@@ -1,0 +1,199 @@
+// Design tokens CSS - Linear-inspired dark theme
+:root {
+  /* Colors - Darkness as canvas */
+  --color-primary: #5e6ad2;
+  --color-marketing-black: #08090a;
+  --color-panel-dark: #0f1011;
+  --color-level3-surface: #191a1b;
+  --color-secondary-surface: #28282c;
+  --color-input-surface: rgba(255, 255, 255, 0.02);
+  
+  /* Text hierarchy */
+  --color-primary-text: #f7f8f8;
+  --color-secondary-text: #d0d6e0;
+  --color-tertiary-text: #8a8f98;
+  --color-quaternary-text: #62666d;
+  --color-inverse-text: #08090a;
+  
+  /* Brand accents */
+  --color-brand-indigo: #5e6ad2;
+  --color-accent-violet: #7170ff;
+  --color-accent-hover: #828fff;
+  
+  /* Status colors */
+  --color-success-green: #27a644;
+  --color-success-emerald: #10b981;
+  --color-danger-red: #dc2626;
+  --color-warning-amber: #d97706;
+  
+  /* Status backgrounds */
+  --color-status-a-traiter-bg: #e5e7eb;
+  --color-status-a-traiter-text: #374151;
+  --color-status-en-cours-bg: #dbeafe;
+  --color-status-en-cours-text: #1e40af;
+  --color-status-en-attente-bg: #fef3c7;
+  --color-status-en-attente-text: #92400e;
+  --color-status-bloque-bg: #fee2e2;
+  --color-status-bloque-text: #991b1b;
+  --color-status-traite-bg: #dcfce7;
+  --color-status-traite-text: #166534;
+  
+  /* Borders */
+  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-border-standard: rgba(255, 255, 255, 0.08);
+  --color-border-accent: rgba(113, 112, 255, 0.3);
+  --color-border-primary: #23252a;
+  
+  /* Overlay */
+  --color-overlay-primary: rgba(0, 0, 0, 0.85);
+  
+  /* Typography */
+  --font-primary: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --font-feature-settings: "cv01", "ss03";
+  
+  /* Spacing */
+  --space-base: 8px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  
+  /* Border radius */
+  --rounded-micro: 2px;
+  --rounded-standard: 4px;
+  --rounded-comfortable: 6px;
+  --rounded-card: 8px;
+  --rounded-panel: 12px;
+  --rounded-large: 22px;
+  --rounded-pill: 9999px;
+  --rounded-circle: 9999px;
+  
+  /* Shadows */
+  --shadow-flat: none;
+  --shadow-subtle: rgba(0, 0, 0, 0.03) 0px 1.2px 0px 0px;
+  --shadow-surface: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
+  --shadow-inset: rgba(0, 0, 0, 0.2) 0px 0px 12px 0px inset;
+  --shadow-ring: rgba(0, 0, 0, 0.2) 0px 0px 0px 1px;
+  --shadow-elevated: rgba(0, 0, 0, 0.4) 0px 2px 4px;
+  --shadow-dialog: rgba(0,0,0,0) 0px 8px 2px, rgba(0,0,0,0.01) 0px 5px 2px, rgba(0,0,0,0.04) 0px 3px 2px, rgba(0,0,0,0.07) 0px 1px 1px, rgba(0,0,0,0.08) 0px 0px 1px;
+  --shadow-focus: rgba(0, 0, 0, 0.1) 0px 4px 12px, 0 0 0 2px var(--color-accent-violet);
+  
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Layout */
+  --layout-max-width: 1400px;
+  --layout-sidebar-width: 260px;
+  --layout-header-height: 56px;
+  --layout-container-padding: 24px;
+}
+
+/* Font faces */
+@font-face {
+  font-family: 'Inter Variable';
+  src: url('https://fonts.gstatic.com/s/inter/v19/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hjp-Ek-_EeA.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  font-feature-settings: "cv01", "ss03";
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v23/tDbD2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjlU-c.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+/* Base styles */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-primary);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--color-primary-text);
+  background: var(--color-panel-dark);
+  font-feature-settings: var(--font-feature-settings);
+  min-height: 100vh;
+}
+
+body, button, input, select, textarea {
+  font-feature-settings: var(--font-feature-settings);
+}
+
+::selection {
+  background: var(--color-accent-violet);
+  color: var(--color-inverse-text);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--rounded-comfortable);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-panel-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-level3-surface);
+  border-radius: 4px;
+  border: 2px solid var(--color-panel-dark);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-secondary-surface);
+}
+
+/* Utility classes */
+.text-primary { color: var(--color-primary-text); }
+.text-secondary { color: var(--color-secondary-text); }
+.text-tertiary { color: var(--color-tertiary-text); }
+.text-inverse { color: var(--color-inverse-text); }
+.text-accent { color: var(--color-accent-violet); }
+
+.bg-panel { background: var(--color-panel-dark); }
+.bg-surface { background: var(--color-level3-surface); }
+.bg-secondary-surface { background: var(--color-secondary-surface); }
+.bg-input { background: var(--color-input-surface); }
+
+.border-subtle { border: 1px solid var(--color-border-subtle); }
+.border-standard { border: 1px solid var(--color-border-standard); }
+.border-accent { border: 1px solid var(--color-border-accent); }
+
+.rounded-micro { border-radius: var(--rounded-micro); }
+.rounded-standard { border-radius: var(--rounded-standard); }
+.rounded-comfortable { border-radius: var(--rounded-comfortable); }
+.rounded-card { border-radius: var(--rounded-card); }
+.rounded-panel { border-radius: var(--rounded-panel); }
+.rounded-pill { border-radius: var(--rounded-pill); }
+.rounded-circle { border-radius: var(--rounded-circle); }
+
+.shadow-surface { box-shadow: var(--shadow-surface); }
+.shadow-elevated { box-shadow: var(--shadow-elevated); }
+.shadow-dialog { box-shadow: var(--shadow-dialog); }
+
+.transition-fast { transition: all var(--transition-fast); }
+.transition-normal { transition: all var(--transition-normal); }
+
+.font-mono { font-family: var(--font-mono); }

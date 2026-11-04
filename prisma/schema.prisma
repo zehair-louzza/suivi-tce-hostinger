@@ -1,0 +1,91 @@
+// Prisma Schema - SQLite for Hostinger deployment
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devis         Devis[]
+  interventions Intervention[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  USER
+  VIEWER
+}
+
+model Devis {
+  id          Int      @id @default(autoincrement())
+  client      String
+  amount      Float    @default(0)
+  dateCreated DateTime @db.Date
+  echeance    DateTime? @db.Date
+  status      Statut   @default(A_TRAITER)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  interventions Intervention[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([dateCreated])
+  @@map("devis")
+}
+
+model Intervention {
+  id                 Int      @id @default(autoincrement())
+  chantier           String
+  entreprise         String?
+  amount             Float    @default(0)
+  datePlanifiee      DateTime @db.Date
+  dateReelle         DateTime? @db.Date
+  status             Statut   @default(A_TRAITER)
+  notes              String?  @db.Text
+
+  // Traçabilité conversion devis -> intervention
+  origineDevisId     Int?
+  origineDevisClient String?
+  origineDevisDate   DateTime? @db.Date
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  userId             Int
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  devisId            Int?
+  devis              Devis?   @relation(fields: [devisId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([datePlanifiee])
+  @@index([devisId])
+  @@map("interventions")
+}
+
+enum Statut {
+  A_TRAITER
+  EN_COURS
+  EN_ATTENTE
+  BLOQUE
+  TRAITE
+}
