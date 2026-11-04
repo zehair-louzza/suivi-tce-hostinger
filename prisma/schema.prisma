@@ -1,12 +1,11 @@
-// Prisma Schema - SQLite for Hostinger deployment
-// Remarque : SQLite ne gère pas les enum ni les types natifs (@db.*) avec Prisma 5 ;
-// rôles et statuts sont donc des String, validés par Zod côté serveur.
+// Prisma Schema - PostgreSQL (Supabase) for Hostinger deployment
+// Les rôles et statuts restent des String, validés par Zod côté serveur.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
