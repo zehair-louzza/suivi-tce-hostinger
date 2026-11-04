@@ -1,219 +1,159 @@
-// Interventions routes
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 import { z } from 'zod';
 import { socketEvents } from '../socket/index.js';
 
 export const interventionRouter = Router();
+const statuses = ['A_TRAITER', 'EN_COURS', 'EN_ATTENTE', 'BLOQUE', 'TRAITE'] as const;
 
-// Validation schemas
-const StatutIntervention = ['A_TRAITER', 'EN_COURS', 'EN_ATTENTE', 'BLOQUE', 'TRAITE'] as const;
+const AmountSchema = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const text = value.trim();
+  if (text === '') return 0;
+  if (!/^\d+(?:[.,]\d+)?$/.test(text)) return value;
+  return Number(text.replace(',', '.'));
+}, z.number().finite().nonnegative('Le montant doit être positif ou nul'));
 
-const CreateInterventionSchema = z.object({
-  chantier: z.string().min(1, 'Chantier/Lot est requis').max(200),
-  entreprise: z.string().max(200).optional().nullable(),
-  amount: z.number().nonnegative().default(0),
-  datePlanifiee: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format date invalide (YYYY-MM-DD)'),
-  dateReelle: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format date invalide (YYYY-MM-DD)').optional().nullable(),
-  status: z.enum(['A_TRAITER', 'EN_COURS', 'EN_ATTENTE', 'BLOQUE', 'TRAITE']).default('A_TRAITER'),
-  notes: z.string().max(2000).optional().nullable(),
-  origineDevisId: z.number().int().positive().optional().nullable(),
-  origineDevisClient: z.string().max(200).optional().nullable(),
-  origineDevisDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  devisId: z.number().int().positive().optional().nullable(),
+const StatusSchema = z.preprocess(value =>
+  typeof value === 'string' ? value.trim().toUpperCase().replace(/-/g, '_') : value,
+  z.enum(statuses)
+);
+const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ').refine(value => {
+  const date = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}, 'Date invalide');
+const OptionalDateSchema = z.preprocess(value => value === '' ? null : value, DateSchema.nullable());
+const Fields = z.object({
+  chantier: z.string().trim().min(1, 'Chantier/Lot est requis').max(200),
+  entreprise: z.string().max(200).nullable(),
+  amount: AmountSchema,
+  datePlanifiee: DateSchema,
+  dateReelle: OptionalDateSchema,
+  status: StatusSchema,
+  notes: z.string().max(2000).nullable(),
+  origineDevisId: z.number().int().positive().nullable(),
+  origineDevisClient: z.string().max(200).nullable(),
+  origineDevisDate: OptionalDateSchema,
+  devisId: z.number().int().positive().nullable(),
 });
+const CreateSchema = Fields.partial().extend({
+  chantier: Fields.shape.chantier,
+  datePlanifiee: DateSchema,
+  amount: AmountSchema.default(0),
+  status: StatusSchema.default('A_TRAITER'),
+});
+const UpdateSchema = Fields.partial();
+const IdSchema = z.coerce.number().int().positive();
+const PageSchema = z.coerce.number().int().min(1);
+const LimitSchema = z.coerce.number().int().min(1).max(100);
 
-const UpdateInterventionSchema = CreateInterventionSchema.partial();
-
-// Helper
-function mapStatutIntervention(statut: string): string {
-  return statut.toLowerCase().replace('_', '-');
+function mapStatus(status: string) {
+  return status.toLowerCase().replace(/_/g, '-');
 }
-
 function transformIntervention(i: any) {
   return {
-    id: i.id,
-    chantier: i.chantier,
-    entreprise: i.entreprise,
-    amount: i.amount,
-    datePlanifiee: i.datePlanifiee.toISOString().split('T')[0],
-    dateReelle: i.dateReelle?.toISOString().split('T')[0] || null,
-    status: i.status.toLowerCase().replace('_', '-'),
-    notes: i.notes,
-    origineDevisId: i.origineDevisId,
-    origineDevisClient: i.origineDevisClient,
-    origineDevisDate: i.origineDevisDate?.toISOString().split('T')[0] || null,
-    createdAt: i.createdAt.getTime(),
-    updatedAt: i.updatedAt.getTime(),
+    id: i.id, chantier: i.chantier, entreprise: i.entreprise, amount: i.amount,
+    datePlanifiee: i.datePlanifiee.toISOString().slice(0, 10),
+    dateReelle: i.dateReelle?.toISOString().slice(0, 10) || null,
+    status: mapStatus(i.status), notes: i.notes,
+    origineDevisId: i.origineDevisId, origineDevisClient: i.origineDevisClient,
+    origineDevisDate: i.origineDevisDate?.toISOString().slice(0, 10) || null,
+    createdAt: i.createdAt.getTime(), updatedAt: i.updatedAt.getTime(),
   };
 }
+function dateValue(value: string | null | undefined) {
+  return value ? new Date(value + 'T00:00:00.000Z') : null;
+}
+async function checkDevis(devisId: number | null | undefined, userId: number, isAdmin: boolean) {
+  if (devisId == null) return;
+  const devis = await prisma.devis.findFirst({ where: { id: devisId, ...(isAdmin ? {} : { userId }) }, select: { id: true } });
+  if (!devis) throw new AppError(404, 'Devis lié introuvable ou inaccessible', 'NOT_FOUND');
+}
 
-// GET /api/interventions - List with pagination, search, filter
-interventionRouter.get('/', async (req: Request, res: Response) => {
+interventionRouter.get('/', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const isAdmin = req.user!.role === 'ADMIN';
-  const search = req.query.search as string || '';
-  const status = req.query.status as string || '';
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 50;
-
+  const search = typeof req.query.search === 'string' ? req.query.search : '';
+  const status = req.query.status ? StatusSchema.parse(req.query.status) : undefined;
+  const page = PageSchema.parse(req.query.page ?? 1);
+  const limit = LimitSchema.parse(req.query.limit ?? 50);
   const where: any = {
     ...(isAdmin ? {} : { userId }),
-    ...(search ? {
-      OR: [
-        { chantier: { contains: search, mode: 'insensitive' } },
-        { entreprise: { contains: search, mode: 'insensitive' } },
-        { notes: { contains: search, mode: 'insensitive' } },
-      ],
-    } : {}),
-    ...(status ? { status: status.toUpperCase().replace('-', '_') } : {}),
+    ...(search ? { OR: [
+      { chantier: { contains: search, mode: 'insensitive' } },
+      { entreprise: { contains: search, mode: 'insensitive' } },
+      { notes: { contains: search, mode: 'insensitive' } },
+    ] } : {}),
+    ...(status ? { status } : {}),
   };
-
   const [items, total] = await Promise.all([
-    prisma.intervention.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
+    prisma.intervention.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
     prisma.intervention.count({ where }),
   ]);
+  res.json({ data: items.map(transformIntervention), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+}));
 
-  res.json({
-    data: items.map(transformIntervention),
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  });
-});
-
-// GET /api/interventions/stats - Get counters by status
-interventionRouter.get('/stats', async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
-  const isAdmin = req.user!.role === 'ADMIN';
-
-  const where = isAdmin ? {} : { userId };
-
-  const stats = await prisma.intervention.groupBy({
-    by: ['status'],
-    where,
-    _count: true,
-  });
-
-  const result: Record<string, number> = {
-    'a-traiter': 0,
-    'en-cours': 0,
-    'en-attente': 0,
-    'bloque': 0,
-    'traite': 0,
-  };
-
-  stats.forEach((s: { status: string; _count: number }) => {
-    const key = mapStatutIntervention(s.status);
-    result[key] = s._count;
-  });
-
+interventionRouter.get('/stats', asyncHandler(async (req, res) => {
+  const where = req.user!.role === 'ADMIN' ? {} : { userId: req.user!.userId };
+  const stats = await prisma.intervention.groupBy({ by: ['status'], where, _count: true });
+  const result: Record<string, number> = { 'a-traiter': 0, 'en-cours': 0, 'en-attente': 0, bloque: 0, traite: 0 };
+  stats.forEach(s => { result[mapStatus(s.status)] = s._count; });
   res.json(result);
-});
+}));
 
-// GET /api/interventions/:id - Get single intervention
-interventionRouter.get('/:id', async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10);
+interventionRouter.get('/:id', asyncHandler(async (req, res) => {
+  const id = IdSchema.parse(req.params.id);
+  const where = { id, ...(req.user!.role === 'ADMIN' ? {} : { userId: req.user!.userId }) };
+  const item = await prisma.intervention.findFirst({ where });
+  if (!item) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+  res.json({ data: transformIntervention(item) });
+}));
+
+interventionRouter.post('/', asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
-  const isAdmin = req.user!.role === 'ADMIN';
-
-  const intervention = await prisma.intervention.findFirst({
-    where: { id, ...(isAdmin ? {} : { userId }) },
-    include: { devis: true },
-  });
-
-  if (!intervention) {
-    throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  }
-
-  res.json({ data: transformIntervention(intervention) });
-});
-
-// POST /api/interventions - Create intervention
-interventionRouter.post('/', async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
-  const data = CreateInterventionSchema.parse(req.body);
-
-  const intervention = await prisma.intervention.create({
-    data: {
-      ...data,
-      datePlanifiee: new Date(data.datePlanifiee),
-      dateReelle: data.dateReelle ? new Date(data.dateReelle) : null,
-      status: data.status,
-      userId,
-      devisId: data.devisId || null,
-    },
-  });
-
-  const transformed = transformIntervention(intervention);
-  
-  // Emit real-time event
-  socketEvents.interventionCreated(userId, transformed);
-
+  const data = CreateSchema.parse(req.body);
+  await checkDevis(data.devisId, userId, req.user!.role === 'ADMIN');
+  const item = await prisma.intervention.create({ data: {
+    ...data, userId,
+    datePlanifiee: new Date(data.datePlanifiee + 'T00:00:00.000Z'),
+    dateReelle: dateValue(data.dateReelle),
+    origineDevisDate: dateValue(data.origineDevisDate),
+    devisId: data.devisId ?? null,
+  } });
+  const transformed = transformIntervention(item);
+  try { socketEvents.interventionCreated(userId, transformed); }
+  catch { console.error('Intervention saved; real-time creation notification failed.'); }
   res.status(201).json({ data: transformed, message: 'Intervention créée avec succès' });
-});
+}));
 
-// PATCH /api/interventions/:id - Update intervention
-interventionRouter.patch('/:id', async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10);
+interventionRouter.patch('/:id', asyncHandler(async (req, res) => {
+  const id = IdSchema.parse(req.params.id);
   const userId = req.user!.userId;
   const isAdmin = req.user!.role === 'ADMIN';
-  const data = UpdateInterventionSchema.parse(req.body);
-
-  // Check ownership
-  const existing = await prisma.intervention.findFirst({
-    where: { id, ...(isAdmin ? {} : { userId }) },
-  });
-
-  if (!existing) {
-    throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  }
-
+  const data = UpdateSchema.parse(req.body);
+  const existing = await prisma.intervention.findFirst({ where: { id, ...(isAdmin ? {} : { userId }) } });
+  if (!existing) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+  await checkDevis(data.devisId, userId, isAdmin);
   const updateData: any = { ...data };
-  if (data.datePlanifiee) updateData.datePlanifiee = new Date(data.datePlanifiee);
-  if (data.dateReelle) updateData.dateReelle = new Date(data.dateReelle);
-  if (data.status) updateData.status = data.status;
-
-  const intervention = await prisma.intervention.update({
-    where: { id },
-    data: updateData,
-  });
-
-  const transformed = transformIntervention(intervention);
-  
-  // Emit real-time event
-  socketEvents.interventionUpdated(userId, transformed);
-
+  if (data.datePlanifiee !== undefined) updateData.datePlanifiee = new Date(data.datePlanifiee + 'T00:00:00.000Z');
+  if (data.dateReelle !== undefined) updateData.dateReelle = dateValue(data.dateReelle);
+  if (data.origineDevisDate !== undefined) updateData.origineDevisDate = dateValue(data.origineDevisDate);
+  const item = await prisma.intervention.update({ where: { id }, data: updateData });
+  const transformed = transformIntervention(item);
+  try { socketEvents.interventionUpdated(userId, transformed); }
+  catch { console.error('Intervention updated; real-time update notification failed.'); }
   res.json({ data: transformed, message: 'Intervention mise à jour' });
-});
+}));
 
-// DELETE /api/interventions/:id - Delete intervention
-interventionRouter.delete('/:id', async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10);
+interventionRouter.delete('/:id', asyncHandler(async (req, res) => {
+  const id = IdSchema.parse(req.params.id);
   const userId = req.user!.userId;
-  const isAdmin = req.user!.role === 'ADMIN';
-
-  const existing = await prisma.intervention.findFirst({
-    where: { id, ...(isAdmin ? {} : { userId }) },
-  });
-
-  if (!existing) {
-    throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  }
-
+  const existing = await prisma.intervention.findFirst({ where: { id, ...(req.user!.role === 'ADMIN' ? {} : { userId }) } });
+  if (!existing) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
   await prisma.intervention.delete({ where: { id } });
-
-  // Emit real-time event
-  socketEvents.interventionDeleted(userId, { id });
-
+  try { socketEvents.interventionDeleted(userId, { id }); }
+  catch { console.error('Intervention deleted; real-time deletion notification failed.'); }
   res.json({ message: 'Intervention supprimée' });
-});
+}));
