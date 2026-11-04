@@ -9,16 +9,18 @@ export function subscribeToRealtimeInvalidation(
  resource: RealtimeResource,
  onError: () => void = () => console.error('Actualisation temps réel non terminée ; les requêtes restent à recharger'),
 ) {
- const refresh = () => {
+ const refresh = (refreshLinkedQuotes = false) => {
   // The API is the source of truth. Never assume a cached array/envelope shape.
-  void Promise.all([
+  const requests = [
    client.invalidateQueries({ queryKey: [resource, 'list'] }),
    client.invalidateQueries({ queryKey: [resource, 'stats'] }),
-  ]).catch(onError);
+  ];
+  if (refreshLinkedQuotes) requests.push(client.invalidateQueries({ queryKey: ['devis', 'list'] }));
+  void Promise.all(requests).catch(onError);
  };
  const prefix = resource === 'devis' ? 'devis' : 'intervention';
- const unsubscribe = ['created', 'updated', 'deleted'].map(action => on(`${prefix}:${action}`, refresh));
- // Socket.IO emits connect after initial connection and each reconnection.
- unsubscribe.push(on('connect', refresh));
+ const unsubscribe = ['created', 'updated', 'deleted'].map(action => on(`${prefix}:${action}`, () => refresh(resource === 'interventions')));
+ // Each resource resynchronizes on reconnect; the devis subscriber refreshes its own badge data.
+ unsubscribe.push(on('connect', () => refresh()));
  return () => { unsubscribe.forEach(off => off()); };
 }

@@ -26,7 +26,7 @@ function prepare(data: Record<string,unknown>) {
  return Object.fromEntries(Object.entries(data).map(([k,v]) => [k, k.startsWith('date') || k==='echeance' ? (typeof v==='string' ? new Date(v+'T00:00:00.000Z') : v) : v]));
 }
 function dto(d:any) {
- const result:any={id:d.id,client:d.client,amount:d.amount,dateCreated:d.dateCreated.toISOString().slice(0,10),echeance:d.echeance?.toISOString().slice(0,10)||null,status:d.status.toLowerCase().replace(/_/g,'-'),notes:d.notes,createdAt:d.createdAt.getTime(),updatedAt:d.updatedAt.getTime(),version:d.version};
+ const result:any={id:d.id,client:d.client,amount:d.amount,dateCreated:d.dateCreated.toISOString().slice(0,10),echeance:d.echeance?.toISOString().slice(0,10)||null,status:d.status.toLowerCase().replace(/_/g,'-'),notes:d.notes,createdAt:d.createdAt.getTime(),updatedAt:d.updatedAt.getTime(),version:d.version,nombreInterventionsLiees:d._count?.interventions??0,premiereInterventionLieeId:d.interventions?.[0]?.id??null};
  for(const key of Object.keys(QuoteBusinessFields.shape)) {
   const value=d[key];
   result[key]=value instanceof Date ? value.toISOString().slice(0,10) : key==='montantHt' && value!=null ? value.toFixed(2) : value ?? null;
@@ -43,13 +43,18 @@ devisRouter.use(asyncHandler(async(req,_res,next)=>{
  req.user!.role=actor.role as 'ADMIN'|'USER'|'VIEWER';next();
 }));
 const scope=(req:any)=>req.user.role==='ADMIN'?{}:{userId:req.user.userId};
+// Count in the database, independently of the intervention list pagination.
+const linkedInterventions=(req:any)=>({
+ _count:{select:{interventions:{where:scope(req)}}},
+ interventions:{where:scope(req),select:{id:true},orderBy:{id:'asc' as const},take:1},
+});
 devisRouter.get('/',asyncHandler(async(req,res)=>{
  const page=z.coerce.number().int().min(1).max(100000).parse(req.query.page??1);
  const limit=z.coerce.number().int().min(1).max(100).parse(req.query.limit??50);
  const search=z.string().max(200).parse(req.query.search??'');
  const status=req.query.status?Status.parse(req.query.status):undefined;
  const where:any={...scope(req),...(status?{status}:{}),...(search?{OR:[{client:{contains:search,mode:'insensitive'}},{objet:{contains:search,mode:'insensitive'}},{notes:{contains:search,mode:'insensitive'}}]}:{})};
- const [items,total]=await prisma.$transaction([prisma.devis.findMany({where,orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(page-1)*limit,take:limit}),prisma.devis.count({where})]);
+ const [items,total]=await prisma.$transaction([prisma.devis.findMany({where,include:linkedInterventions(req),orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(page-1)*limit,take:limit}),prisma.devis.count({where})]);
  res.json({data:items.map(dto),pagination:{page,limit,total,totalPages:Math.ceil(total/limit)}});
 }));
 devisRouter.get('/stats',asyncHandler(async(req,res)=>{
@@ -59,12 +64,12 @@ devisRouter.get('/stats',asyncHandler(async(req,res)=>{
  res.json(result);
 }));
 devisRouter.get('/:id',asyncHandler(async(req,res)=>{
- const d=await prisma.devis.findFirst({where:{id:Id.parse(req.params.id),...scope(req)}});
+ const d=await prisma.devis.findFirst({where:{id:Id.parse(req.params.id),...scope(req)},include:linkedInterventions(req)});
  if(!d)throw new AppError(404,'Devis introuvable','NOT_FOUND');res.json({data:dto(d)});
 }));
 devisRouter.post('/',asyncHandler(async(req,res)=>{
  const parsed=Create.parse(req.body);
- const d=await prisma.devis.create({data:{...prepare(parsed),client:parsed.client,dateCreated:new Date(parsed.dateCreated+'T00:00:00.000Z'),userId:req.user!.userId} as any});
+ const d=await prisma.devis.create({data:{...prepare(parsed),client:parsed.client,dateCreated:new Date(parsed.dateCreated+'T00:00:00.000Z'),userId:req.user!.userId} as any,include:linkedInterventions(req)});
  const result=dto(d);notify(()=>socketEvents.devisCreated(d.userId,result));res.status(201).json({data:result,message:'Devis créé'});
 }));
 devisRouter.patch('/:id',asyncHandler(async(req,res)=>{
@@ -74,7 +79,7 @@ devisRouter.patch('/:id',asyncHandler(async(req,res)=>{
   if(!existing)throw new AppError(404,'Devis introuvable','NOT_FOUND');
   const changed=await tx.devis.updateMany({where:{id,userId:existing.userId,version:existing.version},data:{...prepare(parsed),version:{increment:1}} as any});
   if(changed.count!==1)throw new AppError(409,'Le devis a changé ; recharger','VERSION_CONFLICT');
-  return tx.devis.findUniqueOrThrow({where:{id}});
+  return tx.devis.findUniqueOrThrow({where:{id},include:linkedInterventions(req)});
  });
  const result=dto(d);notify(()=>socketEvents.devisUpdated(d.userId,result));res.json({data:result,message:'Devis mis à jour'});
 }));
