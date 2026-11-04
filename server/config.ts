@@ -1,4 +1,9 @@
 // Server configuration
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET.startsWith('dev-secret'))) {
+  throw new Error('JWT_SECRET doit être défini (valeur aléatoire de 64+ caractères) en production.');
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',

@@ -1,6 +1,6 @@
 // Login Page
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -107,7 +107,7 @@ export function LoginPage() {
             />
             {(isRegister ? registerForm.formState.errors.email : loginForm.formState.errors.email) && (
               <p className="form-error">
-                {(isRegister ? registerForm.formState.errors.email : loginForm.formState.errors.email).message}
+                {(isRegister ? registerForm.formState.errors.email : loginForm.formState.errors.email)?.message}
               </p>
             )}
           </div>
@@ -126,7 +126,7 @@ export function LoginPage() {
             />
             {(isRegister ? registerForm.formState.errors.password : loginForm.formState.errors.password) && (
               <p className="form-error">
-                {(isRegister ? registerForm.formState.errors.password : loginForm.formState.errors.password).message}
+                {(isRegister ? registerForm.formState.errors.password : loginForm.formState.errors.password)?.message}
               </p>
             )}
           </div>

@@ -2,9 +2,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
-import { Devis, Intervention } from '../lib/api';
-
-let socket: Socket | null = null;
 
 export function useSocket() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -13,37 +10,34 @@ export function useSocket() {
   useEffect(() => {
     if (isAuthenticated && !socketRef.current) {
       // Connect to socket server
-      socketRef.current = io({
+      const s = io({
         auth: { token: accessToken },
         transports: ['websocket', 'polling'],
         autoConnect: true,
       });
+      socketRef.current = s;
 
-      socket = socketRef.current;
-
-      socket.on('connect', () => {
-        console.log('Socket connected:', socket.id);
+      s.on('connect', () => {
+        console.log('Socket connected:', s.id);
       });
 
-      socket.on('disconnect', (reason) => {
+      s.on('disconnect', (reason) => {
         console.log('Socket disconnected:', reason);
       });
 
-      socket.on('connect_error', (err) => {
+      s.on('connect_error', (err) => {
         console.error('Socket connection error:', err.message);
       });
     } else if (!isAuthenticated && socketRef.current) {
       // Disconnect on logout
       socketRef.current.disconnect();
       socketRef.current = null;
-      socket = null;
     }
 
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
-        socket = null;
       }
     };
   }, [isAuthenticated, accessToken]);

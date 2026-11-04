@@ -1,15 +1,12 @@
 // Dashboard Page - Main view with Devis and Interventions panels
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   devisApi, 
   interventionApi,
   Devis, 
-  Intervention,
   formatCurrency,
   formatDateFR,
-  StatsResponse,
-  PaginatedResponse,
 } from '../lib/api';
 import toast from 'react-hot-toast';
 import { Fragment } from 'react';
@@ -65,7 +62,7 @@ function StatusBadge({ status, size = 'md' }: { status: StatutType; size?: 'sm' 
 }
 
 // Origine badge
-function OrigineBadge({ devisId, client, date }: { devisId: number; client: string; date: string }) {
+function OrigineBadge({ devisId, client, date }: { devisId: number; client: string | null; date: string | null }) {
   return (
     <span className="badge badge-origine" title={`Converti depuis le devis #${devisId}`}>
       🔗 Devis #{devisId} • {client} ({formatDateFR(date)})
@@ -132,7 +129,7 @@ function DevisFormModal({ isOpen, onClose, onSubmit, devis, isLoading }: DevisFo
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose} disabled={isLoading}>Annuler</button>
-          <button className="btn btn-primary" onClick={() => document.getElementById('devis-form')?.requestSubmit()} disabled={isLoading}>
+          <button className="btn btn-primary" onClick={() => (document.getElementById('devis-form') as HTMLFormElement | null)?.requestSubmit()} disabled={isLoading}>
             {isLoading ? 'Enregistrement...' : devis ? 'Enregistrer' : 'Créer'}
           </button>
         </>
@@ -194,7 +191,7 @@ function InterventionFormModal({ isOpen, onClose, onSubmit, intervention, isLoad
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose} disabled={isLoading}>Annuler</button>
-          <button className="btn btn-primary" onClick={() => document.getElementById('intervention-form')?.requestSubmit()} disabled={isLoading}>
+          <button className="btn btn-primary" onClick={() => (document.getElementById('intervention-form') as HTMLFormElement | null)?.requestSubmit()} disabled={isLoading}>
             {isLoading ? 'Enregistrement...' : intervention ? 'Enregistrer' : 'Créer'}
           </button>
         </>
@@ -311,7 +308,7 @@ function DevisPanel({ devis, stats, isLoading, search, onSearchChange, onAdd, on
           <tbody>
             {filteredDevis.length === 0 ? (
               <tr>
-                <td colSpan="7">
+                <td colSpan={7}>
                   <div className="empty-state">
                     <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -446,7 +443,7 @@ function InterventionPanel({ interventions, stats, isLoading, search, onSearchCh
           <tbody>
             {filteredInterventions.length === 0 ? (
               <tr>
-                <td colSpan="7">
+                <td colSpan={7}>
                   <div className="empty-state">
                     <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -468,9 +465,7 @@ function InterventionPanel({ interventions, stats, isLoading, search, onSearchCh
                     {i.origineDevisId && (
                       <Fragment>
                         <br />
-                        <span className="badge badge-origine" title={`Converti depuis le devis #${i.origineDevisId}`}>
-                          🔗 Devis #{i.origineDevisId} • {i.origineDevisClient} ({formatDateFR(i.origineDevisDate)})
-                        </span>
+                        <OrigineBadge devisId={i.origineDevisId} client={i.origineDevisClient} date={i.origineDevisDate} />
                       </Fragment>
                     )}
                     {i.notes && !i.origineDevisId && (
@@ -532,24 +527,24 @@ export function DashboardPage() {
   // Fetch data
   const { data: devisData, isLoading: devisLoading } = useQuery({
     queryKey: ['devis', 'list'],
-    queryFn: () => devisApi.list({ limit: 100 }),
+    queryFn: () => devisApi.list({ limit: 100 }).then((r) => r.data),
     select: (data) => data.data,
   });
 
   const { data: devisStats, isLoading: statsLoading } = useQuery({
     queryKey: ['devis', 'stats'],
-    queryFn: () => devisApi.stats(),
+    queryFn: () => devisApi.stats().then((r) => r.data),
   });
 
   const { data: intervData, isLoading: intervLoading } = useQuery({
     queryKey: ['interventions', 'list'],
-    queryFn: () => interventionApi.list({ limit: 100 }),
+    queryFn: () => interventionApi.list({ limit: 100 }).then((r) => r.data),
     select: (data) => data.data,
   });
 
   const { data: intervStats } = useQuery({
     queryKey: ['interventions', 'stats'],
-    queryFn: () => interventionApi.stats(),
+    queryFn: () => interventionApi.stats().then((r) => r.data),
   });
 
   // Mutations
@@ -730,17 +725,3 @@ export function DashboardPage() {
     </div>
   );
 }
-
-import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  devisApi, 
-  interventionApi,
-  Devis, 
-  Intervention,
-} from '../lib/api';
-import { formatDateFR as formatDateFRShared } from '../lib/api';
-import toast from 'react-hot-toast';
-
-// Re-export for use in components
-export { formatDateFRShared as formatDateFR };

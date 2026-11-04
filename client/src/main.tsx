@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter } from 'react-router-dom';
-import App from './App';
+import { App } from './App';
 import './styles/design-tokens.css';
 import './styles/global.css';
 

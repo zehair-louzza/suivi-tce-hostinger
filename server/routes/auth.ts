@@ -15,12 +15,9 @@ const LoginSchema = z.object({
   password: z.string().min(8, 'Mot de passe trop court (min 8 caractères)'),
 });
 
+// La confirmation du mot de passe est vérifiée côté client (le client n'envoie que name, email, password).
 const RegisterSchema = LoginSchema.extend({
   name: z.string().min(1, 'Nom requis').max(100),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Les mots de passe ne correspondent pas',
-  path: ['confirmPassword'],
 });
 
 // Generate tokens
@@ -29,16 +26,18 @@ function generateTokens(user: { id: number; email: string; role: string }) {
     userId: user.id,
     email: user.email,
     role: user.role,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7 days
   };
 
-  const accessToken = jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
-  
+  // iat/exp sont ajoutés par jsonwebtoken : les mettre aussi dans le payload provoque l'erreur
+  // « Bad "options.expiresIn" option the payload already has an "exp" property ».
+  const accessToken = jwt.sign(payload, config.jwtSecret, {
+    expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
+  });
+
   const refreshToken = jwt.sign(
     { ...payload, type: 'refresh' },
     config.jwtSecret,
-    { expiresIn: config.jwtRefreshExpiresIn }
+    { expiresIn: config.jwtRefreshExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   return { accessToken, refreshToken };

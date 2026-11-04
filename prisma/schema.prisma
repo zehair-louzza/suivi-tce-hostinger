@@ -1,4 +1,6 @@
 // Prisma Schema - SQLite for Hostinger deployment
+// Remarque : SQLite ne gère pas les enum ni les types natifs (@db.*) avec Prisma 5 ;
+// rôles et statuts sont donc des String, validés par Zod côté serveur.
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,7 +15,7 @@ model User {
   email     String   @unique
   password  String
   name      String
-  role      Role     @default(USER)
+  role      String   @default("USER") // ADMIN | USER | VIEWER
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -23,20 +25,15 @@ model User {
   @@map("users")
 }
 
-enum Role {
-  ADMIN
-  USER
-  VIEWER
-}
 
 model Devis {
   id          Int      @id @default(autoincrement())
   client      String
   amount      Float    @default(0)
-  dateCreated DateTime @db.Date
-  echeance    DateTime? @db.Date
-  status      Statut   @default(A_TRAITER)
-  notes       String?  @db.Text
+  dateCreated DateTime
+  echeance    DateTime?
+  status      String   @default("A_TRAITER") // A_TRAITER | EN_COURS | EN_ATTENTE | BLOQUE | TRAITE
+  notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -56,15 +53,15 @@ model Intervention {
   chantier           String
   entreprise         String?
   amount             Float    @default(0)
-  datePlanifiee      DateTime @db.Date
-  dateReelle         DateTime? @db.Date
-  status             Statut   @default(A_TRAITER)
-  notes              String?  @db.Text
+  datePlanifiee      DateTime
+  dateReelle         DateTime?
+  status             String   @default("A_TRAITER") // A_TRAITER | EN_COURS | EN_ATTENTE | BLOQUE | TRAITE
+  notes              String?
 
   // Traçabilité conversion devis -> intervention
   origineDevisId     Int?
   origineDevisClient String?
-  origineDevisDate   DateTime? @db.Date
+  origineDevisDate   DateTime?
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -80,12 +77,4 @@ model Intervention {
   @@index([datePlanifiee])
   @@index([devisId])
   @@map("interventions")
-}
-
-enum Statut {
-  A_TRAITER
-  EN_COURS
-  EN_ATTENTE
-  BLOQUE
-  TRAITE
 }

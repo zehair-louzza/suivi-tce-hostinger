@@ -104,7 +104,7 @@ interventionRouter.get('/stats', async (req: Request, res: Response) => {
     _count: true,
   });
 
-  const result = {
+  const result: Record<string, number> = {
     'a-traiter': 0,
     'en-cours': 0,
     'en-attente': 0,
@@ -112,7 +112,7 @@ interventionRouter.get('/stats', async (req: Request, res: Response) => {
     'traite': 0,
   };
 
-  stats.forEach(s => {
+  stats.forEach((s: { status: string; _count: number }) => {
     const key = mapStatutIntervention(s.status);
     result[key] = s._count;
   });

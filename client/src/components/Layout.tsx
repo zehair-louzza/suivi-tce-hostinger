@@ -1,11 +1,12 @@
 // Layout with sidebar, header, and content area
+import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../stores/authStore';
 import { useDevisRealtime } from '../hooks/useSocket';
 import { useInterventionRealtime } from '../hooks/useSocket';
 
 export function Layout() {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   
   // Enable real-time updates
@@ -42,7 +43,6 @@ export function Layout() {
               className={({ isActive }) => 
                 `sidebar-item ${isActive ? 'active' : ''}`
               }
-              aria-current={({ isActive }) => isActive ? 'page' : undefined}
             >
               <item.icon />
               <span>{item.label}</span>
@@ -76,11 +76,12 @@ export function Layout() {
         {/* Header/Toolbar */}
         <header className="toolbar" role="banner">
           <div className="header-left">
-            <Outlet context={{}} />
+            <span className="page-title">Suivi des devis et interventions</span>
           </div>
           <div className="header-right">
             <span className="last-updated" id="lastUpdated">
               Dernière mise à jour : <span id="lastUpdatedTime">—</span>
+              <LastUpdater />
             </span>
           </div>
         </header>
@@ -95,8 +96,6 @@ export function Layout() {
 }
 
 // Update last updated time
-import { useEffect } from 'react';
-
 function LastUpdater() {
   useEffect(() => {
     const updateTime = () => {

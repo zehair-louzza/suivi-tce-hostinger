@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '../lib/api';
-import { User } from '../../shared/types';
+import { User } from '../../../shared/types';
 import { Fragment } from 'react';
 
 interface AuthState {
@@ -130,7 +130,7 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const { fetchMe, isAuthenticated, isLoading } = useAuthStore();
+  const { fetchMe, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated) {

@@ -118,13 +118,13 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export interface StatsResponse {
+export type StatsResponse = {
   'a-traiter': number;
   'en-cours': number;
   'en-attente': number;
   'bloque': number;
   'traite': number;
-}
+};
 
 // API functions
 export const devisApi = {
@@ -171,4 +171,17 @@ export const authApi = {
 export const healthApi = {
   check: () => api.get('/health'),
   ready: () => api.get('/health/ready'),
+};
+
+// Formatters
+export const formatCurrency = (amount: number | null | undefined): string =>
+  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount ?? 0);
+
+export const formatDateFR = (date: string | null | undefined): string => {
+  if (!date) return '—';
+  // Les dates AAAA-MM-JJ sont lues sans décalage de fuseau horaire.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('fr-FR');
 };

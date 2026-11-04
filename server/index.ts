@@ -1,6 +1,8 @@
 // Server entry point
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
+import fs from 'fs';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -70,18 +72,17 @@ app.use('/api/devis', authMiddleware, devisRouter);
 app.use('/api/interventions', authMiddleware, interventionRouter);
 
 // Serve static files from client build in production
+// (enregistré de façon synchrone, avant le gestionnaire 404 ; `npm start` s'exécute depuis la racine du projet)
 if (config.nodeEnv === 'production') {
-  import('path').then(path => {
-    import('fs').then(fs => {
-      const clientDist = path.resolve(process.cwd(), '../dist/client');
-      if (fs.existsSync(clientDist)) {
-        app.use(express.static(clientDist));
-        app.get('*', (_req, res) => {
-          res.sendFile(path.join(clientDist, 'index.html'));
-        });
-      }
+  const clientDist = path.resolve(process.cwd(), 'dist/client');
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+    app.get(/^\/(?!api|socket\.io).*/, (_req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'));
     });
-  });
+  } else {
+    console.warn(`⚠️  Build client introuvable : ${clientDist} (lancer « npm run build »)`);
+  }
 }
 
 // 404 handler

@@ -1,10 +1,10 @@
 // Main App component with routing
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '../stores/authStore';
-import { Layout } from '../components/Layout';
-import { LoginPage } from '../pages/LoginPage';
-import { DashboardPage } from '../pages/DashboardPage';
-import { ProtectedRoute } from '../components/ProtectedRoute';
+import { AuthProvider, useAuth } from './stores/authStore';
+import { Layout } from './components/Layout';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -41,6 +41,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="devis" element={<DashboardPage />} />
+        <Route path="interventions" element={<DashboardPage />} />
       </Route>
     </Routes>
   );
