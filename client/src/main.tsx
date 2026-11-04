@@ -8,11 +8,12 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import './styles/design-tokens.css';
 import './styles/global.css';
+import './styles/layout.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
       retry: 1,
       refetchOnWindowFocus: false,
     },
