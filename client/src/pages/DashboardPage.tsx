@@ -1,152 +1,51 @@
-import { Fragment, useState, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { devisApi, interventionApi, Devis, Intervention, formatCurrency, formatDateFR } from '../lib/api';
+import { api, devisApi, interventionApi, Devis, Intervention, formatCurrency, formatDateFR } from '../lib/api';
+import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
 
-type View = 'overview' | 'devis' | 'interventions';
-type Kind = 'devis' | 'interventions';
-type Item = Devis | Intervention;
-type Status = Devis['status'];
-const statuses: Status[] = ['a-traiter', 'en-cours', 'en-attente', 'bloque', 'traite'];
-const labels: Record<Status, string> = { 'a-traiter': 'À traiter', 'en-cours': 'En cours', 'en-attente': 'En attente', bloque: 'Bloqué', traite: 'Traité / Clôturé' };
-const publicStatus = (status: string) => status.toLowerCase().replace(/_/g, '-') as Status;
-function Badge({ status }: { status: Status }) {
-  return <span className={`badge badge-status badge-${status}`}>{labels[status] || status}</span>;
+type View='overview'|'devis'|'interventions';
+type Kind='devis'|'interventions';
+type Item=Devis|Intervention;
+const statuses=['a-traiter','en-cours','en-attente','bloque','traite'] as const;
+const labels:Record<string,string>={'a-traiter':'À traiter','en-cours':'En cours','en-attente':'En attente',bloque:'Bloqué',traite:'Traité / Clôturé'};
+const commercial:Record<string,string>={A_PREPARER:'À préparer',EN_PREPARATION:'En préparation',A_VALIDER_EN_INTERNE:'À valider en interne',ENVOYE_AU_CLIENT:'Envoyé au client',EN_NEGOCIATION:'En négociation',ACCEPTE:'Accepté',EXPIRE:'Expiré',REFUSE:'Refusé',ANNULE:'Annulé'};
+const badge=(status:string)=>status.toLowerCase().replace(/_/g,'-');
+function message(e:any){const body=e?.response?.data;return Array.isArray(body?.details)?body.details.map((d:any)=>`${d.field} : ${d.message}`).join(' ; '):body?.error||e?.message||'Erreur lors de la demande';}
+function Panel({kind,items,stats,loading,failed,statsFailed,retry,busy,add,edit,remove,convert}:any){
+ const [search,setSearch]=useState('');const quote=kind==='devis';
+ const filtered=items.filter((v:any)=>[v.client,v.chantier,v.objet,v.entreprise,v.notes,v.amount,labels[badge(v.status)]].some(p=>String(p??'').toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr'))));
+ const columns=quote?['N°','Client / Projet','Montant','Date création','Échéance','Statut','Actions']:['N°','Chantier / Lot','Entreprise','Date planifiée','Date réelle','Statut','Actions'];
+ return <section className="panel" aria-labelledby={`${kind}-title`}><header className="panel-header"><h2 className="panel-title" id={`${kind}-title`}>{quote?'DEVIS':'INTERVENTIONS'}</h2><div className="panel-counters">{statsFailed?<span>Statistiques indisponibles</span>:statuses.map(s=><span className="counter" key={s}><span className="counter-value">{stats[s]||0}</span>{labels[s]}</span>)}</div></header><div className="panel-toolbar"><button className="btn btn-primary" disabled={busy} onClick={add}>+ Ajouter {quote?'un devis':'une intervention'}</button><input className="search" id={`${kind}-search`} name={`${kind}-search`} type="search" value={search} aria-label={`Filtrer les ${kind}`} placeholder={`Filtrer les ${kind}…`} onChange={e=>setSearch(e.target.value)}/></div>
+ {loading?<div className="panel-loading">Chargement...</div>:failed?<div className="empty-state" role="alert"><p>Impossible de charger les {kind}.</p><button className="btn btn-ghost" onClick={retry}>Réessayer</button></div>:<div className="table-wrapper"><table className="data-table"><thead><tr>{columns.map(c=><th key={c} scope="col">{c}</th>)}</tr></thead><tbody>{filtered.length===0?<tr><td colSpan={7}><div className="empty-state">{items.length?'Aucun résultat ne correspond au filtre.':'Aucun élément enregistré.'}</div></td></tr>:filtered.map((v:any)=><tr key={v.id} className={v.origineDevisId?'converted':''}><td>{v.id}</td><td><strong>{quote?v.client:v.chantier}</strong>{quote&&v.objet&&<><br/><small>{v.objet}</small></>}{quote&&v.statutCommercial&&<><br/><small>{commercial[v.statutCommercial]||v.statutCommercial}</small></>}{!quote&&v.origineDevisId&&<><br/><span className="badge badge-origine">🔗 Devis #{v.origineDevisId} • {v.origineDevisClient} ({formatDateFR(v.origineDevisDate)})</span></>}{v.notes&&<><br/><small className="text-tertiary">{v.notes}</small></>}</td><td>{quote?formatCurrency(v.amount):v.entreprise||'—'}</td><td>{formatDateFR(quote?v.dateCreated:v.datePlanifiee)}</td><td>{formatDateFR(quote?v.echeance:v.dateReelle)}</td><td><span className={`badge badge-status badge-${badge(v.status)}`}>{labels[badge(v.status)]||v.status}</span></td><td><div className="actions">{quote&&<button className="btn-icon convert" disabled={busy} aria-label="Créer une intervention liée" title="Créer une intervention liée — devis conservé" onClick={()=>convert(v)}>↗</button>}<button className="btn-icon" disabled={busy} aria-label="Modifier" onClick={()=>edit(v)}>✎</button><button className="btn-icon delete" disabled={busy} aria-label="Supprimer" onClick={()=>remove(v)}>×</button></div></td></tr>)}</tbody></table></div>}
+ {items.length>=100&&<p className="text-tertiary" style={{padding:16}}>Affichage limité aux 100 éléments les plus récents.</p>}</section>;
 }
-function errorMessage(error: any): string {
-  const body = error?.response?.data;
-  if (Array.isArray(body?.details)) return body.details.map((detail: any) => `${detail.field} : ${detail.message}`).join(' ; ');
-  return typeof body?.error === 'string' ? body.error : error?.message || 'Erreur lors de la demande';
+function Editor({state,busy,submit,close}:any){
+ const quote=state.kind==='devis',value=state.item||{};const [error,setError]=useState('');const prefix=quote?'devis':'intervention';
+ const fields=quote?[['client','Client / Projet','text',true],['objet','Objet / travaux','text',true],['amount','Montant historique (€)','number',true],['dateCreated','Date création','date',true],['echeance','Échéance','date',false]]:[['chantier','Chantier / Lot','text',true],['entreprise','Entreprise','text',false],['amount','Montant (€)','number',false],['datePlanifiee','Date planifiée','date',true],['dateReelle','Date réelle','date',false]];
+ const save=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setError('');const data:any=Object.fromEntries(new FormData(e.currentTarget));data.amount=Number(String(data.amount||'0').replace(',','.'));if(!Number.isFinite(data.amount)||data.amount<0){setError('Montant invalide');return;}data.status=String(data.status).toUpperCase().replace(/-/g,'_');for(const k of ['echeance','dateReelle'])if(data[k]==='')data[k]=null;try{await submit(data);}catch(err){setError(message(err));}};
+ return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editor-title" onClick={()=>{if(!busy)close();}}><div className="modal" onClick={e=>e.stopPropagation()}><header className="modal-header"><h2 className="modal-title" id="editor-title">{state.item?'Modifier':'Créer'} {quote?'un devis':'une intervention'}</h2><button className="modal-close" disabled={busy} onClick={close} aria-label="Fermer">×</button></header><div className="modal-body"><form id="business-form" onSubmit={save}>{fields.map(([name,label,type,required])=><div className="form-group" key={String(name)}><label className="form-label" htmlFor={`${prefix}-${name}`}>{label}{required?' *':''}</label><input className="input" id={`${prefix}-${name}`} name={String(name)} type={String(type)} required={Boolean(required)} disabled={busy} min={type==='number'?0:undefined} step={type==='number'?'0.01':undefined} defaultValue={value[String(name)]??''}/></div>)}{quote&&<div className="form-group"><label className="form-label" htmlFor="quote-commercial">Statut commercial</label><select className="select" name="statutCommercial" id="quote-commercial" defaultValue={value.statutCommercial||'A_PREPARER'} disabled={busy}>{Object.entries(commercial).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>}<div className="form-group"><label className="form-label" htmlFor={`${prefix}-status`}>Traitement simplifié</label><select className="select" id={`${prefix}-status`} name="status" disabled={busy} defaultValue={badge(value.status||'a-traiter')}>{statuses.map(s=><option key={s} value={s}>{labels[s]}</option>)}</select></div><div className="form-group"><label className="form-label" htmlFor={`${prefix}-notes`}>Notes</label><textarea className="textarea" id={`${prefix}-notes`} name="notes" maxLength={2000} rows={3} defaultValue={value.notes||''} disabled={busy}/></div>{error&&<p className="form-error" role="alert">{error}</p>}</form></div><footer className="modal-footer"><button className="btn btn-ghost" onClick={close} disabled={busy}>Annuler</button><button className="btn btn-primary" type="submit" form="business-form" disabled={busy}>{busy?'Enregistrement...':'Enregistrer'}</button></footer></div></div>;
 }
-
-interface PanelProps {
-  kind: Kind;
-  items: Item[];
-  stats: Record<string, number>;
-  loading: boolean;
-  failed: boolean;
-  statsFailed: boolean;
-  retry: () => void;
-  busy: boolean;
-  onAdd: () => void;
-  onEdit: (item: Item) => void;
-  onDelete: (item: Item) => void;
-  onConvert: (item: Devis) => void;
+function Conversion({quote,close,done}:any){
+ const {user}=useAuth();const storageKey=`anelec:conversion:${user?.id}:${quote.id}`;
+ const [pending,setPending]=useState<any>(()=>{try{const raw=sessionStorage.getItem(storageKey);if(!raw)return null;const p=JSON.parse(raw);return typeof p.key==='string'&&typeof p.datePlanifiee==='string'?p:null;}catch{return null;}});
+ const [date,setDate]=useState(pending?.datePlanifiee||quote.echeance||'');const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(busy)return;setError('');let request=pending;try{if(!request){request={key:crypto.randomUUID(),datePlanifiee:date};sessionStorage.setItem(storageKey,JSON.stringify(request));setPending(request);}}catch{setError('Impossible de mémoriser la demande. Autorisez le stockage de session avant de continuer.');return;}setBusy(true);
+ try{const response=await api.post(`/devis/${quote.id}/convert`,{datePlanifiee:request.datePlanifiee},{headers:{'Idempotency-Key':request.key}});try{sessionStorage.removeItem(storageKey);}catch{}toast.success(response.data.replayed?'Demande déjà réalisée ; aucune nouvelle intervention':'Intervention créée ; devis conservé');done();}
+ catch(err:any){setError(message(err));if(err?.response?.status===400){try{sessionStorage.removeItem(storageKey);}catch{}setPending(null);}}
+ finally{setBusy(false);}};
+ return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="conversion-title"><div className="modal"><header className="modal-header"><h2 className="modal-title" id="conversion-title">Créer une intervention liée</h2><button className="modal-close" disabled={busy} onClick={close} aria-label="Fermer">×</button></header><div className="modal-body"><p>Le devis « {quote.client} » sera conservé. Une intervention lui sera liée ; il ne sera ni déplacé ni supprimé.</p><p>Le devis doit être accepté et son objet renseigné. Après une réussite confirmée, une nouvelle demande pourra créer une autre intervention.</p><form id="conversion-form" onSubmit={submit}><div className="form-group"><label className="form-label" htmlFor="conversion-date">Date planifiée *</label><input className="input" id="conversion-date" name="datePlanifiee" type="date" required min="1900-01-01" max="2199-12-31" value={date} disabled={busy||Boolean(pending)} onChange={e=>setDate(e.target.value)}/></div>{pending&&<p>Une demande est mémorisée. La relancer réutilise sa date et sa clé pour éviter un doublon.</p>}{error&&<p className="form-error" role="alert">{error}</p>}</form></div><footer className="modal-footer"><button className="btn btn-ghost" disabled={busy} onClick={close}>Fermer</button><button className="btn btn-primary" type="submit" form="conversion-form" disabled={busy}>{busy?'Création...':pending?'Relancer la même demande':'Créer l’intervention'}</button></footer></div></div>;
 }
-function BusinessPanel({ kind, items, stats, loading, failed, statsFailed, retry, busy, onAdd, onEdit, onDelete, onConvert }: PanelProps) {
-  const [search, setSearch] = useState('');
-  const isDevis = kind === 'devis';
-  const title = isDevis ? 'DEVIS' : 'INTERVENTIONS';
-  const filtered = items.filter(item => {
-    const value = item as any;
-    return [value.client, value.chantier, value.entreprise, value.notes, value.amount, labels[publicStatus(value.status)]].some(part => String(part ?? '').toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
-  });
-  const columns = isDevis ? ['N°', 'Client / Projet', 'Montant', 'Date création', 'Échéance', 'Statut', 'Actions'] : ['N°', 'Chantier / Lot', 'Entreprise', 'Date planifiée', 'Date réelle', 'Statut', 'Actions'];
-  return (
-    <section className="panel" aria-labelledby={`${kind}-title`}>
-      <header className="panel-header"><h2 className="panel-title" id={`${kind}-title`}>{title}</h2><div className="panel-counters" aria-label={`Compteurs ${kind}`}>
-        {statsFailed ? <span role="status">Statistiques indisponibles</span> : statuses.map(status => <span className="counter" key={status}><span className="counter-value">{stats[status] || 0}</span>{labels[status]}</span>)}
-      </div></header>
-      <div className="panel-toolbar"><button className="btn btn-primary" onClick={onAdd} disabled={busy}>+ Ajouter {isDevis ? 'un devis' : 'une intervention'}</button><input id={`${kind}-search`} name={`${kind}-search`} className="search" type="search" placeholder={`Filtrer les ${kind}…`} aria-label={`Filtrer les ${kind}`} value={search} onChange={event => setSearch(event.target.value)} /></div>
-      {loading ? <div className="panel-loading" role="status">Chargement...</div> : failed ? <div className="empty-state" role="alert"><p>Impossible de charger les {kind}.</p><button className="btn btn-ghost" onClick={retry}>Réessayer</button></div> : <div className="table-wrapper"><table className="data-table"><thead><tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>
-        {filtered.length === 0 ? <tr><td colSpan={7}><div className="empty-state"><p>{items.length ? 'Aucun résultat ne correspond au filtre.' : `Aucun élément dans les ${kind}.`}</p></div></td></tr> : filtered.map(item => {
-          const value = item as any;
-          return <tr key={item.id} className={!isDevis && value.origineDevisId ? 'converted' : ''}>
-            <td>{item.id}</td>
-            <td><strong>{isDevis ? value.client : value.chantier}</strong>{!isDevis && value.origineDevisId && <Fragment><br /><span className="badge badge-origine">🔗 Devis #{value.origineDevisId} • {value.origineDevisClient} ({formatDateFR(value.origineDevisDate)})</span></Fragment>}{value.notes && <Fragment><br /><small className="text-tertiary">{value.notes}</small></Fragment>}</td>
-            <td>{isDevis ? formatCurrency(value.amount) : value.entreprise || '—'}</td>
-            <td>{formatDateFR(isDevis ? value.dateCreated : value.datePlanifiee)}</td>
-            <td>{formatDateFR(isDevis ? value.echeance : value.dateReelle)}</td>
-            <td><Badge status={publicStatus(value.status)} /></td>
-            <td><div className="actions">{isDevis && <button type="button" className="btn-icon convert" disabled={busy} onClick={() => onConvert(item as Devis)} aria-label="Transformer en intervention" title="Transformer en intervention">↗</button>}<button type="button" className="btn-icon" disabled={busy} onClick={() => onEdit(item)} aria-label="Modifier" title="Modifier">✎</button><button type="button" className="btn-icon delete" disabled={busy} onClick={() => onDelete(item)} aria-label="Supprimer" title="Supprimer">×</button></div></td>
-          </tr>;
-        })}
-      </tbody></table></div>}
-      {items.length >= 100 && <p className="text-tertiary" style={{ padding: 16 }}>Affichage limité aux 100 éléments les plus récents.</p>}
-    </section>
-  );
-}
-
-interface EditorState { kind: Kind; item?: Item }
-function Editor({ state, busy, submit, close }: { state: EditorState; busy: boolean; submit: (data: Record<string, unknown>) => Promise<void>; close: () => void }) {
-  const isDevis = state.kind === 'devis';
-  const value = (state.item || {}) as any;
-  const prefix = isDevis ? 'devis' : 'intervention';
-  const [error, setError] = useState('');
-  const fields = isDevis ? [
-    { name: 'client', label: 'Client / Projet', type: 'text', required: true },
-    { name: 'amount', label: 'Montant (€)', type: 'number', required: true },
-    { name: 'dateCreated', label: 'Date création', type: 'date', required: true },
-    { name: 'echeance', label: 'Échéance', type: 'date', required: false },
-  ] : [
-    { name: 'chantier', label: 'Chantier / Lot', type: 'text', required: true },
-    { name: 'entreprise', label: 'Entreprise', type: 'text', required: false },
-    { name: 'amount', label: 'Montant (€)', type: 'number', required: false },
-    { name: 'datePlanifiee', label: 'Date planifiée', type: 'date', required: true },
-    { name: 'dateReelle', label: 'Date réelle', type: 'date', required: false },
-  ];
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    const data: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget));
-    data.amount = Number(String(data.amount || '0').replace(',', '.'));
-    if (!Number.isFinite(data.amount) || Number(data.amount) < 0) { setError('Montant invalide'); return; }
-    data.status = String(data.status).toUpperCase().replace(/-/g, '_');
-    for (const name of ['echeance', 'dateReelle']) if (data[name] === '') data[name] = null;
-    try { await submit(data); } catch (failure) { setError(errorMessage(failure)); }
-  };
-  return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editor-title" onClick={() => { if (!busy) close(); }}><div className="modal" onClick={event => event.stopPropagation()}>
-    <header className="modal-header"><h2 className="modal-title" id="editor-title">{state.item ? 'Modifier' : 'Créer'} {isDevis ? 'un devis' : 'une intervention'}</h2><button type="button" className="modal-close" disabled={busy} onClick={close} aria-label="Fermer">×</button></header>
-    <div className="modal-body"><form id="business-form" onSubmit={handleSubmit}>
-      {fields.map(field => <div className="form-group" key={field.name}><label className="form-label" htmlFor={`${prefix}-${field.name}`}>{field.label}{field.required ? ' *' : ''}</label><input className="input" id={`${prefix}-${field.name}`} name={field.name} type={field.type} required={field.required} disabled={busy} min={field.type === 'number' ? 0 : undefined} step={field.type === 'number' ? '0.01' : undefined} maxLength={field.type === 'text' ? 200 : undefined} defaultValue={value[field.name] ?? ''} /></div>)}
-      <div className="form-group"><label className="form-label" htmlFor={`${prefix}-status`}>Statut *</label><select className="select" id={`${prefix}-status`} name="status" defaultValue={publicStatus(value.status || 'a-traiter')} disabled={busy} required>{statuses.map(status => <option key={status} value={status}>{labels[status]}</option>)}</select></div>
-      <div className="form-group"><label className="form-label" htmlFor={`${prefix}-notes`}>Notes</label><textarea className="textarea" id={`${prefix}-notes`} name="notes" maxLength={2000} rows={3} defaultValue={value.notes || ''} disabled={busy} /></div>
-      {error && <p className="form-error" role="alert">{error}</p>}
-    </form></div>
-    <footer className="modal-footer"><button type="button" className="btn btn-ghost" disabled={busy} onClick={close}>Annuler</button><button type="submit" form="business-form" className="btn btn-primary" disabled={busy}>{busy ? 'Enregistrement...' : 'Enregistrer'}</button></footer>
-  </div></div>;
-}
-
-type Action = { kind: Kind; operation: 'create' | 'update' | 'delete' | 'convert'; id?: number; data?: any };
-export function DashboardPage({ view = 'overview' }: { view?: View }) {
-  const showDevis = view !== 'interventions';
-  const showInterventions = view !== 'devis';
-  const queryClient = useQueryClient();
-  const [editor, setEditor] = useState<EditorState | null>(null);
-  const devis = useQuery({ queryKey: ['devis', 'list'], enabled: showDevis, queryFn: () => devisApi.list({ limit: 100 }).then(response => response.data.data) });
-  const devisStats = useQuery({ queryKey: ['devis', 'stats'], enabled: showDevis, queryFn: () => devisApi.stats().then(response => response.data) });
-  const interventions = useQuery({ queryKey: ['interventions', 'list'], enabled: showInterventions, queryFn: () => interventionApi.list({ limit: 100 }).then(response => response.data.data) });
-  const interventionStats = useQuery({ queryKey: ['interventions', 'stats'], enabled: showInterventions, queryFn: () => interventionApi.stats().then(response => response.data) });
-  const mutation = useMutation({
-    mutationFn: async (action: Action) => {
-      if (action.operation === 'convert') return devisApi.convert(action.id!, {});
-      const service = action.kind === 'devis' ? devisApi : interventionApi;
-      if (action.operation === 'create') return service.create(action.data);
-      if (action.operation === 'update') return service.update(action.id!, action.data);
-      return service.delete(action.id!);
-    },
-    onSuccess: (_response, action) => {
-      queryClient.invalidateQueries({ queryKey: [action.kind] });
-      if (action.operation === 'convert') queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      if (action.operation === 'create' || action.operation === 'update') setEditor(null);
-      toast.success(action.operation === 'convert' ? 'Devis converti en intervention' : action.operation === 'delete' ? 'Suppression effectuée' : 'Enregistrement effectué');
-    },
-    onError: failure => toast.error(errorMessage(failure)),
-  });
-  const remove = (kind: Kind, item: Item) => {
-    if (window.confirm('Supprimer cet élément ? Cette action est irréversible.')) mutation.mutate({ kind, operation: 'delete', id: item.id });
-  };
-  const convert = (item: Devis) => {
-    if (window.confirm(`Transformer le devis « ${item.client} » en intervention ? Le devis sera déplacé et supprimé de la liste des devis. Cette action est irréversible.`)) mutation.mutate({ kind: 'devis', operation: 'convert', id: item.id });
-  };
-  const save = async (data: Record<string, unknown>) => {
-    if (!editor) return;
-    await mutation.mutateAsync({ kind: editor.kind, operation: editor.item ? 'update' : 'create', id: editor.item?.id, data });
-  };
-  return <div className="dashboard">
-    <aside className="legend" aria-label="Légende des badges"><h2 className="legend-title">Légende des badges</h2><div className="legend-grid">{statuses.map(status => <Badge key={status} status={status} />)}<span className="badge badge-origine">Converti depuis devis</span></div></aside>
-    {showDevis && <BusinessPanel key="devis" kind="devis" items={devis.data || []} stats={devisStats.data || {}} loading={devis.isLoading} failed={devis.isError} statsFailed={devisStats.isError} retry={() => { void devis.refetch(); void devisStats.refetch(); }} busy={mutation.isPending} onAdd={() => setEditor({ kind: 'devis' })} onEdit={item => setEditor({ kind: 'devis', item })} onDelete={item => remove('devis', item)} onConvert={convert} />}
-    {showInterventions && <BusinessPanel key="interventions" kind="interventions" items={interventions.data || []} stats={interventionStats.data || {}} loading={interventions.isLoading} failed={interventions.isError} statsFailed={interventionStats.isError} retry={() => { void interventions.refetch(); void interventionStats.refetch(); }} busy={mutation.isPending} onAdd={() => setEditor({ kind: 'interventions' })} onEdit={item => setEditor({ kind: 'interventions', item })} onDelete={item => remove('interventions', item)} onConvert={convert} />}
-    {editor && <Editor key={`${editor.kind}-${editor.item?.id ?? 'new'}`} state={editor} busy={mutation.isPending} submit={save} close={() => setEditor(null)} />}
-  </div>;
+type Action={kind:Kind;operation:'create'|'update'|'delete';id?:number;data?:any};
+export function DashboardPage({view='overview'}:{view?:View}){
+ const showDevis=view!=='interventions',showInterventions=view!=='devis';const qc=useQueryClient();
+ const [editor,setEditor]=useState<{kind:Kind;item?:Item}|null>(null),[conversion,setConversion]=useState<Devis|null>(null);
+ const devis=useQuery({queryKey:['devis','list'],enabled:showDevis,queryFn:()=>devisApi.list({limit:100}).then(r=>r.data.data)});
+ const ds=useQuery({queryKey:['devis','stats'],enabled:showDevis,queryFn:()=>devisApi.stats().then(r=>r.data)});
+ const interventions=useQuery({queryKey:['interventions','list'],enabled:showInterventions,queryFn:()=>interventionApi.list({limit:100}).then(r=>r.data.data)});
+ const ins=useQuery({queryKey:['interventions','stats'],enabled:showInterventions,queryFn:()=>interventionApi.stats().then(r=>r.data)});
+ const mutation=useMutation({mutationFn:async(a:Action)=>{const service=a.kind==='devis'?devisApi:interventionApi;return a.operation==='create'?service.create(a.data):a.operation==='update'?service.update(a.id!,a.data):service.delete(a.id!);},onSuccess:(_r,a)=>{qc.invalidateQueries({queryKey:[a.kind]});if(a.operation!=='delete')setEditor(null);toast.success(a.operation==='delete'?'Suppression effectuée':'Enregistrement effectué');},onError:e=>toast.error(message(e))});
+ const remove=(kind:Kind,item:Item)=>{if(window.confirm('Supprimer cet élément ? Cette action est irréversible.'))mutation.mutate({kind,operation:'delete',id:item.id});};
+ const save=async(data:any)=>{if(editor)await mutation.mutateAsync({kind:editor.kind,operation:editor.item?'update':'create',id:editor.item?.id,data});};
+ return <div className="dashboard"><aside className="legend" aria-label="Légende des badges"><h2 className="legend-title">Légende des badges</h2><div className="legend-grid">{statuses.map(s=><span key={s} className={`badge badge-status badge-${s}`}>{labels[s]}</span>)}<span className="badge badge-origine">Lié à un devis</span></div></aside>{showDevis&&<Panel kind="devis" items={devis.data||[]} stats={ds.data||{}} loading={devis.isLoading} failed={devis.isError} statsFailed={ds.isError} retry={()=>{void devis.refetch();void ds.refetch();}} busy={mutation.isPending} add={()=>setEditor({kind:'devis'})} edit={(item:Item)=>setEditor({kind:'devis',item})} remove={(item:Item)=>remove('devis',item)} convert={(item:Devis)=>setConversion(item)}/>}{showInterventions&&<Panel kind="interventions" items={interventions.data||[]} stats={ins.data||{}} loading={interventions.isLoading} failed={interventions.isError} statsFailed={ins.isError} retry={()=>{void interventions.refetch();void ins.refetch();}} busy={mutation.isPending} add={()=>setEditor({kind:'interventions'})} edit={(item:Item)=>setEditor({kind:'interventions',item})} remove={(item:Item)=>remove('interventions',item)}/ >}{editor&&<Editor key={`${editor.kind}-${editor.item?.id??'new'}`} state={editor} busy={mutation.isPending} submit={save} close={()=>setEditor(null)}/ >}{conversion&&<Conversion key={conversion.id} quote={conversion} close={()=>setConversion(null)} done={()=>{qc.invalidateQueries({queryKey:['devis']});qc.invalidateQueries({queryKey:['interventions']});setConversion(null);}}/>}</div>;
 }

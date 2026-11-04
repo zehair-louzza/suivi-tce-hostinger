@@ -1,0 +1,46 @@
+name: Conversion et compilation PostgreSQL
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_DB: anelec_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:ci-only-not-a-secret@127.0.0.1:5432/anelec_ci
+      ANELEC_CI_DATABASE: 'true'
+      JWT_SECRET: ci-only-jwt-secret-not-for-production-123456789
+      COOKIE_SECRET: ci-only-cookie-secret-not-for-production-123456789
+      CORS_ORIGIN: http://localhost:5173
+      SOCKET_CORS_ORIGIN: http://localhost:5173
+      PGPASSWORD: ci-only-not-a-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --include=dev
+      - run: npx --no-install prisma validate
+      - run: npx --no-install prisma generate
+      - name: Rôles API Supabase factices, uniquement en CI
+        run: psql -h 127.0.0.1 -U postgres -d anelec_ci -v ON_ERROR_STOP=1 -c 'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;'
+      - name: Migrations sur base CI neuve uniquement
+        run: npx --no-install prisma migrate deploy
+      - run: npm run build
+      - run: npx --no-install tsx --test test/linkedConversion.pg.test.ts

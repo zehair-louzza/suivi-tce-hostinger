@@ -1,25 +1,34 @@
-# Synchronisation Prisma V2
+# Rapprochement Prisma — Suivi_ANELEC
 
-Cible unique : Suivi_ANELEC, qfhxptwsuotqnrihzhxw.
-La migration anelec_metier_v2_expand a déjà été appliquée via Supabase. Le fichier Prisma versionné en reproduit les effets et ajoute une enveloppe transactionnelle pour les bases neuves. La contrainte datePlanifiee reste NOT NULL. Les noms d'index Prisma sont explicitement alignés sur les noms PostgreSQL minuscules des index créés sans guillemets.
+Projet unique : qfhxptwsuotqnrihzhxw. Pas de branche Supabase payante.
+La migration de structure anelec_metier_v2_expand est déjà appliquée via Supabase. Le dépôt contient sa version Prisma 20261104182000_anelec_metier_v2_expand. Les historiques Supabase et Prisma restent distincts : publier le fichier ne remplit pas _prisma_migrations.
 
-IMPORTANT : ne pas lancer migrate deploy sur cette base avant rapprochement. La présence du fichier dans le dépôt ne marque PAS la migration comme appliquée dans _prisma_migrations. L'historique Supabase et l'historique Prisma sont distincts.
+## Procédure depuis un terminal du projet
+Utiliser le checkout main à jour et l'URL PostgreSQL serveur de CE projet, chargée dans DATABASE_URL sans l'afficher ni la committer. Vérifier le hostname db.qfhxptwsuotqnrihzhxw.supabase.co ou, avec le pooler, l'identifiant postgres.qfhxptwsuotqnrihzhxw. Ne pas utiliser l'URL HTTP ni une clé API Supabase.
 
-Procédure séparée, à exécuter avec une connexion serveur autorisée après validation de la cible et confirmation :
 1. npm ci --include=dev
-2. npx prisma validate
-3. npx prisma generate
-4. npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
-5. Si et seulement si le diff est nul, examiner aussi les CHECK, le RLS et les privilèges de conversion_requests (Prisma ne décrit pas tout).
-6. npx prisma migrate resolve --applied 20261104182000_anelec_metier_v2_expand
-7. npx prisma migrate status
+2. npx --no-install prisma validate
+3. npx --no-install prisma generate
+4. npx --no-install prisma migrate status
+   Une migration en attente est attendue ; ce statut seul ne vérifie pas le schéma.
+5. Avec Prisma 5 du projet :
+   npx --no-install prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+   Code 0 = aucun écart décrit par Prisma ; code 2 = différences, arrêter ; code 1 = erreur, arrêter.
+6. Examiner aussi RLS, privilèges, contraintes CHECK et historique de la migration initiale. migrate diff ne couvre pas toutes les fonctions PostgreSQL. Ne pas modifier la migration initiale.
+7. Seulement après conformité et autorisation d'écriture du registre :
+   npx --no-install prisma migrate resolve --applied 20261104182000_anelec_metier_v2_expand
+8. npx --no-install prisma migrate status
+   Les deux migrations doivent être reconnues appliquées. Ne pas annoncer le rapprochement réussi sans ce résultat.
+9. npm run build
 
-Ne pas changer la migration initiale ni fabriquer de ligne _prisma_migrations à la main. Ne jamais exécuter reset. Une différence de schéma bloque le rapprochement. Aucun de ces changements de registre n'est exécuté par ce commit ou au démarrage. scripts/migrate.mjs existant reste inchangé ; ne pas le lancer avant l'étape 6.
+resolve --applied enregistre la migration sans rejouer les ALTER TABLE. Ne PAS lancer migrate deploy/scripts/migrate.mjs avant le rapprochement sur la base déjà modifiée. Pas de reset, db push, suppression de dossier migrations ou INSERT manuel dans _prisma_migrations. Ne pas exécuter cette procédure contre l'autre projet. Aucun rapprochement n'est effectué automatiquement par ce commit.
 
-Ce lot ajoute les validateurs et le service lié, MAIS ne remplace pas encore la route ni le message frontend. Le prochain lot doit monter convertKeepingQuote et changer simultanément la confirmation qui annonce la suppression. Ne pas considérer la conversion publiée comme corrigée avant ce basculement.
+## Basculement conversion
+La route /api/devis/:id/convert appelle maintenant convertKeepingQuote ; elle exige une date réelle choisie et l'en-tête Idempotency-Key. Le devis commercial doit être ACCEPTE et son objet renseigné. L'éditeur devis permet de renseigner ces deux champs ; TRAITE n'est pas assimilé à ACCEPTE.
+La boîte de dialogue indique que le devis reste présent. Une tentative mémorisée conserve clé et date dans sessionStorage, y compris après une réponse incertaine. Le bouton de relance rejoue cette tentative. Une réussite confirmée efface la tentative ; une demande volontaire suivante peut créer une autre intervention.
+La route ne publie plus d'événement de suppression du devis. La suppression explicite d'un devis lié est refusée. Les dates planifiées restent obligatoires dans cette étape. Le montant historique copié n'est pas le nouveau montantHt.
 
-Préconditions du nouveau service : devis commercial ACCEPTE, objet renseigné, date planifiée explicite. Les formulaires historiques ne renseignent pas encore tous ces champs : prévoir la qualification via API et les formulaires suivants ; ne pas inventer une acceptation depuis le statut TRAITE.
-
-Le service conserve le devis, utilise une transaction Serializable, garde le propriétaire du devis, mémorise la réponse et refuse un payload différent avec la même clé. Une nouvelle clé peut volontairement créer une autre intervention. Les montants HT ne sont pas transformés en Float : amount copié reste le champ historique uniquement.
-
-État des tests : les 84 tests du pack local précédent ne constituent PAS des tests de ces nouveaux modules TypeScript. Il reste à compiler le dépôt, ajouter les tests des modules intégrés et effectuer les tests PostgreSQL réels. Pas de nouvelle affirmation de validation complète.
+## Vérifications
+Le workflow GitHub Actions compile le dépôt, exécute les deux migrations sur un PostgreSQL 17 éphémère local et teste le service intégré. Il n'utilise aucun secret Supabase et ne migre PAS la base qfhxptwsuotqnrihzhxw. Les rôles anon/authenticated y sont des rôles NOLOGIN de simulation. Les tests refusent les hôtes autres que localhost/127.0.0.1 et les bases autres que anelec_ci.
+La suite vérifie conservation du devis, lien/propriétaire, permissions, rejeu, collision de payload, concurrence avec retry borné et reconnexion. Une erreur temporaire 409 concurrente est tolérée si aucune duplication ne se produit ; le client doit relancer avec la même clé.
+Résultats CI à consulter après publication. Ces tests ne valident pas les cookies/JWT, le navigateur, les rooms Socket.io, les droits du compte Prisma Supabase ni le déploiement Hostinger. Les 84 tests d'un ancien pack ne sont pas une validation de ce commit. Compléter par un essai navigateur après build réussi et rapprochement.
