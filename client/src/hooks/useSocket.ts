@@ -1,164 +1,44 @@
-// Socket.io connection hook for real-time updates
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
+import { subscribeToRealtimeInvalidation, type RealtimeResource } from '../lib/realtimeInvalidation';
 
 export function useSocket() {
-  const { isAuthenticated, accessToken } = useAuthStore();
-  const socketRef = useRef<Socket | null>(null);
+ const { isAuthenticated, accessToken } = useAuthStore();
+ const socketRef = useRef<Socket | null>(null);
+ useEffect(() => {
+  if (!isAuthenticated) return;
+  const socket = io({ auth: { token: accessToken }, transports: ['websocket', 'polling'], autoConnect: true });
+  socketRef.current = socket;
+  socket.on('connect', () => console.log('Socket connected:', socket.id));
+  socket.on('disconnect', reason => console.log('Socket disconnected:', reason));
+  socket.on('connect_error', err => console.error('Socket connection error:', err.message));
+  return () => {
+   socket.disconnect();
+   if (socketRef.current === socket) socketRef.current = null;
+  };
+ }, [isAuthenticated, accessToken]);
 
-  useEffect(() => {
-    if (isAuthenticated && !socketRef.current) {
-      // Connect to socket server
-      const s = io({
-        auth: { token: accessToken },
-        transports: ['websocket', 'polling'],
-        autoConnect: true,
-      });
-      socketRef.current = s;
-
-      s.on('connect', () => {
-        console.log('Socket connected:', s.id);
-      });
-
-      s.on('disconnect', (reason) => {
-        console.log('Socket disconnected:', reason);
-      });
-
-      s.on('connect_error', (err) => {
-        console.error('Socket connection error:', err.message);
-      });
-    } else if (!isAuthenticated && socketRef.current) {
-      // Disconnect on logout
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-    };
-  }, [isAuthenticated, accessToken]);
-
-  // Subscribe to events
-  const on = useCallback((event: string, callback: (data: any) => void) => {
-    if (socketRef.current) {
-      socketRef.current.on(event, callback);
-    }
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off(event, callback);
-      }
-    };
-  }, []);
-
-  // Emit events
-  const emit = useCallback((event: string, data?: any) => {
-    if (socketRef.current) {
-      socketRef.current.emit(event, data);
-    }
-  }, []);
-
-  return { socket: socketRef.current, on, emit };
+ const on = useCallback((event: string, callback: (data: any) => void) => {
+  const socket = socketRef.current;
+  socket?.on(event, callback);
+  // Remove from the instance actually used for this subscription.
+  return () => { socket?.off(event, callback); };
+ }, []);
+ const emit = useCallback((event: string, data?: any) => { socketRef.current?.emit(event, data); }, []);
+ return { socket: socketRef.current, on, emit };
 }
 
-// Helper hook for devis real-time updates
-import { useQueryClient } from '@tanstack/react-query';
-
-export function useDevisRealtime() {
-  const queryClient = useQueryClient();
-  const { on } = useSocket();
-
-  useEffect(() => {
-    const unsubCreated = on('devis:created', (data: any) => {
-      queryClient.setQueryData(['devis', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: [data, ...old.data],
-          pagination: { ...old.pagination, total: old.pagination.total + 1 },
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['devis', 'stats'] });
-    });
-
-    const unsubUpdated = on('devis:updated', (data: any) => {
-      queryClient.setQueryData(['devis', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: old.data.map((d: any) => (d.id === data.id ? data : d)),
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['devis', 'stats'] });
-    });
-
-    const unsubDeleted = on('devis:deleted', (data: { id: number }) => {
-      queryClient.setQueryData(['devis', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: old.data.filter((d: any) => d.id !== data.id),
-          pagination: { ...old.pagination, total: old.pagination.total - 1 },
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['devis', 'stats'] });
-    });
-
-    return () => {
-      unsubCreated();
-      unsubUpdated();
-      unsubDeleted();
-    };
-  }, [on, queryClient]);
+function useResourceRealtime(resource: RealtimeResource) {
+ const queryClient = useQueryClient();
+ const { on } = useSocket();
+ const { isAuthenticated, accessToken } = useAuthStore();
+ useEffect(() => {
+  if (!isAuthenticated) return;
+  return subscribeToRealtimeInvalidation(on, queryClient, resource);
+  // Rebind after token changes, since useSocket recreates its connection.
+ }, [on, queryClient, resource, isAuthenticated, accessToken]);
 }
-
-export function useInterventionRealtime() {
-  const queryClient = useQueryClient();
-  const { on } = useSocket();
-
-  useEffect(() => {
-    const unsubCreated = on('intervention:created', (data: any) => {
-      queryClient.setQueryData(['interventions', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: [data, ...old.data],
-          pagination: { ...old.pagination, total: old.pagination.total + 1 },
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['interventions', 'stats'] });
-    });
-
-    const unsubUpdated = on('intervention:updated', (data: any) => {
-      queryClient.setQueryData(['interventions', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: old.data.map((i: any) => (i.id === data.id ? data : i)),
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['interventions', 'stats'] });
-    });
-
-    const unsubDeleted = on('intervention:deleted', (data: { id: number }) => {
-      queryClient.setQueryData(['interventions', 'list'], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          data: old.data.filter((i: any) => i.id !== data.id),
-          pagination: { ...old.pagination, total: old.pagination.total - 1 },
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ['interventions', 'stats'] });
-    });
-
-    return () => {
-      unsubCreated();
-      unsubUpdated();
-      unsubDeleted();
-    };
-  }, [on, queryClient]);
-}
+export function useDevisRealtime() { useResourceRealtime('devis'); }
+export function useInterventionRealtime() { useResourceRealtime('interventions'); }

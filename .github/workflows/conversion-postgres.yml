@@ -51,6 +51,11 @@ jobs:
         run: |
           set -o pipefail
           npm run build 2>&1 | tee reports/build.log
+      - name: Tests de non-régression du temps réel
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --no-install tsx --test test/realtimeInvalidation.test.ts 2>&1 | tee reports/realtime.tap
       - name: Tests PostgreSQL de conversion
         shell: bash
         run: |
