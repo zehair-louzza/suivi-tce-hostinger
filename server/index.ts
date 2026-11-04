@@ -22,37 +22,24 @@ import { authMiddleware } from './middleware/auth.js';
 import { setupSocketHandlers } from './socket/index.js';
 
 const app = express();
+// Trust only the local reverse proxy observed in Hostinger runtime logs.
+app.set('trust proxy', 'loopback');
 const httpServer = createServer(app);
 
-// Socket.io setup
 export const io = new Server(httpServer, {
-  cors: {
-    origin: config.socketCorsOrigin,
-    credentials: true,
-  },
+  cors: { origin: config.socketCorsOrigin, credentials: true },
 });
-
-// Initialize socket instance for event emitters
 import { setSocketInstance } from './socket/index.js';
 setSocketInstance(io);
-
-// Setup socket handlers
 setupSocketHandlers(io);
 
-// Middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
-app.use(cors({
-  origin: config.corsOrigin,
-  credentials: true,
-}));
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(config.cookieSecret));
 app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMax,
@@ -61,18 +48,13 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(limiter);
-
-// Make io available in routes
 app.set('io', io);
 
-// Routes
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/devis', authMiddleware, devisRouter);
 app.use('/api/interventions', authMiddleware, interventionRouter);
 
-// Serve static files from client build in production
-// (enregistré de façon synchrone, avant le gestionnaire 404 ; `npm start` s'exécute depuis la racine du projet)
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');
   if (fs.existsSync(clientDist)) {
@@ -81,38 +63,29 @@ if (config.nodeEnv === 'production') {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {
-    console.warn(`⚠️  Build client introuvable : ${clientDist} (lancer « npm run build »)`);
+    console.warn(`Build client introuvable : ${clientDist} (lancer npm run build)`);
   }
 }
 
-// 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route non trouvée' });
 });
-
-// Error handler
 app.use(errorHandler);
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
   await prisma.$disconnect();
-  httpServer.close(() => {
-    process.exit(0);
-  });
+  httpServer.close(() => process.exit(0));
 });
-
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
   await prisma.$disconnect();
-  httpServer.close(() => {
-    process.exit(0);
-  });
+  httpServer.close(() => process.exit(0));
 });
 
 httpServer.listen(config.port, () => {
   console.log(`🚀 Server running on port ${config.port} (${config.nodeEnv})`);
-  console.log(`📡 Socket.io ready`);
+  console.log('📡 Socket.io ready');
   console.log(`🔗 CORS: ${config.corsOrigin}`);
 });
 

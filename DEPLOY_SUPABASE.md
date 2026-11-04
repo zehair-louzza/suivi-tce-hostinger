@@ -1,25 +1,38 @@
 # Hostinger + Supabase (Prisma 5)
 
-## Required settings
+## Runtime settings
 
-- Framework: Express; root: ./; build: npm run build.
-- Hostinger entry file: scripts/start.mjs (replace dist/server/index.js).
+- Express; root ./; build npm run build; entry scripts/start.mjs.
 - NODE_ENV=production; PORT=3000; NPM_CONFIG_INCLUDE=dev.
-- DATABASE_URL: the Supabase PostgreSQL Session pooler URI (port 5432), stored only in Hostinger secrets. Use the exact dashboard URI with the database password correctly URL-encoded. Require TLS using sslmode=require if not already configured; preserve existing URI query parameters.
-- Keep the existing JWT, cookie and CORS settings. SUPABASE_URL and SUPABASE_API_KEY are not used by Prisma.
+- DATABASE_URL: Supabase PostgreSQL Session pooler URI, port 5432, stored only in Hostinger. URL-encode special characters in the password. Use TLS (sslmode=require), preserving existing URI query parameters.
+- Keep JWT, cookie and CORS settings. Supabase API keys are not used by Prisma.
 
-## First deployment
+## Startup
 
-Use a dedicated Supabase database/schema with no existing application tables or valuable data. Back up any existing data before migrations. The connection role needs permission to create tables, indexes, constraints and the Prisma migration history. The current Supabase postgres role can bypass RLS; keep its password server-side only.
+The launcher starts Express immediately without migration subprocesses or database network waits. This avoids the observed Hostinger three-second listen deadline. The initial migration has already been applied according to the supplied runtime logs; this patch does not change it or transfer SQLite data.
 
-The new launcher executes the local Prisma CLI with migrate deploy before importing the compiled Express server. It does not use npx downloads, db push, reset, forced data loss or demo seeding. If a migration fails or exceeds 180 seconds, the server does not start. A failed initial migration requires investigation, not an automatic reset.
+The server trusts only loopback reverse proxies, matching the observed peer 127.0.0.1. Confirm the actual proxy topology and that the local proxy sanitizes forwarded headers before production use. Do not blindly trust all proxies.
 
-The initial migration creates users, devis, interventions and enables RLS without public API policies. The application continues to use its own Express JWT authorization and Prisma database connection, not Supabase Auth. Do not add public access policies for these tables, especially users containing password hashes.
+GET /api/auth/me now runs authMiddleware before loading the user. Async auth route failures are forwarded to the Express 4 error handler. Existing cookie security and USER registration role are preserved. No demo account is seeded.
 
-Changing npm start alone is insufficient when Hostinger launches the configured entry directly. Always set Entry file to scripts/start.mjs. Builds alone do not apply this migration. If running outside Hostinger, use node scripts/start.mjs from the project root.
+## Future database migrations (separate deployment step)
 
-## Verify
+Back up the database and review pending SQL before execution. With the appropriate PostgreSQL credentials in the execution environment, run from the project root:
 
-Runtime logs should show migrations applied, then Migrations complete. Starting Express..., then Server running on port 3000. Check /api/health and register a real account using the application; no demo account is created automatically. Inspect the assigned user role before granting administrative privileges.
+```sh
+node scripts/migrate.mjs
+```
 
-Subsequent restarts apply only pending committed migrations. Never edit an already applied migration. Prepare and review new migrations separately; keep database backups. Existing SQLite data is not transferred by this change. This patch was prepared by source inspection and must still be validated by build/runtime logs and functional tests.
+This command runs the local Prisma migrate deploy and exits nonzero on failure. It is not invoked automatically by startup or build. Apply future migrations in a controlled deployment/release step before deploying code that depends on them. Do not run reset, force-reset, accept-data-loss or edit applied migrations. Keep database credentials out of Git and logs.
+
+## Validation after redeploy
+
+1. Confirm entry scripts/start.mjs and deployment of this commit.
+2. Verify the startup no longer prints Applying pending PostgreSQL migrations.
+3. Check server startup logs for errors and /api/health.
+4. Login with the real account already registered: expect login 200 followed by me 200.
+5. Without a valid session, me should return JSON 401, not terminate the process.
+6. Wrong credentials should return JSON 401; invalid registration input should be handled without process exit.
+7. Check registration, logout and refresh. Do not share cookies or tokens in diagnostics.
+
+This patch was prepared by source inspection, not compiled or functionally tested here. Other routers and UI styling have not been audited or modified by this patch. Further errors require runtime logs and tests.
