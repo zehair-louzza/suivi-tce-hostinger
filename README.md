@@ -1,296 +1,91 @@
-# Suivi TCE — Hostinger Deployable
+# Suivi TCE — Devis et interventions
 
-Application complète de suivi des devis et interventions TCE, déployable sur **Hostinger VPS** (Node.js + SQLite).
+Application React/TypeScript avec API Express, Prisma, PostgreSQL Supabase et Socket.io. Configuration actuelle : application web Node.js sur Hostinger Cloud, et non VPS avec SQLite. Les anciennes instructions SQLite, Nginx et PM2 ne s'appliquent pas a ce deploiement.
 
-## 🏗️ Architecture
+## Trois vues distinctes
 
-```
-suivi-tce-hostinger/
-├── package.json                 # Single package.json (no workspaces)
-├── tsconfig.json                # Client TypeScript config
-├── tsconfig.server.json         # Server TypeScript config
-├── tsconfig.node.json           # Vite config
-├── vite.config.ts               # Vite config with proxy
-├── .env.example                 # Environment template
-├── .gitignore
-├── prisma/
-│   └── schema.prisma            # SQLite schema (User, Devis, Intervention)
-├── server/
-│   ├── index.ts                 # Express + Socket.io entry
-│   ├── config.ts                # Configuration
-│   ├── lib/prisma.ts            # Prisma singleton
-│   ├── middleware/
-│   │   ├── auth.ts              # JWT + roles
-│   │   └── errorHandler.ts
-│   ├── routes/
-│   │   ├── auth.ts              # /api/auth/*
-│   │   ├── devis.ts             # /api/devis/* + conversion
-│   │   ├── interventions.ts     # /api/interventions/*
-│   │   └── health.ts
-│   ├── socket/index.ts          # Socket.io real-time
-│   └── db/
-│       ├── init.ts              # DB initialization
-│       └── seed.ts              # Sample data
-├── client/
-│   ├── index.html
-│   ├── src/
-│   │   ├── main.tsx             # Entry + providers
-│   │   ├── App.tsx              # Routes
-│   │   ├── components/
-│   │   │   ├── Layout.tsx       # Sidebar + Header
-│   │   │   └── ProtectedRoute.tsx
-│   │   ├── pages/
-│   │   │   ├── LoginPage.tsx    # Login/Register
-│   │   │   └── DashboardPage.tsx # Main dashboard
-│   │   ├── hooks/useSocket.ts   # Real-time sync
-│   │   ├── stores/authStore.tsx # Zustand auth
-│   │   ├── lib/api.ts           # Axios + types
-│   │   └── styles/
-│   │       ├── design-tokens.css
-│   │       └── global.css
-│   └── styles/
-└── shared/types.ts              # Shared types + Zod schemas
-```
+| Route | Titre | Contenu |
+| --- | --- | --- |
+| / | Tableau de bord | Vue combinee des devis et interventions, compteurs et legende |
+| /devis | Devis | Uniquement les devis, recherche et actions devis |
+| /interventions | Interventions | Uniquement les interventions, recherche et actions interventions |
 
-## 🚀 Stack Technique
+App.tsx choisit explicitement le mode de DashboardPage. Les panneaux et le formulaire sont partages et montes conditionnellement, pas caches par CSS. Les requetes de liste/statistiques sont activees uniquement pour les familles visibles. Le Layout partage la navigation, les connexions temps reel et le titre adapte a la route. Les changements de route reinitialisent les formulaires ouverts. L'heure affichee dans l'en-tete est une horloge locale, pas une preuve de synchronisation des donnees.
 
-| Layer | Tech |
-|-------|------|
-| **Frontend** | React 18 + TypeScript + Vite |
-| **State** | TanStack Query v5 + Zustand |
-| **UI** | CSS Custom Properties (Linear-inspired dark theme) |
-| **Forms** | React Hook Form + Zod |
-| **Real-time** | Socket.io (client + server) |
-| **Backend** | Express + TypeScript + Prisma |
-| **Database** | **SQLite** (file-based, perfect for Hostinger) |
-| **Auth** | JWT + HttpOnly cookies (access + refresh) |
-| **Validation** | Zod (shared schemas) |
+## Structure utile
 
-## 📦 Installation Locale
+- client/src/App.tsx : routes protegees et modes de vue.
+- client/src/pages/DashboardPage.tsx : panneaux, recherches, formulaire et actions partages.
+- client/src/components/Layout.tsx : navigation et titres.
+- client/src/lib/api.ts : client HTTP avec cookies.
+- client/src/styles/design-tokens.css, global.css, layout.css : theme et mise en page responsive.
+- server/routes/auth.ts : authentification JWT.
+- server/routes/interventions.ts : validation normalisee et gestion async des interventions.
+- server/routes/devis.ts : devis et conversion ; voir limites ci-dessous.
+- prisma/schema.prisma, prisma/migrations : schema PostgreSQL et migrations versionnees.
+- scripts/start.mjs : demarrage sans migration bloquante.
+- scripts/migrate.mjs : application des migrations dans une etape separee.
 
-### Prérequis
-- Node.js 20+
-- npm 10+
+## Installation locale
 
-### 1. Cloner et installer
-```bash
-git clone <votre-repo>
-cd suivi-tce-hostinger
-npm install
-```
+Node.js >=20, npm. Installer avec npm ci en incluant les devDependencies. Creer un fichier .env prive depuis .env.example et remplacer imperativement l'ancienne URL SQLite par une URL PostgreSQL de developpement. Ne jamais utiliser la base de production pour des essais de schema.
 
-### 2. Configuration
-```bash
-cp .env.example .env
-# Éditez .env avec vos secrets (JWT_SECRET, COOKIE_SECRET, etc.)
-```
-
-### 3. Base de données
-```bash
-# Générer Prisma Client
+```sh
+npm ci --include=dev
 npx prisma generate
-
-# Créer la base + migrations
-npx prisma migrate dev --name init
-
-# (Optionnel) Seed données démo
-npm run db:seed
-```
-
-### 4. Développement
-```bash
-# Lance client (5173) + server (3001)
+node scripts/migrate.mjs
 npm run dev
 ```
 
-**Accès** :
-- Frontend : http://localhost:5173
-- Backend API : http://localhost:3001/api
-- Health check : http://localhost:3001/api/health
-- Compte démo : `demo@suivi-tce.fr` / `demo1234`
+Le fichier .env.example historique peut encore contenir des exemples SQLite/developpement ; les reglages ci-dessous sont ceux du deploiement PostgreSQL actuel. Ne committer aucun secret.
 
-## 🏭 Build Production
+## Hostinger Cloud
 
-```bash
-# Build client + server
-npm run build
+- Framework Express ; branche main ; repertoire racine ./.
+- Compilation npm run build ; entree scripts/start.mjs.
+- NODE_ENV=production ; PORT=3000 ; NPM_CONFIG_INCLUDE=dev.
+- DATABASE_URL : URI PostgreSQL Supabase Session pooler port 5432, avec mot de passe correctement encode et TLS (sslmode=require), conservee uniquement dans les variables serveur. Preserver les parametres deja presents dans l'URI.
+- CORS_ORIGIN et SOCKET_CORS_ORIGIN : https://suivi.anelecgroupe.com.
+- JWT_SECRET et COOKIE_SECRET : valeurs longues aleatoires distinctes.
+- JWT_EXPIRES_IN=7d ; JWT_REFRESH_EXPIRES_IN=30d.
+- COOKIE_MAX_AGE=604800000 est une variable historique ; les routes auth fixent actuellement directement les durees des cookies (7 et 30 jours).
+- RATE_LIMIT_WINDOW_MS=900000 ; RATE_LIMIT_MAX=100.
 
-# Crée :
-# dist/client/     # Fichiers statiques (HTML, CSS, JS)
-# dist/server/     # Code serveur compilé
+SUPABASE_URL et SUPABASE_API_KEY ne sont pas necessaires a Prisma. L'application garde sa propre authentification Express/JWT ; les comptes ne sont pas automatiquement des utilisateurs Supabase Auth. Aucun compte demo n'est cree par les migrations.
+
+## Base et migrations
+
+La migration initiale PostgreSQL cree users, devis et interventions avec index et relations. Elle active RLS sans politique publique ; la connexion backend doit avoir les permissions appropriees. Garder les identifiants PostgreSQL exclusivement cote serveur.
+
+Les migrations ne sont pas executees au demarrage car un acces reseau prealable retardait listen() au-dela du delai observe chez Hostinger. Pour une evolution de schema : sauvegarder, examiner le SQL, puis appliquer les migrations dans une etape controlee avant le code qui en depend :
+
+```sh
+node scripts/migrate.mjs
 ```
 
-## 🌐 Déploiement sur Hostinger VPS
+Ne pas utiliser migrate reset, force-reset ou accept-data-loss en production. Ne pas modifier une migration deja appliquee. Les donnees SQLite historiques ne sont pas transferees automatiquement. Consulter DEPLOY_SUPABASE.md et FIX_INTERVENTIONS.md pour le contexte des corrections precedentes.
 
-### 1. Préparer le VPS
-```bash
-# Sur votre VPS Ubuntu 22.04+
-sudo apt update && sudo apt install -y nodejs npm nginx
-# Ou installez Node 20 via nvm
-```
+## Actions et limites connues
 
-### 2. Déployer l'application
-```bash
-# Sur votre machine locale
-npm run build
+Les panneaux proposent creation, lecture, modification, suppression et conversion devis vers intervention. La conversion existante cree une intervention puis supprime le devis ; elle demande confirmation et conserve un badge d'origine. Son traitement serveur n'est pas rendu transactionnel par la separation des vues : tester sur donnees fictives avant utilisation metier.
 
-# Copier sur le VPS
-rsync -avz dist/ user@votre-vps:/var/www/suivi-tce/
-rsync -avz prisma/ user@votre-vps:/var/www/suivi-tce/prisma/
-rsync -avz package.json package-lock.json user@votre-vps:/var/www/suivi-tce/
-scp .env user@votre-vps:/var/www/suivi-tce/.env
+Les listes affichent au maximum les 100 derniers elements ; la recherche du tableau porte sur les elements charges, pas toute la base. Les comptes USER voient leurs donnees selon les controles serveur ; ADMIN peut voir plus largement. Les roles ne doivent pas etre consideres comme un audit complet des autorisations : les permissions VIEWER restent a verifier.
 
-# Sur le VPS
-cd /var/www/suivi-tce
-npm ci --production
-npx prisma generate
-npx prisma migrate deploy
-```
+Les erreurs async des routes auth et interventions sont prises en charge. Les routes devis n'ont pas encore recu le meme durcissement serveur. Le formulaire partage convertit montant, statut et dates facultatives avant envoi, mais cela ne remplace pas la validation et la gestion d'erreurs serveur a completer pour les devis. Les connexions Socket.io existantes sont conservees ; leur mutualisation reste hors de ce correctif.
 
-### 3. Configuration Nginx (Reverse Proxy)
-```nginx
-# /etc/nginx/sites-available/suivi-tce
-server {
-    listen 80;
-    server_name votre-domaine.com;
+Des vulnerabilites de dependances ont ete signalees par npm audit : examiner et tester les mises a jour sans lancer audit fix --force aveuglement.
 
-    # Frontend statique
-    location / {
-        root /var/www/suivi-tce/dist/client;
-        try_files $uri $uri/ /index.html;
-        
-        # Cache assets
-        location ~* \.(js|css|png|jpg|woff2)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
+## Validation de la separation
 
-    # API + Socket.io
-    location /api/ {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
+Ce changement est prepare par inspection ; sa compilation et son rendu doivent encore etre verifies.
 
-    location /socket.io/ {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
+1. npm run build doit reussir dans Hostinger.
+2. Ouvrir directement /, /devis et /interventions, puis recharger chaque URL.
+3. Verifier titre, menu actif et panneaux : deux sur /, un seul sur chaque page dediee.
+4. Tester la navigation avant/arriere et une session non authentifiee.
+5. Verifier les appels de listes/statistiques et l'absence de 503.
+6. Creer/modifier une intervention fictive, verifier POST 201/PATCH 200 et persistance apres rechargement.
+7. Verifier les fonctions devis et conversion sur donnees fictives, compte tenu des limites serveur ci-dessus.
+8. Verifier les recherches, erreurs affichees et navigation mobile.
 
-```bash
-sudo ln -s /etc/nginx/sites-available/suivi-tce /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-### 4. PM2 pour le processus Node
-```bash
-sudo npm install -g pm2
-
-# ecosystem.config.js
-module.exports = {
-  apps: [{
-    name: 'suivi-tce',
-    script: 'dist/server/index.js',
-    cwd: '/var/www/suivi-tce',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3001,
-      DATABASE_URL: 'file:./data.db',
-      JWT_SECRET: 'votre-secret-64-chars',
-      COOKIE_SECRET: 'votre-cookie-secret',
-      CORS_ORIGIN: 'https://votre-domaine.com',
-      SOCKET_CORS_ORIGIN: 'https://votre-domaine.com',
-    },
-  }],
-};
-
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-```
-
-### 5. SSL avec Certbot
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d votre-domaine.com
-```
-
-## 🗄️ Base de Données SQLite
-
-L'application utilise **SQLite** (fichier `data.db`) - idéal pour Hostinger :
-- Pas de serveur DB séparé
-- Fichier unique, facile à sauvegarder
-- Performances excellentes pour charges modérées
-- `npx prisma migrate deploy` pour les migrations en prod
-
-**Sauvegarde automatique** :
-```bash
-# Cron quotidien
-0 3 * * * cp /var/www/suivi-tce/data.db /var/backups/suivi-tce/data-$(date +\%F).db
-```
-
-## 🎯 Fonctionnalités
-
-| Feature | Description |
-|---------|-------------|
-| **Devis CRUD** | Créer, lire, modifier, supprimer + stats |
-| **Interventions CRUD** | Idem + traçabilité |
-| **Conversion Devis→Intervention** | Mapping auto + badge 🔗 traçabilité |
-| **Temps réel** | Socket.io (création/MAJ/suppression instantanée) |
-| **Auth JWT** | Access/Refresh tokens HttpOnly cookies |
-| **Rôles** | ADMIN, USER, VIEWER |
-| **Recherche/Filtres** | Par texte, statut, pagination |
-| **Design System** | Linear-inspired dark mode, CSS tokens |
-
-## 🔧 Scripts Utiles
-
-```bash
-npm run dev              # Dev client + server
-npm run dev:server       # Server only
-npm run dev:client       # Client only
-npm run build            # Build production
-npm run start            # Start production server
-npm run db:init          # Init DB
-npm run db:seed          # Seed sample data
-npm run db:studio        # Prisma Studio (GUI)
-npm run lint             # ESLint
-```
-
-## 📁 Variables d'Environnement (Production)
-
-```env
-DATABASE_URL=file:./data.db
-JWT_SECRET=your-64-char-random-secret
-JWT_EXPIRES_IN=7d
-JWT_REFRESH_EXPIRES_IN=30d
-PORT=3001
-NODE_ENV=production
-CORS_ORIGIN=https://votre-domaine.com
-SOCKET_CORS_ORIGIN=https://votre-domaine.com
-COOKIE_SECRET=your-cookie-secret
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-```
-
-Générez les secrets :
-```bash
-openssl rand -base64 48  # Pour JWT_SECRET
-openssl rand -base64 32  # Pour COOKIE_SECRET
-```
-
-## 📝 Licence
-
-MIT
+Licence : MIT, selon la documentation initiale du projet.

@@ -1,727 +1,152 @@
-// Dashboard Page - Main view with Devis and Interventions panels
-import { useState } from 'react';
+import { Fragment, useState, FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
-  devisApi, 
-  interventionApi,
-  Devis, 
-  formatCurrency,
-  formatDateFR,
-} from '../lib/api';
+import { devisApi, interventionApi, Devis, Intervention, formatCurrency, formatDateFR } from '../lib/api';
 import toast from 'react-hot-toast';
-import { Fragment } from 'react';
 
-// Modal component
-interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  footer?: React.ReactNode;
+type View = 'overview' | 'devis' | 'interventions';
+type Kind = 'devis' | 'interventions';
+type Item = Devis | Intervention;
+type Status = Devis['status'];
+const statuses: Status[] = ['a-traiter', 'en-cours', 'en-attente', 'bloque', 'traite'];
+const labels: Record<Status, string> = { 'a-traiter': 'À traiter', 'en-cours': 'En cours', 'en-attente': 'En attente', bloque: 'Bloqué', traite: 'Traité / Clôturé' };
+const publicStatus = (status: string) => status.toLowerCase().replace(/_/g, '-') as Status;
+function Badge({ status }: { status: Status }) {
+  return <span className={`badge badge-status badge-${status}`}>{labels[status] || status}</span>;
+}
+function errorMessage(error: any): string {
+  const body = error?.response?.data;
+  if (Array.isArray(body?.details)) return body.details.map((detail: any) => `${detail.field} : ${detail.message}`).join(' ; ');
+  return typeof body?.error === 'string' ? body.error : error?.message || 'Erreur lors de la demande';
 }
 
-function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 id="modal-title" className="modal-title">{title}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Fermer">&times;</button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  );
-}
-
-// Status badge component
-type StatutType = 'a-traiter' | 'en-cours' | 'en-attente' | 'bloque' | 'traite';
-
-const STATUT_LABELS: Record<StatutType, string> = {
-  'a-traiter': 'À traiter',
-  'en-cours': 'En cours',
-  'en-attente': 'En attente',
-  'bloque': 'Bloqué',
-  'traite': 'Traité / Clôturé',
-};
-
-const STATUT_CLASSES: Record<StatutType, string> = {
-  'a-traiter': 'badge-a-traiter',
-  'en-cours': 'badge-en-cours',
-  'en-attente': 'badge-en-attente',
-  'bloque': 'badge-bloque',
-  'traite': 'badge-traite',
-};
-
-function StatusBadge({ status, size = 'md' }: { status: StatutType; size?: 'sm' | 'md' }) {
-  const className = `badge badge-status ${STATUT_CLASSES[status]} ${size === 'sm' ? 'badge-sm' : ''}`;
-  return <span className={className}>{STATUT_LABELS[status] || status}</span>;
-}
-
-// Origine badge
-function OrigineBadge({ devisId, client, date }: { devisId: number; client: string | null; date: string | null }) {
-  return (
-    <span className="badge badge-origine" title={`Converti depuis le devis #${devisId}`}>
-      🔗 Devis #{devisId} • {client} ({formatDateFR(date)})
-    </span>
-  );
-}
-
-// Convert confirmation modal
-interface ConvertConfirmProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  devis: Devis;
-  isLoading: boolean;
-}
-
-function ConvertConfirmModal({ isOpen, onClose, onConfirm, devis, isLoading }: ConvertConfirmProps) {
-  if (!isOpen) return null;
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Transformer en intervention"
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={isLoading}>Annuler</button>
-          <button className="btn btn-primary" onClick={onConfirm} disabled={isLoading}>
-            {isLoading ? 'Conversion...' : 'Confirmer la conversion'}
-          </button>
-        </>
-      }
-    >
-      <div className="convert-confirm">
-        <p>Voulez-vous transformer le devis <strong>{devis.client}</strong> en intervention ?</p>
-        <ul>
-          <li>Le devis sera <strong>déplacé</strong> vers les interventions</li>
-          <li>Toutes les informations seront conservées</li>
-          <li>Un badge de traçabilité <strong>🔗 Devis #{devis.id}</strong> sera ajouté</li>
-        </ul>
-        <p className="convert-warning">Cette action est irréversible.</p>
-      </div>
-    </Modal>
-  );
-}
-
-// Devis Form Modal
-interface DevisFormModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
-  devis?: Devis | null;
-  isLoading: boolean;
-}
-
-function DevisFormModal({ isOpen, onClose, onSubmit, devis, isLoading }: DevisFormModalProps) {
-  if (!isOpen) return null;
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={devis ? 'Modifier le devis' : 'Nouveau devis'}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={isLoading}>Annuler</button>
-          <button className="btn btn-primary" onClick={() => (document.getElementById('devis-form') as HTMLFormElement | null)?.requestSubmit()} disabled={isLoading}>
-            {isLoading ? 'Enregistrement...' : devis ? 'Enregistrer' : 'Créer'}
-          </button>
-        </>
-      }
-    >
-      <form id="devis-form" onSubmit={(e) => { e.preventDefault(); onSubmit(new FormData(e.currentTarget)); }}>
-        <div className="form-group">
-          <label htmlFor="client" className="form-label">Client / Projet <span className="form-required">*</span></label>
-          <input id="client" name="client" type="text" className="input" placeholder="Ex: Mairie de Lyon - Rénovation école" defaultValue={devis?.client || ''} required />
-        </div>
-        <div className="form-group">
-          <label htmlFor="amount" className="form-label">Montant (€) <span className="form-required">*</span></label>
-          <input id="amount" name="amount" type="number" className="input" placeholder="Ex: 45000" step="0.01" min="0" defaultValue={devis?.amount || ''} required />
-        </div>
-        <div className="form-group">
-          <label htmlFor="dateCreated" className="form-label">Date création</label>
-          <input id="dateCreated" name="dateCreated" type="date" className="input" defaultValue={devis?.dateCreated || ''} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="echeance" className="form-label">Échéance</label>
-          <input id="echeance" name="echeance" type="date" className="input" defaultValue={devis?.echeance || ''} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="status" className="form-label">Statut <span className="form-required">*</span></label>
-          <select id="status" name="status" className={`select select-${devis?.status || 'a-traiter'}`} defaultValue={devis?.status || 'a-traiter'} required>
-            <option value="a-traiter">À traiter</option>
-            <option value="en-cours">En cours</option>
-            <option value="en-attente">En attente</option>
-            <option value="bloque">Bloqué</option>
-            <option value="traite">Traité</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="notes" className="form-label">Notes</label>
-          <textarea id="notes" name="notes" className="textarea" rows={3} placeholder="Observations, remarques…" defaultValue={devis?.notes || ''} />
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// Intervention Form Modal
-interface InterventionFormModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
-  intervention?: any | null;
-  isLoading: boolean;
-}
-
-function InterventionFormModal({ isOpen, onClose, onSubmit, intervention, isLoading }: InterventionFormModalProps) {
-  if (!isOpen) return null;
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={intervention ? 'Modifier l\'intervention' : 'Nouvelle intervention'}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={isLoading}>Annuler</button>
-          <button className="btn btn-primary" onClick={() => (document.getElementById('intervention-form') as HTMLFormElement | null)?.requestSubmit()} disabled={isLoading}>
-            {isLoading ? 'Enregistrement...' : intervention ? 'Enregistrer' : 'Créer'}
-          </button>
-        </>
-      }
-    >
-      <form id="intervention-form" onSubmit={(e) => { e.preventDefault(); onSubmit(new FormData(e.currentTarget)); }}>
-        <div className="form-group">
-          <label htmlFor="chantier" className="form-label">Chantier / Lot <span className="form-required">*</span></label>
-          <input id="chantier" name="chantier" type="text" className="input" placeholder="Ex: Lycée Victor Hugo - Lot 03 Maçonnerie" defaultValue={intervention?.chantier || ''} required />
-        </div>
-        <div className="form-group">
-          <label htmlFor="entreprise" className="form-label">Entreprise</label>
-          <input id="entreprise" name="entreprise" type="text" className="input" placeholder="Ex: SARL Dubois" defaultValue={intervention?.entreprise || ''} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="amount" className="form-label">Montant (€)</label>
-          <input id="amount" name="amount" type="number" className="input" placeholder="Ex: 12000" step="0.01" min="0" defaultValue={intervention?.amount || ''} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="datePlanifiee" className="form-label">Date planifiée <span className="form-required">*</span></label>
-          <input id="datePlanifiee" name="datePlanifiee" type="date" className="input" defaultValue={intervention?.datePlanifiee || ''} required />
-        </div>
-        <div className="form-group">
-          <label htmlFor="dateReelle" className="form-label">Date réelle</label>
-          <input id="dateReelle" name="dateReelle" type="date" className="input" defaultValue={intervention?.dateReelle || ''} />
-        </div>
-        <div className="form-group">
-          <label htmlFor="status" className="form-label">Statut <span className="form-required">*</span></label>
-          <select id="status" name="status" className={`select select-${intervention?.status || 'a-traiter'}`} defaultValue={intervention?.status || 'a-traiter'} required>
-            <option value="a-traiter">À traiter</option>
-            <option value="en-cours">En cours</option>
-            <option value="en-attente">En attente</option>
-            <option value="bloque">Bloqué</option>
-            <option value="traite">Clôturé</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="notes" className="form-label">Notes</label>
-          <textarea id="notes" name="notes" className="textarea" rows={3} placeholder="Observations…" defaultValue={intervention?.notes || ''} />
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// Panel component for Devis
-interface DevisPanelProps {
-  devis: Devis[];
+interface PanelProps {
+  kind: Kind;
+  items: Item[];
   stats: Record<string, number>;
-  isLoading: boolean;
-  search: string;
-  onSearchChange: (value: string) => void;
+  loading: boolean;
+  failed: boolean;
+  statsFailed: boolean;
+  retry: () => void;
+  busy: boolean;
   onAdd: () => void;
-  onEdit: (devis: Devis) => void;
-  onDelete: (id: number) => void;
-  onConvert: (devis: Devis) => void;
+  onEdit: (item: Item) => void;
+  onDelete: (item: Item) => void;
+  onConvert: (item: Devis) => void;
 }
-
-function DevisPanel({ devis, stats, isLoading, search, onSearchChange, onAdd, onEdit, onDelete, onConvert }: DevisPanelProps) {
-  const filteredDevis = devis.filter(d => 
-    d.client.toLowerCase().includes(search.toLowerCase()) ||
-    (d.notes?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-    String(d.amount).includes(search) ||
-    STATUT_LABELS[d.status as StatutType].toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (isLoading) {
-    return (
-      <div className="panel">
-        <div className="panel-loading">Chargement des devis...</div>
-      </div>
-    );
-  }
-
+function BusinessPanel({ kind, items, stats, loading, failed, statsFailed, retry, busy, onAdd, onEdit, onDelete, onConvert }: PanelProps) {
+  const [search, setSearch] = useState('');
+  const isDevis = kind === 'devis';
+  const title = isDevis ? 'DEVIS' : 'INTERVENTIONS';
+  const filtered = items.filter(item => {
+    const value = item as any;
+    return [value.client, value.chantier, value.entreprise, value.notes, value.amount, labels[publicStatus(value.status)]].some(part => String(part ?? '').toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
+  });
+  const columns = isDevis ? ['N°', 'Client / Projet', 'Montant', 'Date création', 'Échéance', 'Statut', 'Actions'] : ['N°', 'Chantier / Lot', 'Entreprise', 'Date planifiée', 'Date réelle', 'Statut', 'Actions'];
   return (
-    <section className="panel" aria-labelledby="devis-title">
-      <header className="panel-header">
-        <h2 id="devis-title" className="panel-title">DEVIS</h2>
-        <div className="panel-counters" role="group" aria-label="Compteurs de statuts devis">
-          {(["a-traiter", "en-cours", "en-attente", "bloque", "traite"] as const).map(status => (
-            <span key={status} className="counter" data-status={status}>
-              <span className="counter-value">{stats[status] || 0}</span>
-              {STATUT_LABELS[status as StatutType]}
-            </span>
-          ))}
-        </div>
-      </header>
-      
-      <div className="panel-toolbar">
-        <button className="btn btn-primary" onClick={onAdd}>+ Ajouter un devis</button>
-        <input
-          type="text"
-          className="search"
-          placeholder="Filtrer les devis…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          aria-label="Filtrer les devis"
-        />
-      </div>
-      
-      <div className="table-wrapper">
-        <table className="data-table" role="grid">
-          <thead>
-            <tr>
-              <th scope="col">N°</th>
-              <th scope="col">Client / Projet</th>
-              <th scope="col">Montant</th>
-              <th scope="col">Date création</th>
-              <th scope="col">Échéance</th>
-              <th scope="col">Statut</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDevis.length === 0 ? (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">
-                    <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <path d="M9 12h6" />
-                      <path d="M12 9v6" />
-                    </svg>
-                    <p className="empty-state-text">
-                      {devis.length === 0 ? 'Aucun devis. Cliquez sur « + Ajouter un devis » pour commencer.' : 'Aucun devis ne correspond au filtre.'}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              filteredDevis.map((d, idx) => (
-                <tr key={d.id}>
-                  <td>{idx + 1}</td>
-                  <td>
-                    <strong>{d.client}</strong>
-                    {d.notes && (
-                      <Fragment>
-                        <br />
-                        <small style={{ color: 'var(--color-tertiary-text)' }}>{d.notes}</small>
-                      </Fragment>
-                    )}
-                  </td>
-                  <td>{formatCurrency(d.amount)}</td>
-                  <td>{formatDateFR(d.dateCreated)}</td>
-                  <td>{formatDateFR(d.echeance)}</td>
-                  <td>
-                    <StatusBadge status={d.status as StatutType} />
-                  </td>
-                  <td>
-                    <div className="actions">
-                      <button className="btn-icon convert" onClick={() => onConvert(d)} title="Transformer en intervention" aria-label="Transformer en intervention">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                      </button>
-                      <button className="btn-icon" onClick={() => onEdit(d)} title="Modifier" aria-label="Modifier">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
-                      <button className="btn-icon delete" onClick={() => onDelete(d.id)} title="Supprimer" aria-label="Supprimer">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    <section className="panel" aria-labelledby={`${kind}-title`}>
+      <header className="panel-header"><h2 className="panel-title" id={`${kind}-title`}>{title}</h2><div className="panel-counters" aria-label={`Compteurs ${kind}`}>
+        {statsFailed ? <span role="status">Statistiques indisponibles</span> : statuses.map(status => <span className="counter" key={status}><span className="counter-value">{stats[status] || 0}</span>{labels[status]}</span>)}
+      </div></header>
+      <div className="panel-toolbar"><button className="btn btn-primary" onClick={onAdd} disabled={busy}>+ Ajouter {isDevis ? 'un devis' : 'une intervention'}</button><input id={`${kind}-search`} name={`${kind}-search`} className="search" type="search" placeholder={`Filtrer les ${kind}…`} aria-label={`Filtrer les ${kind}`} value={search} onChange={event => setSearch(event.target.value)} /></div>
+      {loading ? <div className="panel-loading" role="status">Chargement...</div> : failed ? <div className="empty-state" role="alert"><p>Impossible de charger les {kind}.</p><button className="btn btn-ghost" onClick={retry}>Réessayer</button></div> : <div className="table-wrapper"><table className="data-table"><thead><tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>
+        {filtered.length === 0 ? <tr><td colSpan={7}><div className="empty-state"><p>{items.length ? 'Aucun résultat ne correspond au filtre.' : `Aucun élément dans les ${kind}.`}</p></div></td></tr> : filtered.map(item => {
+          const value = item as any;
+          return <tr key={item.id} className={!isDevis && value.origineDevisId ? 'converted' : ''}>
+            <td>{item.id}</td>
+            <td><strong>{isDevis ? value.client : value.chantier}</strong>{!isDevis && value.origineDevisId && <Fragment><br /><span className="badge badge-origine">🔗 Devis #{value.origineDevisId} • {value.origineDevisClient} ({formatDateFR(value.origineDevisDate)})</span></Fragment>}{value.notes && <Fragment><br /><small className="text-tertiary">{value.notes}</small></Fragment>}</td>
+            <td>{isDevis ? formatCurrency(value.amount) : value.entreprise || '—'}</td>
+            <td>{formatDateFR(isDevis ? value.dateCreated : value.datePlanifiee)}</td>
+            <td>{formatDateFR(isDevis ? value.echeance : value.dateReelle)}</td>
+            <td><Badge status={publicStatus(value.status)} /></td>
+            <td><div className="actions">{isDevis && <button type="button" className="btn-icon convert" disabled={busy} onClick={() => onConvert(item as Devis)} aria-label="Transformer en intervention" title="Transformer en intervention">↗</button>}<button type="button" className="btn-icon" disabled={busy} onClick={() => onEdit(item)} aria-label="Modifier" title="Modifier">✎</button><button type="button" className="btn-icon delete" disabled={busy} onClick={() => onDelete(item)} aria-label="Supprimer" title="Supprimer">×</button></div></td>
+          </tr>;
+        })}
+      </tbody></table></div>}
+      {items.length >= 100 && <p className="text-tertiary" style={{ padding: 16 }}>Affichage limité aux 100 éléments les plus récents.</p>}
     </section>
   );
 }
 
-// Panel component for Interventions
-interface InterventionPanelProps {
-  interventions: any[];
-  stats: Record<string, number>;
-  isLoading: boolean;
-  search: string;
-  onSearchChange: (value: string) => void;
-  onAdd: () => void;
-  onEdit: (intervention: any) => void;
-  onDelete: (id: number) => void;
+interface EditorState { kind: Kind; item?: Item }
+function Editor({ state, busy, submit, close }: { state: EditorState; busy: boolean; submit: (data: Record<string, unknown>) => Promise<void>; close: () => void }) {
+  const isDevis = state.kind === 'devis';
+  const value = (state.item || {}) as any;
+  const prefix = isDevis ? 'devis' : 'intervention';
+  const [error, setError] = useState('');
+  const fields = isDevis ? [
+    { name: 'client', label: 'Client / Projet', type: 'text', required: true },
+    { name: 'amount', label: 'Montant (€)', type: 'number', required: true },
+    { name: 'dateCreated', label: 'Date création', type: 'date', required: true },
+    { name: 'echeance', label: 'Échéance', type: 'date', required: false },
+  ] : [
+    { name: 'chantier', label: 'Chantier / Lot', type: 'text', required: true },
+    { name: 'entreprise', label: 'Entreprise', type: 'text', required: false },
+    { name: 'amount', label: 'Montant (€)', type: 'number', required: false },
+    { name: 'datePlanifiee', label: 'Date planifiée', type: 'date', required: true },
+    { name: 'dateReelle', label: 'Date réelle', type: 'date', required: false },
+  ];
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    const data: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget));
+    data.amount = Number(String(data.amount || '0').replace(',', '.'));
+    if (!Number.isFinite(data.amount) || Number(data.amount) < 0) { setError('Montant invalide'); return; }
+    data.status = String(data.status).toUpperCase().replace(/-/g, '_');
+    for (const name of ['echeance', 'dateReelle']) if (data[name] === '') data[name] = null;
+    try { await submit(data); } catch (failure) { setError(errorMessage(failure)); }
+  };
+  return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editor-title" onClick={() => { if (!busy) close(); }}><div className="modal" onClick={event => event.stopPropagation()}>
+    <header className="modal-header"><h2 className="modal-title" id="editor-title">{state.item ? 'Modifier' : 'Créer'} {isDevis ? 'un devis' : 'une intervention'}</h2><button type="button" className="modal-close" disabled={busy} onClick={close} aria-label="Fermer">×</button></header>
+    <div className="modal-body"><form id="business-form" onSubmit={handleSubmit}>
+      {fields.map(field => <div className="form-group" key={field.name}><label className="form-label" htmlFor={`${prefix}-${field.name}`}>{field.label}{field.required ? ' *' : ''}</label><input className="input" id={`${prefix}-${field.name}`} name={field.name} type={field.type} required={field.required} disabled={busy} min={field.type === 'number' ? 0 : undefined} step={field.type === 'number' ? '0.01' : undefined} maxLength={field.type === 'text' ? 200 : undefined} defaultValue={value[field.name] ?? ''} /></div>)}
+      <div className="form-group"><label className="form-label" htmlFor={`${prefix}-status`}>Statut *</label><select className="select" id={`${prefix}-status`} name="status" defaultValue={publicStatus(value.status || 'a-traiter')} disabled={busy} required>{statuses.map(status => <option key={status} value={status}>{labels[status]}</option>)}</select></div>
+      <div className="form-group"><label className="form-label" htmlFor={`${prefix}-notes`}>Notes</label><textarea className="textarea" id={`${prefix}-notes`} name="notes" maxLength={2000} rows={3} defaultValue={value.notes || ''} disabled={busy} /></div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </form></div>
+    <footer className="modal-footer"><button type="button" className="btn btn-ghost" disabled={busy} onClick={close}>Annuler</button><button type="submit" form="business-form" className="btn btn-primary" disabled={busy}>{busy ? 'Enregistrement...' : 'Enregistrer'}</button></footer>
+  </div></div>;
 }
 
-function InterventionPanel({ interventions, stats, isLoading, search, onSearchChange, onAdd, onEdit, onDelete }: InterventionPanelProps) {
-  const filteredInterventions = interventions.filter(i =>
-    i.chantier.toLowerCase().includes(search.toLowerCase()) ||
-    (i.entreprise?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-    (i.notes?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-    STATUT_LABELS[i.status as StatutType].toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (isLoading) {
-    return (
-      <div className="panel">
-        <div className="panel-loading">Chargement des interventions...</div>
-      </div>
-    );
-  }
-
-  return (
-    <section className="panel" aria-labelledby="interventions-title">
-      <header className="panel-header">
-        <h2 id="interventions-title" className="panel-title">INTERVENTIONS</h2>
-        <div className="panel-counters" role="group" aria-label="Compteurs de statuts interventions">
-          {(["a-traiter", "en-cours", "en-attente", "bloque", "traite"] as const).map(status => (
-            <span key={status} className="counter" data-status={status}>
-              <span className="counter-value">{stats[status] || 0}</span>
-              {STATUT_LABELS[status as StatutType]}
-            </span>
-          ))}
-        </div>
-      </header>
-      
-      <div className="panel-toolbar">
-        <button className="btn btn-primary" onClick={onAdd}>+ Ajouter une intervention</button>
-        <input
-          type="text"
-          className="search"
-          placeholder="Filtrer les interventions…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          aria-label="Filtrer les interventions"
-        />
-      </div>
-      
-      <div className="table-wrapper">
-        <table className="data-table" role="grid">
-          <thead>
-            <tr>
-              <th scope="col">N°</th>
-              <th scope="col">Chantier / Lot</th>
-              <th scope="col">Entreprise</th>
-              <th scope="col">Date planifiée</th>
-              <th scope="col">Date réelle</th>
-              <th scope="col">Statut</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredInterventions.length === 0 ? (
-              <tr>
-                <td colSpan={7}>
-                  <div className="empty-state">
-                    <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <path d="M9 12h6" />
-                      <path d="M12 9v6" />
-                    </svg>
-                    <p className="empty-state-text">
-                      {interventions.length === 0 ? 'Aucune intervention. Cliquez sur « + Ajouter une intervention » pour commencer.' : 'Aucune intervention ne correspond au filtre.'}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              filteredInterventions.map((i, idx) => (
-                <tr key={i.id} className={i.origineDevisId ? 'converted' : ''}>
-                  <td>{idx + 1}</td>
-                  <td>
-                    <strong>{i.chantier}</strong>
-                    {i.origineDevisId && (
-                      <Fragment>
-                        <br />
-                        <OrigineBadge devisId={i.origineDevisId} client={i.origineDevisClient} date={i.origineDevisDate} />
-                      </Fragment>
-                    )}
-                    {i.notes && !i.origineDevisId && (
-                      <Fragment>
-                        <br />
-                        <small style={{ color: 'var(--color-tertiary-text)' }}>{i.notes}</small>
-                      </Fragment>
-                    )}
-                    {i.notes && i.origineDevisId && (
-                      <Fragment>
-                        <br />
-                        <small style={{ color: 'var(--color-tertiary-text)' }}>{i.notes.split('--- Converti depuis')[0]}</small>
-                      </Fragment>
-                    )}
-                  </td>
-                  <td>{i.entreprise || '—'}</td>
-                  <td>{formatDateFR(i.datePlanifiee)}</td>
-                  <td>{formatDateFR(i.dateReelle)}</td>
-                  <td>
-                    <StatusBadge status={i.status as StatutType} />
-                  </td>
-                  <td>
-                    <div className="actions">
-                      <button className="btn-icon" onClick={() => onEdit(i)} title="Modifier" aria-label="Modifier">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
-                      <button className="btn-icon delete" onClick={() => onDelete(i.id)} title="Supprimer" aria-label="Supprimer">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-// Main Dashboard Page
-export function DashboardPage() {
+type Action = { kind: Kind; operation: 'create' | 'update' | 'delete' | 'convert'; id?: number; data?: any };
+export function DashboardPage({ view = 'overview' }: { view?: View }) {
+  const showDevis = view !== 'interventions';
+  const showInterventions = view !== 'devis';
   const queryClient = useQueryClient();
-  const [devisSearch, setDevisSearch] = useState('');
-  const [intervSearch, setIntervSearch] = useState('');
-  
-  // Modals state
-  const [devisModal, setDevisModal] = useState<{ isOpen: boolean; devis?: Devis }>({ isOpen: false });
-  const [intervModal, setIntervModal] = useState<{ isOpen: boolean; intervention?: any }>({ isOpen: false });
-  const [convertModal, setConvertModal] = useState<{ isOpen: boolean; devis?: Devis }>({ isOpen: false });
-
-  // Fetch data
-  const { data: devisData, isLoading: devisLoading } = useQuery({
-    queryKey: ['devis', 'list'],
-    queryFn: () => devisApi.list({ limit: 100 }).then((r) => r.data),
-    select: (data) => data.data,
-  });
-
-  const { data: devisStats, isLoading: statsLoading } = useQuery({
-    queryKey: ['devis', 'stats'],
-    queryFn: () => devisApi.stats().then((r) => r.data),
-  });
-
-  const { data: intervData, isLoading: intervLoading } = useQuery({
-    queryKey: ['interventions', 'list'],
-    queryFn: () => interventionApi.list({ limit: 100 }).then((r) => r.data),
-    select: (data) => data.data,
-  });
-
-  const { data: intervStats } = useQuery({
-    queryKey: ['interventions', 'stats'],
-    queryFn: () => interventionApi.stats().then((r) => r.data),
-  });
-
-  // Mutations
-  const createDevisMutation = useMutation({
-    mutationFn: (data: FormData) => devisApi.create(Object.fromEntries(data)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      toast.success('Devis créé avec succès');
-      setDevisModal({ isOpen: false });
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const devis = useQuery({ queryKey: ['devis', 'list'], enabled: showDevis, queryFn: () => devisApi.list({ limit: 100 }).then(response => response.data.data) });
+  const devisStats = useQuery({ queryKey: ['devis', 'stats'], enabled: showDevis, queryFn: () => devisApi.stats().then(response => response.data) });
+  const interventions = useQuery({ queryKey: ['interventions', 'list'], enabled: showInterventions, queryFn: () => interventionApi.list({ limit: 100 }).then(response => response.data.data) });
+  const interventionStats = useQuery({ queryKey: ['interventions', 'stats'], enabled: showInterventions, queryFn: () => interventionApi.stats().then(response => response.data) });
+  const mutation = useMutation({
+    mutationFn: async (action: Action) => {
+      if (action.operation === 'convert') return devisApi.convert(action.id!, {});
+      const service = action.kind === 'devis' ? devisApi : interventionApi;
+      if (action.operation === 'create') return service.create(action.data);
+      if (action.operation === 'update') return service.update(action.id!, action.data);
+      return service.delete(action.id!);
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la création'),
-  });
-
-  const updateDevisMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: FormData }) => devisApi.update(id, Object.fromEntries(data)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      toast.success('Devis mis à jour');
-      setDevisModal({ isOpen: false });
+    onSuccess: (_response, action) => {
+      queryClient.invalidateQueries({ queryKey: [action.kind] });
+      if (action.operation === 'convert') queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      if (action.operation === 'create' || action.operation === 'update') setEditor(null);
+      toast.success(action.operation === 'convert' ? 'Devis converti en intervention' : action.operation === 'delete' ? 'Suppression effectuée' : 'Enregistrement effectué');
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la mise à jour'),
+    onError: failure => toast.error(errorMessage(failure)),
   });
-
-  const deleteDevisMutation = useMutation({
-    mutationFn: (id: number) => devisApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      toast.success('Devis supprimé');
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la suppression'),
-  });
-
-  const convertDevisMutation = useMutation({
-    mutationFn: (id: number) => devisApi.convert(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Devis converti en intervention !');
-      setConvertModal({ isOpen: false });
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la conversion'),
-  });
-
-  const createIntervMutation = useMutation({
-    mutationFn: (data: FormData) => interventionApi.create(Object.fromEntries(data)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Intervention créée avec succès');
-      setIntervModal({ isOpen: false });
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la création'),
-  });
-
-  const updateIntervMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: FormData }) => interventionApi.update(id, Object.fromEntries(data)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Intervention mise à jour');
-      setIntervModal({ isOpen: false });
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la mise à jour'),
-  });
-
-  const deleteIntervMutation = useMutation({
-    mutationFn: (id: number) => interventionApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Intervention supprimée');
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la suppression'),
-  });
-
-  // Handlers
-  const handleAddDevis = () => setDevisModal({ isOpen: true, devis: undefined });
-  const handleEditDevis = (d: Devis) => setDevisModal({ isOpen: true, devis: d });
-  const handleDeleteDevis = (id: number) => {
-    if (confirm('Supprimer ce devis ? Cette action est irréversible.')) {
-      deleteDevisMutation.mutate(id);
-    }
+  const remove = (kind: Kind, item: Item) => {
+    if (window.confirm('Supprimer cet élément ? Cette action est irréversible.')) mutation.mutate({ kind, operation: 'delete', id: item.id });
   };
-  const handleConvertDevis = (d: Devis) => setConvertModal({ isOpen: true, devis: d });
-
-  const handleDevisSubmit = async (formData: FormData) => {
-    if (devisModal.devis) {
-      await updateDevisMutation.mutateAsync({ id: devisModal.devis.id, data: formData });
-    } else {
-      await createDevisMutation.mutateAsync(formData);
-    }
+  const convert = (item: Devis) => {
+    if (window.confirm(`Transformer le devis « ${item.client} » en intervention ? Le devis sera déplacé et supprimé de la liste des devis. Cette action est irréversible.`)) mutation.mutate({ kind: 'devis', operation: 'convert', id: item.id });
   };
-
-  const handleAddInterv = () => setIntervModal({ isOpen: true, intervention: undefined });
-  const handleEditInterv = (i: any) => setIntervModal({ isOpen: true, intervention: i });
-  const handleDeleteInterv = (id: number) => {
-    if (confirm('Supprimer cette intervention ? Cette action est irréversible.')) {
-      deleteIntervMutation.mutate(id);
-    }
+  const save = async (data: Record<string, unknown>) => {
+    if (!editor) return;
+    await mutation.mutateAsync({ kind: editor.kind, operation: editor.item ? 'update' : 'create', id: editor.item?.id, data });
   };
-
-  const handleIntervSubmit = async (formData: FormData) => {
-    if (intervModal.intervention) {
-      await updateIntervMutation.mutateAsync({ id: intervModal.intervention.id, data: formData });
-    } else {
-      await createIntervMutation.mutateAsync(formData);
-    }
-  };
-
-  const handleConfirmConvert = () => {
-    if (convertModal.devis) {
-      convertDevisMutation.mutate(convertModal.devis.id);
-    }
-  };
-
-  return (
-    <div className="dashboard">
-      {/* Legend */}
-      <aside className="legend" aria-label="Légende des badges">
-        <h3 className="legend-title">LÉGENDE DES BADGES</h3>
-        <div className="legend-grid">
-          <div className="legend-item"><StatusBadge status="a-traiter" /></div>
-          <div className="legend-item"><StatusBadge status="en-cours" /></div>
-          <div className="legend-item"><StatusBadge status="en-attente" /></div>
-          <div className="legend-item"><StatusBadge status="bloque" /></div>
-          <div className="legend-item"><StatusBadge status="traite" /></div>
-          <div className="legend-item"><span className="badge badge-origine">Converti depuis devis</span></div>
-        </div>
-      </aside>
-
-      {/* Main grid */}
-      <div className="dashboard-grid">
-        <DevisPanel
-          devis={devisData || []}
-          stats={devisStats || { 'a-traiter': 0, 'en-cours': 0, 'en-attente': 0, 'bloque': 0, 'traite': 0 }}
-          isLoading={devisLoading || statsLoading}
-          search={devisSearch}
-          onSearchChange={setDevisSearch}
-          onAdd={handleAddDevis}
-          onEdit={handleEditDevis}
-          onDelete={handleDeleteDevis}
-          onConvert={handleConvertDevis}
-        />
-        
-        <InterventionPanel
-          interventions={intervData || []}
-          stats={intervStats || { 'a-traiter': 0, 'en-cours': 0, 'en-attente': 0, 'bloque': 0, 'traite': 0 }}
-          isLoading={intervLoading}
-          search={intervSearch}
-          onSearchChange={setIntervSearch}
-          onAdd={handleAddInterv}
-          onEdit={handleEditInterv}
-          onDelete={handleDeleteInterv}
-        />
-      </div>
-
-      {/* Modals */}
-      <DevisFormModal
-        isOpen={devisModal.isOpen}
-        onClose={() => setDevisModal({ isOpen: false })}
-        onSubmit={handleDevisSubmit}
-        devis={devisModal.devis}
-        isLoading={createDevisMutation.isPending || updateDevisMutation.isPending}
-      />
-
-      <InterventionFormModal
-        isOpen={intervModal.isOpen}
-        onClose={() => setIntervModal({ isOpen: false })}
-        onSubmit={handleIntervSubmit}
-        intervention={intervModal.intervention}
-        isLoading={createIntervMutation.isPending || updateIntervMutation.isPending}
-      />
-
-      <ConvertConfirmModal
-        isOpen={convertModal.isOpen}
-        onClose={() => setConvertModal({ isOpen: false })}
-        onConfirm={handleConfirmConvert}
-        devis={convertModal.devis!}
-        isLoading={convertDevisMutation.isPending}
-      />
-    </div>
-  );
+  return <div className="dashboard">
+    <aside className="legend" aria-label="Légende des badges"><h2 className="legend-title">Légende des badges</h2><div className="legend-grid">{statuses.map(status => <Badge key={status} status={status} />)}<span className="badge badge-origine">Converti depuis devis</span></div></aside>
+    {showDevis && <BusinessPanel key="devis" kind="devis" items={devis.data || []} stats={devisStats.data || {}} loading={devis.isLoading} failed={devis.isError} statsFailed={devisStats.isError} retry={() => { void devis.refetch(); void devisStats.refetch(); }} busy={mutation.isPending} onAdd={() => setEditor({ kind: 'devis' })} onEdit={item => setEditor({ kind: 'devis', item })} onDelete={item => remove('devis', item)} onConvert={convert} />}
+    {showInterventions && <BusinessPanel key="interventions" kind="interventions" items={interventions.data || []} stats={interventionStats.data || {}} loading={interventions.isLoading} failed={interventions.isError} statsFailed={interventionStats.isError} retry={() => { void interventions.refetch(); void interventionStats.refetch(); }} busy={mutation.isPending} onAdd={() => setEditor({ kind: 'interventions' })} onEdit={item => setEditor({ kind: 'interventions', item })} onDelete={item => remove('interventions', item)} onConvert={convert} />}
+    {editor && <Editor key={`${editor.kind}-${editor.item?.id ?? 'new'}`} state={editor} busy={mutation.isPending} submit={save} close={() => setEditor(null)} />}
+  </div>;
 }
