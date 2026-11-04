@@ -19,8 +19,8 @@ jobs:
           POSTGRES_DB: anelec_ci
         ports: ['5432:5432']
         options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d anelec_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:ci-only-not-a-secret@127.0.0.1:5432/anelec_ci
       ANELEC_CI_DATABASE: 'true'
@@ -35,12 +35,42 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      - run: mkdir -p reports
       - run: npm ci --include=dev
       - run: npx --no-install prisma validate
       - run: npx --no-install prisma generate
-      - name: Rôles API Supabase factices, uniquement en CI
+      - name: Rôles de simulation Supabase uniquement en CI
         run: psql -h 127.0.0.1 -U postgres -d anelec_ci -v ON_ERROR_STOP=1 -c 'CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;'
-      - name: Migrations sur base CI neuve uniquement
-        run: npx --no-install prisma migrate deploy
-      - run: npm run build
-      - run: npx --no-install tsx --test test/linkedConversion.pg.test.ts
+      - name: Migrations sur PostgreSQL CI neuf
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --no-install prisma migrate deploy 2>&1 | tee reports/migrations.log
+      - name: Compilation client et serveur
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee reports/build.log
+      - name: Tests PostgreSQL de conversion
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --no-install tsx --test test/linkedConversion*.pg.test.ts 2>&1 | tee reports/conversion.tap
+      - name: Capturer et vérifier les logs PostgreSQL
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p reports
+          docker logs "${{ job.services.postgres.id }}" > reports/postgres.log 2>&1
+          if grep -Fq 'role "root" does not exist' reports/postgres.log; then
+            echo 'Le healthcheck utilise encore root : vérification en échec.'
+            exit 1
+          fi
+      - name: Conserver les rapports de ce commit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversion-${{ github.sha }}
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 7
