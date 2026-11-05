@@ -212,13 +212,15 @@ export function LoginPage() {
 
       {/* RIGHT LOGIN FORM PANE */}
       <div
+        className="auth-form-pane"
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '32px',
+          padding: '24px 18px',
           background: 'var(--bg-surface)',
           color: 'var(--text-primary)',
+          minHeight: '100dvh',
         }}
       >
         <div
@@ -227,11 +229,41 @@ export function LoginPage() {
             maxWidth: '400px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '22px',
+            gap: '20px',
           }}
         >
+          {/* En-tête mobile ANELEC visible sur téléphone */}
+          <div className="mobile-only-flex" style={{ alignItems: 'center', gap: '10px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '9px',
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                border: '1px solid rgba(59, 130, 246, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 100 100" fill="none">
+                <path d="M50 10 L14 88 H33 L42 67 H58 L50 47 L67 88 H86 L50 10 Z" fill="#ffffff" />
+                <polygon points="47,54 57,54 51,69 61,69 44,92 49,73 41,73" fill="#3b82f6" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
+                ANELEC GROUPE
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 700, letterSpacing: '0.12em' }}>
+                DISPATCH & APP MOBILE TERRAIN
+              </div>
+            </div>
+          </div>
+
           <div>
-            <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <h2 style={{ fontSize: '21px', fontWeight: 800, color: 'var(--text-primary)' }}>
               {isRegister ? 'Créer un compte Dispatcher' : 'Connexion à votre espace ANELEC'}
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>

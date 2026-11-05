@@ -40,6 +40,7 @@ export function Layout({
   const navigate = useNavigate();
 
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parisTime, setParisTime] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('anelec-theme-v2');
@@ -214,13 +215,24 @@ export function Layout({
 
   const activeMeta = visibleNavItems.find((item) => item.id === activeSection) || navItems[0];
 
+  const handleSelectSection = (sec: AppSection) => {
+    setMobileMenuOpen(false);
+    onSectionChange?.(sec);
+  };
+
   return (
-    <div className="enterprise-shell">
+    <div className={`enterprise-shell ${isMobileTechOnly ? 'mobile-tech-shell' : ''}`}>
+      {/* Backdrop pour le tiroir mobile */}
+      <div
+        className={`mobile-sidebar-backdrop ${mobileMenuOpen ? 'open' : ''}`}
+        onClick={() => setMobileMenuOpen(false)}
+      />
+
       {/* LEFT SIDEBAR NAVIGATION (ServiceTitan / Linear / Praxedo Standard) */}
-      <aside className={`enterprise-sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <aside className={`enterprise-sidebar ${collapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-brand">
           <div
-            onClick={() => onSectionChange?.('aujourdhui')}
+            onClick={() => handleSelectSection(isMobileTechOnly ? 'mobile_tech' : 'aujourdhui')}
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', overflow: 'hidden' }}
           >
             <AnelecBrandMark />
@@ -238,6 +250,7 @@ export function Layout({
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
+            className="desktop-only-el"
             style={{
               background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.08)',
@@ -266,7 +279,7 @@ export function Layout({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => onSectionChange?.(item.id)}
+                onClick={() => handleSelectSection(item.id)}
                 className={`sidebar-item ${isActive ? 'active' : ''}`}
                 title={`${item.label} — ${item.subtitle}`}
               >
@@ -330,7 +343,9 @@ export function Layout({
                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {user.name}
                   </div>
-                  <div style={{ fontSize: '10px', color: '#64748b' }}>Dispatcher ANELEC</div>
+                  <div style={{ fontSize: '10px', color: '#64748b' }}>
+                    {isMobileTechOnly ? 'Technicien Terrain' : 'Dispatcher ANELEC'}
+                  </div>
                 </div>
               </div>
               <button
@@ -353,42 +368,78 @@ export function Layout({
       {/* MAIN WORKSPACE */}
       <div className="enterprise-main">
         <header className="enterprise-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  ANELEC TCE
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+            {/* Bouton Menu Hamburger sur mobile (si plusieurs sections disponibles) */}
+            {!isMobileTechOnly && (
+              <button
+                type="button"
+                className="mobile-only-flex btn btn-secondary btn-sm"
+                onClick={() => setMobileMenuOpen((o) => !o)}
+                style={{ padding: '6px 8px', flexShrink: 0 }}
+                title="Menu de navigation"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+            )}
+
+            {isMobileTechOnly && (
+              <div style={{ flexShrink: 0 }}>
+                <AnelecBrandMark />
+              </div>
+            )}
+
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                <span
+                  className="desktop-only-el"
+                  style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}
+                >
+                  ANELEC TCE /
                 </span>
-                <span style={{ color: 'var(--text-muted)' }}>/</span>
-                <h1 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {activeMeta.label}
+                <h1
+                  style={{
+                    fontSize: '14.5px',
+                    fontWeight: 800,
+                    color: 'var(--text-primary)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {isMobileTechOnly ? `ANELEC Terrain • ${user?.technicienNom || user?.name || ''}` : activeMeta.label}
                 </h1>
               </div>
             </div>
           </div>
 
-          {/* Center Global Command Bar Trigger (Ctrl+K) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={onOpenCommandPalette}
-              className="cmd-trigger"
-              title="Recherche globale & commandes rapides (Ctrl+K)"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <span style={{ flex: 1, textAlign: 'left' }}>Rechercher devis, client, technicien ou commande...</span>
-              <span className="kbd-shortcut">Ctrl K</span>
-            </button>
-          </div>
+          {/* Center Global Command Bar Trigger (Ctrl+K) - Masqué en mode Mobile Tech */}
+          {!isMobileTechOnly && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={onOpenCommandPalette}
+                className="cmd-trigger"
+                title="Recherche globale & commandes rapides (Ctrl+K)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <span style={{ flex: 1, textAlign: 'left' }}>Rechercher devis, client, technicien ou commande...</span>
+                <span className="kbd-shortcut cmd-kbd">Ctrl K</span>
+              </button>
+            </div>
+          )}
 
-          {/* Right Quick Actions & Clock */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Right Quick Actions, Theme & Mobile Logout */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             {parisTime && (
               <div
-                className="font-mono"
+                className="font-mono desktop-only-el"
                 style={{
                   fontSize: '11.5px',
                   color: 'var(--text-secondary)',
@@ -407,8 +458,8 @@ export function Layout({
               </div>
             )}
 
-            {onQuickNewDevis && (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={onQuickNewDevis}>
+            {!isMobileTechOnly && onQuickNewDevis && (
+              <button type="button" className="btn btn-secondary btn-sm desktop-only-el" onClick={onQuickNewDevis}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -417,8 +468,8 @@ export function Layout({
               </button>
             )}
 
-            {onQuickNewIntervention && (
-              <button type="button" className="btn btn-primary btn-sm" onClick={onQuickNewIntervention}>
+            {!isMobileTechOnly && onQuickNewIntervention && (
+              <button type="button" className="btn btn-primary btn-sm desktop-only-el" onClick={onQuickNewIntervention}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -450,12 +501,62 @@ export function Layout({
                 </svg>
               )}
             </button>
+
+            {/* Bouton Déconnexion direct dans la barre du haut sur mobile ou compte Technicien */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className={`btn btn-secondary btn-sm ${isMobileTechOnly ? '' : 'mobile-only-flex'}`}
+              style={{ padding: '6px 9px', color: '#dc2626' }}
+              title="Se déconnecter"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              {isMobileTechOnly && <span style={{ fontSize: '11.5px', fontWeight: 700 }}>Sortir</span>}
+            </button>
           </div>
         </header>
 
         <main className="enterprise-content">
           {children}
         </main>
+
+        {/* BARRE DE NAVIGATION INFÉRIEURE SUR SMARTPHONE (pour les comptes multi-sections) */}
+        {!isMobileTechOnly && visibleNavItems.length > 1 && (
+          <nav className="mobile-bottom-nav" aria-label="Navigation mobile">
+            {visibleNavItems.slice(0, 6).map((item) => {
+              const isActive = activeSection === item.id;
+              const shortLabel =
+                item.id === 'aujourdhui'
+                  ? 'Pilotage'
+                  : item.id === 'planning'
+                  ? 'Planning'
+                  : item.id === 'devis'
+                  ? 'Devis'
+                  : item.id === 'interventions'
+                  ? 'Travaux'
+                  : item.id === 'admin'
+                  ? 'Admin'
+                  : item.id === 'mobile_tech'
+                  ? 'Terrain'
+                  : 'Métier';
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSelectSection(item.id)}
+                  className={`mobile-bottom-nav-btn ${isActive ? 'active' : ''}`}
+                >
+                  {item.icon}
+                  <span>{shortLabel}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
       </div>
     </div>
   );
