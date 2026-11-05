@@ -137,14 +137,14 @@ export function DashboardPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Fetch Data (avec auto-actualisation toutes les 10s pour les interventions)
+  // Fetch Data (actualisation automatique via WebSockets + sécurité toutes les 25s)
   const { data: devisRes } = useQuery({
     queryKey: ['devis'],
     queryFn: async () => {
       const r = await devisApi.list({ limit: 500 });
       return r.data;
     },
-    refetchInterval: 15000,
+    refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
 
@@ -154,7 +154,7 @@ export function DashboardPage() {
       const r = await interventionApi.list({ limit: 500 });
       return r.data;
     },
-    refetchInterval: 10000,
+    refetchInterval: 20000,
     refetchOnWindowFocus: true,
   });
 

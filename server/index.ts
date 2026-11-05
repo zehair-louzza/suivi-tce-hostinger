@@ -24,8 +24,8 @@ import { authMiddleware } from './middleware/auth.js';
 import { setupSocketHandlers, setSocketInstance } from './socket/index.js';
 
 const app = express();
-// Trust only the local reverse proxy observed in Hostinger runtime logs.
-app.set('trust proxy', 'loopback');
+// Faire confiance au reverse proxy Hostinger (1er saut) pour extraire la véritable IP du client
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
@@ -41,15 +41,30 @@ app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(cookieParser(config.cookieSecret));
 app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
 
-const limiter = rateLimit({
+// Limiteur de tentatives de connexion (protection anti brute-force sur /api/auth/login)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Trop de tentatives de connexion, réessayez dans quelques minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiteur d'API général (appliqué UNIQUEMENT à /api, JAMAIS aux fichiers statiques / HTML / PWA / assets)
+const apiLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMax,
   message: { error: 'Trop de requêtes, réessayez plus tard' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health',
 });
-app.use(limiter);
+
 app.set('io', io);
+
+// Application des limiteurs ciblés
+app.use('/api/auth/login', authLimiter);
+app.use('/api', apiLimiter);
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);

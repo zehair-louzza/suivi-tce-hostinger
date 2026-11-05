@@ -8,7 +8,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   
-  // Database - SQLite for Hostinger
+  // Database - PostgreSQL Supabase
   databaseUrl: process.env.DATABASE_URL || 'file:./data.db',
   
   // JWT
@@ -19,9 +19,9 @@ export const config = {
   // CORS
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   
-  // Rate limiting
-  rateLimitWindowMs: 15 * 60 * 1000, // 15 minutes
-  rateLimitMax: 100,
+  // Rate limiting (3000 requêtes / 15 min par défaut pour éviter tout blocage d'utilisateurs légitimes)
+  rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),
+  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '3000', 10),
   
   // Cookie
   cookieSecret: process.env.COOKIE_SECRET || 'dev-cookie-secret-change-in-production',
