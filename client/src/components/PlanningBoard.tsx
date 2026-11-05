@@ -176,6 +176,20 @@ export function PlanningBoard({
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [inlineInputVal, setInlineInputVal] = useState<string>('');
 
+  // Optimistic UI cache (0ms instant update without waiting for network roundtrip)
+  const [optimisticOverrides, setOptimisticOverrides] = useState<
+    Record<
+      string,
+      {
+        technicien?: string;
+        date?: string;
+        heureDebut?: string;
+        heureFin?: string;
+        statut?: string;
+      }
+    >
+  >({});
+
   const [draggedSlot, setDraggedSlot] = useState<PlanningSlotItem | null>(null);
   const [resizingState, setResizingState] = useState<{
     slot: PlanningSlotItem;
@@ -183,6 +197,35 @@ export function PlanningBoard({
     trackRect: DOMRect;
     previewDebut: string;
     previewFin: string;
+  } | null>(null);
+
+  // Unified 60fps Pointer Move State for scheduled Gantt blocks
+  const [movingState, setMovingState] = useState<{
+    slot: PlanningSlotItem;
+    startClientX: number;
+    startClientY: number;
+    trackRect: DOMRect;
+    origStartM: number;
+    origEndM: number;
+    origTech: string;
+    previewDebut: string;
+    previewFin: string;
+    previewTech: string;
+    hasMoved: boolean;
+  } | null>(null);
+
+  // Magnetic Hover Laser Guide on Gantt Tracks
+  const [hoverGuide, setHoverGuide] = useState<{
+    technicien: string;
+    min: number;
+    leftPct: number;
+  } | null>(null);
+
+  // Live Interactive Dual-Slider Preview in Glass Time Studio
+  const [sliderPreview, setSliderPreview] = useState<{
+    slotId: string;
+    heureDebut: string;
+    heureFin: string;
   } | null>(null);
 
   const [drawState, setDrawState] = useState<{
@@ -232,7 +275,7 @@ export function PlanningBoard({
     });
   }, [weekStart]);
 
-  // Build unified Planning items from Devis + Interventions
+  // Build unified Planning items from Devis + Interventions + Instant Optimistic Overrides
   const allItems = useMemo<PlanningSlotItem[]>(() => {
     const list: PlanningSlotItem[] = [];
 
@@ -247,10 +290,16 @@ export function PlanningBoard({
         d.statutCommercial === 'Accepté' && (!d.interventionsCount || d.interventionsCount === 0);
 
       if (needsVisit || isAcceptedWithoutIntervention) {
-        const hDebut = d.visiteHeureDebut || '08:30';
-        const hFin = d.visiteHeureFin || '10:30';
+        const slotId = `devis-${d.id}`;
+        const opt = optimisticOverrides[slotId];
+        const hDebut = opt?.heureDebut ?? d.visiteHeureDebut ?? '08:30';
+        const hFin = opt?.heureFin ?? d.visiteHeureFin ?? '10:30';
+        const tech = opt?.technicien !== undefined ? opt.technicien : d.visiteTechnicien || '';
+        const dateVal = opt?.date !== undefined ? opt.date : toDateKey(d.visiteDate);
+        const statutVal = opt?.statut ?? (d.visiteStatut || d.statutCommercial || 'À planifier');
+
         list.push({
-          id: `devis-${d.id}`,
+          id: slotId,
           kind: 'VISITE_DEVIS',
           sourceType: 'DEVIS',
           sourceId: d.id,
@@ -260,9 +309,9 @@ export function PlanningBoard({
           site: d.site || 'Site à préciser',
           typePrestation: d.corpsEtat || 'Visite Devis',
           priorite: d.priorite || 'Normale',
-          statut: d.visiteStatut || d.statutCommercial || 'À planifier',
-          technicien: d.visiteTechnicien || '',
-          date: toDateKey(d.visiteDate),
+          statut: statutVal,
+          technicien: tech,
+          date: dateVal,
           heureDebut: hDebut,
           heureFin: hFin,
           durationHours: computeDurationHours(hDebut, hFin) ?? 2,
@@ -273,8 +322,14 @@ export function PlanningBoard({
 
     for (const intv of interventionsList) {
       if (intv.statutOperationnel === 'Annulée') continue;
-      const hDebut = intv.heureDebut || '08:00';
-      const hFin = intv.heureFin || '12:00';
+      const slotId = `intv-${intv.id}`;
+      const opt = optimisticOverrides[slotId];
+      const hDebut = opt?.heureDebut ?? intv.heureDebut ?? '08:00';
+      const hFin = opt?.heureFin ?? intv.heureFin ?? '12:00';
+      const tech = opt?.technicien !== undefined ? opt.technicien : intv.entreprise || '';
+      const dateVal = opt?.date !== undefined ? opt.date : toDateKey(intv.datePlanifiee);
+      const statutVal = opt?.statut ?? (intv.statutOperationnel || 'À planifier');
+
       const isUrgent =
         intv.priorite === 'Urgente' ||
         intv.typeIntervention === 'Dépannage' ||
@@ -282,7 +337,7 @@ export function PlanningBoard({
       const isVisite = Boolean(intv.isVisiteDevis) || intv.typeIntervention === 'Visite technique devis';
 
       list.push({
-        id: `intv-${intv.id}`,
+        id: slotId,
         kind: isUrgent ? 'URGENCE' : isVisite ? 'VISITE_DEVIS' : 'INTERVENTION',
         sourceType: 'INTERVENTION',
         sourceId: intv.id,
@@ -292,9 +347,9 @@ export function PlanningBoard({
         site: intv.chantier || 'Site',
         typePrestation: intv.corpsEtat || intv.typeIntervention || 'Intervention',
         priorite: intv.priorite || 'Normale',
-        statut: intv.statutOperationnel || 'À planifier',
-        technicien: intv.entreprise || '',
-        date: toDateKey(intv.datePlanifiee),
+        statut: statutVal,
+        technicien: tech,
+        date: dateVal,
         heureDebut: hDebut,
         heureFin: hFin,
         durationHours: computeDurationHours(hDebut, hFin) ?? 4,
@@ -303,7 +358,7 @@ export function PlanningBoard({
     }
 
     return list;
-  }, [devisList, interventionsList]);
+  }, [devisList, interventionsList, optimisticOverrides]);
 
   const filteredItems = useMemo(() => {
     return allItems.filter((item) => {
@@ -337,9 +392,31 @@ export function PlanningBoard({
       updates: { technicien?: string; date?: string | null; heureDebut?: string; heureFin?: string; statut?: string }
     ) => {
       const nextTech = updates.technicien !== undefined ? updates.technicien : item.technicien;
-      const nextDate = updates.date !== undefined ? updates.date : item.date;
+      const nextDate = updates.date !== undefined ? (updates.date || '') : item.date;
       const nextDebut = updates.heureDebut || item.heureDebut || '08:00';
       const nextFin = updates.heureFin || item.heureFin || '10:00';
+      const nextStatut =
+        updates.statut ||
+        (['En cours', 'Terminée - à valider', 'Clôturée'].includes(item.statut)
+          ? item.statut
+          : nextDate && nextTech
+          ? 'Planifiée'
+          : 'À planifier');
+
+      // 1. Instant Optimistic UI Update (0ms visual response)
+      setOptimisticOverrides((prev) => ({
+        ...prev,
+        [item.id]: {
+          technicien: nextTech,
+          date: nextDate,
+          heureDebut: nextDebut,
+          heureFin: nextFin,
+          statut: nextStatut,
+        },
+      }));
+      if (selectedSlotId === item.id) {
+        setKeyboardIntervalText(`${nextDebut}-${nextFin}`);
+      }
 
       try {
         if (item.sourceType === 'DEVIS') {
@@ -352,32 +429,33 @@ export function PlanningBoard({
             visiteStatut: nextDate && nextTech ? 'Planifiée' : 'À planifier',
           });
         } else {
-          const preservedStatus =
-            updates.statut ||
-            (['En cours', 'Terminée - à valider', 'Clôturée'].includes(item.statut)
-              ? item.statut
-              : nextDate && nextTech
-              ? 'Planifiée'
-              : 'À planifier');
           await onUpdateInterventionPlanning(item.sourceId, {
             entreprise: nextTech,
             datePlanifiee: nextDate || null,
             heureDebut: nextDebut,
             heureFin: nextFin,
-            statutOperationnel: preservedStatus,
+            statutOperationnel: nextStatut,
             modePlanification: nextDate && nextTech ? 'Planifiée' : 'Non planifiée',
           });
         }
-        toast.success(`${item.reference} → ${nextTech || 'File'} (${nextDebut}–${nextFin})`);
+        toast.success(`${item.reference} → ${nextTech || 'File'} (${nextDebut}–${nextFin})`, {
+          duration: 1800,
+        });
       } catch {
+        // Revert optimistic override on failure
+        setOptimisticOverrides((prev) => {
+          const copy = { ...prev };
+          delete copy[item.id];
+          return copy;
+        });
         toast.error('Erreur lors de la mise à jour du planning');
       }
     },
-    [onUpdateDevisPlanning, onUpdateInterventionPlanning]
+    [onUpdateDevisPlanning, onUpdateInterventionPlanning, selectedSlotId]
   );
 
   useEffect(() => {
-    if (!resizingState && !drawState) return;
+    if (!resizingState && !movingState && !drawState) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       if (resizingState) {
@@ -390,16 +468,55 @@ export function PlanningBoard({
         const curEnd = timeToMinutes(slot.heureFin);
 
         if (edge === 'left') {
-          const newStart = Math.max(START_HOUR * 60, Math.min(curEnd - 30, snappedMin));
+          const newStart = Math.max(START_HOUR * 60, Math.min(curEnd - 15, snappedMin));
           setResizingState((prev) =>
             prev ? { ...prev, previewDebut: minutesToTime(newStart) } : null
           );
         } else {
-          const newEnd = Math.min(END_HOUR * 60, Math.max(curStart + 30, snappedMin));
+          const newEnd = Math.min(END_HOUR * 60, Math.max(curStart + 15, snappedMin));
           setResizingState((prev) =>
             prev ? { ...prev, previewFin: minutesToTime(newEnd) } : null
           );
         }
+      } else if (movingState) {
+        const dx = e.clientX - movingState.startClientX;
+        const dy = e.clientY - movingState.startClientY;
+        const movedEnough = movingState.hasMoved || Math.hypot(dx, dy) > 4;
+        if (!movedEnough) return;
+
+        const { trackRect, origStartM, origEndM } = movingState;
+        const durMin = Math.max(15, origEndM - origStartM);
+        const deltaMinRaw = (dx / Math.max(1, trackRect.width)) * TOTAL_MINUTES;
+        const deltaMinSnapped = Math.round(deltaMinRaw / 15) * 15;
+
+        const clampedStart = Math.max(
+          START_HOUR * 60,
+          Math.min(END_HOUR * 60 - durMin, origStartM + deltaMinSnapped)
+        );
+        const clampedEnd = clampedStart + durMin;
+
+        // Detect vertical hovered technician / team lane
+        let targetTech = movingState.previewTech;
+        for (const [techKey, el] of Object.entries(trackRefs.current)) {
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          if (e.clientY >= r.top && e.clientY <= r.bottom) {
+            targetTech = techKey;
+            break;
+          }
+        }
+
+        setMovingState((prev) =>
+          prev
+            ? {
+                ...prev,
+                hasMoved: true,
+                previewDebut: minutesToTime(clampedStart),
+                previewFin: minutesToTime(clampedEnd),
+                previewTech: targetTech,
+              }
+            : null
+        );
       } else if (drawState) {
         const trackEl = trackRefs.current[drawState.technicien];
         if (!trackEl) return;
@@ -417,6 +534,21 @@ export function PlanningBoard({
         setResizingState(null);
         if (previewDebut !== slot.heureDebut || previewFin !== slot.heureFin) {
           await applySlotSchedule(slot, { heureDebut: previewDebut, heureFin: previewFin });
+        }
+      } else if (movingState) {
+        const { slot, previewDebut, previewFin, previewTech, hasMoved } = movingState;
+        setMovingState(null);
+        if (
+          hasMoved &&
+          (previewDebut !== slot.heureDebut ||
+            previewFin !== slot.heureFin ||
+            previewTech !== slot.technicien)
+        ) {
+          await applySlotSchedule(slot, {
+            technicien: previewTech,
+            heureDebut: previewDebut,
+            heureFin: previewFin,
+          });
         }
       } else if (drawState) {
         const startMin = Math.min(drawState.startMin, drawState.currentMin);
@@ -455,34 +587,50 @@ export function PlanningBoard({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingState, drawState, applySlotSchedule, selectedSlot, unscheduledItems]);
+  }, [resizingState, movingState, drawState, applySlotSchedule, selectedSlot, unscheduledItems]);
 
   const nudgeSelectedSlot = useCallback(
-    async (action: 'EARLIER' | 'LATER' | 'SHORTER' | 'LONGER' | 'PREV_TECH' | 'NEXT_TECH') => {
+    async (
+      action:
+        | 'EARLIER_15'
+        | 'LATER_15'
+        | 'EARLIER'
+        | 'LATER'
+        | 'SHORTER_15'
+        | 'LONGER_15'
+        | 'SHORTER'
+        | 'LONGER'
+        | 'PREV_TECH'
+        | 'NEXT_TECH'
+    ) => {
       if (!selectedSlot) return;
       const startM = timeToMinutes(selectedSlot.heureDebut);
       const endM = timeToMinutes(selectedSlot.heureFin);
-      const dur = Math.max(30, endM - startM);
+      const dur = Math.max(15, endM - startM);
 
-      if (action === 'EARLIER') {
-        const nextStart = Math.max(START_HOUR * 60, startM - 30);
+      if (action === 'EARLIER_15' || action === 'EARLIER') {
+        const step = action === 'EARLIER_15' ? 15 : 30;
+        const nextStart = Math.max(START_HOUR * 60, startM - step);
         await applySlotSchedule(selectedSlot, {
           heureDebut: minutesToTime(nextStart),
           heureFin: minutesToTime(nextStart + dur),
         });
-      } else if (action === 'LATER') {
-        const nextEnd = Math.min(END_HOUR * 60, endM + 30);
+      } else if (action === 'LATER_15' || action === 'LATER') {
+        const step = action === 'LATER_15' ? 15 : 30;
+        const nextEnd = Math.min(END_HOUR * 60, endM + step);
         await applySlotSchedule(selectedSlot, {
           heureDebut: minutesToTime(nextEnd - dur),
           heureFin: minutesToTime(nextEnd),
         });
-      } else if (action === 'SHORTER') {
-        const nextEnd = Math.max(startM + 30, endM - 30);
+      } else if (action === 'SHORTER_15' || action === 'SHORTER') {
+        const step = action === 'SHORTER_15' ? 15 : 30;
+        const nextEnd = Math.max(startM + 15, endM - step);
         await applySlotSchedule(selectedSlot, {
           heureFin: minutesToTime(nextEnd),
         });
-      } else if (action === 'LONGER') {
-        const nextEnd = Math.min(END_HOUR * 60, endM + 30);
+      } else if (action === 'LONGER_15' || action === 'LONGER') {
+        const step = action === 'LONGER_15' ? 15 : 30;
+        const nextEnd = Math.min(END_HOUR * 60, endM + step);
         await applySlotSchedule(selectedSlot, {
           heureFin: minutesToTime(nextEnd),
         });
@@ -1146,151 +1294,297 @@ export function PlanningBoard({
         </div>
       </div>
 
-      {/* 2. KEYBOARD-FIRST COMMAND & INTERVAL HUD */}
-      {selectedSlot && (
-        <div
-          style={{
-            background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.14) 0%, rgba(168, 85, 247, 0.12) 100%)',
-            border: '1px solid rgba(59, 130, 246, 0.45)',
-            borderRadius: '11px',
-            padding: '10px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span
-              className="font-mono"
-              style={{
-                padding: '3px 8px',
-                borderRadius: '6px',
-                fontWeight: 700,
-                fontSize: '11.5px',
-                background:
-                  selectedSlot.kind === 'VISITE_DEVIS'
-                    ? 'var(--visite-bg)'
-                    : selectedSlot.kind === 'URGENCE'
-                    ? 'var(--urgence-bg)'
-                    : 'var(--travaux-bg)',
-                color:
-                  selectedSlot.kind === 'VISITE_DEVIS'
-                    ? '#d8b4fe'
-                    : selectedSlot.kind === 'URGENCE'
-                    ? '#fca5a5'
-                    : '#93c5fd',
-                border: '1px solid rgba(255,255,255,0.15)',
-              }}
-            >
-              {selectedSlot.reference}
-            </span>
-            <span style={{ fontWeight: 700, fontSize: '13px' }}>{selectedSlot.client}</span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>• {selectedSlot.title}</span>
-            <span className="font-mono" style={{ fontSize: '12px', color: '#60a5fa', fontWeight: 700 }}>
-              [{selectedSlot.technicien || 'Non affecté'} • {selectedSlot.heureDebut}–{selectedSlot.heureFin} ({selectedSlot.durationHours}h)]
-            </span>
-          </div>
+      {/* 2. GLASS TIME STUDIO : DOUBLE SLIDER TACTILE + PRESETS 1-CLIC + CLAVIER */}
+      {selectedSlot && (() => {
+        const activeStartStr =
+          sliderPreview?.slotId === selectedSlot.id
+            ? sliderPreview.heureDebut
+            : selectedSlot.heureDebut;
+        const activeEndStr =
+          sliderPreview?.slotId === selectedSlot.id
+            ? sliderPreview.heureFin
+            : selectedSlot.heureFin;
+        const startMinVal = Math.max(START_HOUR * 60, timeToMinutes(activeStartStr));
+        const endMinVal = Math.min(END_HOUR * 60, Math.max(startMinVal + 15, timeToMinutes(activeEndStr)));
+        const durHoursVal = Math.round(((endMinVal - startMinVal) / 60) * 100) / 100;
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await handleApplyKeyboardInterval(selectedSlot, keyboardIntervalText);
+        return (
+          <div className="glass-time-studio" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Top row: Mission identity + Quick Keyboard + Actions */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
               }}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <input
-                type="text"
-                className="input font-mono"
-                style={{ width: '185px', padding: '5px 10px', fontSize: '12px' }}
-                placeholder="Ex: 08:30-11:00, 14h+2h, matin"
-                value={keyboardIntervalText}
-                onChange={(e) => setKeyboardIntervalText(e.target.value)}
-              />
-              {livePreviewInterval && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '9px', flexWrap: 'wrap' }}>
                 <span
                   className="font-mono"
                   style={{
-                    fontSize: '11px',
-                    color: '#10b981',
-                    background: 'rgba(16, 185, 129, 0.14)',
-                    padding: '3px 7px',
-                    borderRadius: '5px',
+                    padding: '3px 9px',
+                    borderRadius: '999px',
+                    fontWeight: 800,
+                    fontSize: '11.5px',
+                    background:
+                      selectedSlot.kind === 'VISITE_DEVIS'
+                        ? '#9333ea'
+                        : selectedSlot.kind === 'URGENCE'
+                        ? '#dc2626'
+                        : '#2563eb',
+                    color: '#ffffff',
                   }}
                 >
-                  → {livePreviewInterval.heureDebut}–{livePreviewInterval.heureFin} ({livePreviewInterval.durationHours}h)
+                  {selectedSlot.reference}
                 </span>
-              )}
-              <button type="submit" className="btn btn-primary btn-sm">
-                Appliquer
-              </button>
-            </form>
+                <span style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                  {selectedSlot.client}
+                </span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                  • {selectedSlot.title}
+                </span>
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: '12px',
+                    color: '#1d4ed8',
+                    background: 'rgba(37, 99, 235, 0.12)',
+                    border: '1px solid rgba(37, 99, 235, 0.28)',
+                    padding: '2px 9px',
+                    borderRadius: '999px',
+                    fontWeight: 800,
+                  }}
+                >
+                  🕒 {activeStartStr} → {activeEndStr} ({durHoursVal}h) • {selectedSlot.technicien || 'Non affecté'}
+                </span>
+              </div>
 
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {[
-                { label: 'Matin (8h-12h)', val: '08:00-12:00' },
-                { label: 'Aprem (13h30-17h30)', val: '13:30-17:30' },
-                { label: 'Journée', val: '08:00-17:00' },
-              ].map((p) => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    await handleApplyKeyboardInterval(selectedSlot, keyboardIntervalText);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <input
+                    type="text"
+                    className="input font-mono"
+                    style={{ width: '175px', padding: '4px 10px', fontSize: '12px', height: '30px' }}
+                    placeholder="Ex: 08:30-11:00, 14h+2h"
+                    value={keyboardIntervalText}
+                    onChange={(e) => setKeyboardIntervalText(e.target.value)}
+                  />
+                  {livePreviewInterval && (
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: '11px',
+                        color: '#059669',
+                        background: 'rgba(16, 185, 129, 0.14)',
+                        padding: '3px 7px',
+                        borderRadius: '999px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      → {livePreviewInterval.heureDebut}–{livePreviewInterval.heureFin}
+                    </span>
+                  )}
+                  <button type="submit" className="btn btn-primary btn-sm">
+                    Valider
+                  </button>
+                </form>
+
                 <button
-                  key={p.val}
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => handleApplyKeyboardInterval(selectedSlot, p.val)}
+                  onClick={() =>
+                    selectedSlot.rawDevis
+                      ? onOpenDevisDrawer(selectedSlot.rawDevis)
+                      : selectedSlot.rawIntervention
+                      ? onOpenInterventionDrawer(selectedSlot.rawIntervention)
+                      : undefined
+                  }
                 >
-                  {p.label}
+                  Ouvrir fiche
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setSliderPreview(null);
+                    setSelectedSlotId(null);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '3px', borderLeft: '1px solid var(--border-default)', paddingLeft: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => nudgeSelectedSlot('EARLIER')}
-              >
-                -30m
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => nudgeSelectedSlot('LATER')}
-              >
-                +30m
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => nudgeSelectedSlot('LONGER')}
-              >
-                Durée +30m
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() =>
-                  selectedSlot.rawDevis
-                    ? onOpenDevisDrawer(selectedSlot.rawDevis)
-                    : selectedSlot.rawIntervention
-                    ? onOpenInterventionDrawer(selectedSlot.rawIntervention)
-                    : undefined
-                }
-              >
-                Ouvrir fiche
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedSlotId(null)}
-              >
-                ✕
-              </button>
+            {/* Bottom row: Interactive Mouse Dual Sliders + 1-Click Duration & Period Chips */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: '12px',
+                alignItems: 'center',
+                paddingTop: '8px',
+                borderTop: '1px solid rgba(59, 130, 246, 0.16)',
+              }}
+            >
+              {/* Slider Début */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', minWidth: '82px' }}>
+                  Début : <strong className="font-mono" style={{ color: '#2563eb' }}>{activeStartStr}</strong>
+                </span>
+                <input
+                  type="range"
+                  className="glass-range-slider"
+                  min={START_HOUR * 60}
+                  max={END_HOUR * 60 - 15}
+                  step={15}
+                  value={startMinVal}
+                  onChange={(e) => {
+                    const nextStart = Number(e.target.value);
+                    const nextEnd = Math.max(nextStart + 15, endMinVal);
+                    setSliderPreview({
+                      slotId: selectedSlot.id,
+                      heureDebut: minutesToTime(nextStart),
+                      heureFin: minutesToTime(Math.min(END_HOUR * 60, nextEnd)),
+                    });
+                  }}
+                  onMouseUp={async () => {
+                    if (sliderPreview && sliderPreview.slotId === selectedSlot.id) {
+                      const { heureDebut, heureFin } = sliderPreview;
+                      setSliderPreview(null);
+                      await applySlotSchedule(selectedSlot, { heureDebut, heureFin });
+                    }
+                  }}
+                  onTouchEnd={async () => {
+                    if (sliderPreview && sliderPreview.slotId === selectedSlot.id) {
+                      const { heureDebut, heureFin } = sliderPreview;
+                      setSliderPreview(null);
+                      await applySlotSchedule(selectedSlot, { heureDebut, heureFin });
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Slider Fin */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', minWidth: '78px' }}>
+                  Fin : <strong className="font-mono" style={{ color: '#2563eb' }}>{activeEndStr}</strong>
+                </span>
+                <input
+                  type="range"
+                  className="glass-range-slider"
+                  min={START_HOUR * 60 + 15}
+                  max={END_HOUR * 60}
+                  step={15}
+                  value={endMinVal}
+                  onChange={(e) => {
+                    const nextEnd = Math.max(startMinVal + 15, Number(e.target.value));
+                    setSliderPreview({
+                      slotId: selectedSlot.id,
+                      heureDebut: minutesToTime(startMinVal),
+                      heureFin: minutesToTime(nextEnd),
+                    });
+                  }}
+                  onMouseUp={async () => {
+                    if (sliderPreview && sliderPreview.slotId === selectedSlot.id) {
+                      const { heureDebut, heureFin } = sliderPreview;
+                      setSliderPreview(null);
+                      await applySlotSchedule(selectedSlot, { heureDebut, heureFin });
+                    }
+                  }}
+                  onTouchEnd={async () => {
+                    if (sliderPreview && sliderPreview.slotId === selectedSlot.id) {
+                      const { heureDebut, heureFin } = sliderPreview;
+                      setSliderPreview(null);
+                      await applySlotSchedule(selectedSlot, { heureDebut, heureFin });
+                    }
+                  }}
+                />
+              </div>
+
+              {/* 1-Click Duration & Shift Buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {[
+                  { label: '1h', min: 60 },
+                  { label: '1h30', min: 90 },
+                  { label: '2h', min: 120 },
+                  { label: '3h', min: 180 },
+                  { label: '4h', min: 240 },
+                ].map((d) => (
+                  <button
+                    key={d.label}
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      background: endMinVal - startMinVal === d.min ? 'rgba(37, 99, 235, 0.16)' : undefined,
+                      borderColor: endMinVal - startMinVal === d.min ? '#2563eb' : undefined,
+                      color: endMinVal - startMinVal === d.min ? '#1d4ed8' : undefined,
+                      fontWeight: 700,
+                    }}
+                    onClick={() => {
+                      const nextEnd = Math.min(END_HOUR * 60, startMinVal + d.min);
+                      applySlotSchedule(selectedSlot, {
+                        heureDebut: minutesToTime(startMinVal),
+                        heureFin: minutesToTime(nextEnd),
+                      });
+                    }}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+
+                <span style={{ color: 'var(--border-default)', margin: '0 2px' }}>|</span>
+
+                {[
+                  { label: '☀️ Matin', val: '08:00-12:00' },
+                  { label: '🌤️ Aprem', val: '13:30-17:30' },
+                  { label: '📅 Journée', val: '08:00-17:30' },
+                ].map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '2px 8px', fontSize: '11px' }}
+                    onClick={() => handleApplyKeyboardInterval(selectedSlot, p.val)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+
+                <span style={{ color: 'var(--border-default)', margin: '0 2px' }}>|</span>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 7px', fontSize: '11px' }}
+                  onClick={() => nudgeSelectedSlot('EARLIER_15')}
+                  title="Décaler 15 min plus tôt"
+                >
+                  ◀ -15m
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 7px', fontSize: '11px' }}
+                  onClick={() => nudgeSelectedSlot('LATER_15')}
+                  title="Décaler 15 min plus tard"
+                >
+                  +15m ▶
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 3. MAIN WORKSPACE */}
       <div className={`fsm-workspace ${backlogCollapsed ? 'backlog-collapsed' : ''}`}>
@@ -1806,8 +2100,26 @@ export function PlanningBoard({
                         />
 
                         {teamLaneItems.map(({ slot, lane }) => {
-                          const startM = Math.max(START_HOUR * 60, timeToMinutes(slot.heureDebut));
-                          const endM = Math.min(END_HOUR * 60, Math.max(startM + 30, timeToMinutes(slot.heureFin)));
+                          const isResizingThis = resizingState?.slot.id === slot.id;
+                          const isMovingThis = movingState?.slot.id === slot.id && movingState.hasMoved;
+                          const isSlidingThis = sliderPreview?.slotId === slot.id;
+                          const dispDebut = isResizingThis
+                            ? resizingState.previewDebut
+                            : isMovingThis
+                            ? movingState.previewDebut
+                            : isSlidingThis
+                            ? sliderPreview.heureDebut
+                            : slot.heureDebut;
+                          const dispFin = isResizingThis
+                            ? resizingState.previewFin
+                            : isMovingThis
+                            ? movingState.previewFin
+                            : isSlidingThis
+                            ? sliderPreview.heureFin
+                            : slot.heureFin;
+
+                          const startM = Math.max(START_HOUR * 60, timeToMinutes(dispDebut));
+                          const endM = Math.min(END_HOUR * 60, Math.max(startM + 15, timeToMinutes(dispFin)));
                           const leftPct = ((startM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
                           const widthPct = ((endM - startM) / TOTAL_MINUTES) * 100;
                           const laneHeight = 54;
@@ -1822,13 +2134,27 @@ export function PlanningBoard({
                           return (
                             <div
                               key={slot.id}
-                              draggable
-                              onDragStart={(e) => {
+                              onMouseDown={(e) => {
+                                if (e.button !== 0) return;
                                 e.stopPropagation();
-                                setDraggedSlot(slot);
                                 setSelectedSlotId(slot.id);
+                                setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                                const trackEl = trackRefs.current[eq.nomEquipe];
+                                if (!trackEl) return;
+                                setMovingState({
+                                  slot,
+                                  startClientX: e.clientX,
+                                  startClientY: e.clientY,
+                                  trackRect: trackEl.getBoundingClientRect(),
+                                  origStartM: timeToMinutes(slot.heureDebut),
+                                  origEndM: timeToMinutes(slot.heureFin),
+                                  origTech: eq.nomEquipe,
+                                  previewDebut: slot.heureDebut,
+                                  previewFin: slot.heureFin,
+                                  previewTech: eq.nomEquipe,
+                                  hasMoved: false,
+                                });
                               }}
-                              onDragEnd={() => setDraggedSlot(null)}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedSlotId(slot.id);
@@ -1836,7 +2162,7 @@ export function PlanningBoard({
                               }}
                               className={`gantt-event-block ${typeClass} ${
                                 selectedSlotId === slot.id ? 'selected' : ''
-                              }`}
+                              } ${isResizingThis || isMovingThis ? 'is-manipulating' : ''}`}
                               style={{
                                 left: `${leftPct}%`,
                                 width: `${Math.max(4.5, widthPct)}%`,
@@ -1844,13 +2170,47 @@ export function PlanningBoard({
                                 height: `${laneHeight}px`,
                               }}
                             >
+                              <div
+                                className="gantt-resize-handle left"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  const trackEl = trackRefs.current[eq.nomEquipe];
+                                  if (!trackEl) return;
+                                  setResizingState({
+                                    slot,
+                                    edge: 'left',
+                                    trackRect: trackEl.getBoundingClientRect(),
+                                    previewDebut: slot.heureDebut,
+                                    previewFin: slot.heureFin,
+                                  });
+                                }}
+                              />
+
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', fontWeight: 700, color: '#fff' }}>
-                                <span className="font-mono">{slot.heureDebut}–{slot.heureFin}</span>
+                                <span className="font-mono">{dispDebut}–{dispFin}</span>
                                 <span className="font-mono">{slot.reference}</span>
                               </div>
                               <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 👥 {slot.client} — {slot.title}
                               </div>
+
+                              <div
+                                className="gantt-resize-handle right"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  const trackEl = trackRefs.current[eq.nomEquipe];
+                                  if (!trackEl) return;
+                                  setResizingState({
+                                    slot,
+                                    edge: 'right',
+                                    trackRect: trackEl.getBoundingClientRect(),
+                                    previewDebut: slot.heureDebut,
+                                    previewFin: slot.heureFin,
+                                  });
+                                }}
+                              />
                             </div>
                           );
                         })}
@@ -2407,7 +2767,28 @@ export function PlanningBoard({
                             trackRefs.current[tech] = el;
                           }}
                           className="gantt-track-canvas"
-                          style={{ height: `${rowHeight}px` }}
+                          style={{
+                            height: `${rowHeight}px`,
+                            background:
+                              movingState?.hasMoved && movingState.previewTech === tech
+                                ? 'rgba(37, 99, 235, 0.08)'
+                                : undefined,
+                          }}
+                          onMouseMove={(e) => {
+                            if (resizingState || movingState || drawState) {
+                              if (hoverGuide) setHoverGuide(null);
+                              return;
+                            }
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                            const pointerMin = START_HOUR * 60 + (relX / rect.width) * TOTAL_MINUTES;
+                            const snappedMin = Math.round(pointerMin / 15) * 15;
+                            const leftPct = ((snappedMin - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                            setHoverGuide({ technicien: tech, min: snappedMin, leftPct });
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverGuide?.technicien === tech) setHoverGuide(null);
+                          }}
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={async (e) => {
                             e.preventDefault();
@@ -2450,6 +2831,22 @@ export function PlanningBoard({
                             <div className="gantt-now-line" style={{ left: `${nowLeftPct}%` }} />
                           )}
 
+                          {/* Magnetic Hover Laser Line showing exact 15-min time under cursor */}
+                          {hoverGuide &&
+                            hoverGuide.technicien === tech &&
+                            !resizingState &&
+                            !movingState &&
+                            !drawState && (
+                              <div
+                                className="gantt-hover-laser"
+                                style={{ left: `${hoverGuide.leftPct}%` }}
+                              >
+                                <span className="gantt-hover-laser-badge">
+                                  {minutesToTime(hoverGuide.min)}
+                                </span>
+                              </div>
+                            )}
+
                           {isDrawingHere && (
                             <div
                               className="gantt-ghost-selection font-mono"
@@ -2473,13 +2870,64 @@ export function PlanningBoard({
                             </div>
                           )}
 
+                          {/* Ghost preview when dragging a slot vertically from another technician onto this track */}
+                          {movingState &&
+                            movingState.hasMoved &&
+                            movingState.previewTech === tech &&
+                            movingState.origTech !== tech && (() => {
+                              const gStartM = Math.max(START_HOUR * 60, timeToMinutes(movingState.previewDebut));
+                              const gEndM = Math.min(END_HOUR * 60, Math.max(gStartM + 15, timeToMinutes(movingState.previewFin)));
+                              const gLeft = ((gStartM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                              const gWidth = ((gEndM - gStartM) / TOTAL_MINUTES) * 100;
+                              return (
+                                <div
+                                  className="gantt-ghost-selection font-mono"
+                                  style={{
+                                    left: `${gLeft}%`,
+                                    width: `${Math.max(4.5, gWidth)}%`,
+                                    background: 'rgba(37, 99, 235, 0.28)',
+                                    border: '2px solid #2563eb',
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      background: '#1d4ed8',
+                                      color: '#fff',
+                                      padding: '3px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '11px',
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    ➔ {tech} • {movingState.previewDebut}–{movingState.previewFin}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+
                           {laneItems.map(({ slot, lane, hasConflict }) => {
                             const isResizingThis = resizingState?.slot.id === slot.id;
-                            const dispDebut = isResizingThis ? resizingState.previewDebut : slot.heureDebut;
-                            const dispFin = isResizingThis ? resizingState.previewFin : slot.heureFin;
+                            const isMovingThis = movingState?.slot.id === slot.id && movingState.hasMoved;
+                            const isSlidingThis = sliderPreview?.slotId === slot.id;
+
+                            const dispDebut = isResizingThis
+                              ? resizingState.previewDebut
+                              : isMovingThis
+                              ? movingState.previewDebut
+                              : isSlidingThis
+                              ? sliderPreview.heureDebut
+                              : slot.heureDebut;
+                            const dispFin = isResizingThis
+                              ? resizingState.previewFin
+                              : isMovingThis
+                              ? movingState.previewFin
+                              : isSlidingThis
+                              ? sliderPreview.heureFin
+                              : slot.heureFin;
 
                             const startM = Math.max(START_HOUR * 60, timeToMinutes(dispDebut));
-                            const endM = Math.min(END_HOUR * 60, Math.max(startM + 30, timeToMinutes(dispFin)));
+                            const endM = Math.min(END_HOUR * 60, Math.max(startM + 15, timeToMinutes(dispFin)));
+                            const liveDurH = Math.round(((endM - startM) / 60) * 100) / 100;
 
                             const leftPct = ((startM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
                             const widthPct = ((endM - startM) / TOTAL_MINUTES) * 100;
@@ -2499,13 +2947,51 @@ export function PlanningBoard({
                             return (
                               <div
                                 key={slot.id}
-                                draggable={!isResizingThis && !isInlineEditing}
-                                onDragStart={(e) => {
+                                onMouseDown={(e) => {
+                                  if (e.button !== 0 || isInlineEditing) return;
                                   e.stopPropagation();
-                                  setDraggedSlot(slot);
                                   setSelectedSlotId(slot.id);
+                                  setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                                  const trackEl = trackRefs.current[tech];
+                                  if (!trackEl) return;
+                                  setMovingState({
+                                    slot,
+                                    startClientX: e.clientX,
+                                    startClientY: e.clientY,
+                                    trackRect: trackEl.getBoundingClientRect(),
+                                    origStartM: timeToMinutes(slot.heureDebut),
+                                    origEndM: timeToMinutes(slot.heureFin),
+                                    origTech: tech,
+                                    previewDebut: slot.heureDebut,
+                                    previewFin: slot.heureFin,
+                                    previewTech: tech,
+                                    hasMoved: false,
+                                  });
                                 }}
-                                onDragEnd={() => setDraggedSlot(null)}
+                                onWheel={(e) => {
+                                  if (!e.altKey && !e.shiftKey) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const delta = e.deltaY < 0 ? 15 : -15;
+                                  const curStart = timeToMinutes(slot.heureDebut);
+                                  const curEnd = timeToMinutes(slot.heureFin);
+                                  const dur = Math.max(15, curEnd - curStart);
+                                  if (e.shiftKey) {
+                                    // Shift + Wheel: extend/shorten end time by 15 min
+                                    const nextEnd = Math.min(END_HOUR * 60, Math.max(curStart + 15, curEnd + delta));
+                                    applySlotSchedule(slot, { heureFin: minutesToTime(nextEnd) });
+                                  } else {
+                                    // Alt + Wheel: shift whole slot by 15 min
+                                    const nextStart = Math.max(
+                                      START_HOUR * 60,
+                                      Math.min(END_HOUR * 60 - dur, curStart + delta)
+                                    );
+                                    applySlotSchedule(slot, {
+                                      heureDebut: minutesToTime(nextStart),
+                                      heureFin: minutesToTime(nextStart + dur),
+                                    });
+                                  }
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedSlotId(slot.id);
@@ -2516,19 +3002,26 @@ export function PlanningBoard({
                                   setInlineEditId(slot.id);
                                   setInlineInputVal(`${slot.heureDebut}-${slot.heureFin}`);
                                 }}
-                                className={`gantt-event-block ${typeClass} ${isSelected ? 'selected' : ''}`}
+                                title="Glisser pour déplacer • Étirer les bords gauche/droite • Alt+Molette pour décaler de 15m • Shift+Molette pour ajuster la durée"
+                                className={`gantt-event-block ${typeClass} ${isSelected ? 'selected' : ''} ${
+                                  isResizingThis || isMovingThis || isSlidingThis ? 'is-manipulating' : ''
+                                }`}
                                 style={{
                                   left: `${leftPct}%`,
                                   width: `${Math.max(4.5, widthPct)}%`,
                                   top: `${topPx}px`,
                                   height: `${laneHeight}px`,
+                                  opacity:
+                                    isMovingThis && movingState.previewTech !== tech ? 0.35 : 1,
                                 }}
                               >
                                 <div
                                   className="gantt-resize-handle left"
+                                  title="Glisser pour modifier l'heure de début (pas de 15 min)"
                                   onMouseDown={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
+                                    setSelectedSlotId(slot.id);
                                     const trackEl = trackRefs.current[tech];
                                     if (!trackEl) return;
                                     setResizingState({
@@ -2563,8 +3056,24 @@ export function PlanningBoard({
                                     </form>
                                   ) : (
                                     <>
-                                      <span className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700, color: '#ffffff' }}>
-                                        {dispDebut}–{dispFin}
+                                      <span
+                                        className="font-mono"
+                                        style={{
+                                          fontSize: '10.5px',
+                                          fontWeight: 800,
+                                          color: '#ffffff',
+                                          background:
+                                            isResizingThis || isMovingThis || isSlidingThis
+                                              ? 'rgba(15, 23, 42, 0.72)'
+                                              : 'transparent',
+                                          padding:
+                                            isResizingThis || isMovingThis || isSlidingThis
+                                              ? '1px 6px'
+                                              : 0,
+                                          borderRadius: '4px',
+                                        }}
+                                      >
+                                        {dispDebut}–{dispFin} ({liveDurH}h)
                                       </span>
                                       <span className="font-mono" style={{ fontSize: '10px', opacity: 0.85 }}>
                                         {slot.reference}
@@ -2602,9 +3111,11 @@ export function PlanningBoard({
 
                                 <div
                                   className="gantt-resize-handle right"
+                                  title="Glisser pour modifier l'heure de fin (pas de 15 min)"
                                   onMouseDown={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
+                                    setSelectedSlotId(slot.id);
                                     const trackEl = trackRefs.current[tech];
                                     if (!trackEl) return;
                                     setResizingState({

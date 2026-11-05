@@ -503,6 +503,401 @@ export function DashboardPage() {
             ))}
           </div>
 
+          {/* =================================================================
+              SLEEK GLASSMORPHISM ANALYTICS & SMOOTH CHARTS (BLUE & WHITE)
+             ================================================================= */}
+          {(() => {
+            const totalDevisHT = devisList.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+            const acceptedDevisHT = devisList
+              .filter((d) => d.statutCommercial === 'Accepté')
+              .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+            const conversionRate =
+              devisList.length > 0
+                ? Math.round(
+                    (devisList.filter((d) => d.statutCommercial === 'Accepté').length /
+                      devisList.length) *
+                      100
+                  )
+                : 0;
+
+            const plannedOrDoneIntvs = interventionsList.filter((i) =>
+              ['Planifiée', 'En cours', 'Terminée - à valider', 'Clôturée'].includes(
+                i.statutOperationnel
+              )
+            ).length;
+            const executionRate =
+              interventionsList.length > 0
+                ? Math.round((plannedOrDoneIntvs / interventionsList.length) * 100)
+                : 0;
+
+            const closedIntvs = interventionsList.filter((i) =>
+              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
+            );
+            const billedIntvs = closedIntvs.filter((i) => i.statutFacture === 'Facturée').length;
+            const billingRate =
+              closedIntvs.length > 0 ? Math.round((billedIntvs / closedIntvs.length) * 100) : 100;
+
+            // Group activity across top 6 trades for smooth spline curves & bar analytics
+            const topTrades = ['Électricité', 'Plomberie', 'Serrurerie', 'Peinture', 'CVC / Clim', 'Menuiserie'];
+            const tradeSeries = topTrades.map((trade) => {
+              const key = trade.split(' ')[0].toLowerCase();
+              const intvCount = interventionsList.filter((i) =>
+                (i.corpsEtat || '').toLowerCase().includes(key)
+              ).length;
+              const devCount = devisList.filter((d) =>
+                (d.corpsEtat || '').toLowerCase().includes(key)
+              ).length;
+              return {
+                label: trade.split(' ')[0],
+                intv: intvCount,
+                devis: devCount,
+                total: intvCount + devCount,
+              };
+            });
+
+            const maxVal = Math.max(6, ...tradeSeries.map((t) => Math.max(t.intv, t.devis, 1)));
+            const chartW = 520;
+            const chartH = 148;
+            const padX = 28;
+            const padY = 18;
+            const usableW = chartW - padX * 2;
+            const usableH = chartH - padY * 2;
+
+            const buildSmoothPath = (values: number[]) => {
+              const pts = values.map((v, idx) => ({
+                x: padX + (idx / Math.max(1, values.length - 1)) * usableW,
+                y: padY + usableH - (v / maxVal) * usableH,
+              }));
+              if (pts.length === 0) return { line: '', area: '', pts: [] };
+              let d = `M ${pts[0].x} ${pts[0].y}`;
+              for (let i = 0; i < pts.length - 1; i++) {
+                const p0 = pts[i];
+                const p1 = pts[i + 1];
+                const cx = (p0.x + p1.x) / 2;
+                d += ` C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`;
+              }
+              const area = `${d} L ${pts[pts.length - 1].x} ${padY + usableH} L ${pts[0].x} ${
+                padY + usableH
+              } Z`;
+              return { line: d, area, pts };
+            };
+
+            const intvCurve = buildSmoothPath(tradeSeries.map((t) => t.intv));
+            const devisCurve = buildSmoothPath(tradeSeries.map((t) => t.devis));
+
+            const circumference = 2 * Math.PI * 44;
+            const execDash = (executionRate / 100) * circumference;
+
+            return (
+              <div className="analytics-glass-grid">
+                {/* CARD 1 : Smooth Spline Area Chart (Activité & Pipeline Financier) */}
+                <div className="glass-analytics-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <span
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            background: 'rgba(37, 99, 235, 0.12)',
+                            color: '#2563eb',
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          MODERN ANALYTICS
+                        </span>
+                        <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          Dynamique des Interventions & Pipeline Devis
+                        </h3>
+                      </div>
+                      <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Courbe analytique par pôle métier • Suivi temps réel ANELEC
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          Pipeline Devis HT
+                        </div>
+                        <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: '#2563eb' }}>
+                          {formatCurrency(totalDevisHT)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', paddingLeft: '12px', borderLeft: '1px solid var(--border-default)' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          Signés / Acceptés
+                        </div>
+                        <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: '#0ea5e9' }}>
+                          {formatCurrency(acceptedDevisHT)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <svg viewBox={`0 0 ${chartW} ${chartH}`} className="smooth-chart-svg">
+                    <defs>
+                      <linearGradient id="blueAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563eb" stopOpacity="0.32" />
+                        <stop offset="100%" stopColor="#2563eb" stopOpacity="0.01" />
+                      </linearGradient>
+                      <linearGradient id="cyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.24" />
+                        <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.01" />
+                      </linearGradient>
+                    </defs>
+
+                    {[0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                      const y = padY + usableH * ratio;
+                      return (
+                        <line
+                          key={idx}
+                          x1={padX}
+                          y1={y}
+                          x2={chartW - padX}
+                          y2={y}
+                          stroke="rgba(37, 99, 235, 0.08)"
+                          strokeDasharray="4 4"
+                        />
+                      );
+                    })}
+
+                    <path d={devisCurve.area} fill="url(#cyanAreaGrad)" />
+                    <path d={intvCurve.area} fill="url(#blueAreaGrad)" />
+
+                    <path
+                      d={devisCurve.line}
+                      className="smooth-chart-line"
+                      stroke="#0ea5e9"
+                      strokeWidth="2.5"
+                    />
+                    <path
+                      d={intvCurve.line}
+                      className="smooth-chart-line"
+                      stroke="#2563eb"
+                      strokeWidth="3"
+                    />
+
+                    {intvCurve.pts.map((pt, i) => (
+                      <g key={i}>
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="4.5"
+                          fill="#ffffff"
+                          stroke="#2563eb"
+                          strokeWidth="2.5"
+                        />
+                        <text
+                          x={pt.x}
+                          y={chartH - 2}
+                          textAnchor="middle"
+                          fontSize="10"
+                          fontWeight="600"
+                          fill="#475569"
+                        >
+                          {tradeSeries[i].label}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', gap: '14px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, color: '#2563eb' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2563eb' }} />
+                        Interventions ({interventionsList.length})
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, color: '#0ea5e9' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0ea5e9' }} />
+                        Devis ({devisList.length})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 10px', fontSize: '11px' }}
+                      onClick={() => handleSectionChange('planning')}
+                    >
+                      Fluidifier le Planning →
+                    </button>
+                  </div>
+                </div>
+
+                {/* CARD 2 : Smooth Radial / Donut Performance Gauge */}
+                <div className="glass-analytics-card">
+                  <div>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        background: 'rgba(14, 165, 233, 0.12)',
+                        color: '#0284c7',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      PERFORMANCE TCE
+                    </span>
+                    <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
+                      Indice de Planification & Transformation
+                    </h3>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', margin: '4px 0' }}>
+                    <div style={{ position: 'relative', width: '112px', height: '112px', flexShrink: 0 }}>
+                      <svg width="112" height="112" viewBox="0 0 112 112">
+                        <defs>
+                          <linearGradient id="ringBlueGrad" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stopColor="#1d4ed8" />
+                            <stop offset="55%" stopColor="#3b82f6" />
+                            <stop offset="100%" stopColor="#0ea5e9" />
+                          </linearGradient>
+                        </defs>
+                        <circle
+                          cx="56"
+                          cy="56"
+                          r="44"
+                          fill="none"
+                          stroke="rgba(37, 99, 235, 0.1)"
+                          strokeWidth="10"
+                        />
+                        <circle
+                          cx="56"
+                          cy="56"
+                          r="44"
+                          fill="none"
+                          stroke="url(#ringBlueGrad)"
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                          strokeDasharray={`${execDash} ${circumference}`}
+                          transform="rotate(-90 56 56)"
+                        />
+                      </svg>
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <span className="font-mono" style={{ fontSize: '21px', fontWeight: 800, color: '#1e40af' }}>
+                          {executionRate}%
+                        </span>
+                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
+                          PLANIFIÉ
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Transformation Devis</span>
+                          <span className="font-mono" style={{ color: '#2563eb' }}>{conversionRate}%</span>
+                        </div>
+                        <div className="smooth-bar-track">
+                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, conversionRate)}%` }} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Exécution Terrain</span>
+                          <span className="font-mono" style={{ color: '#0284c7' }}>{executionRate}%</span>
+                        </div>
+                        <div className="smooth-bar-track">
+                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, executionRate)}%` }} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Facturation Clôturées</span>
+                          <span className="font-mono" style={{ color: '#0ea5e9' }}>{billingRate}%</span>
+                        </div>
+                        <div className="smooth-bar-track">
+                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, billingRate)}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{plannedOrDoneIntvs} / {interventionsList.length} missions actives</span>
+                    <span className="font-mono" style={{ color: '#2563eb', fontWeight: 700 }}>Temps réel ●</span>
+                  </div>
+                </div>
+
+                {/* CARD 3 : Smooth Trade & Capacity Breakdown */}
+                <div className="glass-analytics-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          background: 'rgba(37, 99, 235, 0.12)',
+                          color: '#2563eb',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        CORPS D'ÉTAT
+                      </span>
+                      <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
+                        Volume par Métier TCE
+                      </h3>
+                    </div>
+                    <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb' }}>
+                      {interventionsList.length + devisList.length} dossiers
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {tradeSeries.slice(0, 5).map((tr) => {
+                      const pct = Math.min(100, Math.round((tr.total / Math.max(1, maxVal * 1.4)) * 100));
+                      return (
+                        <div key={tr.label} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{tr.label}</span>
+                            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              <strong>{tr.intv}</strong> intv • <strong>{tr.devis}</strong> devis
+                            </span>
+                          </div>
+                          <div className="smooth-bar-track">
+                            <div
+                              className="smooth-bar-fill"
+                              style={{ width: `${Math.max(10, pct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 10px', fontSize: '11px' }}
+                      onClick={() => handleSectionChange('interventions')}
+                    >
+                      Voir toutes les missions →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bannière d'alerte Rapports & Photos reçus */}
           {queues.rapportsEnAttente.length > 0 && (
             <div
