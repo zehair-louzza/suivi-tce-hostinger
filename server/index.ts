@@ -17,6 +17,7 @@ import { authRouter } from './routes/auth.js';
 import { devisRouter } from './routes/devis.js';
 import { interventionRouter } from './routes/interventions.js';
 import { referentielsRouter } from './routes/referentiels.js';
+import { adminRouter } from './routes/admin.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -35,8 +36,8 @@ setupSocketHandlers(io);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(cookieParser(config.cookieSecret));
 app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
 
@@ -55,6 +56,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/devis', authMiddleware, devisRouter);
 app.use('/api/interventions', authMiddleware, interventionRouter);
 app.use('/api/referentiels', authMiddleware, referentielsRouter);
+app.use('/api/admin', authMiddleware, adminRouter);
 
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');

@@ -13,7 +13,7 @@ import {
 
 export const interventionRouter = Router();
 
-function parseHistorique(json?: string | null): HistoriqueEvent[] {
+function parseJsonArray<T = any>(json?: string | null): T[] {
   if (!json) return [];
   try {
     const arr = JSON.parse(json);
@@ -21,6 +21,10 @@ function parseHistorique(json?: string | null): HistoriqueEvent[] {
   } catch {
     return [];
   }
+}
+
+function parseHistorique(json?: string | null): HistoriqueEvent[] {
+  return parseJsonArray<HistoriqueEvent>(json);
 }
 
 function addHistoriqueEvent(
@@ -143,6 +147,13 @@ export function transformIntervention(i: any) {
     amount: i.amount ?? null,
     heureDebut: i.heureDebut || null,
     heureFin: i.heureFin || null,
+    heureDebutReelle: i.heureDebutReelle || null,
+    heureFinReelle: i.heureFinReelle || null,
+    actionsRealisees: parseJsonArray<string>(i.actionsRealiseesJson),
+    photos: parseJsonArray<any>(i.photosJson),
+    elementsChiffrage: i.elementsChiffrage || null,
+    rapportFinal: i.rapportFinal || null,
+    statutRapport: i.statutRapport || (i.rapportFinal ? 'Validé & Clôturé' : i.compteRendu ? 'Déclaré par technicien' : 'Brouillon'),
     isVisiteDevis,
     origineDevisId: i.origineDevisId || i.devisId || null,
     origineDevisClient: i.origineDevisClient || i.client || null,
@@ -338,6 +349,13 @@ interventionRouter.post(
         amount: parseOptionalFloat(b.amount) ?? 0,
         heureDebut: b.heureDebut || null,
         heureFin: b.heureFin || null,
+        heureDebutReelle: b.heureDebutReelle || null,
+        heureFinReelle: b.heureFinReelle || null,
+        actionsRealiseesJson: Array.isArray(b.actionsRealisees) ? JSON.stringify(b.actionsRealisees) : null,
+        photosJson: Array.isArray(b.photos) ? JSON.stringify(b.photos) : null,
+        elementsChiffrage: b.elementsChiffrage || null,
+        rapportFinal: b.rapportFinal || null,
+        statutRapport: b.statutRapport || null,
         isVisiteDevis,
         origineDevisId: b.origineDevisId ? Number(b.origineDevisId) : b.devisId ? Number(b.devisId) : null,
         origineDevisClient: b.origineDevisClient || b.client || null,
@@ -476,6 +494,19 @@ interventionRouter.patch(
     if (b.amount !== undefined) updateData.amount = parseOptionalFloat(b.amount) ?? 0;
     if (b.heureDebut !== undefined) updateData.heureDebut = b.heureDebut || null;
     if (b.heureFin !== undefined) updateData.heureFin = b.heureFin || null;
+    if (b.heureDebutReelle !== undefined) updateData.heureDebutReelle = b.heureDebutReelle || null;
+    if (b.heureFinReelle !== undefined) updateData.heureFinReelle = b.heureFinReelle || null;
+    if (b.actionsRealisees !== undefined) {
+      updateData.actionsRealiseesJson = Array.isArray(b.actionsRealisees)
+        ? JSON.stringify(b.actionsRealisees)
+        : null;
+    }
+    if (b.photos !== undefined) {
+      updateData.photosJson = Array.isArray(b.photos) ? JSON.stringify(b.photos) : null;
+    }
+    if (b.elementsChiffrage !== undefined) updateData.elementsChiffrage = b.elementsChiffrage || null;
+    if (b.rapportFinal !== undefined) updateData.rapportFinal = b.rapportFinal || null;
+    if (b.statutRapport !== undefined) updateData.statutRapport = b.statutRapport || null;
     if (b.isVisiteDevis !== undefined) {
       updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
     }

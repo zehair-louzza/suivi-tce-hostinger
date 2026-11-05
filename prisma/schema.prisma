@@ -13,6 +13,9 @@ model User {
   password           String
   name               String
   role               String              @default("USER")
+  technicienNom      String?
+  permissionsJson    String?
+  active             Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   devis              Devis[]
@@ -122,6 +125,15 @@ model Intervention {
   isVisiteDevis      Boolean             @default(false)
   historiqueJson     String?
 
+  // Champs Mobile Technicien, Chiffrage & Rédaction Rapports
+  heureDebutReelle     String?
+  heureFinReelle       String?
+  actionsRealiseesJson String?
+  photosJson           String?
+  elementsChiffrage    String?
+  rapportFinal         String?
+  statutRapport        String?
+
   @@index([userId])
   @@index([status])
   @@index([datePlanifiee])
@@ -155,4 +167,23 @@ model Referentiel {
   updatedAt DateTime @updatedAt
 
   @@map("referentiels")
+}
+
+model PointageTechnicien {
+  id                      Int       @id @default(autoincrement())
+  technicien              String
+  userId                  Int?
+  dateJour                String
+  heureArriveeBureau      String?
+  timestampArrivee        DateTime?
+  heureFinJournee         String?
+  timestampFin            DateTime?
+  statutJournee           String    @default("EN_SERVICE")
+  derniereInterventionRef String?
+  commentaireJournee      String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([technicien, dateJour], map: "pointages_techniciens_technicien_datejour_key")
+  @@map("pointages_techniciens")
 }

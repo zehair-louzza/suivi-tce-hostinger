@@ -1,14 +1,13 @@
 // Authentication middleware
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
 import { AppError } from './errorHandler.js';
 
 interface TokenPayload {
   userId: number;
   email: string;
-  role: 'ADMIN' | 'USER' | 'VIEWER';
+  role: string;
   iat: number;
   exp: number;
 }
@@ -22,7 +21,6 @@ declare global {
 }
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
-  // Try to get token from cookie first, then Authorization header
   const token = req.cookies?.accessToken || req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
@@ -60,12 +58,13 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   next();
 }
 
-export function requireRole(...roles: TokenPayload['role'][]) {
+export function requireRole(...roles: string[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
       throw new AppError(401, 'Authentification requise', 'UNAUTHORIZED');
     }
-    if (!roles.includes(req.user.role)) {
+    const upperRole = (req.user.role || '').toUpperCase();
+    if (!roles.map((r) => r.toUpperCase()).includes(upperRole)) {
       throw new AppError(403, 'Accès refusé : permissions insuffisantes', 'FORBIDDEN');
     }
     next();

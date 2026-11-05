@@ -3,7 +3,14 @@ import { useAuth } from '../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-export type AppSection = 'aujourdhui' | 'planning' | 'devis' | 'interventions' | 'referentiels';
+export type AppSection =
+  | 'aujourdhui'
+  | 'planning'
+  | 'devis'
+  | 'interventions'
+  | 'referentiels'
+  | 'admin'
+  | 'mobile_tech';
 
 interface LayoutProps {
   children: ReactNode;
@@ -159,9 +166,53 @@ export function Layout({
         </svg>
       ),
     },
+    {
+      id: 'admin',
+      label: 'Workstation Admin',
+      subtitle: 'Droits, Pointages & Rapports',
+      shortcut: '6',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <path d="M9 12l2 2 4-4" />
+        </svg>
+      ),
+    },
+    {
+      id: 'mobile_tech',
+      label: 'App Mobile Technicien',
+      subtitle: 'Pointage, Actions & Photos',
+      shortcut: '7',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+          <line x1="12" y1="18" x2="12.01" y2="18" />
+        </svg>
+      ),
+    },
   ];
 
-  const activeMeta = navItems.find((item) => item.id === activeSection) || navItems[0];
+  const isAdminOrManager =
+    user?.id === 1 ||
+    (user?.role || '').toUpperCase() === 'ADMIN' ||
+    Boolean(user?.permissions?.canManageUsers) ||
+    Boolean(user?.permissions?.canWriteReports);
+
+  const isMobileTechOnly =
+    (user?.role || '').toUpperCase() === 'TECHNICIEN' ||
+    (Boolean(user?.permissions?.mobileOnly) && !isAdminOrManager);
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (isMobileTechOnly) {
+      return item.id === 'mobile_tech';
+    }
+    if (item.id === 'admin') {
+      return isAdminOrManager;
+    }
+    return true;
+  });
+
+  const activeMeta = visibleNavItems.find((item) => item.id === activeSection) || navItems[0];
 
   return (
     <div className="enterprise-shell">
@@ -209,7 +260,7 @@ export function Layout({
 
         <nav className="sidebar-nav">
           {!collapsed && <div className="sidebar-section-label">Opérations & Dispatch</div>}
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = activeSection === item.id;
             return (
               <button

@@ -596,6 +596,13 @@ export const InterventionSchema = z.object({
   amount: z.number().nonnegative().optional().nullable(),
   heureDebut: z.string().max(10).optional().nullable(),
   heureFin: z.string().max(10).optional().nullable(),
+  heureDebutReelle: z.string().max(10).optional().nullable(),
+  heureFinReelle: z.string().max(10).optional().nullable(),
+  actionsRealisees: z.array(z.string()).optional(),
+  photos: z.array(z.any()).optional(),
+  elementsChiffrage: z.string().max(4000).optional().nullable(),
+  rapportFinal: z.string().max(8000).optional().nullable(),
+  statutRapport: z.string().max(80).optional().nullable(),
   isVisiteDevis: z.boolean().optional().default(false),
   origineDevisId: z.number().int().positive().optional().nullable(),
   origineDevisClient: z.string().max(200).optional().nullable(),
@@ -617,12 +624,63 @@ export type Intervention = z.infer<typeof InterventionSchema> & {
   computed?: InterventionComputed;
 };
 
+export type UserRoleCode =
+  | 'ADMIN'
+  | 'CHIFFRAGE_DEVIS'
+  | 'CONDUCTEUR_TRAVAUX'
+  | 'REDACTEUR_RAPPORTS'
+  | 'TECHNICIEN'
+  | 'USER'
+  | 'VIEWER';
+
+export interface UserPermissions {
+  canManageUsers: boolean;
+  canManageReferentiels: boolean;
+  canEditDevis: boolean;
+  canViewFinancials: boolean;
+  canConvertDevis: boolean;
+  canEditPlanning: boolean;
+  canEditInterventions: boolean;
+  canWriteReports: boolean;
+  canManageBilling: boolean;
+  canDeleteRecords: boolean;
+  canAccessMobileTech: boolean;
+  mobileOnly: boolean;
+}
+
 export interface User {
   id: number;
   email: string;
   name: string;
-  role: 'admin' | 'user' | 'viewer' | string;
-  createdAt?: number;
+  role: UserRoleCode | string;
+  technicienNom?: string | null;
+  permissions?: UserPermissions;
+  active?: boolean;
+  createdAt?: number | string;
+}
+
+export interface TerrainPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  category?: 'AVANT' | 'APRES' | 'RELEVE_CHIFFRAGE' | 'CONSTAT';
+  takenAt: string;
+  auteur?: string;
+}
+
+export interface PointageTechnicienItem {
+  id: number;
+  technicien: string;
+  userId?: number | null;
+  dateJour: string;
+  heureArriveeBureau?: string | null;
+  timestampArrivee?: string | null;
+  heureFinJournee?: string | null;
+  timestampFin?: string | null;
+  statutJournee: 'EN_SERVICE' | 'TERMINEE';
+  derniereInterventionRef?: string | null;
+  commentaireJournee?: string | null;
+  dureeMinutes?: number | null;
 }
 
 // Helpers
@@ -763,3 +821,215 @@ export function rankTechniciansForTrade(
 
   return { qualified, allRanked };
 }
+
+// ============================================================================
+// 7. ARCHITECTURE RBAC ANELEC : RÔLES, DROITS & ACTIONS PRÉ-REMPLIES MOBILE
+// ============================================================================
+
+export interface RoleDefinition {
+  code: UserRoleCode;
+  label: string;
+  badgeColor: string;
+  summary: string;
+  keyResponsibilities: string[];
+  defaultPermissions: UserPermissions;
+}
+
+export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
+  ADMIN: {
+    code: 'ADMIN',
+    label: 'Super-Administrateur / Direction',
+    badgeColor: '#dc2626',
+    summary:
+      'Contrôle intégral : gestion des utilisateurs et permissions, référentiels, compétences métier, chiffrage devis HT, planning Gantt, rapports et facturation.',
+    keyResponsibilities: [
+      'Créer et désigner les utilisateurs avec attribution granulaire des droits de modification',
+      'Configurer les compétences métier des techniciens et les référentiels ANELEC',
+      'Superviser les pointages journaliers (arrivée bureau matin / fin dernière intervention soir)',
+      'Valider et modifier sans restriction les Devis (22 col.), Interventions (23 col.), Rapports et Factures',
+    ],
+    defaultPermissions: {
+      canManageUsers: true,
+      canManageReferentiels: true,
+      canEditDevis: true,
+      canViewFinancials: true,
+      canConvertDevis: true,
+      canEditPlanning: true,
+      canEditInterventions: true,
+      canWriteReports: true,
+      canManageBilling: true,
+      canDeleteRecords: true,
+      canAccessMobileTech: true,
+      mobileOnly: false,
+    },
+  },
+  CHIFFRAGE_DEVIS: {
+    code: 'CHIFFRAGE_DEVIS',
+    label: 'Chargé d’Études & Chiffrage Devis',
+    badgeColor: '#2563eb',
+    summary:
+      'Spécialiste du pipeline Devis et du chiffrage : exploite les relevés techniques, métrés et photos des visites techniciens pour chiffrer et convertir les devis.',
+    keyResponsibilities: [
+      'Créer, chiffrer (Montants HT, validité) et suivre les relances des Devis (22 colonnes)',
+      'Déclencher des demandes de Visite Technique Devis et consulter les éléments de chiffrage & photos terrain',
+      'Convertir les Devis acceptés en Interventions opérationnelles',
+      'Consulter le planning pour coordonner les visites de chiffrage',
+    ],
+    defaultPermissions: {
+      canManageUsers: false,
+      canManageReferentiels: false,
+      canEditDevis: true,
+      canViewFinancials: true,
+      canConvertDevis: true,
+      canEditPlanning: true,
+      canEditInterventions: false,
+      canWriteReports: false,
+      canManageBilling: false,
+      canDeleteRecords: false,
+      canAccessMobileTech: false,
+      mobileOnly: false,
+    },
+  },
+  CONDUCTEUR_TRAVAUX: {
+    code: 'CONDUCTEUR_TRAVAUX',
+    label: 'Conducteur de Travaux / Dispatcher',
+    badgeColor: '#7c3aed',
+    summary:
+      'Pilote opérationnel du Planning Gantt et des équipes terrain : affecte les missions selon les compétences, suit les pointages et débloque les chantiers.',
+    keyResponsibilities: [
+      'Gérer le Planning Gantt, l’auto-planification par moindre compétence et la Bourse de Dispatch',
+      'Créer et modifier les fiches Interventions (23 colonnes), affecter les techniciens et gérer les urgences',
+      'Suivre en direct l’activation/désactivation des missions et les pointages matin/soir des techniciens',
+      'Valider techniquement les travaux réalisés avant rédaction du rapport final',
+    ],
+    defaultPermissions: {
+      canManageUsers: false,
+      canManageReferentiels: true,
+      canEditDevis: false,
+      canViewFinancials: true,
+      canConvertDevis: true,
+      canEditPlanning: true,
+      canEditInterventions: true,
+      canWriteReports: true,
+      canManageBilling: false,
+      canDeleteRecords: false,
+      canAccessMobileTech: true,
+      mobileOnly: false,
+    },
+  },
+  REDACTEUR_RAPPORTS: {
+    code: 'REDACTEUR_RAPPORTS',
+    label: 'Chargé de Rapports, Qualité & Facturation',
+    badgeColor: '#059669',
+    summary:
+      'Exploite les déclarations terrain des techniciens (comptes rendus, actions pré-remplies, photos, horaires réels) pour rédiger les rapports officiels et facturer.',
+    keyResponsibilities: [
+      'Réceptionner les déclarations terrain des techniciens (actions cochées, observations, photos Avant/Après)',
+      'Rédiger, mettre en forme et valider le Rapport Final d’Intervention pour le client / donneur d’ordre',
+      'Clôturer les interventions validées et renseigner le numéro et statut de Facturation',
+      'Contrôler la complétude documentaire (photos, résultat technique, levée de réserves)',
+    ],
+    defaultPermissions: {
+      canManageUsers: false,
+      canManageReferentiels: false,
+      canEditDevis: false,
+      canViewFinancials: true,
+      canConvertDevis: false,
+      canEditPlanning: false,
+      canEditInterventions: true,
+      canWriteReports: true,
+      canManageBilling: true,
+      canDeleteRecords: false,
+      canAccessMobileTech: false,
+      mobileOnly: false,
+    },
+  },
+  TECHNICIEN: {
+    code: 'TECHNICIEN',
+    label: 'Technicien Terrain (App Mobile Dédiée)',
+    badgeColor: '#d97706',
+    summary:
+      'Interface mobile dédiée : pointage arrivée bureau matin / fin de journée soir, activation/désactivation des interventions & visites devis, actions pré-remplies et photos.',
+    keyResponsibilities: [
+      'Activer son heure d’arrivée au bureau chaque matin et désactiver sa journée le soir après la dernière intervention',
+      'Activer (Démarrer) et Désactiver (Terminer) chaque intervention ou visite de devis en temps réel',
+      'Remplir les petits comptes rendus avec actions pré-remplies en 1 clic + éléments utiles au chiffrage',
+      'Prendre ou joindre des photos (Avant / Après / Relevé pour devis) directement depuis son smartphone',
+    ],
+    defaultPermissions: {
+      canManageUsers: false,
+      canManageReferentiels: false,
+      canEditDevis: false,
+      canViewFinancials: false,
+      canConvertDevis: false,
+      canEditPlanning: false,
+      canEditInterventions: true,
+      canWriteReports: false,
+      canManageBilling: false,
+      canDeleteRecords: false,
+      canAccessMobileTech: true,
+      mobileOnly: true,
+    },
+  },
+};
+
+export function getEffectivePermissions(
+  role?: string | null,
+  customPermissionsJson?: string | null
+): UserPermissions {
+  const normRole = (role || 'USER').toUpperCase();
+  const base =
+    ROLE_DEFINITIONS[normRole]?.defaultPermissions ||
+    (normRole === 'ADMIN'
+      ? ROLE_DEFINITIONS.ADMIN.defaultPermissions
+      : ROLE_DEFINITIONS.CONDUCTEUR_TRAVAUX.defaultPermissions);
+
+  if (!customPermissionsJson) return { ...base };
+  try {
+    const parsed = JSON.parse(customPermissionsJson);
+    return { ...base, ...parsed };
+  } catch {
+    return { ...base };
+  }
+}
+
+export const ACTIONS_PREREMPLIES_TERRAIN: Record<string, string[]> = {
+  'Visite Devis & Chiffrage': [
+    'Relevé dimensionnel & métrés complets effectués',
+    'Photos de l’existant et des accès jointes',
+    'Vérification de la faisabilité technique validée',
+    'Chiffrage matériel spécifique listé en observation',
+    'Nécessite nacelle / échafaudage / accès spécifique',
+    'Présence client / gardien sur site lors de la visite',
+  ],
+  Électricité: [
+    'Consignation & mise en sécurité électrique effectuée',
+    'Diagnostic de panne & recherche de défaut d’isolement',
+    'Remplacement disjoncteur / appareillage tableau',
+    'Tirage de câbles & raccordement appareillage',
+    'Remplacement luminaire / BAES / éclairage',
+    'Essais sous tension & contrôle de bon fonctionnement OK',
+  ],
+  'Plomberie / CVC / Chauffage': [
+    'Coupure d’eau & mise hors d’eau effectuée',
+    'Recherche de fuite destructive / non destructive réalisée',
+    'Réparation de fuite sur canalisation / raccord',
+    'Dégorgement & curage canalisation effectué',
+    'Remplacement robinetterie / mécanisme / ballon ECS',
+    'Contrôle pression, étanchéité & remise en eau OK',
+  ],
+  'Serrurerie / Menuiserie / TCE': [
+    'Ouverture / sécurisation provisoire de porte ou accès',
+    'Remplacement cylindre / serrure / ferme-porte',
+    'Réglage huisserie, gonds et alignement menuiserie',
+    'Reprise enduit / peinture / finition propre',
+    'Nettoyage de la zone d’intervention & évacuation gravats',
+    'Validation sur place avec l’occupant / gardien',
+  ],
+  'Suivi & Suites à donner': [
+    'Intervention terminée à 100% — Sans réserve',
+    'Mise en sécurité effectuée — Devis complémentaire à établir',
+    'En attente de pièce spécifique à commander',
+    'Accès impossible / Occupant absent (Avis de passage)',
+  ],
+};

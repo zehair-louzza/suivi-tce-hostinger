@@ -23,28 +23,48 @@ import {
 } from '../lib/api';
 import { Layout, AppSection } from '../components/Layout';
 import { PlanningBoard } from '../components/PlanningBoard';
+import { AdminWorkstation } from '../components/AdminWorkstation';
+import { TechnicianMobileView } from '../components/TechnicianMobileView';
+import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
 
 export function DashboardPage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isMobileTechUser =
+    (user?.role || '').toUpperCase() === 'TECHNICIEN' ||
+    (Boolean(user?.permissions?.mobileOnly) && user?.id !== 1 && (user?.role || '').toUpperCase() !== 'ADMIN');
+
   const sectionFromPath = (pathname: string): AppSection => {
+    if (isMobileTechUser) return 'mobile_tech';
     if (pathname.startsWith('/planning')) return 'planning';
     if (pathname.startsWith('/devis')) return 'devis';
     if (pathname.startsWith('/interventions')) return 'interventions';
     if (pathname.startsWith('/referentiels')) return 'referentiels';
+    if (pathname.startsWith('/admin')) return 'admin';
+    if (pathname.startsWith('/mobile')) return 'mobile_tech';
     return 'aujourdhui';
   };
 
   const [activeSection, setActiveSection] = useState<AppSection>(() =>
     sectionFromPath(location.pathname)
   );
+  const [selectedMobileTech, setSelectedMobileTech] = useState<string>(
+    () => user?.technicienNom || 'Anouar'
+  );
+
+  useEffect(() => {
+    if (user?.technicienNom) {
+      setSelectedMobileTech(user.technicienNom);
+    }
+  }, [user?.technicienNom]);
 
   useEffect(() => {
     setActiveSection(sectionFromPath(location.pathname));
-  }, [location.pathname]);
+  }, [location.pathname, isMobileTechUser]);
 
   const handleSectionChange = (sec: AppSection) => {
     setActiveSection(sec);
@@ -54,6 +74,8 @@ export function DashboardPage() {
       devis: '/devis',
       interventions: '/interventions',
       referentiels: '/referentiels',
+      admin: '/admin',
+      mobile_tech: '/mobile',
     };
     navigate(pathMap[sec]);
   };
@@ -1492,6 +1514,43 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* =====================================================================
+          SECTION 6 : WORKSTATION ADMIN (UTILISATEURS, DROITS, POINTAGES & RAPPORTS)
+         ===================================================================== */}
+      {activeSection === 'admin' && (
+        <AdminWorkstation
+          techniciens={techniciensList}
+          interventionsList={interventionsList}
+          devisList={devisList}
+          onOpenInterventionDrawer={(intv) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(intv);
+          }}
+          onOpenDevisDrawer={(devis) => {
+            setIsCreatingDevis(false);
+            setSelectedDevis(devis);
+          }}
+          onSwitchToMobilePreview={(techName) => {
+            setSelectedMobileTech(techName);
+            handleSectionChange('mobile_tech');
+          }}
+        />
+      )}
+
+      {/* =====================================================================
+          SECTION 7 : APPLICATION MOBILE DÉDIÉE TECHNICIEN TERRAIN
+         ===================================================================== */}
+      {activeSection === 'mobile_tech' && (
+        <TechnicianMobileView
+          techniciens={techniciensList}
+          currentTechnicien={user?.technicienNom || selectedMobileTech || techniciensList[0] || 'Anouar'}
+          canSwitchTechnicien={!isMobileTechUser}
+          onSelectTechnicien={(t) => setSelectedMobileTech(t)}
+          interventionsList={interventionsList}
+          devisList={devisList}
+        />
       )}
 
       {/* =====================================================================

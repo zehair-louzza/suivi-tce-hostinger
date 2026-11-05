@@ -12,6 +12,14 @@ import {
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   rankTechniciansForTrade,
+  ROLE_DEFINITIONS,
+  getEffectivePermissions,
+  ACTIONS_PREREMPLIES_TERRAIN,
+  User,
+  UserPermissions,
+  UserRoleCode,
+  TerrainPhoto,
+  PointageTechnicienItem,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -22,7 +30,16 @@ import {
   STATUTS_FACTURE,
 } from '../../../shared/types';
 
-export type { Devis, Intervention, ReferentielsMap };
+export type {
+  Devis,
+  Intervention,
+  ReferentielsMap,
+  User,
+  UserPermissions,
+  UserRoleCode,
+  TerrainPhoto,
+  PointageTechnicienItem,
+};
 export {
   formatCurrency,
   formatDateFR,
@@ -31,6 +48,9 @@ export {
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   rankTechniciansForTrade,
+  ROLE_DEFINITIONS,
+  getEffectivePermissions,
+  ACTIONS_PREREMPLIES_TERRAIN,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -193,6 +213,46 @@ export const authApi = {
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
+};
+
+export const adminApi = {
+  listUsers: () => api.get<{ data: User[] }>('/admin/users'),
+  createUser: (payload: {
+    name: string;
+    email: string;
+    password?: string;
+    role: string;
+    technicienNom?: string | null;
+    permissions?: UserPermissions;
+  }) => api.post<{ data: User; message: string }>('/admin/users', payload),
+  updateUser: (
+    id: number,
+    payload: {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: string;
+      technicienNom?: string | null;
+      permissions?: UserPermissions;
+      active?: boolean;
+    }
+  ) => api.put<{ data: User; message: string }>(`/admin/users/${id}`, payload),
+  deleteUser: (id: number) => api.delete<{ message: string }>(`/admin/users/${id}`),
+  listPointages: (params?: { dateJour?: string; technicien?: string }) =>
+    api.get<{ data: PointageTechnicienItem[] }>('/admin/pointages', { params }),
+  clockIn: (payload: {
+    technicien: string;
+    dateJour?: string;
+    heureArriveeBureau?: string;
+    commentaireJournee?: string;
+  }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-in', payload),
+  clockOut: (payload: {
+    technicien: string;
+    dateJour?: string;
+    heureFinJournee?: string;
+    derniereInterventionRef?: string;
+    commentaireJournee?: string;
+  }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-out', payload),
 };
 
 export const healthApi = {
