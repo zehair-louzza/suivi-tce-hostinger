@@ -63,17 +63,6 @@ export function LoginPage() {
     }
   };
 
-  const handleOneClickDemo = async () => {
-    try {
-      await login('demo@suivi-tce.fr', 'demo1234');
-      toast.success('Session Démo ANELEC ouverte');
-      navigate(from, { replace: true });
-    } catch {
-      loginForm.setValue('email', 'demo@suivi-tce.fr');
-      loginForm.setValue('password', 'demo1234');
-    }
-  };
-
   return (
     <div className="auth-split-layout">
       {/* LEFT SHOWCASE PANE */}
@@ -228,7 +217,8 @@ export function LoginPage() {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '32px',
-          background: '#0d1017',
+          background: 'var(--bg-surface)',
+          color: 'var(--text-primary)',
         }}
       >
         <div
@@ -241,30 +231,12 @@ export function LoginPage() {
           }}
         >
           <div>
-            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#f8fafc' }}>
-              {isRegister ? 'Créer un compte Dispatcher' : 'Connexion à votre espace'}
+            <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              {isRegister ? 'Créer un compte Dispatcher' : 'Connexion à votre espace ANELEC'}
             </h2>
-            <p style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-              Accédez au centre de pilotage Devis, Interventions & Planning.
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Accédez au centre de pilotage Devis, Interventions, Planning & App Mobile.
             </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleOneClickDemo}
-            className="btn btn-ai-dispatch"
-            style={{ width: '100%', padding: '10px 14px', fontSize: '13px' }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            Accès Instantané • Démo ANELEC (1-Clic)
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#64748b', fontSize: '11px' }}>
-            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
-            <span>OU IDENTIFIANTS</span>
-            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
           </div>
 
           <form
@@ -274,7 +246,7 @@ export function LoginPage() {
           >
             {isRegister && (
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Nom complet *
                 </label>
                 <input
@@ -284,7 +256,7 @@ export function LoginPage() {
                   {...registerForm.register('name')}
                 />
                 {registerForm.formState.errors.name && (
-                  <p style={{ color: '#f87171', fontSize: '11.5px', marginTop: '4px' }}>
+                  <p style={{ color: '#dc2626', fontSize: '11.5px', marginTop: '4px' }}>
                     {registerForm.formState.errors.name.message}
                   </p>
                 )}
@@ -292,24 +264,24 @@ export function LoginPage() {
             )}
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '5px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                 Adresse email *
               </label>
               <input
                 type="email"
                 className="input"
-                placeholder="demo@suivi-tce.fr"
+                placeholder="prenom@anelecgroupe.com"
                 {...(isRegister ? registerForm.register('email') : loginForm.register('email'))}
               />
               {(isRegister ? registerForm.formState.errors.email : loginForm.formState.errors.email) && (
-                <p style={{ color: '#f87171', fontSize: '11.5px', marginTop: '4px' }}>
+                <p style={{ color: '#dc2626', fontSize: '11.5px', marginTop: '4px' }}>
                   {(isRegister ? registerForm.formState.errors.email : loginForm.formState.errors.email)?.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '5px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                 Mot de passe *
               </label>
               <input
@@ -319,7 +291,7 @@ export function LoginPage() {
                 {...(isRegister ? registerForm.register('password') : loginForm.register('password'))}
               />
               {(isRegister ? registerForm.formState.errors.password : loginForm.formState.errors.password) && (
-                <p style={{ color: '#f87171', fontSize: '11.5px', marginTop: '4px' }}>
+                <p style={{ color: '#dc2626', fontSize: '11.5px', marginTop: '4px' }}>
                   {(isRegister ? registerForm.formState.errors.password : loginForm.formState.errors.password)?.message}
                 </p>
               )}
@@ -327,7 +299,7 @@ export function LoginPage() {
 
             {isRegister && (
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '5px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Confirmer le mot de passe *
                 </label>
                 <input
@@ -337,7 +309,7 @@ export function LoginPage() {
                   {...registerForm.register('confirmPassword')}
                 />
                 {registerForm.formState.errors.confirmPassword && (
-                  <p style={{ color: '#f87171', fontSize: '11.5px', marginTop: '4px' }}>
+                  <p style={{ color: '#dc2626', fontSize: '11.5px', marginTop: '4px' }}>
                     {registerForm.formState.errors.confirmPassword.message}
                   </p>
                 )}
@@ -354,8 +326,8 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div style={{ textAlign: 'center', fontSize: '12.5px', color: '#94a3b8' }}>
-            {isRegister ? 'Déjà inscrit ?' : 'Nouveau dispatcher ?'}{' '}
+          <div style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+            {isRegister ? 'Déjà inscrit ?' : 'Nouveau collaborateur ?'}{' '}
             <button
               type="button"
               onClick={() => {
@@ -366,8 +338,8 @@ export function LoginPage() {
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#60a5fa',
-                fontWeight: 600,
+                color: 'var(--accent-primary)',
+                fontWeight: 700,
                 cursor: 'pointer',
               }}
             >

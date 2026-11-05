@@ -1551,7 +1551,7 @@ export function DashboardPage() {
         <TechnicianMobileView
           techniciens={techniciensList}
           currentTechnicien={user?.technicienNom || selectedMobileTech || techniciensList[0] || 'Anouar'}
-          canSwitchTechnicien={!isMobileTechUser}
+          canSwitchTechnicien={!isMobileTechUser || !user?.technicienNom}
           onSelectTechnicien={(t) => setSelectedMobileTech(t)}
           interventionsList={interventionsList}
           devisList={devisList}

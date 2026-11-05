@@ -352,13 +352,20 @@ export function PlanningBoard({
             visiteStatut: nextDate && nextTech ? 'Planifiée' : 'À planifier',
           });
         } else {
+          const preservedStatus =
+            updates.statut ||
+            (['En cours', 'Terminée - à valider', 'Clôturée'].includes(item.statut)
+              ? item.statut
+              : nextDate && nextTech
+              ? 'Planifiée'
+              : 'À planifier');
           await onUpdateInterventionPlanning(item.sourceId, {
             entreprise: nextTech,
             datePlanifiee: nextDate || null,
             heureDebut: nextDebut,
             heureFin: nextFin,
-            statutOperationnel: updates.statut || (nextDate && nextTech ? 'Planifiée' : 'À planifier'),
-            modePlanification: 'Planifiée',
+            statutOperationnel: preservedStatus,
+            modePlanification: nextDate && nextTech ? 'Planifiée' : 'Non planifiée',
           });
         }
         toast.success(`${item.reference} → ${nextTech || 'File'} (${nextDebut}–${nextFin})`);

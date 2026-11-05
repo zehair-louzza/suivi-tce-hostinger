@@ -783,9 +783,13 @@ export function rankTechniciansForTrade(
 
     const specificSkills = rawSkills.filter((k) => !normalizeSkillToken(k).includes('tous corps'));
     const skillCount = rawSkills.length;
-    const effectiveSkillCount = hasWildcard
-      ? Math.max(15, specificSkills.length + 10)
-      : Math.max(1, specificSkills.length || rawSkills.length || 99);
+    // On classe strictement par le nombre réel de compétences cochées (du moindre de compétences au plus polyvalent)
+    const effectiveSkillCount =
+      rawSkills.length > 0
+        ? specificSkills.length > 0
+          ? rawSkills.length
+          : 12
+        : 99;
 
     const isQualified = isGeneric ? rawSkills.length > 0 : hasDirectSkill || hasWildcard;
 
