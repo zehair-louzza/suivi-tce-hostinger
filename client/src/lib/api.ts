@@ -1,13 +1,48 @@
-// API client with axios
+// API client with axios + Full ANELEC types & endpoints
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
+import {
+  Devis,
+  Intervention,
+  ReferentielsMap,
+  formatCurrency,
+  formatDateFR,
+  parseTimeIntervalInput,
+  computeDurationHours,
+  DEFAULT_REFERENTIELS,
+  STATUTS_COMMERCIAUX_DEVIS,
+  TRAITEMENTS_ADMIN,
+  PROCHAINES_ACTIONS_DEVIS,
+  PRIORITES,
+  TYPES_INTERVENTION,
+  MODES_PLANIFICATION,
+  STATUTS_OPERATIONNELS_INTERVENTION,
+  STATUTS_FACTURE,
+} from '../../../shared/types';
+
+export type { Devis, Intervention, ReferentielsMap };
+export {
+  formatCurrency,
+  formatDateFR,
+  parseTimeIntervalInput,
+  computeDurationHours,
+  DEFAULT_REFERENTIELS,
+  STATUTS_COMMERCIAUX_DEVIS,
+  TRAITEMENTS_ADMIN,
+  PROCHAINES_ACTIONS_DEVIS,
+  PRIORITES,
+  TYPES_INTERVENTION,
+  MODES_PLANIFICATION,
+  STATUTS_OPERATIONNELS_INTERVENTION,
+  STATUTS_FACTURE,
+};
 
 export const api = axios.create({
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Important for cookies
+  withCredentials: true,
 });
 
 // Request interceptor to add auth token
@@ -42,18 +77,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Handle 401 errors
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
-        // Queue the request
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          return api(originalRequest);
-        }).catch((err) => {
-          return Promise.reject(err);
-        });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
       }
 
       originalRequest._retry = true;
@@ -79,35 +112,6 @@ api.interceptors.response.use(
   }
 );
 
-// Types
-export interface Devis {
-  id: number;
-  client: string;
-  amount: number;
-  dateCreated: string;
-  echeance: string | null;
-  status: 'a-traiter' | 'en-cours' | 'en-attente' | 'bloque' | 'traite';
-  notes: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface Intervention {
-  id: number;
-  chantier: string;
-  entreprise: string | null;
-  amount: number;
-  datePlanifiee: string;
-  dateReelle: string | null;
-  status: 'a-traiter' | 'en-cours' | 'en-attente' | 'bloque' | 'traite';
-  notes: string | null;
-  origineDevisId: number | null;
-  origineDevisClient: string | null;
-  origineDevisDate: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
@@ -118,51 +122,65 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export type StatsResponse = {
-  'a-traiter': number;
-  'en-cours': number;
-  'en-attente': number;
-  'bloque': number;
-  'traite': number;
-};
+export type StatsResponse = Record<string, number>;
 
-// API functions
 export const devisApi = {
   list: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
     api.get<PaginatedResponse<Devis>>('/devis', { params }),
-  
+
   stats: () => api.get<StatsResponse>('/devis/stats'),
-  
+
   get: (id: number) => api.get<{ data: Devis }>(`/devis/${id}`),
-  
+
   create: (data: any) => api.post<{ data: Devis; message: string }>('/devis', data),
-  
+
   update: (id: number, data: any) => api.patch<{ data: Devis; message: string }>(`/devis/${id}`, data),
-  
+
   delete: (id: number) => api.delete<{ message: string }>(`/devis/${id}`),
-  
-  convert: (id: number, data?: { entreprise?: string; datePlanifiee?: string; notes?: string }) =>
-    api.post<{ data: any; message: string }>(`/devis/${id}/convert`, data),
+
+  convert: (
+    id: number,
+    data?: {
+      mode?: 'visite' | 'travaux';
+      isVisiteDevis?: boolean;
+      entreprise?: string;
+      datePlanifiee?: string;
+      heureDebut?: string;
+      heureFin?: string;
+      typeIntervention?: string;
+      priorite?: string;
+      notes?: string;
+    }
+  ) => api.post<{ data: Intervention; devis: Devis; message: string }>(`/devis/${id}/convert`, data || {}),
 };
 
 export const interventionApi = {
-  list: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
+  list: (params?: { search?: string; status?: string; technicien?: string; page?: number; limit?: number }) =>
     api.get<PaginatedResponse<Intervention>>('/interventions', { params }),
-  
-  stats: () => api.get<{ 'a-traiter': number; 'en-cours': number; 'en-attente': number; 'bloque': number; 'traite': number }>('/interventions/stats'),
-  
+
+  stats: () => api.get<StatsResponse>('/interventions/stats'),
+
   get: (id: number) => api.get<{ data: Intervention }>(`/interventions/${id}`),
-  
+
   create: (data: any) => api.post<{ data: Intervention; message: string }>('/interventions', data),
-  
+
   update: (id: number, data: any) => api.patch<{ data: Intervention; message: string }>(`/interventions/${id}`, data),
-  
+
   delete: (id: number) => api.delete<{ message: string }>(`/interventions/${id}`),
+};
+
+export const referentielsApi = {
+  getAll: () => api.get<{ data: ReferentielsMap }>('/referentiels'),
+  updateCategory: (categorie: keyof ReferentielsMap, valeurs: string[]) =>
+    api.put<{ data: { categorie: string; valeurs: string[] }; message: string }>(`/referentiels/${categorie}`, {
+      valeurs,
+    }),
 };
 
 export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  register: (name: string, email: string, password: string) => api.post('/auth/register', { name, email, password }),
+  register: (name: string, email: string, password: string) =>
+    api.post('/auth/register', { name, email, password }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
@@ -171,17 +189,4 @@ export const authApi = {
 export const healthApi = {
   check: () => api.get('/health'),
   ready: () => api.get('/health/ready'),
-};
-
-// Formatters
-export const formatCurrency = (amount: number | null | undefined): string =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount ?? 0);
-
-export const formatDateFR = (date: string | null | undefined): string => {
-  if (!date) return '—';
-  // Les dates AAAA-MM-JJ sont lues sans décalage de fuseau horaire.
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-  const d = new Date(date);
-  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('fr-FR');
 };

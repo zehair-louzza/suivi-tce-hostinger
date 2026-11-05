@@ -16,10 +16,11 @@ import { prisma } from './lib/prisma.js';
 import { authRouter } from './routes/auth.js';
 import { devisRouter } from './routes/devis.js';
 import { interventionRouter } from './routes/interventions.js';
+import { referentielsRouter } from './routes/referentiels.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
-import { setupSocketHandlers } from './socket/index.js';
+import { setupSocketHandlers, setSocketInstance } from './socket/index.js';
 
 const app = express();
 // Trust only the local reverse proxy observed in Hostinger runtime logs.
@@ -29,7 +30,6 @@ const httpServer = createServer(app);
 export const io = new Server(httpServer, {
   cors: { origin: config.socketCorsOrigin, credentials: true },
 });
-import { setSocketInstance } from './socket/index.js';
 setSocketInstance(io);
 setupSocketHandlers(io);
 
@@ -54,6 +54,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/devis', authMiddleware, devisRouter);
 app.use('/api/interventions', authMiddleware, interventionRouter);
+app.use('/api/referentiels', authMiddleware, referentielsRouter);
 
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');

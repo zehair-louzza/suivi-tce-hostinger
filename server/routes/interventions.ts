@@ -1,159 +1,554 @@
-import { Router } from 'express';
+// Interventions routes - Full 23 ANELEC columns + Planning horaire + Synchronisation Visite Devis + Historique + PostgreSQL compatibility
+import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { z } from 'zod';
 import { socketEvents } from '../socket/index.js';
+import {
+  computeInterventionCalculations,
+  traitementToStatusCode,
+  statusCodeToTraitement,
+  HistoriqueEvent,
+} from '../../shared/types.js';
 
 export const interventionRouter = Router();
-const statuses = ['A_TRAITER', 'EN_COURS', 'EN_ATTENTE', 'BLOQUE', 'TRAITE'] as const;
 
-const AmountSchema = z.preprocess(value => {
-  if (typeof value !== 'string') return value;
-  const text = value.trim();
-  if (text === '') return 0;
-  if (!/^\d+(?:[.,]\d+)?$/.test(text)) return value;
-  return Number(text.replace(',', '.'));
-}, z.number().finite().nonnegative('Le montant doit être positif ou nul'));
-
-const StatusSchema = z.preprocess(value =>
-  typeof value === 'string' ? value.trim().toUpperCase().replace(/-/g, '_') : value,
-  z.enum(statuses)
-);
-const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ').refine(value => {
-  const date = new Date(value + 'T00:00:00.000Z');
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}, 'Date invalide');
-const OptionalDateSchema = z.preprocess(value => value === '' ? null : value, DateSchema.nullable());
-const Fields = z.object({
-  chantier: z.string().trim().min(1, 'Chantier/Lot est requis').max(200),
-  entreprise: z.string().max(200).nullable(),
-  amount: AmountSchema,
-  datePlanifiee: DateSchema,
-  dateReelle: OptionalDateSchema,
-  status: StatusSchema,
-  notes: z.string().max(2000).nullable(),
-  origineDevisId: z.number().int().positive().nullable(),
-  origineDevisClient: z.string().max(200).nullable(),
-  origineDevisDate: OptionalDateSchema,
-  devisId: z.number().int().positive().nullable(),
-});
-const CreateSchema = Fields.partial().extend({
-  chantier: Fields.shape.chantier,
-  datePlanifiee: DateSchema,
-  amount: AmountSchema.default(0),
-  status: StatusSchema.default('A_TRAITER'),
-});
-const UpdateSchema = Fields.partial();
-const IdSchema = z.coerce.number().int().positive();
-const PageSchema = z.coerce.number().int().min(1);
-const LimitSchema = z.coerce.number().int().min(1).max(100);
-
-function mapStatus(status: string) {
-  return status.toLowerCase().replace(/_/g, '-');
+function parseHistorique(json?: string | null): HistoriqueEvent[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
 }
-function transformIntervention(i: any) {
+
+function addHistoriqueEvent(
+  existingJson: string | null | undefined,
+  auteur: string,
+  action: string,
+  details?: string
+): string {
+  const list = parseHistorique(existingJson);
+  list.unshift({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    date: new Date().toISOString(),
+    auteur,
+    action,
+    details,
+  });
+  return JSON.stringify(list.slice(0, 100));
+}
+
+function toISO(dt?: Date | string | null): string | null {
+  if (!dt) return null;
+  if (typeof dt === 'string') return dt.split('T')[0];
+  return dt.toISOString().split('T')[0];
+}
+
+function parseDateOrNull(val: any): Date | null {
+  if (!val || typeof val !== 'string' || !val.trim()) return null;
+  const d = new Date(val.includes('T') ? val : `${val}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseOptionalFloat(val: any): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  const n = Number(val);
+  return Number.isNaN(n) ? null : n;
+}
+
+export function transformIntervention(i: any) {
+  const dateDemande = toISO(i.dateDemande) || toISO(i.createdAt);
+  const rawDatePlan = toISO(i.datePlanifiee);
+  // Si modePlanification === 'Non planifiée' ou statutOperationnel === 'À planifier' sans heure, on expose datePlanifiee = null côté UI pour le bac "À placer"
+  const isUnplanned =
+    i.modePlanification === 'Non planifiée' &&
+    (i.statutOperationnel === 'À planifier' || i.statutOperationnel === 'A_PLANIFIER');
+  const datePlanifiee = isUnplanned ? null : rawDatePlan;
+
+  const dateDebut = toISO(i.dateDebut);
+  const dateReelle = toISO(i.dateFin) || toISO(i.dateReelle);
+  const echeance = toISO(i.dateEcheance);
+
+  const rawTraitement = i.traitement || i.status || 'A_TRAITER';
+  const isLegacyCode = ['A_TRAITER', 'EN_COURS', 'EN_ATTENTE', 'BLOQUE', 'TRAITE', 'a-traiter', 'en-cours', 'en-attente', 'bloque', 'traite'].includes(rawTraitement);
+  const traitement = isLegacyCode ? statusCodeToTraitement(rawTraitement) : rawTraitement;
+  const statusCode = traitementToStatusCode(traitement);
+  const statutOperationnel =
+    i.statutOperationnel ||
+    (statusCode === 'traite'
+      ? 'Clôturée'
+      : statusCode === 'bloque'
+      ? 'Suspendue'
+      : datePlanifiee
+      ? 'Planifiée'
+      : 'À planifier');
+
+  const isVisiteDevis = Boolean(i.isVisiteDevis || i.typeIntervention === 'Visite technique devis');
+  const tech = i.technicien || i.entreprise || null;
+  const site = i.siteAdresse || i.chantier;
+
+  const computed = computeInterventionCalculations({
+    dateDemande,
+    datePlanifiee,
+    echeance,
+    statutOperationnel,
+    traitement,
+    entreprise: tech,
+    motifBlocage: i.motifBlocage,
+    resultatTechnique: i.resultatTechnique,
+    compteRendu: i.compteRendu,
+    statutFacture: i.statutFacture,
+    heureDebut: i.heureDebut,
+    heureFin: i.heureFin,
+  });
+
   return {
-    id: i.id, chantier: i.chantier, entreprise: i.entreprise, amount: i.amount,
-    datePlanifiee: i.datePlanifiee.toISOString().slice(0, 10),
-    dateReelle: i.dateReelle?.toISOString().slice(0, 10) || null,
-    status: mapStatus(i.status), notes: i.notes,
-    origineDevisId: i.origineDevisId, origineDevisClient: i.origineDevisClient,
-    origineDevisDate: i.origineDevisDate?.toISOString().slice(0, 10) || null,
-    createdAt: i.createdAt.getTime(), updatedAt: i.updatedAt.getTime(),
+    id: i.id,
+    reference:
+      i.referenceMetier ||
+      (isVisiteDevis ? `VIS-2026-${String(i.id).padStart(3, '0')}` : `INT-2026-${String(i.id).padStart(3, '0')}`),
+    referenceMetier:
+      i.referenceMetier ||
+      (isVisiteDevis ? `VIS-2026-${String(i.id).padStart(3, '0')}` : `INT-2026-${String(i.id).padStart(3, '0')}`),
+    refDevisTexte: i.refDevisTexte || (i.devisId ? `DEV-2026-${String(i.devisId).padStart(3, '0')}` : null),
+    client: i.client || i.origineDevisClient || null,
+    chantier: site,
+    siteAdresse: site,
+    objet: i.objet || null,
+    origine: i.origine || null,
+    typeIntervention: i.typeIntervention || (isVisiteDevis ? 'Visite technique devis' : 'Corrective'),
+    modePlanification: i.modePlanification || (datePlanifiee ? 'Planifiée' : 'Non planifiée'),
+    corpsEtat: i.corpsEtat || 'Tous corps d’état',
+    priorite: i.priorite || 'Normale',
+    dateDemande,
+    datePlanifiee,
+    statutOperationnel,
+    traitement,
+    status: statusCode,
+    entreprise: tech,
+    technicien: tech,
+    dateDebut,
+    dateReelle,
+    dateFin: dateReelle,
+    echeance,
+    dateEcheance: echeance,
+    resultatTechnique: i.resultatTechnique || null,
+    motifBlocage: i.motifBlocage || null,
+    numeroFacture: i.numeroFacture || null,
+    statutFacture: i.statutFacture || 'Non facturée',
+    compteRendu: i.compteRendu || null,
+    notes: i.notes || null,
+    amount: i.amount ?? null,
+    heureDebut: i.heureDebut || null,
+    heureFin: i.heureFin || null,
+    isVisiteDevis,
+    origineDevisId: i.origineDevisId || i.devisId || null,
+    origineDevisClient: i.origineDevisClient || i.client || null,
+    origineDevisDate: toISO(i.origineDevisDate),
+    devisId: i.devisId || i.origineDevisId || null,
+    historique: parseHistorique(i.historiqueJson),
+    version: i.version ?? 0,
+    computed,
+    createdAt: i.createdAt ? new Date(i.createdAt).getTime() : Date.now(),
+    updatedAt: i.updatedAt ? new Date(i.updatedAt).getTime() : Date.now(),
   };
 }
-function dateValue(value: string | null | undefined) {
-  return value ? new Date(value + 'T00:00:00.000Z') : null;
-}
-async function checkDevis(devisId: number | null | undefined, userId: number, isAdmin: boolean) {
-  if (devisId == null) return;
-  const devis = await prisma.devis.findFirst({ where: { id: devisId, ...(isAdmin ? {} : { userId }) }, select: { id: true } });
-  if (!devis) throw new AppError(404, 'Devis lié introuvable ou inaccessible', 'NOT_FOUND');
-}
 
-interventionRouter.get('/', asyncHandler(async (req, res) => {
-  const userId = req.user!.userId;
-  const isAdmin = req.user!.role === 'ADMIN';
-  const search = typeof req.query.search === 'string' ? req.query.search : '';
-  const status = req.query.status ? StatusSchema.parse(req.query.status) : undefined;
-  const page = PageSchema.parse(req.query.page ?? 1);
-  const limit = LimitSchema.parse(req.query.limit ?? 50);
-  const where: any = {
-    ...(isAdmin ? {} : { userId }),
-    ...(search ? { OR: [
-      { chantier: { contains: search, mode: 'insensitive' } },
-      { entreprise: { contains: search, mode: 'insensitive' } },
-      { notes: { contains: search, mode: 'insensitive' } },
-    ] } : {}),
-    ...(status ? { status } : {}),
-  };
-  const [items, total] = await Promise.all([
-    prisma.intervention.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
-    prisma.intervention.count({ where }),
-  ]);
-  res.json({ data: items.map(transformIntervention), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
-}));
+interventionRouter.get(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const search = (req.query.search as string) || '';
+    const status = (req.query.status as string) || '';
+    const technicien = (req.query.technicien as string) || '';
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 300;
 
-interventionRouter.get('/stats', asyncHandler(async (req, res) => {
-  const where = req.user!.role === 'ADMIN' ? {} : { userId: req.user!.userId };
-  const stats = await prisma.intervention.groupBy({ by: ['status'], where, _count: true });
-  const result: Record<string, number> = { 'a-traiter': 0, 'en-cours': 0, 'en-attente': 0, bloque: 0, traite: 0 };
-  stats.forEach(s => { result[mapStatus(s.status)] = s._count; });
-  res.json(result);
-}));
+    const where: any = {
+      ...(search
+        ? {
+            OR: [
+              { chantier: { contains: search, mode: 'insensitive' } },
+              { siteAdresse: { contains: search, mode: 'insensitive' } },
+              { client: { contains: search, mode: 'insensitive' } },
+              { objet: { contains: search, mode: 'insensitive' } },
+              { referenceMetier: { contains: search, mode: 'insensitive' } },
+              { entreprise: { contains: search, mode: 'insensitive' } },
+              { notes: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(technicien ? { entreprise: technicien } : {}),
+    };
 
-interventionRouter.get('/:id', asyncHandler(async (req, res) => {
-  const id = IdSchema.parse(req.params.id);
-  const where = { id, ...(req.user!.role === 'ADMIN' ? {} : { userId: req.user!.userId }) };
-  const item = await prisma.intervention.findFirst({ where });
-  if (!item) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  res.json({ data: transformIntervention(item) });
-}));
+    const [items, total] = await Promise.all([
+      prisma.intervention.findMany({
+        where,
+        orderBy: [{ datePlanifiee: 'asc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.intervention.count({ where }),
+    ]);
 
-interventionRouter.post('/', asyncHandler(async (req, res) => {
-  const userId = req.user!.userId;
-  const data = CreateSchema.parse(req.body);
-  await checkDevis(data.devisId, userId, req.user!.role === 'ADMIN');
-  const item = await prisma.intervention.create({ data: {
-    ...data, userId,
-    datePlanifiee: new Date(data.datePlanifiee + 'T00:00:00.000Z'),
-    dateReelle: dateValue(data.dateReelle),
-    origineDevisDate: dateValue(data.origineDevisDate),
-    devisId: data.devisId ?? null,
-  } });
-  const transformed = transformIntervention(item);
-  try { socketEvents.interventionCreated(userId, transformed); }
-  catch { console.error('Intervention saved; real-time creation notification failed.'); }
-  res.status(201).json({ data: transformed, message: 'Intervention créée avec succès' });
-}));
+    let transformed = items.map(transformIntervention);
+    if (status) {
+      transformed = transformed.filter(
+        (i) => i.status === status || i.traitement === status || i.statutOperationnel === status
+      );
+    }
 
-interventionRouter.patch('/:id', asyncHandler(async (req, res) => {
-  const id = IdSchema.parse(req.params.id);
-  const userId = req.user!.userId;
-  const isAdmin = req.user!.role === 'ADMIN';
-  const data = UpdateSchema.parse(req.body);
-  const existing = await prisma.intervention.findFirst({ where: { id, ...(isAdmin ? {} : { userId }) } });
-  if (!existing) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  await checkDevis(data.devisId, userId, isAdmin);
-  const updateData: any = { ...data };
-  if (data.datePlanifiee !== undefined) updateData.datePlanifiee = new Date(data.datePlanifiee + 'T00:00:00.000Z');
-  if (data.dateReelle !== undefined) updateData.dateReelle = dateValue(data.dateReelle);
-  if (data.origineDevisDate !== undefined) updateData.origineDevisDate = dateValue(data.origineDevisDate);
-  const item = await prisma.intervention.update({ where: { id }, data: updateData });
-  const transformed = transformIntervention(item);
-  try { socketEvents.interventionUpdated(userId, transformed); }
-  catch { console.error('Intervention updated; real-time update notification failed.'); }
-  res.json({ data: transformed, message: 'Intervention mise à jour' });
-}));
+    res.json({
+      data: transformed,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  })
+);
 
-interventionRouter.delete('/:id', asyncHandler(async (req, res) => {
-  const id = IdSchema.parse(req.params.id);
-  const userId = req.user!.userId;
-  const existing = await prisma.intervention.findFirst({ where: { id, ...(req.user!.role === 'ADMIN' ? {} : { userId }) } });
-  if (!existing) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-  await prisma.intervention.delete({ where: { id } });
-  try { socketEvents.interventionDeleted(userId, { id }); }
-  catch { console.error('Intervention deleted; real-time deletion notification failed.'); }
-  res.json({ message: 'Intervention supprimée' });
-}));
+interventionRouter.get(
+  '/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const items = await prisma.intervention.findMany();
+    const transformed = items.map(transformIntervention);
+
+    const result: Record<string, number> = {
+      'a-traiter': 0,
+      'en-cours': 0,
+      'en-attente': 0,
+      bloque: 0,
+      traite: 0,
+      interventionsATraiter: 0,
+      interventionsBloquees: 0,
+      interventionsCloturees: 0,
+      aPlanifier: 0,
+      nonFactureesCloturees: 0,
+    };
+
+    for (const i of transformed) {
+      result[i.status] = (result[i.status] || 0) + 1;
+      if (
+        i.traitement === 'À traiter' ||
+        ['Nouvelle demande', 'À planifier'].includes(i.statutOperationnel)
+      ) {
+        result.interventionsATraiter += 1;
+      }
+      if (i.traitement === 'Bloqué' || i.statutOperationnel === 'Suspendue' || Boolean(i.motifBlocage)) {
+        result.interventionsBloquees += 1;
+      }
+      if (i.statutOperationnel === 'Clôturée') {
+        result.interventionsCloturees += 1;
+        if (!i.isVisiteDevis && i.statutFacture !== 'Facturée') {
+          result.nonFactureesCloturees += 1;
+        }
+      }
+      if (!i.datePlanifiee || !i.entreprise) {
+        result.aPlanifier += 1;
+      }
+    }
+
+    res.json(result);
+  })
+);
+
+interventionRouter.get(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const intervention = await prisma.intervention.findFirst({
+      where: { id },
+      include: { devis: true },
+    });
+
+    if (!intervention) {
+      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+    }
+
+    res.json({ data: transformIntervention(intervention) });
+  })
+);
+
+interventionRouter.post(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.userId;
+    const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const b = req.body || {};
+
+    const chantier = String(b.chantier || b.siteAdresse || b.site || b.client || 'Site à préciser').trim();
+    const isVisiteDevis = Boolean(
+      b.isVisiteDevis === true ||
+        b.isVisiteDevis === 'true' ||
+        b.typeIntervention === 'Visite technique devis'
+    );
+    const explicitDatePlan = parseDateOrNull(b.datePlanifiee);
+    const traitement = b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
+    const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
+    const tech = b.entreprise || b.technicien || null;
+    const statutOperationnel =
+      b.statutOperationnel ||
+      (explicitDatePlan ? (tech ? 'Planifiée' : 'À planifier') : 'À planifier');
+    const modePlanification =
+      b.modePlanification || (explicitDatePlan ? 'Planifiée' : 'Non planifiée');
+
+    const historiqueJson = addHistoriqueEvent(
+      null,
+      auteur,
+      isVisiteDevis ? 'Visite technique créée' : 'Intervention enregistrée',
+      `${chantier}${tech ? ` — Technicien : ${tech}` : ''}${
+        explicitDatePlan ? ` — Le ${toISO(explicitDatePlan)} ${b.heureDebut || ''}-${b.heureFin || ''}` : ' (À planifier)'
+      }`
+    );
+
+    const created = await prisma.intervention.create({
+      data: {
+        referenceMetier: b.reference || b.referenceMetier ? String(b.reference || b.referenceMetier).trim() : null,
+        refDevisTexte: b.refDevisTexte || null,
+        client: b.client ? String(b.client).trim() : null,
+        chantier,
+        siteAdresse: chantier,
+        objet: b.objet ? String(b.objet).trim() : null,
+        origine: b.origine || "Donneur d'ordre",
+        typeIntervention: b.typeIntervention || (isVisiteDevis ? 'Visite technique devis' : 'Corrective'),
+        modePlanification,
+        corpsEtat: b.corpsEtat || 'Tous corps d’état',
+        priorite: b.priorite || 'Normale',
+        dateDemande: parseDateOrNull(b.dateDemande) || new Date(),
+        datePlanifiee: explicitDatePlan || new Date(),
+        statutOperationnel,
+        traitement,
+        status: statusLegacy,
+        entreprise: tech,
+        technicien: tech,
+        dateDebut: parseDateOrNull(b.dateDebut),
+        dateReelle: parseDateOrNull(b.dateReelle || b.dateFin),
+        dateFin: parseDateOrNull(b.dateReelle || b.dateFin),
+        dateEcheance: parseDateOrNull(b.echeance || b.dateEcheance),
+        resultatTechnique: b.resultatTechnique || null,
+        motifBlocage: b.motifBlocage || null,
+        numeroFacture: b.numeroFacture || null,
+        statutFacture: b.statutFacture || 'Non facturée',
+        compteRendu: b.compteRendu || null,
+        notes: b.notes || null,
+        amount: parseOptionalFloat(b.amount) ?? 0,
+        heureDebut: b.heureDebut || null,
+        heureFin: b.heureFin || null,
+        isVisiteDevis,
+        origineDevisId: b.origineDevisId ? Number(b.origineDevisId) : b.devisId ? Number(b.devisId) : null,
+        origineDevisClient: b.origineDevisClient || b.client || null,
+        origineDevisDate: parseDateOrNull(b.origineDevisDate),
+        devisId: b.devisId ? Number(b.devisId) : b.origineDevisId ? Number(b.origineDevisId) : null,
+        historiqueJson,
+        userId,
+      },
+    });
+
+    if (!created.referenceMetier) {
+      const autoRef = isVisiteDevis
+        ? `VIS-2026-${String(created.id).padStart(3, '0')}`
+        : `INT-2026-${String(created.id).padStart(3, '0')}`;
+      await prisma.intervention.update({
+        where: { id: created.id },
+        data: { referenceMetier: autoRef },
+      });
+      created.referenceMetier = autoRef;
+    }
+
+    const transformed = transformIntervention(created);
+    try {
+      socketEvents.interventionCreated(userId, transformed);
+    } catch {
+      console.error('Intervention saved; real-time creation notification failed.');
+    }
+
+    res.status(201).json({ data: transformed, message: 'Intervention créée avec succès' });
+  })
+);
+
+interventionRouter.patch(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const userId = req.user!.userId;
+    const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const b = req.body || {};
+
+    const existing = await prisma.intervention.findFirst({ where: { id } });
+    if (!existing) {
+      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+    }
+
+    const changes: string[] = [];
+    if (b.entreprise !== undefined && b.entreprise !== existing.entreprise) {
+      changes.push(`Technicien : ${existing.entreprise || 'Non affecté'} → ${b.entreprise || 'Non affecté'}`);
+    }
+    if (
+      (b.heureDebut !== undefined && b.heureDebut !== existing.heureDebut) ||
+      (b.heureFin !== undefined && b.heureFin !== existing.heureFin)
+    ) {
+      const hd = b.heureDebut !== undefined ? b.heureDebut : existing.heureDebut;
+      const hf = b.heureFin !== undefined ? b.heureFin : existing.heureFin;
+      changes.push(`Créneau horaire : ${hd || '—'} - ${hf || '—'}`);
+    }
+    if (b.statutOperationnel && b.statutOperationnel !== existing.statutOperationnel) {
+      changes.push(`Statut opérationnel : ${existing.statutOperationnel} → ${b.statutOperationnel}`);
+    }
+
+    const historiqueJson =
+      changes.length > 0
+        ? addHistoriqueEvent(
+            existing.historiqueJson,
+            auteur,
+            'Mise à jour intervention / planning',
+            changes.join(' • ')
+          )
+        : existing.historiqueJson;
+
+    const newTraitement =
+      b.traitement !== undefined ? b.traitement : b.status ? statusCodeToTraitement(b.status) : undefined;
+
+    const updateData: any = {
+      historiqueJson,
+      version: { increment: 1 },
+    };
+
+    if (b.reference !== undefined || b.referenceMetier !== undefined) {
+      updateData.referenceMetier = b.reference || b.referenceMetier || null;
+    }
+    if (b.refDevisTexte !== undefined) updateData.refDevisTexte = b.refDevisTexte || null;
+    if (b.client !== undefined) updateData.client = b.client || null;
+    if (b.chantier !== undefined || b.siteAdresse !== undefined) {
+      const ch = String(b.chantier ?? b.siteAdresse).trim();
+      updateData.chantier = ch;
+      updateData.siteAdresse = ch;
+    }
+    if (b.objet !== undefined) updateData.objet = b.objet || null;
+    if (b.origine !== undefined) updateData.origine = b.origine || null;
+    if (b.typeIntervention !== undefined) updateData.typeIntervention = b.typeIntervention || null;
+    if (b.modePlanification !== undefined) updateData.modePlanification = b.modePlanification || null;
+    if (b.corpsEtat !== undefined) updateData.corpsEtat = b.corpsEtat || null;
+    if (b.priorite !== undefined) updateData.priorite = b.priorite || 'Normale';
+    if (b.dateDemande !== undefined) updateData.dateDemande = parseDateOrNull(b.dateDemande);
+    if (b.datePlanifiee !== undefined) {
+      const parsedDate = parseDateOrNull(b.datePlanifiee);
+      if (parsedDate) {
+        updateData.datePlanifiee = parsedDate;
+        updateData.modePlanification = 'Planifiée';
+        if (existing.statutOperationnel === 'À planifier' && !b.statutOperationnel) {
+          updateData.statutOperationnel = 'Planifiée';
+        }
+      } else {
+        // Remise dans le bac "À planifier"
+        updateData.modePlanification = 'Non planifiée';
+        updateData.statutOperationnel = 'À planifier';
+      }
+    }
+    if (b.statutOperationnel !== undefined) updateData.statutOperationnel = b.statutOperationnel;
+    if (newTraitement !== undefined) {
+      updateData.traitement = newTraitement;
+      updateData.status = traitementToStatusCode(newTraitement).toUpperCase().replace('-', '_');
+    }
+    if (b.entreprise !== undefined || b.technicien !== undefined) {
+      const t = b.entreprise ?? b.technicien ?? null;
+      updateData.entreprise = t;
+      updateData.technicien = t;
+    }
+    if (b.dateDebut !== undefined) updateData.dateDebut = parseDateOrNull(b.dateDebut);
+    if (b.dateReelle !== undefined || b.dateFin !== undefined) {
+      const df = parseDateOrNull(b.dateReelle ?? b.dateFin);
+      updateData.dateReelle = df;
+      updateData.dateFin = df;
+    }
+    if (b.echeance !== undefined || b.dateEcheance !== undefined) {
+      updateData.dateEcheance = parseDateOrNull(b.echeance ?? b.dateEcheance);
+    }
+    if (b.resultatTechnique !== undefined) updateData.resultatTechnique = b.resultatTechnique || null;
+    if (b.motifBlocage !== undefined) updateData.motifBlocage = b.motifBlocage || null;
+    if (b.numeroFacture !== undefined) updateData.numeroFacture = b.numeroFacture || null;
+    if (b.statutFacture !== undefined) updateData.statutFacture = b.statutFacture || 'Non facturée';
+    if (b.compteRendu !== undefined) updateData.compteRendu = b.compteRendu || null;
+    if (b.notes !== undefined) updateData.notes = b.notes || null;
+    if (b.amount !== undefined) updateData.amount = parseOptionalFloat(b.amount) ?? 0;
+    if (b.heureDebut !== undefined) updateData.heureDebut = b.heureDebut || null;
+    if (b.heureFin !== undefined) updateData.heureFin = b.heureFin || null;
+    if (b.isVisiteDevis !== undefined) {
+      updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
+    }
+    if (b.devisId !== undefined) updateData.devisId = b.devisId ? Number(b.devisId) : null;
+
+    const updated = await prisma.intervention.update({
+      where: { id },
+      data: updateData,
+    });
+
+    const linkedDevisId = updated.devisId || updated.origineDevisId;
+    if (linkedDevisId && updated.isVisiteDevis) {
+      const parentDevis = await prisma.devis.findUnique({ where: { id: linkedDevisId } });
+      if (parentDevis) {
+        const isVisitDone = ['Terminée - à valider', 'Clôturée'].includes(updated.statutOperationnel || '');
+        await prisma.devis.update({
+          where: { id: linkedDevisId },
+          data: {
+            visiteTechnicien: updated.entreprise,
+            visiteDate: updated.datePlanifiee,
+            visiteHeureDebut: updated.heureDebut,
+            visiteHeureFin: updated.heureFin,
+            visiteStatut: isVisitDone ? 'Effectuée' : 'Planifiée',
+            ...(isVisitDone && parentDevis.traitement === 'En attente technicien'
+              ? {
+                  traitement: 'En cours de traitement',
+                  prochaineAction: 'Chiffrer',
+                }
+              : {}),
+            historiqueJson: addHistoriqueEvent(
+              parentDevis.historiqueJson,
+              auteur,
+              isVisitDone
+                ? 'Visite technique terminée par le technicien — Prêt à chiffrer'
+                : 'Créneau de visite technique mis à jour au planning',
+              `${updated.entreprise || 'Technicien à affecter'} • ${toISO(updated.datePlanifiee) || 'À planifier'} ${
+                updated.heureDebut || ''
+              }-${updated.heureFin || ''}`
+            ),
+          },
+        });
+      }
+    }
+
+    const transformed = transformIntervention(updated);
+    try {
+      socketEvents.interventionUpdated(userId, transformed);
+    } catch {
+      console.error('Intervention updated; real-time update notification failed.');
+    }
+
+    res.json({ data: transformed, message: 'Intervention mise à jour' });
+  })
+);
+
+interventionRouter.delete(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const userId = req.user!.userId;
+
+    const existing = await prisma.intervention.findFirst({ where: { id } });
+    if (!existing) {
+      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+    }
+
+    await prisma.intervention.delete({ where: { id } });
+    try {
+      socketEvents.interventionDeleted(userId, { id });
+    } catch {
+      console.error('Intervention deleted; real-time deletion notification failed.');
+    }
+
+    res.json({ message: 'Intervention supprimée' });
+  })
+);

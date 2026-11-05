@@ -1,54 +1,69 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
+
 model User {
-  id Int @id @default(autoincrement())
-  email String @unique
-  password String
-  name String
-  role String @default("USER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  devis Devis[]
-  interventions Intervention[]
+  id                 Int                 @id @default(autoincrement())
+  email              String              @unique
+  password           String
+  name               String
+  role               String              @default("USER")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  devis              Devis[]
+  interventions      Intervention[]
   conversionRequests ConversionRequest[]
+
   @@map("users")
 }
+
 model Devis {
-  id Int @id @default(autoincrement())
-  client String
-  amount Float @default(0)
-  dateCreated DateTime
-  echeance DateTime?
-  status String @default("A_TRAITER")
-  notes String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId Int
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
-  interventions Intervention[]
-  referenceMetier String?
-  siteAdresse String?
-  objet String?
-  corpsEtat String?
-  origine String?
-  dateDemande DateTime? @db.Date
-  traitement String?
-  priorite String?
-  statutCommercial String?
-  dateLimite DateTime? @db.Date
-  dateEnvoi DateTime? @db.Date
-  montantHt Decimal? @db.Decimal(14, 2)
-  validiteJours Int?
-  prochaineAction String?
-  dateRelance DateTime? @db.Date
-  responsable String?
-  commentaires String?
-  version Int @default(0)
+  id                   Int            @id @default(autoincrement())
+  client               String
+  amount               Float          @default(0)
+  dateCreated          DateTime
+  echeance             DateTime?
+  status               String         @default("A_TRAITER")
+  notes                String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  userId               Int
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interventions        Intervention[]
+  referenceMetier      String?
+  siteAdresse          String?
+  objet                String?
+  corpsEtat            String?
+  origine              String?
+  dateDemande          DateTime?      @db.Date
+  traitement           String?
+  priorite             String?
+  statutCommercial     String?
+  dateLimite           DateTime?      @db.Date
+  dateEnvoi            DateTime?      @db.Date
+  montantHt            Decimal?       @db.Decimal(14, 2)
+  validiteJours        Int?
+  prochaineAction      String?
+  dateRelance          DateTime?      @db.Date
+  responsable          String?
+  commentaires         String?
+  version              Int            @default(0)
+
+  // Champs additionnels Planning Visite Devis & Historique ANELEC
+  refInterventionTexte String?
+  visiteNecessaire     Boolean        @default(false)
+  visiteTechnicien     String?
+  visiteDate           DateTime?      @db.Date
+  visiteHeureDebut     String?
+  visiteHeureFin       String?
+  visiteStatut         String?
+  historiqueJson       String?
+
   @@index([userId])
   @@index([status])
   @@index([dateCreated])
@@ -57,46 +72,56 @@ model Devis {
   @@index([userId, dateRelance], map: "devis_userid_daterelance_idx")
   @@map("devis")
 }
+
 model Intervention {
-  id Int @id @default(autoincrement())
-  chantier String
-  entreprise String?
-  amount Float @default(0)
-  datePlanifiee DateTime
-  dateReelle DateTime?
-  status String @default("A_TRAITER")
-  notes String?
-  origineDevisId Int?
+  id                 Int                 @id @default(autoincrement())
+  chantier           String
+  entreprise         String?
+  amount             Float               @default(0)
+  datePlanifiee      DateTime
+  dateReelle         DateTime?
+  status             String              @default("A_TRAITER")
+  notes              String?
+  origineDevisId     Int?
   origineDevisClient String?
-  origineDevisDate DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId Int
-  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
-  devisId Int?
-  devis Devis? @relation(fields:[devisId], references:[id], onDelete:SetNull)
-  referenceMetier String?
-  client String?
-  siteAdresse String?
-  objet String?
-  corpsEtat String?
-  origine String?
-  dateDemande DateTime? @db.Date
-  traitement String?
-  priorite String?
+  origineDevisDate   DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  devisId            Int?
+  devis              Devis?              @relation(fields: [devisId], references: [id], onDelete: SetNull)
+  referenceMetier    String?
+  client             String?
+  siteAdresse        String?
+  objet              String?
+  corpsEtat          String?
+  origine            String?
+  dateDemande        DateTime?           @db.Date
+  traitement         String?
+  priorite           String?
   statutOperationnel String?
-  typeIntervention String?
-  technicien String?
-  dateDebut DateTime? @db.Date
-  dateFin DateTime? @db.Date
-  dateEcheance DateTime? @db.Date
-  resultatTechnique String?
-  motifBlocage String?
-  numeroFacture String?
-  statutFacture String?
-  compteRendu String?
-  version Int @default(0)
+  typeIntervention   String?
+  technicien         String?
+  dateDebut          DateTime?           @db.Date
+  dateFin            DateTime?           @db.Date
+  dateEcheance       DateTime?           @db.Date
+  resultatTechnique  String?
+  motifBlocage       String?
+  numeroFacture      String?
+  statutFacture      String?
+  compteRendu        String?
+  version            Int                 @default(0)
   conversionRequests ConversionRequest[]
+
+  // Champs additionnels Planning Horaire (Souris + Clavier) & Historique ANELEC
+  refDevisTexte      String?
+  modePlanification  String?
+  heureDebut         String?
+  heureFin           String?
+  isVisiteDevis      Boolean             @default(false)
+  historiqueJson     String?
+
   @@index([userId])
   @@index([status])
   @@index([datePlanifiee])
@@ -106,17 +131,28 @@ model Intervention {
   @@index([userId, dateEcheance], map: "interventions_userid_dateecheance_idx")
   @@map("interventions")
 }
+
 model ConversionRequest {
-  id Int @id @default(autoincrement())
-  actorId Int
-  actor User @relation(fields:[actorId], references:[id], onDelete:Restrict)
-  key String @db.VarChar(128)
-  requestHash String @db.VarChar(64)
+  id             Int          @id @default(autoincrement())
+  actorId        Int
+  actor          User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  key            String       @db.VarChar(128)
+  requestHash    String       @db.VarChar(64)
   interventionId Int
-  intervention Intervention @relation(fields:[interventionId], references:[id], onDelete:Restrict)
-  response Json
-  createdAt DateTime @default(now())
-  @@unique([actorId,key], map: "conversion_requests_actorid_key_key")
+  intervention   Intervention @relation(fields: [interventionId], references: [id], onDelete: Restrict)
+  response       Json
+  createdAt      DateTime     @default(now())
+
+  @@unique([actorId, key], map: "conversion_requests_actorid_key_key")
   @@index([interventionId], map: "conversion_requests_interventionid_idx")
   @@map("conversion_requests")
+}
+
+model Referentiel {
+  id        Int      @id @default(autoincrement())
+  categorie String   @unique
+  valeurs   String
+  updatedAt DateTime @updatedAt
+
+  @@map("referentiels")
 }
