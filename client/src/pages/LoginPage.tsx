@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
+import { InstallAppButton } from '../components/InstallAppButton';
 
 const loginSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -380,6 +381,8 @@ export function LoginPage() {
               {isRegister ? 'Se connecter' : 'Créer un compte'}
             </button>
           </div>
+
+          <InstallAppButton variant="banner" />
         </div>
       </div>
     </div>

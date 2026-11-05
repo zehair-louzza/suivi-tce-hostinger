@@ -61,6 +61,18 @@ app.use('/api/admin', authMiddleware, adminRouter);
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');
   if (fs.existsSync(clientDist)) {
+    // PWA : le service worker et le manifest ne doivent jamais être servis depuis un cache périmé
+    app.get('/sw.js', (_req, res) => {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Service-Worker-Allowed', '/');
+      res.sendFile(path.join(clientDist, 'sw.js'));
+    });
+    app.get('/manifest.webmanifest', (_req, res) => {
+      res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(clientDist, 'manifest.webmanifest'));
+    });
     app.use(express.static(clientDist));
     app.get(/^\/(?!api|socket\.io).*/, (_req, res) => {
       res.sendFile(path.join(clientDist, 'index.html'));

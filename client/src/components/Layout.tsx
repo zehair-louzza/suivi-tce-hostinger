@@ -3,6 +3,7 @@ import { useAuth } from '../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
+import { InstallAppButton } from './InstallAppButton';
 
 export type AppSection =
   | 'aujourdhui'
@@ -479,6 +480,8 @@ export function Layout({
                 Intervention
               </button>
             )}
+
+            <InstallAppButton />
 
             <button
               type="button"

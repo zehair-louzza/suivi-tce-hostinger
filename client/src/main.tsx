@@ -9,6 +9,9 @@ import { App } from './App';
 import './styles/design-tokens.css';
 import './styles/global.css';
 import './styles/layout.css';
+import { registerServiceWorker } from './components/InstallAppButton';
+
+registerServiceWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {
