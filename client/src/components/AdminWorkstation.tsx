@@ -21,7 +21,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
-  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports';
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules';
 }
 
 const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: string }[] = [
@@ -92,9 +92,31 @@ export function AdminWorkstation({
   initialSubTab,
 }: AdminWorkstationProps) {
   const queryClient = useQueryClient();
-  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports'>(
+  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules'>(
     initialSubTab || 'users'
   );
+
+  // Règle Métier ANELEC : « On ne facture pas les devis, on facture uniquement les interventions »
+  // Option sur la console Admin, AUTO-DÉCOCHÉE par défaut (false)
+  const [allowDirectDevisBilling, setAllowDirectDevisBilling] = useState<boolean>(() => {
+    return localStorage.getItem('anelec_allow_direct_devis_billing') === 'true'; // false par défaut
+  });
+
+  const handleToggleAllowDirectDevisBilling = (checked: boolean) => {
+    setAllowDirectDevisBilling(checked);
+    localStorage.setItem('anelec_allow_direct_devis_billing', String(checked));
+    if (checked) {
+      toast.success(
+        'Option activée : Les devis peuvent exceptionnellement être facturés directement.',
+        { icon: '⚠️' }
+      );
+    } else {
+      toast.success(
+        'Règle stricte rétablie : On ne facture que les interventions (les devis ne sont pas facturés).',
+        { icon: '✅' }
+      );
+    }
+  };
 
   useEffect(() => {
     if (initialSubTab) {
@@ -361,6 +383,13 @@ export function AdminWorkstation({
                   {pendingDeclarationsCount} en attente
                 </span>
               )}
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${subTab === 'billing_rules' ? 'active' : ''}`}
+              onClick={() => setSubTab('billing_rules')}
+            >
+              ⚙️ Règles Facturation
             </button>
           </div>
 
@@ -950,6 +979,119 @@ export function AdminWorkstation({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          ONGLET 5 : RÈGLES DE FACTURATION & OPTION D'ARBITRAGE DEVIS (AUTO-DÉCOCHÉE)
+         ===================================================================== */}
+      {subTab === 'billing_rules' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div
+            className="glass-analytics-card"
+            style={{
+              padding: '24px',
+              borderLeft: '4px solid #2563eb',
+              gap: '16px',
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  padding: '2px 9px',
+                  borderRadius: '999px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  background: 'rgba(37, 99, 235, 0.12)',
+                  color: '#2563eb',
+                }}
+              >
+                GOUVERNANCE & RÈGLES FINANCIÈRES
+              </span>
+              <h3 style={{ fontSize: '17px', fontWeight: 800, marginTop: '6px' }}>
+                Règles de Facturation & Clôture Comptable ANELEC
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
+                Configurez les directives appliquées par les agents de facturation pour le tri des dossiers éligibles et le traitement des créances B2B et B2C.
+              </p>
+            </div>
+
+            {/* Encadré Règle Principale ANELEC */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '12px',
+                background: 'rgba(37, 99, 235, 0.05)',
+                border: '1px solid rgba(37, 99, 235, 0.25)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>📌</span>
+                <strong style={{ fontSize: '14px', color: '#1d4ed8' }}>
+                  Principe Fondamental : « On ne facture pas les devis, on facture uniquement les interventions. »
+                </strong>
+              </div>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.5 }}>
+                Dans le modèle de gestion TCE d'ANELEC GROUPE, un <strong>devis est une offre préalable</strong> (avec ou sans visite de repérage), tandis que la <strong>facture sanctionne des travaux réels exécutés et contrôlés</strong>. Par conséquent, les devis non convertis en intervention ne sont jamais proposés à la facturation client.
+              </p>
+            </div>
+
+            {/* Option à choisir sur la console Admin (Auto-décochée par défaut) */}
+            <div
+              style={{
+                padding: '18px',
+                borderRadius: '14px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ maxWidth: '640px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <label
+                    htmlFor="toggle-direct-devis-billing"
+                    style={{ fontSize: '13.5px', fontWeight: 800, cursor: 'pointer', color: 'var(--text-primary)' }}
+                  >
+                    Autoriser la facturation directe depuis les Devis (hors flux Intervention)
+                  </label>
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      background: allowDirectDevisBilling ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: allowDirectDevisBilling ? '#dc2626' : '#059669',
+                    }}
+                  >
+                    {allowDirectDevisBilling ? '⚠️ Activé (Exception)' : '✓ Auto-décochée par défaut (Règle stricte active)'}
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.4 }}>
+                  Si cette case est <strong>décochée (état par défaut automatique)</strong>, l'espace facturation applique strictement la règle : seules les interventions exécutées sont facturables. Si vous cochez cette option, les devis acceptés pourront exceptionnellement faire l'objet d'une émission de facture d'acompte directe.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', gap: '8px' }}>
+                  <input
+                    id="toggle-direct-devis-billing"
+                    type="checkbox"
+                    checked={allowDirectDevisBilling}
+                    onChange={(e) => handleToggleAllowDirectDevisBilling(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#2563eb' }}
+                  />
+                  <span style={{ fontSize: '12.5px', fontWeight: 700 }}>
+                    {allowDirectDevisBilling ? 'Cochée' : 'Auto-décochée'}
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       )}
