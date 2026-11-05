@@ -28,13 +28,52 @@ function computeDurationMinutes(startHHMM?: string | null, endHHMM?: string | nu
   return diff > 0 ? diff : 0;
 }
 
+function getParisNow(): { now: Date; parisDateISO: string; parisHHMM: string } {
+  const now = new Date();
+  const parisHHMM = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Europe/Paris',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+  // Date officielle au fuseau Paris (AAAA-MM-JJ)
+  const parisDateISO = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  return { now, parisDateISO, parisHHMM };
+}
+
+async function getCallerUser(req: Request) {
+  if (!req.user?.userId) {
+    throw new AppError(401, 'Authentification requise', 'UNAUTHORIZED');
+  }
+  const u = await prisma.user.findUnique({
+    where: { id: req.user.userId },
+    select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, active: true },
+  });
+  if (!u || u.active === false) {
+    throw new AppError(403, 'Compte désactivé ou inexistant', 'FORBIDDEN');
+  }
+  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
+  const isAdmin = u.id === 1 || effectiveRole === 'ADMIN';
+  return { ...u, effectiveRole, isAdmin };
+}
+
 // ============================================================================
 // 1. GESTION DES UTILISATEURS & DROITS GRANULAIRES (WORKSTATION ADMIN)
 // ============================================================================
 
 adminRouter.get(
   '/users',
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Accès réservé exclusivement au Super-Administrateur', 'FORBIDDEN');
+    }
+
     const users = await prisma.user.findMany({
       select: publicUserSelect,
       orderBy: [{ id: 'asc' }],
@@ -49,6 +88,11 @@ adminRouter.get(
 adminRouter.post(
   '/users',
   asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Action réservée exclusivement au Super-Administrateur', 'FORBIDDEN');
+    }
+
     const { email, password, name, role, technicienNom, permissions } = req.body || {};
     if (!email || !password || !name) {
       throw new AppError(400, 'Nom, email et mot de passe sont obligatoires', 'VALIDATION_ERROR');
@@ -83,6 +127,11 @@ adminRouter.post(
 adminRouter.put(
   '/users/:id',
   asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Modification des droits réservée au Super-Administrateur', 'FORBIDDEN');
+    }
+
     const id = parseInt(req.params.id, 10);
     const { name, email, password, role, technicienNom, permissions, active } = req.body || {};
 
@@ -124,6 +173,11 @@ adminRouter.put(
 adminRouter.delete(
   '/users/:id',
   asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Suppression réservée au Super-Administrateur', 'FORBIDDEN');
+    }
+
     const id = parseInt(req.params.id, 10);
     if (id === 1 || id === req.user?.userId) {
       throw new AppError(400, 'Impossible de supprimer le compte Super-Administrateur principal', 'FORBIDDEN');
@@ -134,14 +188,20 @@ adminRouter.delete(
 );
 
 // ============================================================================
-// 2. POINTAGES JOURNALIERS TECHNICIENS (ARRIVÉE MATIN / FIN SOIR)
+// 2. POINTAGES JOURNALIERS TECHNICIENS (HORODATAGE INVIOLABLE MATIN / SOIR)
 // ============================================================================
 
 adminRouter.get(
   '/pointages',
   asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
     const dateJour = (req.query.dateJour as string) || '';
-    const technicien = (req.query.technicien as string) || '';
+    let technicien = (req.query.technicien as string) || '';
+
+    // Un technicien ne peut voir QUE ses propres pointages
+    if (!caller.isAdmin) {
+      technicien = (caller.technicienNom || caller.name || '').trim();
+    }
 
     const where: any = {
       ...(dateJour ? { dateJour } : {}),
@@ -176,43 +236,71 @@ adminRouter.get(
 adminRouter.post(
   '/pointages/clock-in',
   asyncHandler(async (req: Request, res: Response) => {
-    const { technicien, dateJour, heureArriveeBureau, commentaireJournee } = req.body || {};
+    const caller = await getCallerUser(req);
+    const { parisDateISO, parisHHMM, now } = getParisNow();
+
+    let technicien = String(req.body?.technicien || '').trim();
+    let dateJour = String(req.body?.dateJour || '').trim();
+    let heureArriveeBureau = String(req.body?.heureArriveeBureau || '').trim();
+    const commentaireJournee = req.body?.commentaireJournee;
+
+    // Pour les techniciens : horodatage automatique inviolable au moment exact du clic
+    if (!caller.isAdmin) {
+      technicien = (caller.technicienNom || caller.name || '').trim();
+      dateJour = parisDateISO; // Forcé sur la date du jour réelle
+      heureArriveeBureau = parisHHMM; // Forcé sur l'heure exacte du clic
+    } else {
+      technicien = technicien || (caller.technicienNom || caller.name || '').trim();
+      dateJour = dateJour || parisDateISO;
+      heureArriveeBureau = heureArriveeBureau || parisHHMM;
+    }
+
     if (!technicien) {
       throw new AppError(400, 'Nom du technicien requis pour le pointage matin', 'VALIDATION_ERROR');
     }
 
-    const now = new Date();
-    const todayISO = dateJour || now.toISOString().slice(0, 10);
-    const defaultHHMM =
-      heureArriveeBureau ||
-      new Intl.DateTimeFormat('fr-FR', {
-        timeZone: 'Europe/Paris',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(now);
+    // Si technicien et déjà pointé le matin : interdiction de modifier l'heure
+    if (!caller.isAdmin) {
+      const existing = await prisma.pointageTechnicien.findUnique({
+        where: {
+          technicien_dateJour: {
+            technicien,
+            dateJour,
+          },
+        },
+      });
+      if (existing?.heureArriveeBureau) {
+        return res.json({
+          data: {
+            ...existing,
+            dureeMinutes: computeDurationMinutes(existing.heureArriveeBureau, existing.heureFinJournee),
+          },
+          message: `Arrivée déjà enregistrée et certifiée à ${existing.heureArriveeBureau} (non modifiable)`,
+        });
+      }
+    }
 
     const upserted = await prisma.pointageTechnicien.upsert({
       where: {
         technicien_dateJour: {
-          technicien: String(technicien).trim(),
-          dateJour: todayISO,
+          technicien,
+          dateJour,
         },
       },
       update: {
-        heureArriveeBureau: defaultHHMM,
+        heureArriveeBureau,
         timestampArrivee: now,
         statutJournee: 'EN_SERVICE',
         ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
       },
       create: {
-        technicien: String(technicien).trim(),
-        userId: req.user?.userId || null,
-        dateJour: todayISO,
-        heureArriveeBureau: defaultHHMM,
+        technicien,
+        userId: caller.id,
+        dateJour,
+        heureArriveeBureau,
         timestampArrivee: now,
         statutJournee: 'EN_SERVICE',
-        commentaireJournee: commentaireJournee || 'Arrivée au bureau — Prise de service validée',
+        commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
       },
     });
 
@@ -221,7 +309,7 @@ adminRouter.post(
         ...upserted,
         dureeMinutes: computeDurationMinutes(upserted.heureArriveeBureau, upserted.heureFinJournee),
       },
-      message: `Prise de service activée à ${defaultHHMM} pour ${technicien}`,
+      message: `Prise de service certifiée à ${heureArriveeBureau} pour ${technicien}`,
     });
   })
 );
@@ -229,47 +317,75 @@ adminRouter.post(
 adminRouter.post(
   '/pointages/clock-out',
   asyncHandler(async (req: Request, res: Response) => {
-    const { technicien, dateJour, heureFinJournee, derniereInterventionRef, commentaireJournee } =
-      req.body || {};
+    const caller = await getCallerUser(req);
+    const { parisDateISO, parisHHMM, now } = getParisNow();
+
+    let technicien = String(req.body?.technicien || '').trim();
+    let dateJour = String(req.body?.dateJour || '').trim();
+    let heureFinJournee = String(req.body?.heureFinJournee || '').trim();
+    const derniereInterventionRef = req.body?.derniereInterventionRef;
+    const commentaireJournee = req.body?.commentaireJournee;
+
+    // Pour les techniciens : horodatage automatique inviolable au moment exact du clic
+    if (!caller.isAdmin) {
+      technicien = (caller.technicienNom || caller.name || '').trim();
+      dateJour = parisDateISO;
+      heureFinJournee = parisHHMM; // Heure exacte certifiée du clic
+    } else {
+      technicien = technicien || (caller.technicienNom || caller.name || '').trim();
+      dateJour = dateJour || parisDateISO;
+      heureFinJournee = heureFinJournee || parisHHMM;
+    }
+
     if (!technicien) {
       throw new AppError(400, 'Nom du technicien requis pour la fin de journée', 'VALIDATION_ERROR');
     }
 
-    const now = new Date();
-    const todayISO = dateJour || now.toISOString().slice(0, 10);
-    const defaultHHMM =
-      heureFinJournee ||
-      new Intl.DateTimeFormat('fr-FR', {
-        timeZone: 'Europe/Paris',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(now);
+    // Si technicien et déjà clôturé : interdiction de modifier l'heure
+    if (!caller.isAdmin) {
+      const existing = await prisma.pointageTechnicien.findUnique({
+        where: {
+          technicien_dateJour: {
+            technicien,
+            dateJour,
+          },
+        },
+      });
+      if (existing?.heureFinJournee) {
+        return res.json({
+          data: {
+            ...existing,
+            dureeMinutes: computeDurationMinutes(existing.heureArriveeBureau, existing.heureFinJournee),
+          },
+          message: `Fin de journée déjà enregistrée et certifiée à ${existing.heureFinJournee} (non modifiable)`,
+        });
+      }
+    }
 
     const upserted = await prisma.pointageTechnicien.upsert({
       where: {
         technicien_dateJour: {
-          technicien: String(technicien).trim(),
-          dateJour: todayISO,
+          technicien,
+          dateJour,
         },
       },
       update: {
-        heureFinJournee: defaultHHMM,
+        heureFinJournee,
         timestampFin: now,
         statutJournee: 'TERMINEE',
         ...(derniereInterventionRef !== undefined ? { derniereInterventionRef } : {}),
         ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
       },
       create: {
-        technicien: String(technicien).trim(),
-        userId: req.user?.userId || null,
-        dateJour: todayISO,
+        technicien,
+        userId: caller.id,
+        dateJour,
         heureArriveeBureau: '08:00',
-        heureFinJournee: defaultHHMM,
+        heureFinJournee,
         timestampFin: now,
         statutJournee: 'TERMINEE',
         derniereInterventionRef: derniereInterventionRef || null,
-        commentaireJournee: commentaireJournee || 'Fin de dernière intervention — Journée clôturée',
+        commentaireJournee: commentaireJournee || 'Fin de journée certifiée par bouton mobile',
       },
     });
 
@@ -278,7 +394,7 @@ adminRouter.post(
         ...upserted,
         dureeMinutes: computeDurationMinutes(upserted.heureArriveeBureau, upserted.heureFinJournee),
       },
-      message: `Fin de journée enregistrée à ${defaultHHMM} pour ${technicien}`,
+      message: `Fin de journée certifiée à ${heureFinJournee} pour ${technicien}`,
     });
   })
 );

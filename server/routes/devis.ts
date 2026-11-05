@@ -279,6 +279,20 @@ devisRouter.get(
         : {}),
     };
 
+    // Cloisonnement strict des techniciens : ils ne voient que les visites devis qui leur sont affectées
+    const userRole = (req.user?.role || '').toUpperCase();
+    const isAdmin = req.user?.userId === 1 || userRole === 'ADMIN';
+    if (!isAdmin && userRole === 'TECHNICIEN') {
+      const callerUser = await prisma.user.findUnique({
+        where: { id: req.user?.userId },
+        select: { technicienNom: true, name: true },
+      });
+      const boundTech = (callerUser?.technicienNom || callerUser?.name || '').trim();
+      if (boundTech) {
+        where.visiteTechnicien = { contains: boundTech, mode: 'insensitive' };
+      }
+    }
+
     const [items, total] = await Promise.all([
       prisma.devis.findMany({
         where,

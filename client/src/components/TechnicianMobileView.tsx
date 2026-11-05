@@ -95,8 +95,40 @@ export function TechnicianMobileView({
   const [customActionInput, setCustomActionInput] = useState<string>('');
   const [photoCategory, setPhotoCategory] = useState<'AVANT' | 'APRES' | 'RELEVE_CHIFFRAGE' | 'CONSTAT'>('AVANT');
   const [photoCaption, setPhotoCaption] = useState<string>('');
-  const [customStartHHMM, setCustomStartHHMM] = useState<string>(() => getNowHHMM());
-  const [customEndHHMM, setCustomEndHHMM] = useState<string>(() => getNowHHMM());
+
+  // Horloge en direct au fuseau officiel Paris
+  const [liveParisTime, setLiveParisTime] = useState<string>(() => {
+    try {
+      return new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(new Date());
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      try {
+        setLiveParisTime(
+          new Intl.DateTimeFormat('fr-FR', {
+            timeZone: 'Europe/Paris',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          }).format(new Date())
+        );
+      } catch {
+        // ignore
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // États contrôlés pour sauvegarde explicite ou automatique sur téléphone
   const [chiffrageDraft, setChiffrageDraft] = useState<string>('');
@@ -398,37 +430,62 @@ export function TechnicianMobileView({
           </button>
         </div>
 
-        {/* Sélecteur de Technicien (si autorisé) et Date sur 1 ou 2 colonnes fluides */}
+        {/* Identification du Technicien & Date */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: canSwitchTechnicien ? 'repeat(auto-fit, minmax(140px, 1fr))' : '1fr',
+            gridTemplateColumns: canSwitchTechnicien ? 'repeat(auto-fit, minmax(160px, 1fr))' : '1fr auto',
             gap: '8px',
+            alignItems: 'center',
           }}
         >
-          {canSwitchTechnicien && (
-            <select
-              className="select"
-              style={{ width: '100%', fontWeight: 700 }}
-              value={currentTechnicien}
-              aria-label="Choisir le technicien"
-              onChange={(e) => {
-                onSelectTechnicien(e.target.value);
-                setActiveMissionId(null);
+          {canSwitchTechnicien ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                Mode Superviseur :
+              </span>
+              <select
+                className="select"
+                style={{ width: '100%', fontWeight: 700 }}
+                value={currentTechnicien}
+                aria-label="Choisir le technicien"
+                onChange={(e) => {
+                  onSelectTechnicien(e.target.value);
+                  setActiveMissionId(null);
+                }}
+              >
+                {techniciens.map((t) => (
+                  <option key={t} value={t}>
+                    👷 {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '12.5px',
               }}
             >
-              {techniciens.map((t) => (
-                <option key={t} value={t}>
-                  👷 {t}
-                </option>
-              ))}
-            </select>
+              <span style={{ color: 'var(--text-secondary)' }}>🔒 Compte personnel :</span>
+              <strong style={{ color: 'var(--text-primary)', fontSize: '13.5px' }}>{currentTechnicien}</strong>
+              <span className="badge badge-success" style={{ fontSize: '10.5px', padding: '2px 8px' }}>
+                Droits Certifiés
+              </span>
+            </div>
           )}
 
           <input
             type="date"
             className="input"
-            style={{ width: '100%', fontWeight: 600 }}
+            style={{ width: canSwitchTechnicien ? '100%' : '140px', fontWeight: 600 }}
             value={selectedDate}
             aria-label="Date des missions"
             onChange={(e) => setSelectedDate(e.target.value)}
@@ -521,63 +578,58 @@ export function TechnicianMobileView({
       {activeTab === 'missions' && !currentPointage?.heureArriveeBureau && (
         <div
           style={{
-            padding: '10px 12px',
-            borderRadius: '10px',
+            padding: '12px 14px',
+            borderRadius: '12px',
             background: 'rgba(245, 158, 11, 0.12)',
-            border: '1px solid rgba(245, 158, 11, 0.45)',
+            border: '1.5px solid rgba(245, 158, 11, 0.5)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
+            flexDirection: 'column',
             gap: '8px',
           }}
         >
-          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-            ☀️ Arrivée au bureau non activée ce matin
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              ⚠️ Arrivée au bureau non activée ce matin
+            </span>
+            {liveParisTime && (
+              <span className="badge badge-warning font-mono" style={{ fontWeight: 800 }}>
+                {liveParisTime}
+              </span>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{
-                flex: 1,
-                background: '#059669',
-                borderColor: '#059669',
-                fontWeight: 800,
-                minHeight: '42px',
-              }}
-              onClick={() => {
-                const hhmm = getNowHHMM();
-                setCustomStartHHMM(hhmm);
-                clockInMut.mutate({
-                  technicien: currentTechnicien,
-                  dateJour: selectedDate,
-                  heureArriveeBureau: hhmm,
-                });
-              }}
-            >
-              ☀️ Activer mon arrivée maintenant ({getNowHHMM()})
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ minHeight: '42px' }}
-              onClick={() => setActiveTab('pointage')}
-            >
-              Choisir heure
-            </button>
-          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+              borderColor: '#059669',
+              fontWeight: 800,
+              minHeight: '44px',
+              fontSize: '13.5px',
+            }}
+            disabled={clockInMut.isPending}
+            onClick={() => {
+              clockInMut.mutate({
+                technicien: currentTechnicien,
+                dateJour: selectedDate,
+              });
+            }}
+          >
+            {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau maintenant (${liveParisTime || getNowHHMM()})`}
+          </button>
         </div>
       )}
 
       {/* =====================================================================
           BLOC 1 : BADGEUSE MATIN (ARRIVÉE BUREAU) & SOIR (FIN DERNIÈRE INTV.)
+          HORODATAGE INVIOLABLE NON MODIFIABLE À LA MAIN
          ===================================================================== */}
       {showPointage && (
         <div
           className="pro-table-container"
           style={{
-            padding: '14px',
+            padding: '16px',
             borderTop:
               currentPointage?.statutJournee === 'EN_SERVICE'
                 ? '4px solid #10b981'
@@ -586,12 +638,44 @@ export function TechnicianMobileView({
                 : '4px solid #f59e0b',
           }}
         >
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800 }}>
-              ⏱️ Pointage Journalier ({formatDateFR(selectedDate)})
+          {/* Horloge numérique en direct */}
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '14px',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '13.5px', fontWeight: 800 }}>
+                ⏱️ Pointage Quotidien Certifié ({formatDateFR(selectedDate)})
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                L'heure est certifiée automatiquement à la pression du bouton. Aucune saisie manuelle.
+              </div>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Activez chaque matin en arrivant au bureau et désactivez chaque soir à la fin de votre dernière intervention.
+
+            <div
+              className="font-mono"
+              style={{
+                fontSize: '14.5px',
+                fontWeight: 800,
+                color: 'var(--accent-primary)',
+                background: 'var(--bg-surface)',
+                padding: '5px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-default)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              🕒 {liveParisTime || getNowHHMM()}
             </div>
           </div>
 
@@ -605,144 +689,155 @@ export function TechnicianMobileView({
             {/* Carte Matin : Arrivée au bureau */}
             <div
               style={{
-                padding: '14px',
-                borderRadius: '12px',
+                padding: '16px',
+                borderRadius: '14px',
                 background: currentPointage?.heureArriveeBureau
                   ? 'rgba(16, 185, 129, 0.08)'
                   : 'var(--bg-elevated)',
                 border: currentPointage?.heureArriveeBureau
-                  ? '1.5px solid rgba(16, 185, 129, 0.45)'
-                  : '1px solid var(--border-default)',
+                  ? '1.5px solid rgba(16, 185, 129, 0.5)'
+                  : '1.5px solid var(--border-default)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '10px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#059669' }}>
-                  ☀️ 1. MATIN — Arrivée Bureau
+                  ☀️ 1. MATIN — Arrivée au Bureau
                 </span>
-                {currentPointage?.heureArriveeBureau && (
-                  <span className="badge badge-success font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
+                {currentPointage?.heureArriveeBureau ? (
+                  <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
                     ✓ {currentPointage.heureArriveeBureau}
                   </span>
+                ) : (
+                  <span className="badge badge-warning">À pointer</span>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="time"
-                  className="input font-mono"
-                  style={{ flex: 1, fontWeight: 700 }}
-                  value={customStartHHMM}
-                  onChange={(e) => setCustomStartHHMM(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ minHeight: '42px', padding: '0 10px', fontWeight: 700 }}
-                  onClick={() => setCustomStartHHMM(getNowHHMM())}
+              {!currentPointage?.heureArriveeBureau ? (
+                <>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Appuyez dès votre arrivée au bureau. L'heure officielle du clic sera certifiée.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={clockInMut.isPending}
+                    style={{
+                      width: '100%',
+                      minHeight: '48px',
+                      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                      borderColor: '#059669',
+                      fontWeight: 800,
+                      fontSize: '13.5px',
+                      boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)',
+                    }}
+                    onClick={() => {
+                      clockInMut.mutate({
+                        technicien: currentTechnicien,
+                        dateJour: selectedDate,
+                      });
+                    }}
+                  >
+                    {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau`}
+                  </button>
+                </>
+              ) : (
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    fontSize: '12px',
+                    color: '#059669',
+                    fontWeight: 700,
+                  }}
                 >
-                  Maintenant
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  minHeight: '46px',
-                  background: '#059669',
-                  borderColor: '#059669',
-                  fontWeight: 800,
-                  fontSize: '13.5px',
-                }}
-                onClick={() => {
-                  const hhmm = customStartHHMM || getNowHHMM();
-                  clockInMut.mutate({
-                    technicien: currentTechnicien,
-                    dateJour: selectedDate,
-                    heureArriveeBureau: hhmm,
-                  });
-                }}
-              >
-                {currentPointage?.heureArriveeBureau
-                  ? `✓ Mettre à jour arrivée (${customStartHHMM})`
-                  : `☀️ Activer mon arrivée au bureau`}
-              </button>
+                  🔒 Horodatage officiel certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
+                </div>
+              )}
             </div>
 
             {/* Carte Soir : Fin de dernière intervention */}
             <div
               style={{
-                padding: '14px',
-                borderRadius: '12px',
+                padding: '16px',
+                borderRadius: '14px',
                 background: currentPointage?.heureFinJournee
                   ? 'rgba(37, 99, 235, 0.08)'
                   : 'var(--bg-elevated)',
                 border: currentPointage?.heureFinJournee
-                  ? '1.5px solid rgba(37, 99, 235, 0.45)'
-                  : '1px solid var(--border-default)',
+                  ? '1.5px solid rgba(37, 99, 235, 0.5)'
+                  : '1.5px solid var(--border-default)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '10px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#2563eb' }}>
-                  🌙 2. SOIR — Fin Dernière Intv.
+                  🌙 2. SOIR — Fin Dernière Intervention
                 </span>
-                {currentPointage?.heureFinJournee && (
-                  <span className="badge badge-info font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
+                {currentPointage?.heureFinJournee ? (
+                  <span className="badge badge-info font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
                     ✓ {currentPointage.heureFinJournee}
                   </span>
+                ) : currentPointage?.heureArriveeBureau ? (
+                  <span className="badge badge-info">En service</span>
+                ) : (
+                  <span className="badge badge-neutral">En attente</span>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="time"
-                  className="input font-mono"
-                  style={{ flex: 1, fontWeight: 700 }}
-                  value={customEndHHMM}
-                  onChange={(e) => setCustomEndHHMM(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ minHeight: '42px', padding: '0 10px', fontWeight: 700 }}
-                  onClick={() => setCustomEndHHMM(getNowHHMM())}
+              {!currentPointage?.heureArriveeBureau ? (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Activez d'abord votre arrivée au bureau le matin pour pouvoir pointer la fin de journée le soir.
+                </div>
+              ) : !currentPointage?.heureFinJournee ? (
+                <>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Appuyez à la fin de votre dernière intervention. L'heure officielle du clic sera certifiée.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={clockOutMut.isPending}
+                    style={{
+                      width: '100%',
+                      minHeight: '48px',
+                      background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                      borderColor: '#2563eb',
+                      fontWeight: 800,
+                      fontSize: '13.5px',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.25)',
+                    }}
+                    onClick={() => {
+                      clockOutMut.mutate({
+                        technicien: currentTechnicien,
+                        dateJour: selectedDate,
+                        derniereInterventionRef: lastMissionRef,
+                      });
+                    }}
+                  >
+                    {clockOutMut.isPending ? '⏳ Enregistrement...' : `🌙 Pointer ma fin de journée`}
+                  </button>
+                </>
+              ) : (
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    background: 'rgba(37, 99, 235, 0.12)',
+                    fontSize: '12px',
+                    color: '#2563eb',
+                    fontWeight: 700,
+                  }}
                 >
-                  Maintenant
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{
-                  width: '100%',
-                  minHeight: '46px',
-                  background: '#2563eb',
-                  borderColor: '#2563eb',
-                  fontWeight: 800,
-                  fontSize: '13.5px',
-                }}
-                onClick={() => {
-                  const hhmm = customEndHHMM || getNowHHMM();
-                  clockOutMut.mutate({
-                    technicien: currentTechnicien,
-                    dateJour: selectedDate,
-                    heureFinJournee: hhmm,
-                    derniereInterventionRef: lastMissionRef,
-                  });
-                }}
-              >
-                {currentPointage?.heureFinJournee
-                  ? `✓ Mettre à jour fin (${customEndHHMM})`
-                  : `🌙 Désactiver fin de journée`}
-              </button>
+                  🔒 Fin de journée certifiée à {currentPointage.heureFinJournee}.
+                  {currentPointage.dureeMinutes ? ` Amplitude : ${Math.floor(currentPointage.dureeMinutes / 60)}h${String(currentPointage.dureeMinutes % 60).padStart(2, '0')}.` : ''}
+                </div>
+              )}
             </div>
           </div>
 

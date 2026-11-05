@@ -1549,10 +1549,16 @@ export function DashboardPage() {
          ===================================================================== */}
       {activeSection === 'mobile_tech' && (
         <TechnicianMobileView
-          techniciens={techniciensList}
-          currentTechnicien={user?.technicienNom || selectedMobileTech || techniciensList[0] || 'Anouar'}
-          canSwitchTechnicien={!isMobileTechUser || !user?.technicienNom}
-          onSelectTechnicien={(t) => setSelectedMobileTech(t)}
+          techniciens={isMobileTechUser ? [user?.technicienNom || user?.name || 'Technicien'] : techniciensList}
+          currentTechnicien={
+            isMobileTechUser
+              ? (user?.technicienNom || user?.name || 'Technicien')
+              : (selectedMobileTech || user?.technicienNom || techniciensList[0] || 'Anouar')
+          }
+          canSwitchTechnicien={!isMobileTechUser}
+          onSelectTechnicien={(t) => {
+            if (!isMobileTechUser) setSelectedMobileTech(t);
+          }}
           interventionsList={interventionsList}
           devisList={devisList}
         />
