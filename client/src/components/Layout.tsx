@@ -35,13 +35,13 @@ export function Layout({
   const [collapsed, setCollapsed] = useState(false);
   const [parisTime, setParisTime] = useState('');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('anelec-theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    const saved = localStorage.getItem('anelec-theme-v2');
+    return (saved === 'light' || saved === 'dark') ? saved : 'light';
   });
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('anelec-theme', theme);
+    localStorage.setItem('anelec-theme-v2', theme);
   }, [theme]);
 
   useEffect(() => {

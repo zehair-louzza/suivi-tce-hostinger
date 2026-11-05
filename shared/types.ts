@@ -226,6 +226,7 @@ export interface ReferentielsMap {
   techniciens: string[];
   motifs_blocage: string[];
   resultats_techniques: string[];
+  technicien_competences?: Record<string, string[]>;
 }
 
 export const DEFAULT_REFERENTIELS: ReferentielsMap = {
@@ -648,4 +649,117 @@ export function getStatutLabel(statut: StatutDevisType | StatutInterventionType)
 
 export function getStatutColors(statut: StatutDevisType | StatutInterventionType): { bg: string; text: string } {
   return STATUT_COLORS[statut] || { bg: '#e5e7eb', text: '#374151' };
+}
+
+
+// ============================================================================
+// 6. MATRICE DE COMPÉTENCES TECHNICIENS & ALGORITHME MOINDRE COMPÉTENCE
+// ============================================================================
+
+export const DEFAULT_TECHNICIEN_COMPETENCES: Record<string, string[]> = {
+  Haitam: ['Électricité'],
+  Manneh: ['Plomberie'],
+  Yankoubou: ['CVC / Climatisation', 'Chauffage'],
+  Mohamed: ['Plomberie', 'CVC / Climatisation', 'Chauffage'],
+  Anouar: ['Électricité', 'Plomberie', 'Serrurerie'],
+  Jamal: ['Menuiserie', 'Serrurerie', 'Peinture', 'Plâtrerie'],
+  'Sous-traitant': ['Tous corps d’état', 'Maçonnerie', 'Faux plafond', 'Revêtement de sol'],
+};
+
+function normalizeSkillToken(val?: string | null): string {
+  return (val || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Classe les techniciens pour un corps d'état / métier donné selon la règle ANELEC :
+ * 1) Seuls les techniciens ayant la compétence requise (ou 'Tous corps d’état') sont éligibles.
+ * 2) Parmi les techniciens éligibles, on choisit EN PRIORITÉ celui qui a LE MOINDRE DE COMPÉTENCES
+ *    (ex: un technicien qui maîtrise uniquement l'Électricité (1 compétence) passe AVANT un technicien
+ *    polyvalent qui maîtrise Électricité + Plomberie + Serrurerie (3 compétences), afin de préserver
+ *    le technicien polyvalent pour d'autres interventions nécessitant ses autres compétences).
+ * 3) En cas d'égalité du nombre de compétences, on départage par la charge horaire journalière la plus faible.
+ */
+export function rankTechniciansForTrade(
+  requiredTrade: string | null | undefined,
+  techniciens: string[],
+  competencesMap?: Record<string, string[]>,
+  currentLoadByTech: Record<string, number> = {}
+): {
+  qualified: { technicien: string; skillCount: number; skills: string[]; isWildcard: boolean }[];
+  allRanked: { technicien: string; skillCount: number; skills: string[]; isQualified: boolean }[];
+} {
+  const map = competencesMap || DEFAULT_TECHNICIEN_COMPETENCES;
+  const reqNorm = normalizeSkillToken(requiredTrade);
+  const isGeneric =
+    !reqNorm ||
+    reqNorm.includes('tous corps') ||
+    reqNorm === 'visite devis' ||
+    reqNorm === 'intervention';
+
+  const evaluated = techniciens.map((tech) => {
+    const rawSkills = Array.isArray(map[tech])
+      ? map[tech].filter(Boolean)
+      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+    const normSkills = rawSkills.map(normalizeSkillToken);
+    const hasWildcard = normSkills.some((k) => k.includes('tous corps'));
+    const hasDirectSkill =
+      !isGeneric &&
+      normSkills.some((k) => k === reqNorm || k.includes(reqNorm) || reqNorm.includes(k));
+
+    const specificSkills = rawSkills.filter((k) => !normalizeSkillToken(k).includes('tous corps'));
+    const skillCount = rawSkills.length;
+    const effectiveSkillCount = hasWildcard
+      ? Math.max(15, specificSkills.length + 10)
+      : Math.max(1, specificSkills.length || rawSkills.length || 99);
+
+    const isQualified = isGeneric ? rawSkills.length > 0 : hasDirectSkill || hasWildcard;
+
+    return {
+      technicien: tech,
+      skills: rawSkills,
+      skillCount,
+      effectiveSkillCount,
+      hasDirectSkill,
+      isWildcard: hasWildcard && !hasDirectSkill,
+      isQualified,
+      load: currentLoadByTech[tech] ?? 0,
+    };
+  });
+
+  const qualified = evaluated
+    .filter((e) => e.isQualified)
+    .sort((a, b) => {
+      if (a.isWildcard !== b.isWildcard) return a.isWildcard ? 1 : -1;
+      if (a.effectiveSkillCount !== b.effectiveSkillCount) {
+        return a.effectiveSkillCount - b.effectiveSkillCount;
+      }
+      return a.load - b.load;
+    })
+    .map((e) => ({
+      technicien: e.technicien,
+      skillCount: e.skillCount,
+      skills: e.skills,
+      isWildcard: e.isWildcard,
+    }));
+
+  const allRanked = [...evaluated]
+    .sort((a, b) => {
+      if (a.isQualified !== b.isQualified) return a.isQualified ? -1 : 1;
+      if (a.effectiveSkillCount !== b.effectiveSkillCount) {
+        return a.effectiveSkillCount - b.effectiveSkillCount;
+      }
+      return a.load - b.load;
+    })
+    .map((e) => ({
+      technicien: e.technicien,
+      skillCount: e.skillCount,
+      skills: e.skills,
+      isQualified: e.isQualified,
+    }));
+
+  return { qualified, allRanked };
 }

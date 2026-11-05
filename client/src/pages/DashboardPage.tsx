@@ -9,6 +9,7 @@ import {
   Intervention,
   ReferentielsMap,
   DEFAULT_REFERENTIELS,
+  DEFAULT_TECHNICIEN_COMPETENCES,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -778,6 +779,12 @@ export function DashboardPage() {
           devisList={devisList}
           interventionsList={interventionsList}
           techniciens={techniciensList}
+          technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
+          corpsEtatList={corpsEtatList}
+          onUpdateCompetences={async (nextMap) => {
+            await referentielsApi.updateCompetences(nextMap);
+            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+          }}
           onUpdateDevisPlanning={async (devisId, payload) => {
             await updateDevisMut.mutateAsync({ id: devisId, data: payload });
           }}
@@ -1276,7 +1283,8 @@ export function DashboardPage() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!newRefValue.trim()) return;
-                const currentVals = refs[newRefCategory] || [];
+                const rawVals = refs[newRefCategory];
+                const currentVals: string[] = Array.isArray(rawVals) ? rawVals : [];
                 if (!currentVals.includes(newRefValue.trim())) {
                   await referentielsApi.updateCategory(newRefCategory, [
                     ...currentVals,
@@ -1313,6 +1321,141 @@ export function DashboardPage() {
                 Ajouter
               </button>
             </form>
+          </div>
+
+          <div className="pro-table-container" style={{ padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                  Matrice des Compétences Techniciens par Métier (Auto-Planification au Moindre de Compétences)
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Cochez les corps d'état maîtrisés par chaque technicien. L'auto-planification affecte en priorité le technicien qualifié ayant le <strong>moindre nombre total de compétences</strong> afin de préserver vos techniciens polyvalents pour les autres métiers.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {techniciensList.map((tech) => {
+                const currentCompMap = refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES;
+                const techSkills = currentCompMap[tech] || [];
+                const isSpecialist = techSkills.length === 1;
+
+                const toggleSkill = async (skill: string) => {
+                  const exists = techSkills.includes(skill);
+                  const updatedSkills = exists
+                    ? techSkills.filter((s) => s !== skill)
+                    : [...techSkills, skill];
+                  const nextMap = { ...currentCompMap, [tech]: updatedSkills };
+                  await referentielsApi.updateCompetences(nextMap);
+                  queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                  toast.success(`Compétences mises à jour pour ${tech}`);
+                };
+
+                return (
+                  <div
+                    key={tech}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                          {tech}
+                        </span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: '11px',
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            fontWeight: 700,
+                            background: isSpecialist ? 'rgba(16, 185, 129, 0.14)' : 'rgba(37, 99, 235, 0.12)',
+                            color: isSpecialist ? '#059669' : 'var(--accent-primary)',
+                            border: isSpecialist
+                              ? '1px solid rgba(16, 185, 129, 0.35)'
+                              : '1px solid rgba(37, 99, 235, 0.25)',
+                          }}
+                        >
+                          {techSkills.length} compétence{techSkills.length > 1 ? 's' : ''}{' '}
+                          {isSpecialist
+                            ? '• Spécialiste Exclusif (Priorité #1)'
+                            : techSkills.length > 1
+                            ? `• Polyvalent (Rang #${techSkills.length})`
+                            : '• Aucune compétence'}
+                        </span>
+                      </div>
+
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const input = e.currentTarget.elements.namedItem('customSkill') as HTMLInputElement;
+                          const val = input?.value?.trim();
+                          if (!val) return;
+                          if (!techSkills.includes(val)) {
+                            const nextMap = { ...currentCompMap, [tech]: [...techSkills, val] };
+                            await referentielsApi.updateCompetences(nextMap);
+                            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                            toast.success(`Compétence « ${val} » ajoutée à ${tech}`);
+                          }
+                          input.value = '';
+                        }}
+                        style={{ display: 'flex', gap: '6px' }}
+                      >
+                        <input
+                          name="customSkill"
+                          type="text"
+                          className="input"
+                          placeholder="+ Ajouter une compétence métier..."
+                          style={{ width: '215px', height: '28px', fontSize: '11.5px', padding: '2px 8px' }}
+                        />
+                        <button type="submit" className="btn btn-secondary btn-sm" style={{ padding: '2px 10px' }}>
+                          Ajouter
+                        </button>
+                      </form>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {Array.from(new Set([...corpsEtatList, ...techSkills])).map((metier) => {
+                        const checked = techSkills.includes(metier);
+                        return (
+                          <button
+                            key={metier}
+                            type="button"
+                            onClick={() => toggleSkill(metier)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '7px',
+                              fontSize: '11.5px',
+                              fontWeight: checked ? 700 : 500,
+                              cursor: 'pointer',
+                              border: checked
+                                ? '1px solid var(--accent-primary)'
+                                : '1px solid var(--border-default)',
+                              background: checked ? 'var(--accent-glow)' : 'var(--bg-surface)',
+                              color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <span>{checked ? '✓' : '+'}</span>
+                            <span>{metier}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>

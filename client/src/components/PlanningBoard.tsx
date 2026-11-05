@@ -3,6 +3,8 @@ import {
   Devis,
   Intervention,
   DEFAULT_REFERENTIELS,
+  DEFAULT_TECHNICIEN_COMPETENCES,
+  rankTechniciansForTrade,
   parseTimeIntervalInput,
   computeDurationHours,
 } from '../lib/api';
@@ -59,6 +61,9 @@ interface PlanningBoardProps {
   onOpenDevisDrawer: (devis: Devis) => void;
   onOpenInterventionDrawer: (intervention: Intervention) => void;
   onCreateQuickIntervention?: (payload: Partial<Intervention>) => Promise<void>;
+  technicienCompetences?: Record<string, string[]>;
+  corpsEtatList?: string[];
+  onUpdateCompetences?: (competences: Record<string, string[]>) => Promise<void>;
 }
 
 const START_HOUR = 7; // 07:00
@@ -130,7 +135,12 @@ export function PlanningBoard({
   onOpenDevisDrawer,
   onOpenInterventionDrawer,
   onCreateQuickIntervention,
+  technicienCompetences = DEFAULT_TECHNICIEN_COMPETENCES,
+  corpsEtatList = DEFAULT_REFERENTIELS.corps_etat,
+  onUpdateCompetences,
 }: PlanningBoardProps) {
+  const [skillsModalOpen, setSkillsModalOpen] = useState(false);
+  const [customSkillInputs, setCustomSkillInputs] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<'gantt' | 'week' | 'columns'>('gantt');
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState<string>(() => toDateKey(new Date()));
@@ -473,6 +483,33 @@ export function PlanningBoard({
     setKeyboardIntervalText(`${parsed.heureDebut}-${parsed.heureFin}`);
   };
 
+  const toggleTechSkill = async (tech: string, skill: string) => {
+    const current = Array.isArray(technicienCompetences[tech])
+      ? technicienCompetences[tech]
+      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+    const exists = current.includes(skill);
+    const nextSkills = exists ? current.filter((s) => s !== skill) : [...current, skill];
+    const nextMap = { ...technicienCompetences, [tech]: nextSkills };
+    if (onUpdateCompetences) {
+      await onUpdateCompetences(nextMap);
+    }
+  };
+
+  const addCustomTechSkill = async (tech: string) => {
+    const val = (customSkillInputs[tech] || '').trim();
+    if (!val) return;
+    const current = Array.isArray(technicienCompetences[tech])
+      ? technicienCompetences[tech]
+      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+    if (!current.includes(val)) {
+      const nextMap = { ...technicienCompetences, [tech]: [...current, val] };
+      if (onUpdateCompetences) {
+        await onUpdateCompetences(nextMap);
+      }
+    }
+    setCustomSkillInputs((prev) => ({ ...prev, [tech]: '' }));
+  };
+
   const handleSmartAutoDispatch = async () => {
     if (unscheduledItems.length === 0) {
       toast.success('Toutes les missions sont déjà planifiées !');
@@ -480,9 +517,16 @@ export function PlanningBoard({
     }
 
     const priorityRank: Record<string, number> = { Urgente: 0, Haute: 1, Normale: 2, Basse: 3 };
-    const queue = [...unscheduledItems].sort(
-      (a, b) => (priorityRank[a.priorite] ?? 2) - (priorityRank[b.priorite] ?? 2)
-    );
+    // Tri intelligent des missions :
+    // 1) Priorité (Urgente > Haute > Normale > Basse)
+    // 2) Rareté de la compétence demandée (les métiers ayant le moins de techniciens qualifiés passent d'abord)
+    const queue = [...unscheduledItems].sort((a, b) => {
+      const pDiff = (priorityRank[a.priorite] ?? 2) - (priorityRank[b.priorite] ?? 2);
+      if (pDiff !== 0) return pDiff;
+      const qualA = rankTechniciansForTrade(a.typePrestation, techniciens, technicienCompetences).qualified.length;
+      const qualB = rankTechniciansForTrade(b.typePrestation, techniciens, technicienCompetences).qualified.length;
+      return qualA - qualB;
+    });
 
     const candidateWindows = [
       { debut: '08:00', fin: '10:00' },
@@ -494,23 +538,37 @@ export function PlanningBoard({
     const targetDate = selectedDayKey || weekDays[0]?.key || toDateKey(new Date());
     const virtualOccupied = [...scheduledItems];
     let assignedCount = 0;
+    const assignedSummary: string[] = [];
+    const skippedNoSkill: string[] = [];
 
-    for (const item of queue.slice(0, 8)) {
-      const preferredTechs = item.technicien
-        ? [item.technicien, ...techniciens.filter((t) => t !== item.technicien)]
-        : [...techniciens].sort((tA, tB) => {
-            const loadA = virtualOccupied
-              .filter((s) => s.technicien === tA && s.date === targetDate)
-              .reduce((acc, s) => acc + s.durationHours, 0);
-            const loadB = virtualOccupied
-              .filter((s) => s.technicien === tB && s.date === targetDate)
-              .reduce((acc, s) => acc + s.durationHours, 0);
-            return loadA - loadB;
-          });
+    for (const item of queue.slice(0, 10)) {
+      const loadByTech: Record<string, number> = {};
+      for (const t of techniciens) {
+        loadByTech[t] = virtualOccupied
+          .filter((s) => s.technicien === t && s.date === targetDate)
+          .reduce((acc, s) => acc + s.durationHours, 0);
+      }
+
+      // Algorithme "Moindre de compétences" :
+      // Parmi les techniciens qui maîtrisent le métier (item.typePrestation),
+      // celui qui a LE MOINS de compétences passe en premier (ex: 1 compétence avant 3 compétences)
+      // pour laisser les techniciens polyvalents disponibles pour d'autres métiers !
+      const { qualified } = rankTechniciansForTrade(
+        item.typePrestation,
+        techniciens,
+        technicienCompetences,
+        loadByTech
+      );
+
+      if (qualified.length === 0) {
+        skippedNoSkill.push(`${item.reference} (${item.typePrestation})`);
+        continue;
+      }
 
       let placed = false;
-      for (const tech of preferredTechs) {
+      for (const candidate of qualified) {
         if (placed) break;
+        const tech = candidate.technicien;
         for (const win of candidateWindows) {
           const wStart = timeToMinutes(win.debut);
           const wEnd =
@@ -540,6 +598,9 @@ export function PlanningBoard({
               durationHours: computeDurationHours(win.debut, winFinStr) ?? 2,
             });
             assignedCount++;
+            assignedSummary.push(
+              `${item.reference} (${item.typePrestation}) → ${tech} [${candidate.skillCount} comp.]`
+            );
             placed = true;
             break;
           }
@@ -547,7 +608,18 @@ export function PlanningBoard({
       }
     }
 
-    toast.success(`${assignedCount} mission(s) auto-planifiée(s) sans conflit horaire`);
+    if (assignedCount > 0) {
+      toast.success(
+        `${assignedCount} mission(s) auto-planifiée(s) (priorité moindre compétence) : ${assignedSummary
+          .slice(0, 2)
+          .join(' • ')}`
+      );
+    }
+    if (skippedNoSkill.length > 0) {
+      toast.error(
+        `Aucun technicien qualifié pour : ${skippedNoSkill.join(', ')}. Ajoutez la compétence dans « Compétences Métier ».`
+      );
+    }
   };
 
   const computeGanttLanes = (slots: PlanningSlotItem[]) => {
@@ -791,8 +863,21 @@ export function PlanningBoard({
 
           <button
             type="button"
+            onClick={() => setSkillsModalOpen(true)}
+            className="btn btn-secondary btn-sm"
+            title="Configurer les compétences métier de chaque technicien pour l'auto-planification (règle du moindre de compétences)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            Compétences Métier
+          </button>
+
+          <button
+            type="button"
             onClick={handleSmartAutoDispatch}
             className="btn btn-ai-dispatch btn-sm"
+            title="Auto-distribution par compétences métier : sélectionne le technicien qualifié ayant le moindre de compétences afin de préserver les polyvalents"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -1066,8 +1151,23 @@ export function PlanningBoard({
                         </span>
                       </div>
 
-                      <div style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                        {item.client}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                          {item.client}
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--brand-primary)',
+                          }}
+                        >
+                          {item.typePrestation}
+                        </span>
                       </div>
                       <div
                         style={{
@@ -1107,12 +1207,18 @@ export function PlanningBoard({
                             });
                           }}
                         >
-                          <option value="">Affecter à ({selectedDayKey.slice(5)})...</option>
-                          {techniciens.map((t) => (
-                            <option key={t} value={t}>
-                              → {t}
-                            </option>
-                          ))}
+                          <option value="">Affecter par compétence ({selectedDayKey.slice(5)})...</option>
+                          {rankTechniciansForTrade(item.typePrestation, techniciens, technicienCompetences).allRanked.map(
+                            (r, idx) => (
+                              <option key={r.technicien} value={r.technicien}>
+                                {r.isQualified
+                                  ? idx === 0
+                                    ? `★ ${r.technicien} (Prioritaire • ${r.skillCount} comp.)`
+                                    : `✓ ${r.technicien} (Qualifié • ${r.skillCount} comp.)`
+                                  : `○ ${r.technicien} (Hors métier • ${r.skillCount} comp.)`}
+                              </option>
+                            )
+                          )}
                         </select>
                         <button
                           type="button"
@@ -1242,10 +1348,63 @@ export function PlanningBoard({
                               >
                                 {tech.slice(0, 2).toUpperCase()}
                               </div>
-                              <div>
-                                <div style={{ fontWeight: 700, fontSize: '13px' }}>{tech}</div>
-                                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{meta.role}</div>
-                              </div>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontWeight: 700, fontSize: '13px' }}>{tech}</span>
+                                    <span
+                                      onClick={() => setSkillsModalOpen(true)}
+                                      className="font-mono"
+                                      style={{
+                                        fontSize: '9.5px',
+                                        fontWeight: 700,
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        background:
+                                          (technicienCompetences[tech]?.length || 1) === 1
+                                            ? 'rgba(16, 185, 129, 0.14)'
+                                            : 'var(--bg-elevated)',
+                                        color:
+                                          (technicienCompetences[tech]?.length || 1) === 1
+                                            ? 'var(--success-accent)'
+                                            : 'var(--text-secondary)',
+                                        border: '1px solid var(--border-default)',
+                                        cursor: 'pointer',
+                                      }}
+                                      title="Cliquez pour modifier les compétences de ce technicien"
+                                    >
+                                      {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || []).length} comp.
+                                    </span>
+                                  </div>
+                                  <div
+                                    onClick={() => setSkillsModalOpen(true)}
+                                    style={{
+                                      display: 'flex',
+                                      flexWrap: 'wrap',
+                                      gap: '3px',
+                                      marginTop: '3px',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Cliquez pour ajouter ou retirer des compétences métier"
+                                  >
+                                    {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [meta.role]).map(
+                                      (sk) => (
+                                        <span
+                                          key={sk}
+                                          style={{
+                                            fontSize: '9.5px',
+                                            padding: '1px 5px',
+                                            borderRadius: '4px',
+                                            background: 'var(--bg-elevated)',
+                                            border: '1px solid var(--border-subtle)',
+                                            color: 'var(--text-secondary)',
+                                          }}
+                                        >
+                                          {sk}
+                                        </span>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
                             </div>
                             <span
                               className="font-mono"
@@ -1997,6 +2156,141 @@ export function PlanningBoard({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 5. MATRICE DES COMPÉTENCES TECHNICIENS PAR MÉTIER (RÈGLE DU MOINDRE DE COMPÉTENCES) */}
+      {skillsModalOpen && (
+        <div className="cmd-palette-backdrop" onClick={() => setSkillsModalOpen(false)}>
+          <div
+            className="cmd-palette-modal"
+            style={{ width: 'min(820px, 95vw)', maxHeight: '85vh', padding: '20px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800 }}>
+                  Compétences Métier des Techniciens (Auto-Distribution)
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.45 }}>
+                  <strong>Règle du Moindre de Compétences :</strong> Lors d'une auto-planification, le système choisit en priorité le technicien qualifié ayant <strong>le moins de compétences au total</strong> (ex. celui qui maîtrise uniquement <em>Électricité</em> passe avant celui qui maîtrise <em>Électricité + Plomberie + Serrurerie</em>), afin de garder vos techniciens polyvalents disponibles pour les autres corps d'état.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSkillsModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
+              {techniciens.map((tech) => {
+                const techSkills =
+                  technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+                const isSpecialist = techSkills.length === 1;
+
+                return (
+                  <div
+                    key={tech}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '9px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '13.5px' }}>{tech}</span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            background: isSpecialist ? 'var(--success-bg)' : 'var(--brand-glow)',
+                            color: isSpecialist ? 'var(--success-accent)' : 'var(--brand-primary)',
+                          }}
+                        >
+                          {techSkills.length} compétence(s) •{' '}
+                          {isSpecialist
+                            ? 'Spécialiste (Priorité #1 sur son métier)'
+                            : `Polyvalent (Réservé si spécialiste disponible)`}
+                        </span>
+                      </div>
+
+                      {/* Case pour ajouter une compétence personnalisée par rapport au métier */}
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          await addCustomTechSkill(tech);
+                        }}
+                        style={{ display: 'flex', gap: '6px' }}
+                      >
+                        <input
+                          type="text"
+                          className="input"
+                          style={{ width: '190px', padding: '4px 8px', fontSize: '11.5px', height: '27px' }}
+                          placeholder="Ajouter une compétence..."
+                          value={customSkillInputs[tech] || ''}
+                          onChange={(e) =>
+                            setCustomSkillInputs((prev) => ({ ...prev, [tech]: e.target.value }))
+                          }
+                        />
+                        <button type="submit" className="btn btn-secondary btn-sm" style={{ height: '27px' }}>
+                          + Ajouter
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Cases à cocher / pastilles cliquables pour tous les corps d'état ANELEC */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {Array.from(new Set([...corpsEtatList, ...techSkills])).map((metier) => {
+                        const active = techSkills.includes(metier);
+                        return (
+                          <button
+                            key={metier}
+                            type="button"
+                            onClick={() => toggleTechSkill(tech, metier)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: active ? 700 : 500,
+                              cursor: 'pointer',
+                              border: active
+                                ? '1.5px solid var(--brand-primary)'
+                                : '1px solid var(--border-default)',
+                              background: active ? 'var(--brand-glow)' : 'var(--bg-surface)',
+                              color: active ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                            }}
+                          >
+                            <span>{active ? '☑' : '☐'}</span>
+                            <span>{metier}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+              <button type="button" className="btn btn-primary" onClick={() => setSkillsModalOpen(false)}>
+                Terminé
+              </button>
+            </div>
           </div>
         </div>
       )}

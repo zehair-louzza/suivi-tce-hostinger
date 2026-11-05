@@ -10,6 +10,8 @@ import {
   parseTimeIntervalInput,
   computeDurationHours,
   DEFAULT_REFERENTIELS,
+  DEFAULT_TECHNICIEN_COMPETENCES,
+  rankTechniciansForTrade,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -27,6 +29,8 @@ export {
   parseTimeIntervalInput,
   computeDurationHours,
   DEFAULT_REFERENTIELS,
+  DEFAULT_TECHNICIEN_COMPETENCES,
+  rankTechniciansForTrade,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -175,6 +179,11 @@ export const referentielsApi = {
     api.put<{ data: { categorie: string; valeurs: string[] }; message: string }>(`/referentiels/${categorie}`, {
       valeurs,
     }),
+  updateCompetences: (competences: Record<string, string[]>) =>
+    api.put<{ data: { categorie: string; valeurs: Record<string, string[]> }; message: string }>(
+      '/referentiels/technicien_competences',
+      { competences }
+    ),
 };
 
 export const authApi = {

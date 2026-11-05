@@ -1,6 +1,57 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
+/* ============================================================================
+   LIGHT MODE BY DEFAULT (ANELEC Enterprise SaaS Standard)
+   ============================================================================ */
 :root,
+[data-theme="light"] {
+  --bg-app: #f1f5f9;
+  --bg-sidebar: #0f172a;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8fafc;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-input: #ffffff;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+
+  --brand-primary: #2563eb;
+  --brand-primary-hover: #1d4ed8;
+  --brand-glow: rgba(37, 99, 235, 0.14);
+
+  --visite-accent: #9333ea;
+  --visite-bg: rgba(147, 51, 234, 0.12);
+  --visite-border: rgba(147, 51, 234, 0.4);
+
+  --travaux-accent: #2563eb;
+  --travaux-bg: rgba(37, 99, 235, 0.12);
+  --travaux-border: rgba(37, 99, 235, 0.4);
+
+  --urgence-accent: #dc2626;
+  --urgence-bg: rgba(220, 38, 38, 0.12);
+  --urgence-border: rgba(220, 38, 38, 0.45);
+
+  --success-accent: #059669;
+  --success-bg: rgba(5, 150, 105, 0.12);
+  --warning-accent: #d97706;
+  --warning-bg: rgba(217, 119, 6, 0.12);
+  --danger-accent: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.12);
+
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.09);
+  --shadow-lg: 0 20px 45px rgba(15, 23, 42, 0.18);
+  --grid-line: rgba(15, 23, 42, 0.05);
+  --grid-line-hour: rgba(15, 23, 42, 0.1);
+}
+
 [data-theme="dark"] {
   --bg-app: #090b10;
   --bg-sidebar: #0d1017;
@@ -23,7 +74,6 @@
   --brand-primary-hover: #2563eb;
   --brand-glow: rgba(59, 130, 246, 0.22);
 
-  /* Mission Type Accents (Top-3 FSM Standard) */
   --visite-accent: #a855f7;
   --visite-bg: rgba(168, 85, 247, 0.15);
   --visite-border: rgba(168, 85, 247, 0.45);
@@ -50,54 +100,6 @@
   --grid-line-hour: rgba(255, 255, 255, 0.09);
 }
 
-[data-theme="light"] {
-  --bg-app: #f1f5f9;
-  --bg-sidebar: #0f172a;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f8fafc;
-  --bg-hover: #f1f5f9;
-  --bg-active: #e2e8f0;
-  --bg-glass: rgba(255, 255, 255, 0.9);
-  --bg-input: #ffffff;
-
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-
-  --border-subtle: #e2e8f0;
-  --border-default: #cbd5e1;
-  --border-strong: #94a3b8;
-
-  --brand-primary: #2563eb;
-  --brand-primary-hover: #1d4ed8;
-  --brand-glow: rgba(37, 99, 235, 0.15);
-
-  --visite-accent: #9333ea;
-  --visite-bg: rgba(147, 51, 234, 0.1);
-  --visite-border: rgba(147, 51, 234, 0.38);
-
-  --travaux-accent: #2563eb;
-  --travaux-bg: rgba(37, 99, 235, 0.1);
-  --travaux-border: rgba(37, 99, 235, 0.38);
-
-  --urgence-accent: #dc2626;
-  --urgence-bg: rgba(220, 38, 38, 0.1);
-  --urgence-border: rgba(220, 38, 38, 0.42);
-
-  --success-accent: #059669;
-  --success-bg: rgba(5, 150, 105, 0.1);
-  --warning-accent: #d97706;
-  --warning-bg: rgba(217, 119, 6, 0.1);
-  --danger-accent: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.1);
-
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.16);
-  --grid-line: rgba(15, 23, 42, 0.045);
-  --grid-line-hour: rgba(15, 23, 42, 0.09);
-}
-
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -119,7 +121,6 @@ html, body, #root {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -146,9 +147,9 @@ html, body, #root {
 .enterprise-sidebar {
   width: 248px;
   flex-shrink: 0;
-  background: #0b0e14;
+  background: #0f172a;
   color: #f8fafc;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -166,7 +167,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-nav {
@@ -183,7 +184,7 @@ html, body, #root {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #64748b;
+  color: #94a3b8;
   padding: 10px 10px 4px;
 }
 
@@ -196,7 +197,7 @@ html, body, #root {
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
-  color: #94a3b8;
+  color: #cbd5e1;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -206,14 +207,14 @@ html, body, #root {
 }
 
 .sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
 }
 
 .sidebar-item.active {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0.05) 100%);
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.24) 0%, rgba(59, 130, 246, 0.08) 100%);
   color: #ffffff;
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: rgba(59, 130, 246, 0.45);
   font-weight: 600;
 }
 
@@ -235,25 +236,24 @@ html, body, #root {
   font-size: 11px;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
 }
 
 .sidebar-badge.urgent {
-  background: rgba(239, 68, 68, 0.22);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.45);
 }
 
 .sidebar-footer {
   padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* Main Workspace Column */
 .enterprise-main {
   flex: 1;
   display: flex;
@@ -286,7 +286,6 @@ html, body, #root {
   gap: 16px;
 }
 
-/* Command Search Trigger in Topbar */
 .cmd-trigger {
   display: flex;
   align-items: center;
@@ -350,7 +349,7 @@ html, body, #root {
   background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -384,11 +383,11 @@ html, body, #root {
   background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
   color: #ffffff;
   border: 1px solid rgba(168, 85, 247, 0.45);
-  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.3);
 }
 
 .btn-ai-dispatch:hover:not(:disabled) {
-  filter: brightness(1.1);
+  filter: brightness(1.08);
   transform: translateY(-1px);
 }
 
@@ -452,7 +451,7 @@ html, body, #root {
 }
 
 /* ============================================================================
-   TOP-3 FSM PLANNING & DISPATCH CONSOLE (SERVICETITAN / JOBBER / PRAXEDO)
+   TOP-3 FSM PLANNING & DISPATCH CONSOLE
    ============================================================================ */
 .fsm-console {
   display: flex;
@@ -492,7 +491,6 @@ html, body, #root {
   }
 }
 
-/* Left Dispatch Queue (Unscheduled Backlog) */
 .fsm-dispatch-tray {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -522,7 +520,6 @@ html, body, #root {
   gap: 8px;
 }
 
-/* Right Main Scheduling Canvas */
 .fsm-canvas-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -533,10 +530,10 @@ html, body, #root {
   box-shadow: var(--shadow-sm);
 }
 
-/* Continuous Gantt Resource Timeline (ServiceTitan / Bryntum Style) */
+/* Continuous Gantt Resource Timeline */
 .gantt-header-row {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 245px 1fr;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-default);
   position: sticky;
@@ -589,29 +586,29 @@ html, body, #root {
 
 .gantt-resource-row {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 245px 1fr;
   border-bottom: 1px solid var(--border-subtle);
   transition: background 0.12s ease;
 }
 
 .gantt-resource-row:hover {
-  background: rgba(59, 130, 246, 0.02);
+  background: rgba(37, 99, 235, 0.025);
 }
 
 .gantt-resource-info {
-  padding: 12px 14px;
+  padding: 11px 13px;
   border-right: 1px solid var(--border-default);
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   z-index: 5;
 }
 
 .gantt-track-canvas {
   position: relative;
-  min-height: 76px;
+  min-height: 82px;
   background-image:
     repeating-linear-gradient(
       to right,
@@ -631,7 +628,6 @@ html, body, #root {
   user-select: none;
 }
 
-/* Red Live NOW Playhead Line */
 .gantt-now-line {
   position: absolute;
   top: 0;
@@ -640,7 +636,7 @@ html, body, #root {
   background: #ef4444;
   z-index: 20;
   pointer-events: none;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.65);
 }
 
 .gantt-now-badge {
@@ -657,7 +653,7 @@ html, body, #root {
   white-space: nowrap;
 }
 
-/* Scheduled Mission Event Block on Gantt Timeline */
+/* Scheduled Mission Event Block on Gantt Timeline (High Contrast in Light & Dark Mode) */
 .gantt-event-block {
   position: absolute;
   border-radius: 8px;
@@ -669,7 +665,8 @@ html, body, #root {
   overflow: hidden;
   transition: box-shadow 0.14s ease, transform 0.1s ease;
   z-index: 10;
-  backdrop-filter: blur(8px);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
 }
 
 .gantt-event-block:hover {
@@ -679,28 +676,31 @@ html, body, #root {
 
 .gantt-event-block.selected {
   z-index: 19;
-  box-shadow: 0 0 0 2px #ffffff, 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2.5px #0f172a, 0 8px 24px rgba(15, 23, 42, 0.35);
+}
+
+[data-theme="dark"] .gantt-event-block.selected {
+  box-shadow: 0 0 0 2px #ffffff, 0 8px 24px rgba(0, 0, 0, 0.55);
 }
 
 .gantt-event-block.type-visite {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.28) 0%, rgba(126, 34, 206, 0.22) 100%);
-  border: 1px solid rgba(168, 85, 247, 0.6);
-  border-left: 4px solid #a855f7;
+  background: linear-gradient(135deg, #9333ea 0%, #6b21a8 100%);
+  border: 1px solid rgba(216, 180, 254, 0.45);
+  border-left: 4px solid #e9d5ff;
 }
 
 .gantt-event-block.type-travaux {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.26) 0%, rgba(29, 78, 216, 0.2) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.6);
-  border-left: 4px solid #3b82f6;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  border: 1px solid rgba(147, 197, 253, 0.45);
+  border-left: 4px solid #bfdbfe;
 }
 
 .gantt-event-block.type-urgence {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.28) 0%, rgba(185, 28, 28, 0.22) 100%);
-  border: 1px solid rgba(239, 68, 68, 0.65);
-  border-left: 4px solid #ef4444;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border: 1px solid rgba(252, 165, 165, 0.5);
+  border-left: 4px solid #fecaca;
 }
 
-/* Left & Right Resize Handles on Gantt Block */
 .gantt-resize-handle {
   position: absolute;
   top: 0;
@@ -721,7 +721,7 @@ html, body, #root {
 }
 
 .gantt-resize-handle:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .gantt-resize-handle.left {
@@ -732,13 +732,12 @@ html, body, #root {
   right: 0;
 }
 
-/* Ghost Creation Preview while Drag-Drawing on Timeline */
 .gantt-ghost-selection {
   position: absolute;
   top: 8px;
   bottom: 8px;
-  background: rgba(59, 130, 246, 0.24);
-  border: 1.5px dashed #60a5fa;
+  background: rgba(37, 99, 235, 0.18);
+  border: 1.5px dashed #2563eb;
   border-radius: 8px;
   z-index: 16;
   pointer-events: none;
@@ -768,6 +767,7 @@ html, body, #root {
   transition: all 0.16s ease;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .kpi-card:hover {
@@ -818,7 +818,6 @@ html, body, #root {
   background: var(--bg-hover);
 }
 
-/* Kanban Board View for Devis & Interventions */
 .kanban-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(265px, 1fr));
@@ -874,7 +873,6 @@ html, body, #root {
   transform: translateY(-1px);
 }
 
-/* Status Pill */
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -892,11 +890,10 @@ html, body, #root {
   border-radius: 50%;
 }
 
-/* Slide-Over Inspector Drawer (45-Column ANELEC Detail) */
 .inspector-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 12, 0.65);
+  background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(4px);
   z-index: 100;
   display: flex;
@@ -915,17 +912,16 @@ html, body, #root {
   animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Global Ctrl+K Command Palette Modal */
 .cmd-palette-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 12, 0.72);
+  background: rgba(15, 23, 42, 0.58);
   backdrop-filter: blur(5px);
   z-index: 200;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 11vh;
+  padding-top: 10vh;
 }
 
 .cmd-palette-modal {
@@ -949,15 +945,12 @@ html, body, #root {
   to { transform: translateX(0); opacity: 1; }
 }
 
-/* ============================================================================
-   AUTH / LOGIN EXECUTIVE SPLIT SCREEN
-   ============================================================================ */
 .auth-split-layout {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
   min-height: 100vh;
-  background: #07090e;
-  color: #f8fafc;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 @media (max-width: 960px) {
