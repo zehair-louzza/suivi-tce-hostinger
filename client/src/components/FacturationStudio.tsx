@@ -124,7 +124,7 @@ export function FacturationStudio({
   onNavigateToPlanning,
   onOpenPhotoLightbox,
 }: FacturationStudioProps) {
-  const [activeTab, setActiveTab] = useState<'triage' | 'retards_clients' | 'studio_facture'>('triage');
+  const [activeTab, setActiveTab] = useState<'triage' | 'retards_clients'>('triage');
   const [filterCategory, setFilterCategory] = useState<'ALL' | BillingEligibilityCategory>('ALL');
   const [filterSegment, setFilterSegment] = useState<'ALL' | ClientSegmentType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,18 +134,6 @@ export function FacturationStudio({
 
   // Sélection multiple pour Facturation Groupée B2B (Bordereau Donneur d'ordre)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-
-  // Dossier actif dans le Studio de Facturation / Impression
-  const [activeBillingId, setActiveBillingId] = useState<number | null>(null);
-  const [invoiceNumberInput, setInvoiceNumberInput] = useState('');
-  const [invoiceAmountHTInput, setInvoiceAmountHTInput] = useState<string>('');
-  const [tvaRate, setTvaRate] = useState<number>(20); // 20, 10, 5.5, 0 (autoliquidation B2B)
-  const [paymentTerms, setPaymentTerms] = useState<string>('30 jours fin de mois (B2B)');
-  const [laborHoursInput, setLaborHoursInput] = useState<number>(0);
-  const [hourlyRateInput, setHourlyRateInput] = useState<number>(65);
-  const [materialsCostInput, setMaterialsCostInput] = useState<number>(0);
-  const [travelFeeInput, setTravelFeeInput] = useState<number>(45);
-  const [invoiceNotesInput, setInvoiceNotesInput] = useState<string>('');
 
   // Modal de réponse client en 1 clic (Retards & Demandes clients initiaux)
   const [clientResponseModalDossier, setClientResponseModalDossier] =
@@ -406,56 +394,25 @@ export function FacturationStudio({
     });
   }, [enrichedDossiers, filterCategory, filterSegment, searchQuery]);
 
-  const activeDossier = useMemo(() => {
-    if (activeBillingId) {
-      return enrichedDossiers.find((d) => d.intervention.id === activeBillingId) || null;
-    }
-    return stats.aFacturer[0] || stats.aVerifier[0] || enrichedDossiers[0] || null;
-  }, [activeBillingId, enrichedDossiers, stats]);
-
-  const openDossierInBillingStudio = (dossier: EnrichedBillingDossier) => {
-    setActiveBillingId(dossier.intervention.id);
-    const nextNum =
-      dossier.intervention.numeroFacture ||
-      `FAC-${new Date().getFullYear()}-${String(dossier.intervention.id).padStart(4, '0')}`;
-    setInvoiceNumberInput(nextNum);
-    setInvoiceAmountHTInput(String(dossier.suggestedAmountHT));
-    const hrs = dossier.realHours || dossier.plannedHours || 2;
-    setLaborHoursInput(hrs);
-    setHourlyRateInput(dossier.segment === 'B2B' ? 65 : 70);
-    setMaterialsCostInput(0);
-    setTravelFeeInput(45);
-    setTvaRate(dossier.segment === 'B2C' ? 10 : 20);
-    setPaymentTerms(
-      dossier.segment === 'B2B'
-        ? '30 jours fin de mois — Virement Chorus / Donneur d’ordre'
-        : 'Paiement comptant à réception de facture (Particulier B2C)'
-    );
-    setInvoiceNotesInput(
-      dossier.intervention.rapportFinal ||
-        dossier.intervention.compteRendu ||
-        dossier.intervention.objet ||
-        ''
-    );
-    setActiveTab('studio_facture');
-  };
-
-  const handleEmitInvoice = async (dossier: EnrichedBillingDossier) => {
-    const finalHT = Number(invoiceAmountHTInput) || dossier.suggestedAmountHT;
-    const finalNum =
-      invoiceNumberInput.trim() ||
-      `FAC-${new Date().getFullYear()}-${String(dossier.intervention.id).padStart(4, '0')}`;
+  const handleToggleFacture = async (dossier: EnrichedBillingDossier) => {
+    const isBilled = dossier.intervention.statutFacture === 'Facturée';
+    const nextStatut = isBilled ? 'Non facturée' : 'Facturée';
+    const nextNum = !isBilled
+      ? dossier.intervention.numeroFacture ||
+        `FAC-${new Date().getFullYear()}-${String(dossier.intervention.id).padStart(4, '0')}`
+      : dossier.intervention.numeroFacture;
 
     await onUpdateIntervention(dossier.intervention.id, {
-      statutFacture: 'Facturée',
-      numeroFacture: finalNum,
-      amount: finalHT,
-      statutOperationnel: 'Clôturée',
-      statutRapport: 'Validé & Clôturé',
-      traitement: 'Traité',
-      rapportFinal: invoiceNotesInput.trim() || dossier.intervention.rapportFinal || undefined,
+      statutFacture: nextStatut,
+      numeroFacture: nextNum,
+      amount: dossier.suggestedAmountHT,
+      statutOperationnel: isBilled ? dossier.intervention.statutOperationnel : 'Clôturée',
     });
-    toast.success(`Facture ${finalNum} (${formatCurrency(finalHT)} HT) validée et enregistrée !`);
+    toast.success(
+      isBilled
+        ? `Dossier ${dossier.intervention.reference} repassé en non facturé`
+        : `Dossier ${dossier.intervention.reference} marqué comme facturé (${nextNum}) !`
+    );
   };
 
   const handleBatchEmitB2BInvoices = async () => {
@@ -681,13 +638,6 @@ export function FacturationStudio({
             onClick={() => setActiveTab('retards_clients')}
           >
             ⏱️ 2. Pourquoi les Retards & Réponses Clients Initiaux ({stats.enRetardOuBloque.length})
-          </button>
-          <button
-            type="button"
-            className={`segmented-btn ${activeTab === 'studio_facture' ? 'active' : ''}`}
-            onClick={() => setActiveTab('studio_facture')}
-          >
-            🧾 3. Studio d'Émission Facture B2B / B2C & Aperçu PDF
           </button>
         </div>
 
@@ -1042,23 +992,33 @@ export function FacturationStudio({
                       </td>
 
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '5px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
-                            onClick={() => openDossierInBillingStudio(d)}
+                            className={`btn btn-sm ${d.category === 'FACTUREE' ? 'btn-secondary' : 'btn-primary'}`}
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
+                            onClick={() => handleToggleFacture(d)}
+                            title={d.category === 'FACTUREE' ? 'Dossier déjà facturé. Cliquez pour basculer.' : 'Marquer comme Facturée'}
                           >
-                            🧾 {d.category === 'FACTUREE' ? 'Facture' : 'Facturer'}
+                            {d.category === 'FACTUREE' ? '✓ Facturée' : 'Facturer'}
                           </button>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            style={{ padding: '3px 8px', fontSize: '11px' }}
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => setClientResponseModalDossier(d)}
                             title="Générer une réponse claire pour le client initial (avancement, retard ou facture)"
                           >
                             💬 Répondre
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '2px 6px', fontSize: '10.5px' }}
+                            onClick={() => onOpenInterventionDrawer(intv)}
+                            title="Ouvrir la fiche intervention"
+                          >
+                            Fiche
                           </button>
                         </div>
                       </td>
@@ -1243,464 +1203,6 @@ export function FacturationStudio({
               }
             )}
           </div>
-        </div>
-      )}
-
-      {/* =====================================================================
-          ONGLET 3 : STUDIO D'ÉMISSION FACTURE B2B & B2C + APERÇU IMPRESSION PDF
-         ===================================================================== */}
-      {activeTab === 'studio_facture' && activeDossier && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-            gap: '16px',
-            alignItems: 'start',
-            minWidth: 0,
-            width: '100%',
-          }}
-        >
-          {/* Colonne Gauche : Paramétrage Facture B2B / B2C & Calculateur */}
-          <div className="glass-analytics-card" style={{ gap: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <span
-                  style={{
-                    padding: '2px 8px',
-                    borderRadius: '999px',
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    background: 'rgba(37, 99, 235, 0.12)',
-                    color: '#2563eb',
-                  }}
-                >
-                  CONSOLE AGENT DE FACTURATION
-                </span>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px' }}>
-                  Édition Facture — {activeDossier.intervention.reference} ({activeDossier.intervention.client})
-                </h3>
-              </div>
-
-              <select
-                className="select"
-                style={{ width: '230px' }}
-                value={activeDossier.intervention.id}
-                onChange={(e) => {
-                  const found = enrichedDossiers.find((x) => x.intervention.id === Number(e.target.value));
-                  if (found) openDossierInBillingStudio(found);
-                }}
-              >
-                {enrichedDossiers.map((x) => (
-                  <option key={x.intervention.id} value={x.intervention.id}>
-                    {x.intervention.reference} — {x.intervention.client} ({x.statusLabel})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sélecteur de Régime B2B vs B2C */}
-            <div
-              style={{
-                padding: '12px',
-                borderRadius: '12px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)' }}>
-                1. Type de Clientèle & Régime Fiscal (B2B vs B2C) :
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSegmentOverrides((prev) => ({
-                      ...prev,
-                      [activeDossier.intervention.id]: 'B2B',
-                    }));
-                    setTvaRate(20);
-                    setPaymentTerms('30 jours fin de mois — Virement Donneur d’ordre');
-                  }}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    border:
-                      activeDossier.segment === 'B2B'
-                        ? '2px solid #2563eb'
-                        : '1px solid var(--border-default)',
-                    background:
-                      activeDossier.segment === 'B2B'
-                        ? 'rgba(37, 99, 235, 0.1)'
-                        : 'var(--bg-surface)',
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#1d4ed8' }}>
-                    🏢 Régime B2B (Professionnel / Syndic / Donneur d'ordre)
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    HT + TVA 20% ou Autoliquidation 0% • Réf Bon de commande • Échéance 30/45j
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSegmentOverrides((prev) => ({
-                      ...prev,
-                      [activeDossier.intervention.id]: 'B2C',
-                    }));
-                    setTvaRate(10);
-                    setPaymentTerms('Paiement comptant à réception de facture (Particulier B2C)');
-                  }}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    border:
-                      activeDossier.segment === 'B2C'
-                        ? '2px solid #0ea5e9'
-                        : '1px solid var(--border-default)',
-                    background:
-                      activeDossier.segment === 'B2C'
-                        ? 'rgba(14, 165, 233, 0.12)'
-                        : 'var(--bg-surface)',
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#0369a1' }}>
-                    🏠 Régime B2C (Client Particulier / Occupant)
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    TTC prioritaire • TVA réduite 10% (&gt;2 ans) / 5,5% / 20% • Règlement comptant
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Calculateur assisté Main d'œuvre + Fournitures -> Montant HT */}
-            <div
-              style={{
-                padding: '12px',
-                borderRadius: '12px',
-                background: 'rgba(37, 99, 235, 0.04)',
-                border: '1px dashed rgba(37, 99, 235, 0.3)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#1d4ed8' }}>
-                  2. Aide au Calcul HT (Heures Technicien + Fournitures + Déplacement)
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ padding: '2px 8px', fontSize: '10.5px' }}
-                  onClick={() => {
-                    const calc =
-                      Math.round((laborHoursInput * hourlyRateInput + materialsCostInput + travelFeeInput) * 100) /
-                      100;
-                    setInvoiceAmountHTInput(String(calc));
-                  }}
-                >
-                  Appliquer ce calcul ({formatCurrency(laborHoursInput * hourlyRateInput + materialsCostInput + travelFeeInput)} HT)
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                <div>
-                  <label style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>Heures MO</label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    className="input font-mono"
-                    value={laborHoursInput}
-                    onChange={(e) => setLaborHoursInput(Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>Taux Horaire (€)</label>
-                  <input
-                    type="number"
-                    className="input font-mono"
-                    value={hourlyRateInput}
-                    onChange={(e) => setHourlyRateInput(Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>Fournitures (€)</label>
-                  <input
-                    type="number"
-                    className="input font-mono"
-                    value={materialsCostInput}
-                    onChange={(e) => setMaterialsCostInput(Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>Déplacement (€)</label>
-                  <input
-                    type="number"
-                    className="input font-mono"
-                    value={travelFeeInput}
-                    onChange={(e) => setTravelFeeInput(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-              {activeDossier.intervention.elementsChiffrage && (
-                <div style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
-                  🛠️ Fournitures déclarées par le technicien : « {activeDossier.intervention.elementsChiffrage} »
-                </div>
-              )}
-            </div>
-
-            {/* Champs Officiels Facture */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Numéro de Facture *
-                </label>
-                <input
-                  type="text"
-                  className="input font-mono"
-                  value={invoiceNumberInput}
-                  onChange={(e) => setInvoiceNumberInput(e.target.value)}
-                  placeholder="FAC-2026-0001"
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Montant Total HT (€) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="input font-mono"
-                  value={invoiceAmountHTInput}
-                  onChange={(e) => setInvoiceAmountHTInput(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Régime de TVA
-                </label>
-                <select
-                  className="select font-mono"
-                  value={tvaRate}
-                  onChange={(e) => setTvaRate(Number(e.target.value))}
-                >
-                  <option value={20}>TVA 20% (Standard B2B/B2C)</option>
-                  <option value={10}>TVA 10% (B2C Logement &gt; 2 ans)</option>
-                  <option value={5.5}>TVA 5,5% (Rénovation énergétique)</option>
-                  <option value={0}>TVA 0% (Autoliquidation BTP B2B)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                Conditions de règlement & Mentions B2B / B2C
-              </label>
-              <input
-                type="text"
-                className="input"
-                value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                Libellé des prestations / Attachement figurant sur la facture
-              </label>
-              <textarea
-                className="input"
-                rows={3}
-                style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
-                value={invoiceNotesInput}
-                onChange={(e) => setInvoiceNotesInput(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => window.print()}
-              >
-                🖨️ Imprimer / Exporter Facture PDF
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => handleEmitInvoice(activeDossier)}
-              >
-                ✓ Valider & Marquer « Facturée » ({invoiceNumberInput || 'FAC'})
-              </button>
-            </div>
-          </div>
-
-          {/* Colonne Droite : Aperçu Temps Réel de la Facture Officielle ANELEC (B2B / B2C) */}
-          {(() => {
-            const ht = Number(invoiceAmountHTInput) || activeDossier.suggestedAmountHT;
-            const tva = Math.round(ht * (tvaRate / 100) * 100) / 100;
-            const ttc = Math.round((ht + tva) * 100) / 100;
-            const intv = activeDossier.intervention;
-
-            return (
-              <div
-                className="glass-analytics-card"
-                style={{
-                  background: '#ffffff',
-                  color: '#0f172a',
-                  padding: '26px 28px',
-                  border: '1px solid rgba(37, 99, 235, 0.25)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2563eb', paddingBottom: '14px' }}>
-                  <div>
-                    <img
-                      src="/brand/anelec-logo.png"
-                      alt="ANELEC GROUPE"
-                      style={{ height: '42px', objectFit: 'contain' }}
-                    />
-                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px' }}>
-                      ANELEC GROUPE — Maintenance & Travaux Tous Corps d'État (TCE)
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div
-                      className="font-mono"
-                      style={{ fontSize: '18px', fontWeight: 800, color: '#1d4ed8' }}
-                    >
-                      FACTURE {invoiceNumberInput || `FAC-${new Date().getFullYear()}-${intv.id}`}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#475569' }}>
-                      Date d'émission : {formatDateFR(todayISO)}
-                    </div>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        marginTop: '4px',
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        background: activeDossier.segment === 'B2B' ? '#dbeafe' : '#e0f2fe',
-                        color: '#1e40af',
-                      }}
-                    >
-                      {activeDossier.segment === 'B2B'
-                        ? 'FACTURE PROFESSIONNELLE B2B'
-                        : 'FACTURE CLIENT PARTICULIER B2C'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Destinataire & Références Dossier */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', margin: '14px 0' }}>
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                      Client / Donneur d'Ordre ({activeDossier.segment})
-                    </div>
-                    <div style={{ fontWeight: 800, fontSize: '14px', marginTop: '2px' }}>
-                      {intv.client || 'Client ANELEC'}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#334155', marginTop: '2px' }}>
-                      Site d'intervention : {intv.chantier}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                      Références Opérationnelles
-                    </div>
-                    <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>
-                      Intervention : {intv.reference || `INT-${intv.id}`}
-                    </div>
-                    <div className="font-mono" style={{ fontSize: '11.5px', color: '#475569' }}>
-                      Devis initial : {activeDossier.linkedDevis?.reference || intv.refDevisTexte || 'Ordre direct'}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#475569' }}>
-                      Corps d'état : <strong>{intv.corpsEtat || 'TCE'}</strong> • Tech : {intv.entreprise || 'ANELEC'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Détail des lignes de facturation */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', margin: '10px 0' }}>
-                  <thead>
-                    <tr style={{ background: '#eff6ff', color: '#1e3a8a', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 10px', borderBottom: '1px solid #bfdbfe' }}>Désignation des Travaux & Prestations</th>
-                      <th style={{ padding: '8px 10px', borderBottom: '1px solid #bfdbfe', textAlign: 'right' }}>Qté / Heures</th>
-                      <th style={{ padding: '8px 10px', borderBottom: '1px solid #bfdbfe', textAlign: 'right' }}>Total HT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #e2e8f0' }}>
-                        <div style={{ fontWeight: 700 }}>{intv.objet || 'Travaux & Maintenance TCE'}</div>
-                        <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px', whiteSpace: 'pre-wrap' }}>
-                          {invoiceNotesInput || 'Intervention réalisée selon les règles de l’art.'}
-                        </div>
-                        {(intv.actionsRealisees || []).length > 0 && (
-                          <div style={{ fontSize: '10.5px', color: '#2563eb', marginTop: '4px' }}>
-                            ✓ Actions réalisées : {(intv.actionsRealisees || []).join(' • ')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="font-mono" style={{ padding: '10px', borderBottom: '1px solid #e2e8f0', textAlign: 'right', verticalAlign: 'top' }}>
-                        {laborHoursInput}h
-                      </td>
-                      <td className="font-mono" style={{ padding: '10px', borderBottom: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700, verticalAlign: 'top' }}>
-                        {formatCurrency(ht)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Totaux HT / TVA / TTC */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '12px', flexWrap: 'wrap', gap: '12px' }}>
-                  <div style={{ fontSize: '11px', color: '#475569', maxWidth: '280px' }}>
-                    <div><strong>Conditions :</strong> {paymentTerms}</div>
-                    {tvaRate === 0 && (
-                      <div style={{ marginTop: '4px', fontWeight: 700, color: '#1e40af' }}>
-                        Mention légale B2B : « Autoliquidation de la TVA — Article 283-2 nonies du CGI (travaux de sous-traitance BTP) ».
-                      </div>
-                    )}
-                    {(tvaRate === 10 || tvaRate === 5.5) && (
-                      <div style={{ marginTop: '4px', fontWeight: 700, color: '#0369a1' }}>
-                        Mention légale B2C : « Taux de TVA réduit ({tvaRate}%) applicable aux travaux d'amélioration/entretien dans un local à usage d'habitation achevé depuis plus de 2 ans ».
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ minWidth: '210px', background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                      <span>Total HT :</span>
-                      <strong className="font-mono">{formatCurrency(ht)}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px', color: '#475569' }}>
-                      <span>TVA ({tvaRate}%) :</span>
-                      <span className="font-mono">{formatCurrency(tva)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#1d4ed8', borderTop: '1px solid #cbd5e1', paddingTop: '6px' }}>
-                      <span>Net à payer TTC :</span>
-                      <span className="font-mono">{formatCurrency(ttc)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
         </div>
       )}
 

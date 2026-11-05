@@ -24,8 +24,8 @@ import { authMiddleware } from './middleware/auth.js';
 import { setupSocketHandlers, setSocketInstance } from './socket/index.js';
 
 const app = express();
-// Faire confiance au reverse proxy Hostinger (1er saut) pour extraire la véritable IP du client
-app.set('trust proxy', 1);
+// Faire confiance au reverse proxy (Cloudflare / Nginx Hostinger) pour extraire la véritable IP du client
+app.set('trust proxy', true);
 const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
@@ -53,11 +53,16 @@ const authLimiter = rateLimit({
 // Limiteur d'API général (appliqué UNIQUEMENT à /api, JAMAIS aux fichiers statiques / HTML / PWA / assets)
 const apiLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
-  max: config.rateLimitMax,
+  max: Math.max(config.rateLimitMax, 15000),
   message: { error: 'Trop de requêtes, réessayez plus tard' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
+  skip: (req) => {
+    // Ne jamais bloquer les health checks ni les utilisateurs connectés
+    if (req.path === '/health') return true;
+    if (req.cookies?.token || req.headers.authorization) return true;
+    return false;
+  },
 });
 
 app.set('io', io);
