@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
+import { BubbleBackdrop } from '../components/BubbleBackdrop';
 
 const loginSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -65,6 +66,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-split-layout">
+      <BubbleBackdrop />
       {/* LEFT SHOWCASE PANE */}
       <div
         className="auth-showcase-pane"

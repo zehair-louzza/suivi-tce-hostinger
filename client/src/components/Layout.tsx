@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { BubbleBackdrop } from './BubbleBackdrop';
 
 export type AppSection =
   | 'aujourdhui'
@@ -222,6 +223,7 @@ export function Layout({
 
   return (
     <div className={`enterprise-shell ${isMobileTechOnly ? 'mobile-tech-shell' : ''}`}>
+      <BubbleBackdrop />
       {/* Backdrop pour le tiroir mobile */}
       <div
         className={`mobile-sidebar-backdrop ${mobileMenuOpen ? 'open' : ''}`}
