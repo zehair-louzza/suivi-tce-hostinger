@@ -138,11 +138,21 @@ export function TechnicianMobileView({
     },
   });
 
-  // Missions du technicien
+  // Missions du technicien (individuelles + missions affectées à son équipe journalière)
   const techMissions = useMemo(() => {
-    const allForTech = interventionsList.filter(
-      (i) => (i.entreprise || '').toLowerCase() === (currentTechnicien || '').toLowerCase()
-    );
+    const targetLower = (currentTechnicien || '').trim().toLowerCase();
+    const allForTech = interventionsList.filter((i) => {
+      const ent = (i.entreprise || '').trim();
+      if (!ent) return false;
+      if (ent.toLowerCase() === targetLower) return true;
+      if (ent.includes('+')) {
+        return ent
+          .split('+')
+          .map((p) => p.trim().toLowerCase())
+          .includes(targetLower);
+      }
+      return false;
+    });
     const filtered =
       filterMode === 'jour'
         ? allForTech.filter((i) => i.datePlanifiee === selectedDate)

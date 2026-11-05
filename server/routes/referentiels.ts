@@ -1,15 +1,16 @@
-// Referentiels routes - Administration des listes de choix ANELEC & Compétences Techniciens par métier
+// Referentiels routes - Administration des listes de choix ANELEC, Compétences Techniciens & Équipes Journalières
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import {
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
+  EquipeJournaliere,
   ReferentielsMap,
 } from '../../shared/types.js';
 
 export const referentielsRouter = Router();
 
-// GET /api/referentiels - Retourne toutes les listes de choix métier ANELEC + matrice compétences techniciens
+// GET /api/referentiels - Retourne toutes les listes de choix métier ANELEC + compétences + équipes journalières
 referentielsRouter.get('/', async (_req: Request, res: Response) => {
   const rows = await prisma.referentiel.findMany();
   const result: ReferentielsMap = {
@@ -21,6 +22,7 @@ referentielsRouter.get('/', async (_req: Request, res: Response) => {
     motifs_blocage: [...DEFAULT_REFERENTIELS.motifs_blocage],
     resultats_techniques: [...DEFAULT_REFERENTIELS.resultats_techniques],
     technicien_competences: { ...DEFAULT_TECHNICIEN_COMPETENCES },
+    equipes_journalieres: [],
   };
 
   for (const r of rows) {
@@ -33,6 +35,15 @@ referentielsRouter.get('/', async (_req: Request, res: Response) => {
             ...DEFAULT_TECHNICIEN_COMPETENCES,
             ...parsed,
           };
+        }
+      } catch {
+        // ignore invalid json
+      }
+    } else if (key === 'equipes_journalieres') {
+      try {
+        const parsed = JSON.parse(r.valeurs);
+        if (Array.isArray(parsed)) {
+          result.equipes_journalieres = parsed;
         }
       } catch {
         // ignore invalid json
@@ -61,7 +72,7 @@ referentielsRouter.get('/', async (_req: Request, res: Response) => {
   res.json({ data: result });
 });
 
-// PUT /api/referentiels/:categorie - Met à jour une liste de choix ou la matrice technicien_competences
+// PUT /api/referentiels/:categorie - Met à jour une liste de choix, la matrice technicien_competences ou equipes_journalieres
 referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
   const categorie = req.params.categorie as keyof ReferentielsMap;
 
@@ -92,6 +103,48 @@ referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
     res.json({
       data: { categorie: 'technicien_competences', valeurs: cleanedMap },
       message: 'Compétences techniciens mises à jour avec succès',
+    });
+    return;
+  }
+
+  if (categorie === 'equipes_journalieres') {
+    const rawEquipes: EquipeJournaliere[] = Array.isArray(req.body?.equipes)
+      ? req.body.equipes
+      : Array.isArray(req.body?.valeurs)
+      ? req.body.valeurs
+      : [];
+
+    const cleanedEquipes: EquipeJournaliere[] = rawEquipes
+      .filter((e) => e && Array.isArray(e.membres) && e.membres.length >= 2)
+      .map((e) => {
+        const membres = Array.from(new Set(e.membres.map((m) => String(m).trim()).filter(Boolean)));
+        return {
+          id: e.id || `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          nomEquipe: e.nomEquipe || membres.join(' + '),
+          membres,
+          dateDebut: e.dateDebut || new Date().toISOString().slice(0, 10),
+          dateFin: e.dateFin || e.dateDebut || new Date().toISOString().slice(0, 10),
+          touteLaJournee: e.touteLaJournee !== false,
+          heureDebut: e.heureDebut || '07:00',
+          heureFin: e.heureFin || '19:00',
+          createdAt: e.createdAt || new Date().toISOString(),
+        };
+      });
+
+    await prisma.referentiel.upsert({
+      where: { categorie: 'equipes_journalieres' },
+      create: {
+        categorie: 'equipes_journalieres',
+        valeurs: JSON.stringify(cleanedEquipes),
+      },
+      update: {
+        valeurs: JSON.stringify(cleanedEquipes),
+      },
+    });
+
+    res.json({
+      data: { categorie: 'equipes_journalieres', valeurs: cleanedEquipes },
+      message: 'Équipes journalières mises à jour avec succès',
     });
     return;
   }

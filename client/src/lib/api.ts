@@ -20,6 +20,7 @@ import {
   UserRoleCode,
   TerrainPhoto,
   PointageTechnicienItem,
+  EquipeJournaliere,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -39,6 +40,7 @@ export type {
   UserRoleCode,
   TerrainPhoto,
   PointageTechnicienItem,
+  EquipeJournaliere,
 };
 export {
   formatCurrency,
@@ -203,6 +205,11 @@ export const referentielsApi = {
     api.put<{ data: { categorie: string; valeurs: Record<string, string[]> }; message: string }>(
       '/referentiels/technicien_competences',
       { competences }
+    ),
+  updateEquipes: (equipes: EquipeJournaliere[]) =>
+    api.put<{ data: { categorie: string; valeurs: EquipeJournaliere[] }; message: string }>(
+      '/referentiels/equipes_journalieres',
+      { equipes }
     ),
 };
 

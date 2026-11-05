@@ -218,6 +218,18 @@ export interface HistoriqueEvent {
   details?: string;
 }
 
+export interface EquipeJournaliere {
+  id: string;
+  nomEquipe: string; // ex: "Anouar + Haitam" ou "Anouar + Mohamed + Manneh"
+  membres: string[]; // 2, 3 individus ou plus
+  dateDebut: string; // YYYY-MM-DD (par défaut : la journée active)
+  dateFin: string;   // YYYY-MM-DD (égal à dateDebut si par journée, ou plage de dates si affecté à une durée)
+  touteLaJournee: boolean; // true = toute la journée, false = heures spécifiques dans la journée
+  heureDebut: string; // ex: "08:00"
+  heureFin: string;   // ex: "17:30"
+  createdAt?: string;
+}
+
 export interface ReferentielsMap {
   clients: string[];
   corps_etat: string[];
@@ -227,6 +239,7 @@ export interface ReferentielsMap {
   motifs_blocage: string[];
   resultats_techniques: string[];
   technicien_competences?: Record<string, string[]>;
+  equipes_journalieres?: EquipeJournaliere[];
 }
 
 export const DEFAULT_REFERENTIELS: ReferentielsMap = {

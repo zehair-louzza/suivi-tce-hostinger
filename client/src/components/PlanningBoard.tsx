@@ -2,11 +2,13 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Devis,
   Intervention,
+  EquipeJournaliere,
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   rankTechniciansForTrade,
   parseTimeIntervalInput,
   computeDurationHours,
+  formatDateFR,
 } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -64,6 +66,8 @@ interface PlanningBoardProps {
   technicienCompetences?: Record<string, string[]>;
   corpsEtatList?: string[];
   onUpdateCompetences?: (competences: Record<string, string[]>) => Promise<void>;
+  equipesJournalieres?: EquipeJournaliere[];
+  onUpdateEquipes?: (equipes: EquipeJournaliere[]) => Promise<void>;
 }
 
 const START_HOUR = 7; // 07:00
@@ -138,9 +142,27 @@ export function PlanningBoard({
   technicienCompetences = DEFAULT_TECHNICIEN_COMPETENCES,
   corpsEtatList = DEFAULT_REFERENTIELS.corps_etat,
   onUpdateCompetences,
+  equipesJournalieres = [],
+  onUpdateEquipes,
 }: PlanningBoardProps) {
   const [skillsModalOpen, setSkillsModalOpen] = useState(false);
   const [customSkillInputs, setCustomSkillInputs] = useState<Record<string, string>>({});
+
+  // ==========================================================================
+  // ÉQUIPES JOURNALIÈRES (Curseur Souris Drag & Drop + Option dépliante + Dates + Heures)
+  // ==========================================================================
+  const [draggedTechName, setDraggedTechName] = useState<string | null>(null);
+  const [dragOverTechTarget, setDragOverTechTarget] = useState<string | null>(null);
+  const [expandedTeamTech, setExpandedTeamTech] = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<string[]>([]);
+  const [teamDurationMode, setTeamDurationMode] = useState<'jour' | 'duree'>('jour');
+  const [teamDateDebut, setTeamDateDebut] = useState<string>(() => toDateKey(new Date()));
+  const [teamDateFin, setTeamDateFin] = useState<string>(() => toDateKey(new Date()));
+  const [teamAllDay, setTeamAllDay] = useState<boolean>(true);
+  const [teamHeureDebut, setTeamHeureDebut] = useState<string>('08:00');
+  const [teamHeureFin, setTeamHeureFin] = useState<string>('17:30');
+  const [teamQuickInterval, setTeamQuickInterval] = useState<string>('');
   const [viewMode, setViewMode] = useState<'gantt' | 'week' | 'columns'>('gantt');
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [selectedDayKey, setSelectedDayKey] = useState<string>(() => toDateKey(new Date()));
@@ -510,6 +532,227 @@ export function PlanningBoard({
     setCustomSkillInputs((prev) => ({ ...prev, [tech]: '' }));
   };
 
+  // ==========================================================================
+  // LOGIQUE ÉQUIPES JOURNALIÈRES (Curseur Souris + Menu dépliant + Dates + Heures)
+  // ==========================================================================
+  const activeTeamsForSelectedDay = useMemo(() => {
+    return (equipesJournalieres || []).filter(
+      (eq) => eq.dateDebut <= selectedDayKey && selectedDayKey <= eq.dateFin
+    );
+  }, [equipesJournalieres, selectedDayKey]);
+
+  const getTeamsForTechOnDay = useCallback(
+    (tech: string, dateKey: string) => {
+      return (equipesJournalieres || []).filter(
+        (eq) =>
+          eq.dateDebut <= dateKey &&
+          dateKey <= eq.dateFin &&
+          Array.isArray(eq.membres) &&
+          eq.membres.includes(tech)
+      );
+    },
+    [equipesJournalieres]
+  );
+
+  const openTeamBuilderForTech = (anchorTech: string, existingTeam?: EquipeJournaliere) => {
+    if (expandedTeamTech === anchorTech && !existingTeam) {
+      setExpandedTeamTech(null);
+      setEditingTeamId(null);
+      return;
+    }
+    setExpandedTeamTech(anchorTech);
+    if (existingTeam) {
+      setEditingTeamId(existingTeam.id);
+      setTeamMembers([...existingTeam.membres]);
+      setTeamDurationMode(existingTeam.dateDebut === existingTeam.dateFin ? 'jour' : 'duree');
+      setTeamDateDebut(existingTeam.dateDebut);
+      setTeamDateFin(existingTeam.dateFin);
+      setTeamAllDay(existingTeam.touteLaJournee !== false);
+      setTeamHeureDebut(existingTeam.heureDebut || '08:00');
+      setTeamHeureFin(existingTeam.heureFin || '17:30');
+      setTeamQuickInterval(
+        existingTeam.touteLaJournee ? '' : `${existingTeam.heureDebut}-${existingTeam.heureFin}`
+      );
+    } else {
+      const existingOnDay = getTeamsForTechOnDay(anchorTech, selectedDayKey)[0];
+      if (existingOnDay) {
+        setEditingTeamId(existingOnDay.id);
+        setTeamMembers([...existingOnDay.membres]);
+        setTeamDurationMode(existingOnDay.dateDebut === existingOnDay.dateFin ? 'jour' : 'duree');
+        setTeamDateDebut(existingOnDay.dateDebut);
+        setTeamDateFin(existingOnDay.dateFin);
+        setTeamAllDay(existingOnDay.touteLaJournee !== false);
+        setTeamHeureDebut(existingOnDay.heureDebut || '08:00');
+        setTeamHeureFin(existingOnDay.heureFin || '17:30');
+        setTeamQuickInterval(
+          existingOnDay.touteLaJournee ? '' : `${existingOnDay.heureDebut}-${existingOnDay.heureFin}`
+        );
+      } else {
+        setEditingTeamId(null);
+        setTeamMembers([anchorTech]);
+        setTeamDurationMode('jour');
+        setTeamDateDebut(selectedDayKey);
+        setTeamDateFin(selectedDayKey);
+        setTeamAllDay(true);
+        setTeamHeureDebut('08:00');
+        setTeamHeureFin('17:30');
+        setTeamQuickInterval('');
+      }
+    }
+  };
+
+  const handleToggleMemberInTeamForm = (tech: string, anchorTech: string) => {
+    if (tech === anchorTech) return; // le technicien d'origine reste dans son équipe
+    setTeamMembers((prev) =>
+      prev.includes(tech) ? prev.filter((m) => m !== tech) : [...prev, tech]
+    );
+  };
+
+  const handleSaveTeamForm = async (anchorTech: string) => {
+    const cleanMembers = Array.from(new Set([anchorTech, ...teamMembers].filter(Boolean)));
+    if (cleanMembers.length < 2) {
+      toast.error('Sélectionnez au moins un 2ème technicien pour former une équipe');
+      return;
+    }
+
+    let finalDebut = teamHeureDebut || '08:00';
+    let finalFin = teamHeureFin || '17:30';
+    if (!teamAllDay && teamQuickInterval.trim()) {
+      const parsed = parseTimeIntervalInput(teamQuickInterval.trim());
+      if (parsed) {
+        finalDebut = parsed.heureDebut;
+        finalFin = parsed.heureFin;
+      }
+    }
+
+    const dStart = teamDurationMode === 'jour' ? selectedDayKey : teamDateDebut || selectedDayKey;
+    const dEnd =
+      teamDurationMode === 'jour'
+        ? selectedDayKey
+        : teamDateFin && teamDateFin >= dStart
+        ? teamDateFin
+        : dStart;
+
+    const newEntry: EquipeJournaliere = {
+      id: editingTeamId || `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      nomEquipe: cleanMembers.join(' + '),
+      membres: cleanMembers,
+      dateDebut: dStart,
+      dateFin: dEnd,
+      touteLaJournee: teamAllDay,
+      heureDebut: teamAllDay ? '07:00' : finalDebut,
+      heureFin: teamAllDay ? '19:00' : finalFin,
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextList = editingTeamId
+      ? (equipesJournalieres || []).map((e) => (e.id === editingTeamId ? newEntry : e))
+      : [...(equipesJournalieres || []), newEntry];
+
+    if (onUpdateEquipes) {
+      await onUpdateEquipes(nextList);
+    }
+    toast.success(
+      `👥 Équipe « ${newEntry.nomEquipe} » (${cleanMembers.length} techniciens) enregistrée ${
+        dStart === dEnd ? `pour le ${formatDateFR(dStart)}` : `du ${formatDateFR(dStart)} au ${formatDateFR(dEnd)}`
+      } (${teamAllDay ? 'Journée entière' : `${finalDebut}–${finalFin}`})`
+    );
+    setExpandedTeamTech(null);
+    setEditingTeamId(null);
+  };
+
+  const handleDeleteDailyTeam = async (teamId: string) => {
+    const nextList = (equipesJournalieres || []).filter((e) => e.id !== teamId);
+    if (onUpdateEquipes) {
+      await onUpdateEquipes(nextList);
+    }
+    toast.success('Équipe journalière dissoute');
+    if (editingTeamId === teamId) {
+      setExpandedTeamTech(null);
+      setEditingTeamId(null);
+    }
+  };
+
+  // Glisser-déposer d'un technicien à la souris sur un autre technicien ou sur une équipe existante
+  const handleDropTechOnTechOrTeam = async (sourceTech: string, targetTechOrTeamId: string) => {
+    setDraggedTechName(null);
+    setDragOverTechTarget(null);
+    if (!sourceTech || sourceTech === targetTechOrTeamId) return;
+
+    // Cas 1 : Déposé sur une équipe déjà active ce jour-là -> ajoute un 3ème / 4ème individu à l'équipe !
+    const targetTeam = activeTeamsForSelectedDay.find(
+      (eq) => eq.id === targetTechOrTeamId || eq.nomEquipe === targetTechOrTeamId
+    );
+    if (targetTeam) {
+      if (targetTeam.membres.includes(sourceTech)) {
+        toast(`${sourceTech} fait déjà partie de l'équipe ${targetTeam.nomEquipe}`);
+        openTeamBuilderForTech(targetTeam.membres[0], targetTeam);
+        return;
+      }
+      const nextMembres = [...targetTeam.membres, sourceTech];
+      const updatedTeam: EquipeJournaliere = {
+        ...targetTeam,
+        membres: nextMembres,
+        nomEquipe: nextMembres.join(' + '),
+      };
+      const nextList = (equipesJournalieres || []).map((e) =>
+        e.id === targetTeam.id ? updatedTeam : e
+      );
+      if (onUpdateEquipes) {
+        await onUpdateEquipes(nextList);
+      }
+      toast.success(
+        `👥 ${sourceTech} ajouté à l'équipe → « ${updatedTeam.nomEquipe} » (${nextMembres.length} individus)`
+      );
+      openTeamBuilderForTech(updatedTeam.membres[0], updatedTeam);
+      return;
+    }
+
+    // Cas 2 : Déposé sur un technicien qui est déjà dans une équipe aujourd'hui -> agrandit cette équipe (3 individus ou +)
+    const existingTargetTeam = getTeamsForTechOnDay(targetTechOrTeamId, selectedDayKey)[0];
+    if (existingTargetTeam) {
+      const mergedMembers = Array.from(new Set([...existingTargetTeam.membres, sourceTech]));
+      const updatedTeam: EquipeJournaliere = {
+        ...existingTargetTeam,
+        membres: mergedMembers,
+        nomEquipe: mergedMembers.join(' + '),
+      };
+      const nextList = (equipesJournalieres || []).map((e) =>
+        e.id === existingTargetTeam.id ? updatedTeam : e
+      );
+      if (onUpdateEquipes) {
+        await onUpdateEquipes(nextList);
+      }
+      toast.success(
+        `👥 Équipe élargie à ${mergedMembers.length} techniciens : « ${updatedTeam.nomEquipe} »`
+      );
+      openTeamBuilderForTech(targetTechOrTeamId, updatedTeam);
+      return;
+    }
+
+    // Cas 3 : Création immédiate d'une équipe journalière entre les 2 techniciens pour la journée sélectionnée
+    // + ouverture du volet dépliant pour ajouter un 3e individu, choisir une durée de dates ou des heures spécifiques !
+    const newTeam: EquipeJournaliere = {
+      id: `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      nomEquipe: `${targetTechOrTeamId} + ${sourceTech}`,
+      membres: [targetTechOrTeamId, sourceTech],
+      dateDebut: selectedDayKey,
+      dateFin: selectedDayKey,
+      touteLaJournee: true,
+      heureDebut: '07:00',
+      heureFin: '19:00',
+      createdAt: new Date().toISOString(),
+    };
+    const nextList = [...(equipesJournalieres || []), newTeam];
+    if (onUpdateEquipes) {
+      await onUpdateEquipes(nextList);
+    }
+    toast.success(
+      `👥 Équipe journalière formée par glisser-déposer : « ${newTeam.nomEquipe} » (${formatDateFR(selectedDayKey)}). Ajustez la durée ou les heures si besoin.`
+    );
+    openTeamBuilderForTech(targetTechOrTeamId, newTeam);
+  };
+
   const handleSmartAutoDispatch = async () => {
     if (unscheduledItems.length === 0) {
       toast.success('Toutes les missions sont déjà planifiées !');
@@ -662,7 +905,16 @@ export function PlanningBoard({
   };
 
   const getTechDayStats = (tech: string, dateKey: string) => {
-    const slots = scheduledItems.filter((s) => s.technicien === tech && s.date === dateKey);
+    const slots = scheduledItems.filter((s) => {
+      if (s.date !== dateKey) return false;
+      if (s.technicien === tech) return true;
+      // Si la mission est affectée à une équipe composée contenant ce technicien (ex: "Anouar + Haitam")
+      if (s.technicien && s.technicien.includes('+')) {
+        const parts = s.technicien.split('+').map((p) => p.trim().toLowerCase());
+        if (parts.includes(tech.trim().toLowerCase())) return true;
+      }
+      return false;
+    });
     const totalHours = slots.reduce((sum, s) => sum + s.durationHours, 0);
     const pct = Math.min(100, Math.round((totalHours / 8) * 100));
     return { slots, totalHours, pct };
@@ -1208,17 +1460,29 @@ export function PlanningBoard({
                           }}
                         >
                           <option value="">Affecter par compétence ({selectedDayKey.slice(5)})...</option>
-                          {rankTechniciansForTrade(item.typePrestation, techniciens, technicienCompetences).allRanked.map(
-                            (r, idx) => (
-                              <option key={r.technicien} value={r.technicien}>
-                                {r.isQualified
-                                  ? idx === 0
-                                    ? `★ ${r.technicien} (Prioritaire • ${r.skillCount} comp.)`
-                                    : `✓ ${r.technicien} (Qualifié • ${r.skillCount} comp.)`
-                                  : `○ ${r.technicien} (Hors métier • ${r.skillCount} comp.)`}
-                              </option>
-                            )
+                          {activeTeamsForSelectedDay.length > 0 && (
+                            <optgroup label={`👥 Équipes Journalières (${selectedDayKey})`}>
+                              {activeTeamsForSelectedDay.map((eq) => (
+                                <option key={eq.id} value={eq.nomEquipe}>
+                                  👥 Équipe ({eq.membres.length}) : {eq.nomEquipe} [
+                                  {eq.touteLaJournee ? 'Journée' : `${eq.heureDebut}-${eq.heureFin}`}]
+                                </option>
+                              ))}
+                            </optgroup>
                           )}
+                          <optgroup label="Techniciens Individuels (Moindre Compétence)">
+                            {rankTechniciansForTrade(item.typePrestation, techniciens, technicienCompetences).allRanked.map(
+                              (r, idx) => (
+                                <option key={r.technicien} value={r.technicien}>
+                                  {r.isQualified
+                                    ? idx === 0
+                                      ? `★ ${r.technicien} (Prioritaire • ${r.skillCount} comp.)`
+                                      : `✓ ${r.technicien} (Qualifié • ${r.skillCount} comp.)`
+                                    : `○ ${r.technicien} (Hors métier • ${r.skillCount} comp.)`}
+                                </option>
+                              )
+                            )}
+                          </optgroup>
                         </select>
                         <button
                           type="button"
@@ -1289,7 +1553,7 @@ export function PlanningBoard({
               <div style={{ minWidth: '960px' }}>
                 <div className="gantt-header-row">
                   <div className="gantt-resource-col-header">
-                    <span>Technicien Terrain</span>
+                    <span>Technicien / Équipes du Jour</span>
                     <span>Charge / 8h</span>
                   </div>
                   <div className="gantt-time-ruler">
@@ -1307,6 +1571,287 @@ export function PlanningBoard({
                   </div>
                 </div>
 
+                {/* =========================================================
+                    PISTES DES ÉQUIPES JOURNALIÈRES ACTIVES CE JOUR (2, 3+ INDIVIDUS)
+                   ========================================================= */}
+                {activeTeamsForSelectedDay.map((eq) => {
+                  const teamSlots = scheduledItems.filter(
+                    (s) => s.date === selectedDayKey && s.technicien === eq.nomEquipe
+                  );
+                  const { totalLanes: teamLanes, items: teamLaneItems } = computeGanttLanes(teamSlots);
+                  const teamRowHeight = Math.max(76, teamLanes * 60 + 14);
+                  const teamSkills = Array.from(
+                    new Set(
+                      eq.membres.flatMap(
+                        (m) => technicienCompetences[m] || DEFAULT_TECHNICIEN_COMPETENCES[m] || []
+                      )
+                    )
+                  );
+                  const teamActiveStartM = eq.touteLaJournee
+                    ? START_HOUR * 60
+                    : Math.max(START_HOUR * 60, timeToMinutes(eq.heureDebut || '08:00'));
+                  const teamActiveEndM = eq.touteLaJournee
+                    ? END_HOUR * 60
+                    : Math.min(END_HOUR * 60, timeToMinutes(eq.heureFin || '17:30'));
+                  const activeBandLeftPct =
+                    ((teamActiveStartM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                  const activeBandWidthPct =
+                    Math.max(4, ((teamActiveEndM - teamActiveStartM) / TOTAL_MINUTES) * 100);
+
+                  const isDropTargetTeam = dragOverTechTarget === eq.id;
+
+                  return (
+                    <div
+                      key={eq.id}
+                      className="gantt-resource-row"
+                      style={{
+                        background: isDropTargetTeam
+                          ? 'rgba(16, 185, 129, 0.12)'
+                          : 'rgba(124, 58, 237, 0.04)',
+                        borderBottom: '2px solid rgba(124, 58, 237, 0.25)',
+                      }}
+                    >
+                      <div
+                        className="gantt-resource-info"
+                        onDragOver={(e) => {
+                          if (draggedTechName) {
+                            e.preventDefault();
+                            setDragOverTechTarget(eq.id);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTechTarget === eq.id) setDragOverTechTarget(null);
+                        }}
+                        onDrop={async (e) => {
+                          if (draggedTechName) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            await handleDropTechOnTechOrTeam(draggedTechName, eq.id);
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '2px 6px',
+                                  borderRadius: '5px',
+                                  background: '#7c3aed',
+                                  color: '#ffffff',
+                                }}
+                              >
+                                👥 ÉQUIPE ({eq.membres.length})
+                              </span>
+                              <span style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                                {eq.nomEquipe}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  background: 'rgba(16, 185, 129, 0.14)',
+                                  color: '#059669',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                🕒 {eq.touteLaJournee ? 'Toute la journée' : `${eq.heureDebut}–${eq.heureFin}`}
+                              </span>
+                              <span
+                                className="font-mono"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  background: 'var(--bg-elevated)',
+                                  color: 'var(--text-secondary)',
+                                }}
+                              >
+                                📅{' '}
+                                {eq.dateDebut === eq.dateFin
+                                  ? `Jour (${formatDateFR(eq.dateDebut)})`
+                                  : `Du ${formatDateFR(eq.dateDebut)} au ${formatDateFR(eq.dateFin)}`}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '4px' }}>
+                              {teamSkills.slice(0, 4).map((sk) => (
+                                <span
+                                  key={sk}
+                                  style={{
+                                    fontSize: '9px',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    background: 'var(--bg-surface)',
+                                    border: '1px solid var(--border-subtle)',
+                                    color: 'var(--text-secondary)',
+                                  }}
+                                >
+                                  {sk}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 6px', fontSize: '10px' }}
+                              onClick={() => openTeamBuilderForTech(eq.membres[0], eq)}
+                              title="Ajouter un 3ème/4ème technicien ou modifier la durée / les heures"
+                            >
+                              ⚙️ Modifier / +Tech
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: '1px 5px', fontSize: '10px', color: '#dc2626' }}
+                              onClick={() => handleDeleteDailyTeam(eq.id)}
+                              title="Dissoudre cette équipe"
+                            >
+                              ✕ Dissoudre
+                            </button>
+                          </div>
+                        </div>
+                        {isDropTargetTeam && draggedTechName && (
+                          <div
+                            style={{
+                              marginTop: '4px',
+                              padding: '3px 6px',
+                              borderRadius: '5px',
+                              background: '#059669',
+                              color: '#fff',
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            + Relâcher pour ajouter {draggedTechName} à cette équipe ({eq.membres.length + 1} pers.)
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        ref={(el) => {
+                          trackRefs.current[eq.nomEquipe] = el;
+                        }}
+                        className="gantt-track-canvas"
+                        style={{ height: `${teamRowHeight}px` }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          if (draggedTechName) {
+                            await handleDropTechOnTechOrTeam(draggedTechName, eq.id);
+                            return;
+                          }
+                          if (!draggedSlot) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                          const dropMin =
+                            START_HOUR * 60 + Math.round(((relX / rect.width) * TOTAL_MINUTES) / 15) * 15;
+                          const durMin = Math.max(60, Math.round(draggedSlot.durationHours * 60));
+                          const clampedStart = Math.max(
+                            START_HOUR * 60,
+                            Math.min(END_HOUR * 60 - durMin, dropMin)
+                          );
+                          await applySlotSchedule(draggedSlot, {
+                            technicien: eq.nomEquipe,
+                            date: selectedDayKey,
+                            heureDebut: minutesToTime(clampedStart),
+                            heureFin: minutesToTime(clampedStart + durMin),
+                          });
+                          setDraggedSlot(null);
+                        }}
+                        onMouseDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                          const startMin =
+                            START_HOUR * 60 + Math.round(((relX / rect.width) * TOTAL_MINUTES) / 15) * 15;
+                          setDrawState({
+                            technicien: eq.nomEquipe,
+                            dateKey: selectedDayKey,
+                            startMin,
+                            currentMin: startMin + 90,
+                          });
+                        }}
+                      >
+                        {/* Plage horaire active de l'équipe dans la journée */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left: `${activeBandLeftPct}%`,
+                            width: `${activeBandWidthPct}%`,
+                            background: 'rgba(124, 58, 237, 0.09)',
+                            borderLeft: '2px dashed rgba(124, 58, 237, 0.45)',
+                            borderRight: '2px dashed rgba(124, 58, 237, 0.45)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+
+                        {teamLaneItems.map(({ slot, lane }) => {
+                          const startM = Math.max(START_HOUR * 60, timeToMinutes(slot.heureDebut));
+                          const endM = Math.min(END_HOUR * 60, Math.max(startM + 30, timeToMinutes(slot.heureFin)));
+                          const leftPct = ((startM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                          const widthPct = ((endM - startM) / TOTAL_MINUTES) * 100;
+                          const laneHeight = 54;
+                          const topPx = 8 + lane * (laneHeight + 6);
+                          const typeClass =
+                            slot.kind === 'VISITE_DEVIS'
+                              ? 'type-visite'
+                              : slot.kind === 'URGENCE'
+                              ? 'type-urgence'
+                              : 'type-travaux';
+
+                          return (
+                            <div
+                              key={slot.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                                setDraggedSlot(slot);
+                                setSelectedSlotId(slot.id);
+                              }}
+                              onDragEnd={() => setDraggedSlot(null)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSlotId(slot.id);
+                                setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                              }}
+                              className={`gantt-event-block ${typeClass} ${
+                                selectedSlotId === slot.id ? 'selected' : ''
+                              }`}
+                              style={{
+                                left: `${leftPct}%`,
+                                width: `${Math.max(4.5, widthPct)}%`,
+                                top: `${topPx}px`,
+                                height: `${laneHeight}px`,
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', fontWeight: 700, color: '#fff' }}>
+                                <span className="font-mono">{slot.heureDebut}–{slot.heureFin}</span>
+                                <span className="font-mono">{slot.reference}</span>
+                              </div>
+                              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                👥 {slot.client} — {slot.title}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
                 {techniciens
                   .filter((t) => filterTech === 'ALL' || t === filterTech)
                   .map((tech) => {
@@ -1314,6 +1859,9 @@ export function PlanningBoard({
                     const { totalLanes, items: laneItems } = computeGanttLanes(slots);
                     const rowHeight = Math.max(78, totalLanes * 62 + 14);
                     const meta = TECH_SPECIALTIES[tech] || { role: 'Technicien TCE', color: '#3b82f6' };
+                    const techTeamsToday = getTeamsForTechOnDay(tech, selectedDayKey);
+                    const isExpandedTeam = expandedTeamTech === tech;
+                    const isDropTargetTech = dragOverTechTarget === tech && draggedTechName !== tech;
 
                     const isDrawingHere =
                       drawState && drawState.technicien === tech && drawState.dateKey === selectedDayKey;
@@ -1327,84 +1875,194 @@ export function PlanningBoard({
                     const drawWidthPct = ((drawEndM - drawStartM) / TOTAL_MINUTES) * 100;
 
                     return (
-                      <div key={tech} className="gantt-resource-row">
-                        <div className="gantt-resource-info">
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                      <div
+                        key={tech}
+                        className="gantt-resource-row"
+                        style={{
+                          background: isDropTargetTech ? 'rgba(16, 185, 129, 0.10)' : undefined,
+                        }}
+                      >
+                        <div
+                          className="gantt-resource-info"
+                          onDragOver={(e) => {
+                            if (draggedTechName && draggedTechName !== tech) {
+                              e.preventDefault();
+                              setDragOverTechTarget(tech);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverTechTarget === tech) setDragOverTechTarget(null);
+                          }}
+                          onDrop={async (e) => {
+                            if (draggedTechName && draggedTechName !== tech) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              await handleDropTechOnTechOrTeam(draggedTechName, tech);
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {/* Avatar Technicien glissable à la souris pour former une équipe */}
                               <div
+                                draggable
+                                onDragStart={(e) => {
+                                  e.stopPropagation();
+                                  setDraggedTechName(tech);
+                                  e.dataTransfer.setData('text/tech-name', tech);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedTechName(null);
+                                  setDragOverTechTarget(null);
+                                }}
+                                title={`Glissez ${tech} avec la souris sur un autre technicien pour former une équipe journalière`}
                                 style={{
                                   width: '30px',
                                   height: '30px',
                                   borderRadius: '8px',
                                   background: `${meta.color}22`,
-                                  border: `1px solid ${meta.color}66`,
+                                  border: `1.5px solid ${meta.color}88`,
                                   color: meta.color,
                                   fontWeight: 800,
-                                  fontSize: '12px',
+                                  fontSize: '11.5px',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
+                                  cursor: 'grab',
+                                  flexShrink: 0,
                                 }}
                               >
                                 {tech.slice(0, 2).toUpperCase()}
                               </div>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ fontWeight: 700, fontSize: '13px' }}>{tech}</span>
-                                    <span
-                                      onClick={() => setSkillsModalOpen(true)}
-                                      className="font-mono"
-                                      style={{
-                                        fontSize: '9.5px',
-                                        fontWeight: 700,
-                                        padding: '1px 5px',
-                                        borderRadius: '4px',
-                                        background:
-                                          (technicienCompetences[tech]?.length || 1) === 1
-                                            ? 'rgba(16, 185, 129, 0.14)'
-                                            : 'var(--bg-elevated)',
-                                        color:
-                                          (technicienCompetences[tech]?.length || 1) === 1
-                                            ? 'var(--success-accent)'
-                                            : 'var(--text-secondary)',
-                                        border: '1px solid var(--border-default)',
-                                        cursor: 'pointer',
-                                      }}
-                                      title="Cliquez pour modifier les compétences de ce technicien"
-                                    >
-                                      {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || []).length} comp.
-                                    </span>
-                                  </div>
-                                  <div
-                                    onClick={() => setSkillsModalOpen(true)}
+
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                  <span
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.stopPropagation();
+                                      setDraggedTechName(tech);
+                                      e.dataTransfer.setData('text/tech-name', tech);
+                                    }}
+                                    onDragEnd={() => {
+                                      setDraggedTechName(null);
+                                      setDragOverTechTarget(null);
+                                    }}
+                                    style={{ fontWeight: 700, fontSize: '13px', cursor: 'grab' }}
+                                    title="Glissez ce nom sur un autre technicien ou cliquez sur « + Équipe » à côté"
+                                  >
+                                    {tech}
+                                  </span>
+
+                                  {/* BOUTON DÉPLIANT À CÔTÉ DU NOM DU TECHNICIEN POUR FORMER UNE ÉQUIPE */}
+                                  <button
+                                    type="button"
+                                    onClick={() => openTeamBuilderForTech(tech)}
                                     style={{
-                                      display: 'flex',
-                                      flexWrap: 'wrap',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      padding: '2px 6px',
+                                      borderRadius: '5px',
+                                      border:
+                                        isExpandedTeam || techTeamsToday.length > 0
+                                          ? '1px solid #7c3aed'
+                                          : '1px solid var(--border-default)',
+                                      background:
+                                        isExpandedTeam || techTeamsToday.length > 0
+                                          ? 'rgba(124, 58, 237, 0.14)'
+                                          : 'var(--bg-elevated)',
+                                      color:
+                                        isExpandedTeam || techTeamsToday.length > 0
+                                          ? '#7c3aed'
+                                          : 'var(--text-secondary)',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
                                       gap: '3px',
-                                      marginTop: '3px',
+                                    }}
+                                    title="Déplier pour former une équipe journalière (2, 3 individus ou plus, sur ce jour ou une durée, avec heures spécifiques)"
+                                  >
+                                    <span>
+                                      {techTeamsToday.length > 0
+                                        ? `👥 Équipe (${techTeamsToday[0].membres.length})`
+                                        : '👥 + Équipe'}
+                                    </span>
+                                    <span>{isExpandedTeam ? '▴' : '▾'}</span>
+                                  </button>
+
+                                  <span
+                                    onClick={() => setSkillsModalOpen(true)}
+                                    className="font-mono"
+                                    style={{
+                                      fontSize: '9.5px',
+                                      fontWeight: 700,
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      background:
+                                        (technicienCompetences[tech]?.length || 1) === 1
+                                          ? 'rgba(16, 185, 129, 0.14)'
+                                          : 'var(--bg-elevated)',
+                                      color:
+                                        (technicienCompetences[tech]?.length || 1) === 1
+                                          ? 'var(--success-accent)'
+                                          : 'var(--text-secondary)',
+                                      border: '1px solid var(--border-default)',
                                       cursor: 'pointer',
                                     }}
-                                    title="Cliquez pour ajouter ou retirer des compétences métier"
+                                    title="Cliquez pour modifier les compétences de ce technicien"
                                   >
-                                    {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [meta.role]).map(
-                                      (sk) => (
-                                        <span
-                                          key={sk}
-                                          style={{
-                                            fontSize: '9.5px',
-                                            padding: '1px 5px',
-                                            borderRadius: '4px',
-                                            background: 'var(--bg-elevated)',
-                                            border: '1px solid var(--border-subtle)',
-                                            color: 'var(--text-secondary)',
-                                          }}
-                                        >
-                                          {sk}
-                                        </span>
-                                      )
-                                    )}
-                                  </div>
+                                    {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || []).length} comp.
+                                  </span>
                                 </div>
+
+                                {/* Badge d'équipe active pour ce technicien sur la journée sélectionnée */}
+                                {techTeamsToday.map((eq) => (
+                                  <div
+                                    key={eq.id}
+                                    onClick={() => openTeamBuilderForTech(tech, eq)}
+                                    style={{
+                                      marginTop: '3px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      color: '#7c3aed',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    👥 Avec {eq.membres.filter((m) => m !== tech).join(' + ')} (
+                                    {eq.touteLaJournee ? 'Journée' : `${eq.heureDebut}–${eq.heureFin}`})
+                                  </div>
+                                ))}
+
+                                <div
+                                  onClick={() => setSkillsModalOpen(true)}
+                                  style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '3px',
+                                    marginTop: '3px',
+                                    cursor: 'pointer',
+                                  }}
+                                  title="Cliquez pour ajouter ou retirer des compétences métier"
+                                >
+                                  {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [meta.role]).map(
+                                    (sk) => (
+                                      <span
+                                        key={sk}
+                                        style={{
+                                          fontSize: '9.5px',
+                                          padding: '1px 5px',
+                                          borderRadius: '4px',
+                                          background: 'var(--bg-elevated)',
+                                          border: '1px solid var(--border-subtle)',
+                                          color: 'var(--text-secondary)',
+                                        }}
+                                      >
+                                        {sk}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
                             </div>
                             <span
                               className="font-mono"
@@ -1417,6 +2075,300 @@ export function PlanningBoard({
                               {totalHours.toFixed(1)}h
                             </span>
                           </div>
+
+                          {/* Indicateur visuel lors du survol à la souris d'un autre technicien */}
+                          {isDropTargetTech && draggedTechName && (
+                            <div
+                              style={{
+                                marginTop: '5px',
+                                padding: '4px 7px',
+                                borderRadius: '6px',
+                                background: '#059669',
+                                color: '#ffffff',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                              }}
+                            >
+                              👥 Relâcher pour associer {draggedTechName} avec {tech} ({selectedDayKey})
+                            </div>
+                          )}
+
+                          {/* =======================================================
+                              OPTION DÉPLIANTE INLINE POUR FORMER UNE ÉQUIPE JOURNALIÈRE
+                             ======================================================= */}
+                          {isExpandedTeam && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                marginTop: '8px',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                background: 'var(--bg-surface)',
+                                border: '1.5px solid #7c3aed',
+                                boxShadow: 'var(--shadow-elevated)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px',
+                                zIndex: 20,
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed' }}>
+                                  👥 Former Équipe avec {tech} ({teamMembers.length} pers.)
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedTeamTech(null)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+
+                              {/* 1. Choix des techniciens à associer (2, 3 individus ou plus) */}
+                              <div>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                  1. Coéquipiers à associer (2, 3 individus ou +) :
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {techniciens
+                                    .filter((other) => other !== tech)
+                                    .map((other) => {
+                                      const selected = teamMembers.includes(other);
+                                      return (
+                                        <button
+                                          key={other}
+                                          type="button"
+                                          onClick={() => handleToggleMemberInTeamForm(other, tech)}
+                                          style={{
+                                            padding: '3px 7px',
+                                            borderRadius: '5px',
+                                            fontSize: '10.5px',
+                                            fontWeight: selected ? 800 : 500,
+                                            cursor: 'pointer',
+                                            border: selected
+                                              ? '1px solid #7c3aed'
+                                              : '1px solid var(--border-default)',
+                                            background: selected
+                                              ? 'rgba(124, 58, 237, 0.16)'
+                                              : 'var(--bg-elevated)',
+                                            color: selected ? '#7c3aed' : 'var(--text-primary)',
+                                          }}
+                                        >
+                                          {selected ? `✓ ${other}` : `+ ${other}`}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+
+                              {/* 2. Par journée uniquement ou sur une durée (choix des dates) */}
+                              <div>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                  2. Portée (Par journée ou sur une durée) :
+                                </div>
+                                <div style={{ display: 'flex', gap: '4px', marginBottom: teamDurationMode === 'duree' ? '6px' : 0 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTeamDurationMode('jour');
+                                      setTeamDateDebut(selectedDayKey);
+                                      setTeamDateFin(selectedDayKey);
+                                    }}
+                                    style={{
+                                      flex: 1,
+                                      padding: '4px 6px',
+                                      borderRadius: '5px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      border:
+                                        teamDurationMode === 'jour'
+                                          ? '1px solid var(--accent-primary)'
+                                          : '1px solid var(--border-default)',
+                                      background:
+                                        teamDurationMode === 'jour'
+                                          ? 'var(--accent-glow)'
+                                          : 'var(--bg-elevated)',
+                                      color:
+                                        teamDurationMode === 'jour'
+                                          ? 'var(--accent-primary)'
+                                          : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    Ce jour ({selectedDayKey.slice(5)})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTeamDurationMode('duree')}
+                                    style={{
+                                      flex: 1,
+                                      padding: '4px 6px',
+                                      borderRadius: '5px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      border:
+                                        teamDurationMode === 'duree'
+                                          ? '1px solid var(--accent-primary)'
+                                          : '1px solid var(--border-default)',
+                                      background:
+                                        teamDurationMode === 'duree'
+                                          ? 'var(--accent-glow)'
+                                          : 'var(--bg-elevated)',
+                                      color:
+                                        teamDurationMode === 'duree'
+                                          ? 'var(--accent-primary)'
+                                          : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    Sur une durée (Dates)
+                                  </button>
+                                </div>
+
+                                {teamDurationMode === 'duree' && (
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                                    <div>
+                                      <label style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>Du :</label>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        style={{ padding: '2px 5px', fontSize: '10.5px', height: '24px' }}
+                                        value={teamDateDebut}
+                                        onChange={(e) => setTeamDateDebut(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>Au :</label>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        style={{ padding: '2px 5px', fontSize: '10.5px', height: '24px' }}
+                                        value={teamDateFin}
+                                        min={teamDateDebut}
+                                        onChange={(e) => setTeamDateFin(e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 3. Heures spécifiques dans la journée */}
+                              <div>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                  3. Créneau horaire de l'équipe :
+                                </div>
+                                <div style={{ display: 'flex', gap: '4px', marginBottom: !teamAllDay ? '6px' : 0 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTeamAllDay(true)}
+                                    style={{
+                                      flex: 1,
+                                      padding: '4px 6px',
+                                      borderRadius: '5px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      border: teamAllDay
+                                        ? '1px solid #059669'
+                                        : '1px solid var(--border-default)',
+                                      background: teamAllDay
+                                        ? 'rgba(16, 185, 129, 0.14)'
+                                        : 'var(--bg-elevated)',
+                                      color: teamAllDay ? '#059669' : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    Journée entière
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTeamAllDay(false)}
+                                    style={{
+                                      flex: 1,
+                                      padding: '4px 6px',
+                                      borderRadius: '5px',
+                                      fontSize: '10px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      border: !teamAllDay
+                                        ? '1px solid #059669'
+                                        : '1px solid var(--border-default)',
+                                      background: !teamAllDay
+                                        ? 'rgba(16, 185, 129, 0.14)'
+                                        : 'var(--bg-elevated)',
+                                      color: !teamAllDay ? '#059669' : 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    Heures spécifiques
+                                  </button>
+                                </div>
+
+                                {!teamAllDay && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                                      <input
+                                        type="time"
+                                        className="input font-mono"
+                                        style={{ padding: '2px 5px', fontSize: '11px', height: '24px' }}
+                                        value={teamHeureDebut}
+                                        onChange={(e) => setTeamHeureDebut(e.target.value)}
+                                      />
+                                      <input
+                                        type="time"
+                                        className="input font-mono"
+                                        style={{ padding: '2px 5px', fontSize: '11px', height: '24px' }}
+                                        value={teamHeureFin}
+                                        onChange={(e) => setTeamHeureFin(e.target.value)}
+                                      />
+                                    </div>
+                                    <input
+                                      type="text"
+                                      className="input font-mono"
+                                      placeholder="Ou clavier : 08:30-12:30, 14h+3h"
+                                      style={{ padding: '2px 6px', fontSize: '10.5px', height: '24px' }}
+                                      value={teamQuickInterval}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setTeamQuickInterval(val);
+                                        const parsed = parseTimeIntervalInput(val);
+                                        if (parsed) {
+                                          setTeamHeureDebut(parsed.heureDebut);
+                                          setTeamHeureFin(parsed.heureFin);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '4px', marginTop: '2px' }}>
+                                {editingTeamId && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ color: '#dc2626', padding: '3px 7px', fontSize: '10.5px' }}
+                                    onClick={() => handleDeleteDailyTeam(editingTeamId)}
+                                  >
+                                    Dissoudre
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ flex: 1, padding: '4px 8px', fontSize: '11px', background: '#7c3aed', borderColor: '#7c3aed' }}
+                                  onClick={() => handleSaveTeamForm(tech)}
+                                >
+                                  ✓ Enregistrer Équipe ({teamMembers.length} pers.)
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           <div
                             style={{

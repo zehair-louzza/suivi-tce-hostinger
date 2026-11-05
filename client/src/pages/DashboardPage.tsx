@@ -807,6 +807,11 @@ export function DashboardPage() {
             await referentielsApi.updateCompetences(nextMap);
             queryClient.invalidateQueries({ queryKey: ['referentiels'] });
           }}
+          equipesJournalieres={refs.equipes_journalieres || []}
+          onUpdateEquipes={async (nextEquipes) => {
+            await referentielsApi.updateEquipes(nextEquipes);
+            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+          }}
           onUpdateDevisPlanning={async (devisId, payload) => {
             await updateDevisMut.mutateAsync({ id: devisId, data: payload });
           }}
@@ -1306,7 +1311,7 @@ export function DashboardPage() {
                 e.preventDefault();
                 if (!newRefValue.trim()) return;
                 const rawVals = refs[newRefCategory];
-                const currentVals: string[] = Array.isArray(rawVals) ? rawVals : [];
+                const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
                 if (!currentVals.includes(newRefValue.trim())) {
                   await referentielsApi.updateCategory(newRefCategory, [
                     ...currentVals,
