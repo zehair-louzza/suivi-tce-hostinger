@@ -386,12 +386,12 @@ export function AdminWorkstation({
             <table className="pro-table">
               <thead>
                 <tr>
-                  <th>Utilisateur</th>
-                  <th>Rôle Métier ANELEC</th>
-                  <th>Technicien Lié (App Mobile)</th>
-                  <th>Droits de Modification Actifs</th>
-                  <th>Statut</th>
-                  <th style={{ textAlign: 'right' }}>Actions Admin</th>
+                  <th style={{ width: '150px' }}>Utilisateur</th>
+                  <th style={{ width: '140px' }}>Rôle Métier</th>
+                  <th style={{ width: '130px' }}>App Mobile</th>
+                  <th>Droits de Modification</th>
+                  <th style={{ width: '70px' }}>Statut</th>
+                  <th style={{ textAlign: 'right', width: '130px' }}>Actions Admin</th>
                 </tr>
               </thead>
               <tbody>
@@ -405,10 +405,10 @@ export function AdminWorkstation({
                   return (
                     <tr key={u.id}>
                       <td>
-                        <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                        <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
                           {u.name} {u.id === 1 && '👑'}
                         </div>
-                        <div className="font-mono" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                        <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                           {u.email}
                         </div>
                       </td>
@@ -416,9 +416,9 @@ export function AdminWorkstation({
                         <span
                           style={{
                             display: 'inline-block',
-                            padding: '3px 9px',
+                            padding: '2px 8px',
                             borderRadius: '999px',
-                            fontSize: '11.5px',
+                            fontSize: '11px',
                             fontWeight: 700,
                             background: `${roleDef?.badgeColor || '#2563eb'}18`,
                             color: roleDef?.badgeColor || '#2563eb',
@@ -430,64 +430,65 @@ export function AdminWorkstation({
                       </td>
                       <td>
                         {u.technicienNom ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span className="badge badge-info">{u.technicienNom}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span className="badge badge-info" style={{ fontSize: '10.5px' }}>{u.technicienNom}</span>
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              style={{ padding: '2px 7px', fontSize: '10.5px' }}
+                              style={{ padding: '1px 5px', fontSize: '10px' }}
                               onClick={() => onSwitchToMobilePreview(u.technicienNom!)}
                             >
-                              📱 Voir son App Mobile
+                              📱 Mobile
                             </button>
                           </div>
                         ) : (
-                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                            Poste Bureau / Direction
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Poste Bureau
                           </span>
                         )}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '430px' }}>
-                          {perms.canManageUsers && <span className="badge badge-danger">Admin & Droits</span>}
-                          {perms.canEditDevis && <span className="badge badge-info">Modif. Devis</span>}
-                          {perms.canViewFinancials && <span className="badge badge-info">Chiffrage HT</span>}
-                          {perms.canEditPlanning && <span className="badge badge-purple">Planning Gantt</span>}
-                          {perms.canEditInterventions && <span className="badge badge-success">Modif. Interventions</span>}
-                          {perms.canWriteReports && <span className="badge badge-success">Rédaction Rapports</span>}
-                          {perms.canManageBilling && <span className="badge badge-warning">Facturation</span>}
-                          {perms.mobileOnly && <span className="badge badge-warning">📱 Version Mobile Dédiée</span>}
-                          <span className="font-mono" style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', maxWidth: '380px' }}>
+                          {perms.canManageUsers && <span className="badge badge-danger" style={{ fontSize: '10px' }}>Admin</span>}
+                          {perms.canEditDevis && <span className="badge badge-info" style={{ fontSize: '10px' }}>Devis</span>}
+                          {perms.canViewFinancials && <span className="badge badge-info" style={{ fontSize: '10px' }}>Chiffrage</span>}
+                          {perms.canEditPlanning && <span className="badge badge-purple" style={{ fontSize: '10px' }}>Planning</span>}
+                          {perms.canEditInterventions && <span className="badge badge-success" style={{ fontSize: '10px' }}>Interventions</span>}
+                          {perms.canWriteReports && <span className="badge badge-success" style={{ fontSize: '10px' }}>Rapports</span>}
+                          {perms.canManageBilling && <span className="badge badge-warning" style={{ fontSize: '10px' }}>Facturation</span>}
+                          {perms.mobileOnly && <span className="badge badge-warning" style={{ fontSize: '10px' }}>📱 Mobile</span>}
+                          <span className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                             ({activePermCount} droits)
                           </span>
                         </div>
                       </td>
                       <td>
-                        <span className={`badge ${u.active !== false ? 'badge-success' : 'badge-danger'}`}>
-                          {u.active !== false ? 'Actif' : 'Désactivé'}
+                        <span className={`badge ${u.active !== false ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '10.5px' }}>
+                          {u.active !== false ? 'Actif' : 'Off'}
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px' }}>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => openEditUserModal(u)}
                           >
-                            Configurer Droits
+                            Droits
                           </button>
                           {u.id !== 1 && (
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              style={{ color: '#dc2626' }}
+                              style={{ color: '#dc2626', padding: '2px 7px', fontSize: '10.5px' }}
                               onClick={() => {
                                 if (window.confirm(`Supprimer le compte de ${u.name} ?`)) {
                                   deleteUserMut.mutate(u.id);
                                 }
                               }}
                             >
-                              Supprimer
+                              ✕
                             </button>
                           )}
                         </div>
@@ -770,20 +771,20 @@ export function AdminWorkstation({
             <table className="pro-table">
               <thead>
                 <tr>
-                  <th>Réf. & Type</th>
-                  <th>Client & Site</th>
-                  <th>Technicien & Horaires Réels</th>
-                  <th>Actions Pré-remplies & Déclaration Terrain</th>
-                  <th>Photos</th>
-                  <th>Statut Rapport</th>
-                  <th style={{ textAlign: 'right' }}>Actions Rédacteur / Chiffrage</th>
+                  <th style={{ width: '105px' }}>Réf. & Type</th>
+                  <th style={{ minWidth: '120px', maxWidth: '160px' }}>Client & Site</th>
+                  <th style={{ width: '140px' }}>Tech & Horaires</th>
+                  <th>Déclaration Terrain & Actions</th>
+                  <th style={{ width: '110px' }}>Photos</th>
+                  <th style={{ width: '90px' }}>Rapport</th>
+                  <th style={{ textAlign: 'right', width: '170px' }}>Actions Rédacteur</th>
                 </tr>
               </thead>
               <tbody>
                 {declarationsList.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '28px', color: 'var(--text-muted)' }}>
-                      Aucune déclaration terrain enregistrée pour le moment. Utilisez l'App Mobile Technicien pour tester une déclaration avec actions pré-remplies et photos.
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                      Aucune déclaration terrain enregistrée pour le moment.
                     </td>
                   </tr>
                 ) : (
@@ -795,69 +796,69 @@ export function AdminWorkstation({
                     return (
                       <tr key={intv.id}>
                         <td>
-                          <div className="font-mono" style={{ fontWeight: 700, color: 'var(--accent-primary)' }}>
+                          <div className="font-mono" style={{ fontWeight: 700, color: '#2563eb', fontSize: '11px' }}>
                             {intv.reference || `INT-${intv.id}`}
                           </div>
-                          <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`}>
-                            {intv.isVisiteDevis ? '📐 Visite Devis' : intv.typeIntervention || 'Travaux'}
+                          <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
+                            {intv.isVisiteDevis ? '📐 Visite' : intv.typeIntervention || 'Travaux'}
                           </span>
                         </td>
-                        <td>
-                          <div style={{ fontWeight: 700 }}>{intv.client || '—'}</div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{intv.chantier}</div>
+                        <td style={{ maxWidth: '160px' }}>
+                          <div style={{ fontWeight: 700, fontSize: '11.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{intv.client || '—'}</div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{intv.chantier}</div>
                         </td>
                         <td>
-                          <div style={{ fontWeight: 700 }}>{intv.entreprise || 'Non affecté'}</div>
-                          <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          <div style={{ fontWeight: 700, fontSize: '11.5px' }}>{intv.entreprise || 'Non affecté'}</div>
+                          <div className="font-mono" style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
                             {formatDateFR(intv.datePlanifiee)} •{' '}
                             {intv.heureDebutReelle ? (
                               <span style={{ color: '#059669', fontWeight: 700 }}>
-                                Réel: {intv.heureDebutReelle} → {intv.heureFinReelle || 'En cours'}
+                                {intv.heureDebutReelle} → {intv.heureFinReelle || 'En cours'}
                               </span>
                             ) : (
                               <span>
-                                Prévu: {intv.heureDebut || '—'}-{intv.heureFin || '—'}
+                                {intv.heureDebut || '—'}-{intv.heureFin || '—'}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td style={{ maxWidth: '340px' }}>
+                        <td style={{ maxWidth: '300px' }}>
                           {intv.actionsRealisees && intv.actionsRealisees.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginBottom: '3px' }}>
                               {intv.actionsRealisees.slice(0, 3).map((act, idx) => (
-                                <span key={idx} className="badge badge-success" style={{ fontSize: '10px' }}>
+                                <span key={idx} className="badge badge-success" style={{ fontSize: '9.5px', padding: '1px 5px' }}>
                                   ✓ {act}
                                 </span>
                               ))}
                               {intv.actionsRealisees.length > 3 && (
-                                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>
-                                  +{intv.actionsRealisees.length - 3} autres
+                                <span className="badge badge-neutral" style={{ fontSize: '9.5px', padding: '1px 4px' }}>
+                                  +{intv.actionsRealisees.length - 3}
                                 </span>
                               )}
                             </div>
                           )}
                           {intv.elementsChiffrage && (
-                            <div style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600 }}>
+                            <div style={{ fontSize: '10.5px', color: '#7c3aed', fontWeight: 600 }}>
                               📐 Chiffrage : {intv.elementsChiffrage}
                             </div>
                           )}
                           {intv.compteRendu && (
-                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                              {intv.compteRendu.slice(0, 110)}
-                              {intv.compteRendu.length > 110 ? '...' : ''}
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              {intv.compteRendu.slice(0, 90)}
+                              {intv.compteRendu.length > 90 ? '...' : ''}
                             </div>
                           )}
                         </td>
                         <td>
                           {intv.photos && intv.photos.length > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <div
-                                style={{ display: 'flex', gap: '4px', cursor: 'pointer' }}
+                                style={{ display: 'flex', gap: '3px', cursor: 'pointer' }}
                                 onClick={() => {
                                   setLightboxPhotos(intv.photos as any);
                                   setLightboxIndex(0);
                                 }}
-                                title="Cliquer pour voir les photos en plein écran"
+                                title="Voir les photos"
                               >
                                 {intv.photos.slice(0, 2).map((ph: any, idx: number) => (
                                   <img
@@ -865,9 +866,9 @@ export function AdminWorkstation({
                                     src={ph.url}
                                     alt=""
                                     style={{
-                                      width: '36px',
-                                      height: '36px',
-                                      borderRadius: '6px',
+                                      width: '30px',
+                                      height: '30px',
+                                      borderRadius: '5px',
                                       objectFit: 'cover',
                                       border: '1px solid var(--border-default)',
                                     }}
@@ -877,17 +878,17 @@ export function AdminWorkstation({
                               <button
                                 type="button"
                                 className="badge badge-info"
-                                style={{ cursor: 'pointer', border: 'none' }}
+                                style={{ cursor: 'pointer', border: 'none', padding: '2px 5px', fontSize: '10px' }}
                                 onClick={() => {
                                   setLightboxPhotos(intv.photos as any);
                                   setLightboxIndex(0);
                                 }}
                               >
-                                📷 {intv.photos.length} photo(s)
+                                📷 {intv.photos.length}
                               </button>
                             </div>
                           ) : (
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Aucune</span>
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Aucune</span>
                           )}
                         </td>
                         <td>
@@ -899,15 +900,17 @@ export function AdminWorkstation({
                                 ? 'badge-warning'
                                 : 'badge-neutral'
                             }`}
+                            style={{ fontSize: '10px', padding: '1px 6px' }}
                           >
                             {intv.statutRapport || 'À rédiger'}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          <div style={{ display: 'inline-flex', gap: '4px', justifyContent: 'flex-end' }}>
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
+                              style={{ padding: '2px 7px', fontSize: '10.5px' }}
                               onClick={() => {
                                 setSelectedReportIntv(intv);
                                 setDraftRapportFinal(
@@ -919,23 +922,25 @@ export function AdminWorkstation({
                                 setDraftStatutRapport('Validé & Clôturé');
                               }}
                             >
-                              📝 Rédiger / Valider Rapport
+                              📝 Valider
                             </button>
                             {parentDevis && (
                               <button
                                 type="button"
                                 className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 6px', fontSize: '10.5px' }}
                                 onClick={() => onOpenDevisDrawer(parentDevis)}
                               >
-                                Chiffrer Devis
+                                Devis
                               </button>
                             )}
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 6px', fontSize: '10.5px' }}
                               onClick={() => onOpenInterventionDrawer(intv)}
                             >
-                              Fiche 23 col.
+                              Fiche
                             </button>
                           </div>
                         </td>

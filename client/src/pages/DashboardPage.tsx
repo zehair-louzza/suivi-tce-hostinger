@@ -1386,14 +1386,14 @@ export function DashboardPage() {
               <table className="pro-table">
                 <thead>
                   <tr>
-                    <th>Référence</th>
-                    <th>Client & Site</th>
-                    <th>Corps d'état & Objet</th>
-                    <th>Responsable</th>
-                    <th>Montant HT</th>
-                    <th>Statut & Visite</th>
-                    <th>Échéance / Alerte</th>
-                    <th style={{ textAlign: 'right' }}>Actions 1-Clic</th>
+                    <th style={{ width: '105px' }}>Référence</th>
+                    <th style={{ minWidth: '120px', maxWidth: '160px' }}>Client & Site</th>
+                    <th style={{ minWidth: '130px', maxWidth: '180px' }}>Corps d'état & Objet</th>
+                    <th style={{ width: '95px' }}>Responsable</th>
+                    <th style={{ width: '90px' }}>Montant HT</th>
+                    <th style={{ width: '105px' }}>Statut & Visite</th>
+                    <th style={{ width: '100px' }}>Échéance</th>
+                    <th style={{ textAlign: 'right', width: '150px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1405,50 +1405,57 @@ export function DashboardPage() {
                         setSelectedDevis(d);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#60a5fa' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#2563eb', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {d.reference || `DEV-${d.id}`}
                         {(d.interventionsCount || 0) > 0 && (
                           <span
                             style={{
-                              marginLeft: '6px',
-                              padding: '1px 5px',
-                              fontSize: '10px',
+                              marginLeft: '4px',
+                              padding: '1px 4px',
+                              fontSize: '9.5px',
                               borderRadius: '4px',
                               background: 'rgba(16, 185, 129, 0.16)',
-                              color: '#34d399',
+                              color: '#059669',
+                              fontWeight: 700,
                             }}
                           >
                             INT liée
                           </span>
                         )}
                       </td>
-                      <td>
-                        <div style={{ fontWeight: 700 }}>{d.client || '—'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.site || '—'}</div>
+                      <td style={{ maxWidth: '160px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '11.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.client || ''}>
+                          {d.client || '—'}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.site || ''}>
+                          {d.site || '—'}
+                        </div>
                       </td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{d.corpsEtat || '—'}</div>
+                      <td style={{ maxWidth: '180px' }}>
+                        <div style={{ fontWeight: 600, fontSize: '11px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {d.corpsEtat || '—'}
+                        </div>
                         <div
                           style={{
-                            fontSize: '11.5px',
-                            color: 'var(--text-secondary)',
-                            maxWidth: '250px',
+                            fontSize: '10.5px',
+                            color: 'var(--text-muted)',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                           }}
+                          title={d.objet || ''}
                         >
                           {d.objet || '—'}
                         </div>
                       </td>
-                      <td>{d.responsable || '—'}</td>
-                      <td className="font-mono" style={{ fontWeight: 700 }}>
+                      <td style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>{d.responsable || '—'}</td>
+                      <td className="font-mono" style={{ fontWeight: 700, fontSize: '11.5px', whiteSpace: 'nowrap' }}>
                         {formatCurrency(d.amount)}
                       </td>
                       <td>
                         <StatusPill statut={d.statutCommercial} />
                         {(d.visiteNecessaire || d.visiteTechnicien) && (
-                          <div style={{ fontSize: '10.5px', color: '#d8b4fe', marginTop: '3px' }}>
+                          <div style={{ fontSize: '10px', color: '#7c3aed', marginTop: '2px', whiteSpace: 'nowrap' }}>
                             Visite : {d.visiteTechnicien || 'À affecter'}
                           </div>
                         )}
@@ -1456,8 +1463,9 @@ export function DashboardPage() {
                       <td>
                         <span
                           style={{
-                            fontSize: '11.5px',
+                            fontSize: '11px',
                             fontWeight: 600,
+                            whiteSpace: 'nowrap',
                             color:
                               d.computed?.alerte === 'Réponse en retard'
                                 ? '#ef4444'
@@ -1470,10 +1478,11 @@ export function DashboardPage() {
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => {
                               updateDevisMut.mutate({
                                 id: d.id,
@@ -1486,15 +1495,16 @@ export function DashboardPage() {
                               handleSectionChange('planning');
                             }}
                           >
-                            Planifier Visite
+                            Visite
                           </button>
                           {(!d.interventionsCount || d.interventionsCount === 0) && (
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
+                              style={{ padding: '2px 7px', fontSize: '10.5px' }}
                               onClick={() => convertDevisMut.mutate(d.id)}
                             >
-                              → Intervention
+                              → INT
                             </button>
                           )}
                         </div>
@@ -1638,15 +1648,15 @@ export function DashboardPage() {
               <table className="pro-table">
                 <thead>
                   <tr>
-                    <th>Référence</th>
-                    <th>Client & Chantier</th>
-                    <th>Corps d'état & Objet</th>
-                    <th>Technicien Terrain</th>
-                    <th>Créneau Planifié</th>
-                    <th>Statut Opérationnel</th>
-                    <th>Photos & Rapport</th>
-                    <th>Facturation</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
+                    <th style={{ width: '95px' }}>Réf.</th>
+                    <th style={{ minWidth: '110px', maxWidth: '145px' }}>Client & Chantier</th>
+                    <th style={{ minWidth: '130px', maxWidth: '175px' }}>Corps d'état & Objet</th>
+                    <th style={{ width: '95px' }}>Technicien</th>
+                    <th style={{ width: '105px' }}>Créneau</th>
+                    <th style={{ width: '100px' }}>Statut</th>
+                    <th style={{ width: '105px' }}>Photos / Rap.</th>
+                    <th style={{ width: '85px' }}>Facture</th>
+                    <th style={{ textAlign: 'right', width: '110px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1658,33 +1668,41 @@ export function DashboardPage() {
                         setSelectedIntv(i);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#60a5fa' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#2563eb', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {i.reference || `INT-${i.id}`}
                       </td>
-                      <td>
-                        <div style={{ fontWeight: 700 }}>{i.client || '—'}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{i.chantier || '—'}</div>
+                      <td style={{ maxWidth: '145px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '11.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={i.client || ''}>
+                          {i.client || '—'}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={i.chantier || ''}>
+                          {i.chantier || '—'}
+                        </div>
                       </td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{i.corpsEtat || i.typeIntervention || '—'}</div>
+                      <td style={{ maxWidth: '175px' }}>
+                        <div style={{ fontWeight: 600, fontSize: '11px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={i.corpsEtat || i.typeIntervention || ''}>
+                          {i.corpsEtat || i.typeIntervention || '—'}
+                        </div>
                         <div
                           style={{
-                            fontSize: '11.5px',
-                            color: 'var(--text-secondary)',
-                            maxWidth: '240px',
+                            fontSize: '10.5px',
+                            color: 'var(--text-muted)',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                           }}
+                          title={i.objet || ''}
                         >
                           {i.objet || '—'}
                         </div>
                       </td>
-                      <td style={{ fontWeight: 600 }}>{i.entreprise || 'À affecter'}</td>
-                      <td className="font-mono" style={{ fontSize: '11.5px' }}>
-                        {formatDateFR(i.datePlanifiee)}
+                      <td style={{ fontWeight: 600, fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        {i.entreprise || 'À affecter'}
+                      </td>
+                      <td className="font-mono" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        <div>{formatDateFR(i.datePlanifiee)}</div>
                         {i.heureDebut && (
-                          <div style={{ color: '#60a5fa' }}>
+                          <div style={{ color: '#2563eb', fontSize: '10px' }}>
                             {i.heureDebut}–{i.heureFin || '12:00'}
                           </div>
                         )}
@@ -1693,8 +1711,8 @@ export function DashboardPage() {
                         <StatusPill statut={i.statutOperationnel} />
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                             {i.photos && i.photos.length > 0 ? (
                               <button
                                 type="button"
@@ -1704,7 +1722,9 @@ export function DashboardPage() {
                                   border: 'none',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '3px',
+                                  gap: '2px',
+                                  padding: '1px 5px',
+                                  fontSize: '10px',
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1716,12 +1736,12 @@ export function DashboardPage() {
                                 📷 {i.photos.length}
                               </button>
                             ) : (
-                              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Sans photo</span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sans photo</span>
                             )}
                             {i.actionsRealisees && i.actionsRealisees.length > 0 && (
                               <span
                                 className="badge badge-success"
-                                style={{ fontSize: '10px' }}
+                                style={{ fontSize: '9.5px', padding: '1px 4px' }}
                                 title={`${i.actionsRealisees.length} actions déclarées`}
                               >
                                 ✓ {i.actionsRealisees.length}
@@ -1736,10 +1756,10 @@ export function DashboardPage() {
                                 ? 'badge-warning'
                                 : 'badge-neutral'
                             }`}
-                            style={{ fontSize: '10px' }}
+                            style={{ fontSize: '9.5px', padding: '1px 5px', whiteSpace: 'nowrap' }}
                           >
                             {i.statutRapport === 'Déclaré par technicien'
-                              ? '🔔 Reçu à valider'
+                              ? '🔔 Reçu'
                               : i.statutRapport || 'À rédiger'}
                           </span>
                         </div>
@@ -1748,30 +1768,33 @@ export function DashboardPage() {
                         <span
                           className="font-mono"
                           style={{
-                            fontSize: '11px',
+                            fontSize: '10.5px',
+                            whiteSpace: 'nowrap',
                             color: i.statutFacture === 'Facturée' ? '#10b981' : 'var(--text-secondary)',
+                            fontWeight: 600,
                           }}
                         >
                           {i.statutFacture || 'Non facturée'}
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
                             className="btn btn-primary btn-sm"
-                            style={{ padding: '2px 8px', fontSize: '11px' }}
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => {
                               setIsCreatingIntv(false);
                               setSelectedIntv(i);
                               setIntvTab('terrain');
                             }}
                           >
-                            📝 Vérifier
+                            📝 Fiche
                           </button>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
+                            style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => handleSectionChange('planning')}
                           >
                             Gantt
