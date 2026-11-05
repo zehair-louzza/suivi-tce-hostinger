@@ -10,6 +10,7 @@ export type AppSection =
   | 'planning'
   | 'devis'
   | 'interventions'
+  | 'facturation'
   | 'referentiels'
   | 'admin'
   | 'mobile_tech';
@@ -22,6 +23,7 @@ interface LayoutProps {
     aujourdhui?: number;
     devis?: number;
     interventions?: number;
+    facturation?: number;
     planning?: number;
     admin?: number;
   };
@@ -149,7 +151,7 @@ export function Layout({
     {
       id: 'interventions',
       label: 'Interventions TCE',
-      subtitle: '23 colonnes & facturation',
+      subtitle: '23 colonnes & suivi',
       badge: badges?.interventions,
       shortcut: '4',
       icon: (
@@ -159,10 +161,26 @@ export function Layout({
       ),
     },
     {
+      id: 'facturation',
+      label: 'Facturation & Clients',
+      subtitle: 'B2B/B2C, Retards & Motifs',
+      badge: badges?.facturation,
+      urgent: (badges?.facturation || 0) > 0,
+      shortcut: '5',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <line x1="6" y1="9" x2="18" y2="9" />
+          <line x1="6" y1="13" x2="12" y2="13" />
+          <line x1="15" y1="15" x2="18" y2="15" />
+        </svg>
+      ),
+    },
+    {
       id: 'referentiels',
       label: 'Référentiels Métier',
       subtitle: 'Équipes & paramètres',
-      shortcut: '5',
+      shortcut: '6',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="3" />
@@ -176,7 +194,7 @@ export function Layout({
       subtitle: 'Droits, Pointages & Rapports',
       badge: badges?.admin,
       urgent: (badges?.admin || 0) > 0,
-      shortcut: '6',
+      shortcut: '7',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -188,7 +206,7 @@ export function Layout({
       id: 'mobile_tech',
       label: 'App Mobile Technicien',
       subtitle: 'Pointage, Actions & Photos',
-      shortcut: '7',
+      shortcut: '8',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />

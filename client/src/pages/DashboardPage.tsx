@@ -23,6 +23,7 @@ import {
 } from '../lib/api';
 import { Layout, AppSection } from '../components/Layout';
 import { PlanningBoard } from '../components/PlanningBoard';
+import { FacturationStudio } from '../components/FacturationStudio';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
@@ -45,6 +46,7 @@ export function DashboardPage() {
     if (pathname.startsWith('/planning')) return 'planning';
     if (pathname.startsWith('/devis')) return 'devis';
     if (pathname.startsWith('/interventions')) return 'interventions';
+    if (pathname.startsWith('/facturation')) return 'facturation';
     if (pathname.startsWith('/referentiels')) return 'referentiels';
     if (pathname.startsWith('/admin')) return 'admin';
     if (pathname.startsWith('/mobile')) return 'mobile_tech';
@@ -75,6 +77,7 @@ export function DashboardPage() {
       planning: '/planning',
       devis: '/devis',
       interventions: '/interventions',
+      facturation: '/facturation',
       referentiels: '/referentiels',
       admin: '/admin',
       mobile_tech: '/mobile',
@@ -400,6 +403,7 @@ export function DashboardPage() {
         planning: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
         devis: devisList.length,
         interventions: interventionsList.length,
+        facturation: queues.intvAFacturer.length,
         admin: queues.rapportsEnAttente.length,
       }}
       onOpenCommandPalette={() => setCmdOpen(true)}
@@ -467,11 +471,10 @@ export function DashboardPage() {
               {
                 title: 'Terminées à facturer',
                 count: queues.intvAFacturer.length,
-                subtitle: 'Prêtes pour facturation',
+                subtitle: 'Espace Facturation B2B / B2C',
                 accent: '#3b82f6',
                 onClick: () => {
-                  setIntvStatutFilter('Clôturée');
-                  handleSectionChange('interventions');
+                  handleSectionChange('facturation');
                 },
               },
             ].map((kpi) => (
@@ -1838,6 +1841,35 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* =====================================================================
+          SECTION 4B : ESPACE FACTURATION & RELATION CLIENT (B2B & B2C)
+         ===================================================================== */}
+      {activeSection === 'facturation' && (
+        <FacturationStudio
+          devisList={devisList}
+          interventionsList={interventionsList}
+          onUpdateIntervention={async (id, data) => {
+            await updateIntvMut.mutateAsync({ id, data });
+          }}
+          onUpdateDevis={async (id, data) => {
+            await updateDevisMut.mutateAsync({ id, data });
+          }}
+          onOpenInterventionDrawer={(intv) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(intv);
+          }}
+          onOpenDevisDrawer={(d) => {
+            setIsCreatingDevis(false);
+            setSelectedDevis(d);
+          }}
+          onNavigateToPlanning={() => handleSectionChange('planning')}
+          onOpenPhotoLightbox={(photos, idx) => {
+            setLightboxPhotos(photos);
+            setLightboxIndex(idx);
+          }}
+        />
       )}
 
       {/* =====================================================================
