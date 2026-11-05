@@ -145,7 +145,7 @@ html, body, #root {
 }
 
 .enterprise-sidebar {
-  width: 248px;
+  width: 228px;
   flex-shrink: 0;
   background: #0f172a;
   color: #f8fafc;
@@ -268,11 +268,11 @@ html, body, #root {
   flex-shrink: 0;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0 20px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   z-index: 30;
 }
 
@@ -280,10 +280,17 @@ html, body, #root {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 22px;
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
+}
+
+.enterprise-content > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cmd-trigger {
@@ -297,7 +304,9 @@ html, body, #root {
   color: var(--text-secondary);
   font-size: 12.5px;
   cursor: pointer;
-  min-width: 280px;
+  min-width: 160px;
+  max-width: 320px;
+  flex: 1;
   transition: all 0.15s ease;
 }
 
@@ -475,10 +484,11 @@ html, body, #root {
 
 .fsm-workspace {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 12px;
   flex: 1;
   min-height: 600px;
+  min-width: 0;
 }
 
 .fsm-workspace.backlog-collapsed {
@@ -500,6 +510,7 @@ html, body, #root {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   max-height: calc(100vh - 175px);
+  min-width: 0;
 }
 
 .fsm-tray-header {
@@ -528,12 +539,13 @@ html, body, #root {
   flex-direction: column;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 /* Continuous Gantt Resource Timeline */
 .gantt-header-row {
   display: grid;
-  grid-template-columns: 245px 1fr;
+  grid-template-columns: 210px minmax(0, 1fr);
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-default);
   position: sticky;
@@ -542,11 +554,11 @@ html, body, #root {
 }
 
 .gantt-resource-col-header {
-  padding: 10px 14px;
+  padding: 10px 12px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-secondary);
   border-right: 1px solid var(--border-default);
   display: flex;
@@ -586,7 +598,7 @@ html, body, #root {
 
 .gantt-resource-row {
   display: grid;
-  grid-template-columns: 245px 1fr;
+  grid-template-columns: 210px minmax(0, 1fr);
   border-bottom: 1px solid var(--border-subtle);
   transition: background 0.12s ease;
 }
@@ -596,13 +608,13 @@ html, body, #root {
 }
 
 .gantt-resource-info {
-  padding: 11px 13px;
+  padding: 10px 12px;
   border-right: 1px solid var(--border-default);
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   z-index: 5;
 }
 
@@ -849,23 +861,26 @@ html, body, #root {
    ============================================================================ */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .kpi-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   cursor: pointer;
   transition: all 0.16s ease;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .kpi-card:hover {
@@ -878,32 +893,37 @@ html, body, #root {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pro-table {
   width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
   text-align: left;
 }
 
 .pro-table th {
   background: var(--bg-elevated);
-  padding: 10px 14px;
+  padding: 9px 11px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-default);
   white-space: nowrap;
 }
 
 .pro-table td {
-  padding: 11px 14px;
+  padding: 9px 11px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 12.5px;
+  font-size: 12px;
   vertical-align: middle;
 }
 
@@ -1805,8 +1825,10 @@ body,
 
 .analytics-glass-grid {
   display: grid;
-  grid-template-columns: 1.55fr 1fr 1.15fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 1200px) {

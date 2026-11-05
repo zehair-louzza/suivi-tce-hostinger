@@ -529,19 +529,19 @@ export function FacturationStudio({
                 : undefined,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669' }}>
-              🟢 À traiter maintenant (Prêtes)
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              🟢 À facturer (Prêtes)
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#059669' }}>
+            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#059669', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {formatCurrency(stats.montantAFacturerHT)} HT
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)' }}>
             {stats.aFacturer.length}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Terminées sur site • Rapport OK • Facture à émettre
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Terminées sur site • Rapport OK
           </div>
         </div>
 
@@ -559,19 +559,19 @@ export function FacturationStudio({
                 : undefined,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#d97706' }}>
-              🟡 À vérifier avant facturation
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              🟡 À vérifier (En attente)
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#d97706' }}>
+            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#d97706', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {formatCurrency(stats.montantAVerifierHT)} HT
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)' }}>
             {stats.aVerifier.length}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Rapport à valider, prix HT à confirmer ou réserve
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Rapport à valider ou réserve
           </div>
         </div>
 
@@ -589,19 +589,19 @@ export function FacturationStudio({
                 : undefined,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-              🔴 Ne pas facturer (Avec motif)
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              🔴 Ne pas facturer
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
               En cours / Visites
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)' }}>
             {stats.nePasFacturer.length}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Travaux non terminés, visites devis ou suspendus
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Non terminés, visites devis
           </div>
         </div>
 
@@ -616,19 +616,19 @@ export function FacturationStudio({
                 : undefined,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#dc2626' }}>
-              ⏱️ Retards & Réponses Clients
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#dc2626', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              ⏱️ Retards & Réponses
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626' }}>
+            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', whiteSpace: 'nowrap', flexShrink: 0 }}>
               Diagnostic 1-Clic
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)' }}>
             {stats.enRetardOuBloque.length}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Causes exactes des retards & courrier client prêt
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Causes retards & courrier prêt
           </div>
         </div>
 
@@ -646,19 +646,19 @@ export function FacturationStudio({
                 : undefined,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb' }}>
-              ✅ Déjà Facturées (B2B & B2C)
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              ✅ Facturées (B2B/B2C)
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#2563eb' }}>
+            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#2563eb', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {formatCurrency(stats.montantFactureHT)} HT
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)' }}>
             {stats.facturees.length}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {stats.b2bCount} dossiers B2B • {stats.b2cCount} dossiers B2C
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {stats.b2bCount} B2B • {stats.b2cCount} B2C
           </div>
         </div>
       </div>
@@ -791,7 +791,7 @@ export function FacturationStudio({
             <table className="pro-table">
               <thead>
                 <tr>
-                  <th style={{ width: '36px' }}>
+                  <th style={{ width: '34px', textAlign: 'center' }}>
                     <input
                       type="checkbox"
                       checked={
@@ -805,12 +805,12 @@ export function FacturationStudio({
                       }
                     />
                   </th>
-                  <th>Réf & Devis Initial</th>
-                  <th>Client Initial & Marché (B2B / B2C)</th>
-                  <th>Décision Facturation & POURQUOI ?</th>
-                  <th>Exécution Terrain & Preuves</th>
-                  <th>Chiffrage HT / TTC</th>
-                  <th style={{ textAlign: 'right' }}>Actions Agent Facturation</th>
+                  <th style={{ width: '135px' }}>Réf & Devis</th>
+                  <th style={{ minWidth: '160px', maxWidth: '220px' }}>Client & Marché</th>
+                  <th style={{ minWidth: '220px', maxWidth: '300px' }}>Décision & Pourquoi ?</th>
+                  <th style={{ width: '150px' }}>Terrain & Pointage</th>
+                  <th style={{ width: '130px' }}>Chiffrage HT / TTC</th>
+                  <th style={{ textAlign: 'right', width: '150px' }}>Actions Facturation</th>
                 </tr>
               </thead>
               <tbody>
@@ -1042,21 +1042,23 @@ export function FacturationStudio({
                       </td>
 
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'inline-flex', gap: '5px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
                             className="btn btn-primary btn-sm"
+                            style={{ padding: '3px 8px', fontSize: '11px' }}
                             onClick={() => openDossierInBillingStudio(d)}
                           >
-                            🧾 {d.category === 'FACTUREE' ? 'Voir Facture' : 'Établir Facture'}
+                            🧾 {d.category === 'FACTUREE' ? 'Facture' : 'Facturer'}
                           </button>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
+                            style={{ padding: '3px 8px', fontSize: '11px' }}
                             onClick={() => setClientResponseModalDossier(d)}
                             title="Générer une réponse claire pour le client initial (avancement, retard ou facture)"
                           >
-                            💬 Réponse Client
+                            💬 Répondre
                           </button>
                         </div>
                       </td>
@@ -1251,9 +1253,11 @@ export function FacturationStudio({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
             gap: '16px',
             alignItems: 'start',
+            minWidth: 0,
+            width: '100%',
           }}
         >
           {/* Colonne Gauche : Paramétrage Facture B2B / B2C & Calculateur */}

@@ -440,19 +440,22 @@ export function Layout({
 
           {/* Center Global Command Bar Trigger (Ctrl+K) - Masqué en mode Mobile Tech */}
           {!isMobileTechOnly && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 1, minWidth: '140px', flex: 1, maxWidth: '380px' }}>
               <button
                 type="button"
                 onClick={onOpenCommandPalette}
                 className="cmd-trigger"
                 title="Recherche globale & commandes rapides (Ctrl+K)"
+                style={{ width: '100%', minWidth: 0 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <span style={{ flex: 1, textAlign: 'left' }}>Rechercher devis, client, technicien ou commande...</span>
-                <span className="kbd-shortcut cmd-kbd">Ctrl K</span>
+                <span style={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Rechercher devis, client, technicien...
+                </span>
+                <span className="kbd-shortcut cmd-kbd" style={{ flexShrink: 0 }}>Ctrl K</span>
               </button>
             </div>
           )}
