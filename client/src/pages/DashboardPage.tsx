@@ -1,17 +1,14 @@
-// Poste de Pilotage Opérationnel ANELEC — Aujourd'hui, Devis (22 col), Interventions (23 col), Planning Techniciens, Référentiels
-import React, { useState, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   devisApi,
   interventionApi,
   referentielsApi,
+  Devis,
+  Intervention,
   ReferentielsMap,
   DEFAULT_REFERENTIELS,
-  formatCurrency,
-  formatDateFR,
-  parseTimeIntervalInput,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -20,2336 +17,2241 @@ import {
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
+  formatCurrency,
+  formatDateFR,
 } from '../lib/api';
+import { Layout, AppSection } from '../components/Layout';
 import { PlanningBoard } from '../components/PlanningBoard';
-
-// ============================================================================
-// BADGES SÉMANTIQUES MÉTIER (Distincts des couleurs de marque ANELEC)
-// ============================================================================
-
-function AlerteBadge({ alerte, explication }: { alerte?: string; explication?: string }) {
-  if (!alerte) return null;
-  let cls = 'alerte-suivre';
-  if (alerte === 'Relance en retard' || alerte === 'Réponse en retard' || alerte === 'En retard') {
-    cls = 'alerte-retard';
-  } else if (alerte === 'Aujourd’hui') {
-    cls = 'alerte-aujourdhui';
-  } else if (alerte === 'Traité') {
-    cls = 'alerte-traite';
-  }
-  return (
-    <span className={`badge-alerte ${cls}`} title={explication || alerte}>
-      {alerte === 'Traité' ? '✓ ' : alerte.includes('retard') ? '⚠️ ' : alerte === 'Aujourd’hui' ? '📅 ' : '• '}
-      {alerte}
-    </span>
-  );
-}
-
-function PrioriteBadge({ priorite }: { priorite?: string | null }) {
-  const p = priorite || 'Normale';
-  const cls =
-    p === 'Urgente'
-      ? 'prio-urgente'
-      : p === 'Haute'
-      ? 'prio-haute'
-      : p === 'Basse'
-      ? 'prio-basse'
-      : 'prio-normale';
-  return <span className={`badge-priorite ${cls}`}>{p}</span>;
-}
-
-function StatutCommercialBadge({ statut }: { statut?: string | null }) {
-  const s = statut || 'À préparer';
-  let cls = 'sc-prepare';
-  if (s === 'Accepté') cls = 'sc-accepte';
-  else if (s === 'Envoyé au client' || s === 'En négociation') cls = 'sc-envoye';
-  else if (s === 'Refusé' || s === 'Annulé' || s === 'Expiré') cls = 'sc-refuse';
-  return <span className={`badge-statut-comm ${cls}`}>{s}</span>;
-}
-
-function TraitementBadge({ traitement }: { traitement?: string | null }) {
-  const t = traitement || 'À traiter';
-  let cls = 'tr-a-traiter';
-  if (t === 'Bloqué') cls = 'tr-bloque';
-  else if (t.startsWith('En attente')) cls = 'tr-attente';
-  else if (t === 'En cours de traitement') cls = 'tr-encours';
-  else if (t === 'Traité' || t === 'Classé sans suite') cls = 'tr-traite';
-  return <span className={`badge-traitement ${cls}`}>{t}</span>;
-}
-
-function StatutOpBadge({ statut }: { statut?: string | null }) {
-  const s = statut || 'À planifier';
-  let cls = 'sop-planifier';
-  if (s === 'Clôturée') cls = 'sop-cloturee';
-  else if (s === 'Terminée - à valider') cls = 'sop-valider';
-  else if (s === 'Suspendue' || s === 'Annulée') cls = 'sop-suspendue';
-  else if (['En cours', 'Sur site', 'En route'].includes(s)) cls = 'sop-encours';
-  else if (['Planifiée', 'Affectée'].includes(s)) cls = 'sop-planifiee';
-  return <span className={`badge-statut-op ${cls}`}>{s}</span>;
-}
-
-// ============================================================================
-// COMPOSANT PRINCIPAL : DASHBOARD / POSTE DE PILOTAGE ANELEC
-// ============================================================================
+import toast from 'react-hot-toast';
 
 export function DashboardPage() {
+  const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const activeSpace: 'aujourdhui' | 'devis' | 'interventions' | 'planning' | 'referentiels' =
-    location.pathname === '/devis'
-      ? 'devis'
-      : location.pathname === '/interventions'
-      ? 'interventions'
-      : location.pathname === '/planning'
-      ? 'planning'
-      : location.pathname === '/referentiels'
-      ? 'referentiels'
-      : 'aujourdhui';
+  const sectionFromPath = (pathname: string): AppSection => {
+    if (pathname.startsWith('/planning')) return 'planning';
+    if (pathname.startsWith('/devis')) return 'devis';
+    if (pathname.startsWith('/interventions')) return 'interventions';
+    if (pathname.startsWith('/referentiels')) return 'referentiels';
+    return 'aujourdhui';
+  };
 
-  // Filtres Devis
+  const [activeSection, setActiveSection] = useState<AppSection>(() =>
+    sectionFromPath(location.pathname)
+  );
+
+  useEffect(() => {
+    setActiveSection(sectionFromPath(location.pathname));
+  }, [location.pathname]);
+
+  const handleSectionChange = (sec: AppSection) => {
+    setActiveSection(sec);
+    const pathMap: Record<AppSection, string> = {
+      aujourdhui: '/',
+      planning: '/planning',
+      devis: '/devis',
+      interventions: '/interventions',
+      referentiels: '/referentiels',
+    };
+    navigate(pathMap[sec]);
+  };
+
+  // Table vs Kanban view modes for Devis & Interventions (Jobber / Linear style)
+  const [devisViewStyle, setDevisViewStyle] = useState<'table' | 'kanban'>('table');
+  const [intvViewStyle, setIntvViewStyle] = useState<'table' | 'kanban'>('table');
+
+  // Filters
   const [devisSearch, setDevisSearch] = useState('');
-  const [devisSavedFilter, setDevisSavedFilter] = useState<
-    'ALL' | 'A_CHIFFRER' | 'RELANCES_RETARD' | 'VISITES' | 'BLOQUES' | 'ACCEPTES'
-  >('ALL');
+  const [devisStatutFilter, setDevisStatutFilter] = useState('ALL');
   const [devisResponsableFilter, setDevisResponsableFilter] = useState('ALL');
-  const [devisCorpsEtatFilter, setDevisCorpsEtatFilter] = useState('ALL');
 
-  // Filtres Interventions
-  const [intervSearch, setIntervSearch] = useState('');
-  const [intervSavedFilter, setIntervSavedFilter] = useState<
-    'ALL' | 'A_PLANIFIER' | 'VISITES_DEVIS' | 'BLOQUEES' | 'A_VALIDER' | 'NON_FACTUREES'
-  >('ALL');
-  const [intervTechFilter, setIntervTechFilter] = useState('ALL');
-  const [intervCorpsEtatFilter, setIntervCorpsEtatFilter] = useState('ALL');
+  const [intvSearch, setIntvSearch] = useState('');
+  const [intvStatutFilter, setIntvStatutFilter] = useState('ALL');
+  const [intvTechFilter, setIntvTechFilter] = useState('ALL');
 
-  // Fiches latérales (Drawers) & Modales de création
-  const [selectedDevisId, setSelectedDevisId] = useState<number | null>(null);
-  const [selectedIntervId, setSelectedIntervId] = useState<number | null>(null);
+  // Slide-over Inspector Drawers (22-col Devis / 23-col Intervention)
+  const [selectedDevis, setSelectedDevis] = useState<Partial<Devis> | null>(null);
   const [isCreatingDevis, setIsCreatingDevis] = useState(false);
-  const [isCreatingInterv, setIsCreatingInterv] = useState(false);
+  const [devisTab, setDevisTab] = useState<'qualif' | 'chiffrage' | 'relances' | 'historique'>('qualif');
 
-  // Exception de clôture tracée (règle de validation progressive ANELEC)
-  const [clotureExceptionConfirmed, setClotureExceptionConfirmed] = useState(false);
+  const [selectedIntv, setSelectedIntv] = useState<Partial<Intervention> | null>(null);
+  const [isCreatingIntv, setIsCreatingIntv] = useState(false);
+  const [intvTab, setIntvTab] = useState<'planif' | 'terrain' | 'facturation' | 'historique'>('planif');
 
-  // Référentiels : ajout d'entrée
-  const [newRefValue, setNewRefValue] = useState<Record<string, string>>({});
+  // Global Ctrl+K Command Palette
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdQuery, setCmdQuery] = useState('');
 
-  // Queries
-  const { data: devisList = [], isLoading: devisLoading } = useQuery({
-    queryKey: ['devis', 'list'],
-    queryFn: () => devisApi.list({ limit: 250 }).then((r) => r.data.data),
+  // Referentiels state
+  const [newRefCategory, setNewRefCategory] = useState<keyof ReferentielsMap>('techniciens');
+  const [newRefValue, setNewRefValue] = useState('');
+
+  // Global keyboard shortcut Ctrl+K / Cmd+K
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      } else if (e.key === 'Escape') {
+        setCmdOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Fetch Data
+  const { data: devisRes } = useQuery({
+    queryKey: ['devis'],
+    queryFn: async () => {
+      const r = await devisApi.list({ limit: 500 });
+      return r.data;
+    },
   });
 
-  const { data: intervList = [], isLoading: intervLoading } = useQuery({
-    queryKey: ['interventions', 'list'],
-    queryFn: () => interventionApi.list({ limit: 300 }).then((r) => r.data.data),
+  const { data: intvRes } = useQuery({
+    queryKey: ['interventions'],
+    queryFn: async () => {
+      const r = await interventionApi.list({ limit: 500 });
+      return r.data;
+    },
   });
 
-  const { data: referentiels = DEFAULT_REFERENTIELS } = useQuery({
+  const { data: refRes } = useQuery({
     queryKey: ['referentiels'],
-    queryFn: () => referentielsApi.getAll().then((r) => r.data.data),
+    queryFn: async () => {
+      const r = await referentielsApi.getAll();
+      return r.data;
+    },
   });
 
-  const selectedDevis = useMemo(
-    () => devisList.find((d) => d.id === selectedDevisId) || null,
-    [devisList, selectedDevisId]
-  );
+  const devisList: Devis[] = devisRes?.data || [];
+  const interventionsList: Intervention[] = intvRes?.data || [];
+  const refs: ReferentielsMap = refRes?.data || DEFAULT_REFERENTIELS;
 
-  const selectedInterv = useMemo(
-    () => intervList.find((i) => i.id === selectedIntervId) || null,
-    [intervList, selectedIntervId]
-  );
+  const techniciensList = refs.techniciens?.length ? refs.techniciens : DEFAULT_REFERENTIELS.techniciens;
+  const responsablesList = refs.responsables?.length ? refs.responsables : DEFAULT_REFERENTIELS.responsables;
+  const corpsEtatList = refs.corps_etat?.length ? refs.corps_etat : DEFAULT_REFERENTIELS.corps_etat;
+  const originesList = refs.origines?.length ? refs.origines : DEFAULT_REFERENTIELS.origines;
 
   // Mutations
-  const createDevisMutation = useMutation({
-    mutationFn: (payload: any) => devisApi.create(payload),
-    onSuccess: (res) => {
+  const createDevisMut = useMutation({
+    mutationFn: (payload: Partial<Devis>) => devisApi.create(payload),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['devis'] });
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
       toast.success('Devis créé avec succès');
       setIsCreatingDevis(false);
-      setSelectedDevisId(res.data.data.id);
+      setSelectedDevis(null);
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la création du devis'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur création devis'),
   });
 
-  const updateDevisMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => devisApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Fiche Devis enregistrée');
-    },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la mise à jour'),
-  });
-
-  const deleteDevisMutation = useMutation({
-    mutationFn: (id: number) => devisApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      toast.success('Devis supprimé');
-      setSelectedDevisId(null);
-    },
-  });
-
-  const convertDevisMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => devisApi.convert(id, data),
+  const updateDevisMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Devis> }) => devisApi.update(id, data),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['devis'] });
       queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success(res.data.message || 'Mission créée et liée au devis !');
+      if (selectedDevis && selectedDevis.id === res.data.data.id) {
+        setSelectedDevis(res.data.data);
+      }
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la création liée'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur mise à jour devis'),
   });
 
-  const createIntervMutation = useMutation({
-    mutationFn: (payload: any) => interventionApi.create(payload),
+  const convertDevisMut = useMutation({
+    mutationFn: (id: number) => devisApi.convert(id, { mode: 'travaux' }),
     onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['devis'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      toast.success(res.data.message || `Intervention créée — Devis conservé !`);
+      if (selectedDevis && res.data.devis) {
+        setSelectedDevis(res.data.devis);
+      }
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur lors de la conversion'),
+  });
+
+  const createIntvMut = useMutation({
+    mutationFn: (payload: Partial<Intervention>) => interventionApi.create(payload),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['interventions'] });
       queryClient.invalidateQueries({ queryKey: ['devis'] });
       toast.success('Intervention créée avec succès');
-      setIsCreatingInterv(false);
-      setSelectedIntervId(res.data.data.id);
+      setIsCreatingIntv(false);
+      setSelectedIntv(null);
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la création'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur création intervention'),
   });
 
-  const updateIntervMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => interventionApi.update(id, data),
-    onSuccess: () => {
+  const updateIntvMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Intervention> }) =>
+      interventionApi.update(id, data),
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['interventions'] });
       queryClient.invalidateQueries({ queryKey: ['devis'] });
+      if (selectedIntv && selectedIntv.id === res.data.data.id) {
+        setSelectedIntv(res.data.data);
+      }
     },
-    onError: (err: any) => toast.error(err.response?.data?.error || 'Erreur lors de la mise à jour'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur mise à jour intervention'),
   });
 
-  const deleteIntervMutation = useMutation({
-    mutationFn: (id: number) => interventionApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success('Intervention supprimée');
-      setSelectedIntervId(null);
-    },
-  });
-
-  const updateRefMutation = useMutation({
-    mutationFn: ({ categorie, valeurs }: { categorie: keyof ReferentielsMap; valeurs: string[] }) =>
-      referentielsApi.updateCategory(categorie, valeurs),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-      toast.success('Liste métier ANELEC mise à jour');
-    },
-  });
-
-  // ============================================================================
-  // VUES CALCULÉES POUR L'ESPACE « AUJOURD'HUI » (6 COMPTEURS + FILES D'ACTIONS)
-  // ============================================================================
-
-  const sixCounters = useMemo(() => {
-    const devisATraiter = devisList.filter(
+  // =========================================================================
+  // BUSINESS QUEUES & KPI CALCULATIONS (ANELEC SPEC)
+  // =========================================================================
+  const queues = useMemo(() => {
+    const devisARelancer = devisList.filter(
       (d) =>
-        d.traitement === 'À traiter' ||
-        d.statutCommercial === 'À préparer' ||
-        d.statutCommercial === 'En préparation'
-    ).length;
-    const devisBloques = devisList.filter((d) => d.traitement === 'Bloqué').length;
-    const devisAcceptes = devisList.filter((d) => d.statutCommercial === 'Accepté').length;
+        d.prochaineAction === 'Relancer le client' ||
+        d.computed?.alerte === 'Relance en retard'
+    );
 
-    const intervATraiter = intervList.filter(
-      (i) =>
-        i.traitement === 'À traiter' ||
-        ['Nouvelle demande', 'À planifier'].includes(i.statutOperationnel)
-    ).length;
-    const intervBloquees = intervList.filter(
-      (i) => i.traitement === 'Bloqué' || i.statutOperationnel === 'Suspendue' || Boolean(i.motifBlocage)
-    ).length;
-    const intervCloturees = intervList.filter((i) => i.statutOperationnel === 'Clôturée').length;
-
-    return {
-      devisATraiter,
-      devisBloques,
-      devisAcceptes,
-      intervATraiter,
-      intervBloquees,
-      intervCloturees,
-    };
-  }, [devisList, intervList]);
-
-  const todayActionQueues = useMemo(() => {
-    // 1. Relances arrivées à échéance & réponses en retard
-    const relancesEchues = devisList.filter(
+    const devisProchesEcheance = devisList.filter(
       (d) =>
-        d.computed?.alerte === 'Relance en retard' ||
         d.computed?.alerte === 'Réponse en retard' ||
-        d.prochaineAction === 'Relancer le client'
+        (d.echeance && !['Accepté', 'Refusé', 'Annulé'].includes(d.statutCommercial))
     );
 
-    // 2. Devis à chiffrer ou à valider
-    const devisAChiffrer = devisList.filter(
+    const devisAcceptesSansIntv = devisList.filter(
       (d) =>
-        ['À préparer', 'En préparation', 'À valider en interne'].includes(d.statutCommercial) ||
-        ['Chiffrer', 'Faire valider'].includes(d.prochaineAction || '')
+        d.statutCommercial === 'Accepté' &&
+        (!d.interventionsCount || d.interventionsCount === 0)
     );
 
-    // 3. Interventions & Visites Devis à affecter ou à planifier
-    const aPlanifier = intervList.filter(
+    const visitesDevisAPlanifier = devisList.filter(
+      (d) =>
+        (d.visiteNecessaire || d.traitement === 'En attente technicien') &&
+        (!d.visiteDate || !d.visiteTechnicien)
+    );
+
+    const intvAPlanifier = interventionsList.filter(
       (i) =>
-        (!i.datePlanifiee || !i.entreprise || i.statutOperationnel === 'À planifier') &&
-        !['Clôturée', 'Annulée'].includes(i.statutOperationnel)
+        i.statutOperationnel === 'À planifier' ||
+        (!i.entreprise && !['Clôturée', 'Annulée'].includes(i.statutOperationnel))
     );
 
-    // 4. Dossiers bloqués (Devis + Interventions)
-    const dossiersBloques = [
-      ...devisList
-        .filter((d) => d.traitement === 'Bloqué')
-        .map((d) => ({ kind: 'devis' as const, item: d })),
-      ...intervList
-        .filter((i) => i.traitement === 'Bloqué' || i.statutOperationnel === 'Suspendue' || Boolean(i.motifBlocage))
-        .map((i) => ({ kind: 'intervention' as const, item: i })),
-    ];
-
-    // 5. Travaux terminés à valider
-    const travauxAValider = intervList.filter((i) => i.statutOperationnel === 'Terminée - à valider');
-
-    // 6. Interventions clôturées mais non facturées
-    const clotureesNonFacturees = intervList.filter(
-      (i) => i.statutOperationnel === 'Clôturée' && !i.isVisiteDevis && i.statutFacture !== 'Facturée'
+    const intvEnRetard = interventionsList.filter(
+      (i) => i.computed?.alerteDelai === 'En retard'
     );
 
-    // 7. Alertes de qualité des données (séparées des retards !)
-    const qualiteAlerts: Array<{ ref: string; client: string; message: string; onClick: () => void }> = [];
+    const intvAFacturer = interventionsList.filter(
+      (i) =>
+        (i.statutOperationnel === 'Clôturée' || i.statutOperationnel === 'Terminée - à valider') &&
+        i.statutFacture !== 'Facturée'
+    );
+
+    const anomaliesQualite: { type: 'DEVIS' | 'INTERVENTION'; ref: string; message: string; item: any }[] = [];
     for (const d of devisList) {
-      for (const msg of d.computed?.qualiteAlertes || []) {
-        qualiteAlerts.push({
-          ref: d.reference || `DEV-${d.id}`,
-          client: d.client,
-          message: msg,
-          onClick: () => setSelectedDevisId(d.id),
-        });
+      for (const a of d.computed?.qualiteAlertes || []) {
+        anomaliesQualite.push({ type: 'DEVIS', ref: d.reference || `DEV-${d.id}`, message: a, item: d });
       }
     }
-    for (const i of intervList) {
-      for (const msg of i.computed?.qualiteAlertes || []) {
-        qualiteAlerts.push({
-          ref: i.reference || `INT-${i.id}`,
-          client: i.client || i.chantier,
-          message: msg,
-          onClick: () => setSelectedIntervId(i.id),
-        });
+    for (const i of interventionsList) {
+      for (const a of i.computed?.qualiteAlertes || []) {
+        anomaliesQualite.push({ type: 'INTERVENTION', ref: i.reference || `INT-${i.id}`, message: a, item: i });
       }
     }
 
     return {
-      relancesEchues,
-      devisAChiffrer,
-      aPlanifier,
-      dossiersBloques,
-      travauxAValider,
-      clotureesNonFacturees,
-      qualiteAlerts,
+      devisARelancer,
+      devisProchesEcheance,
+      devisAcceptesSansIntv,
+      visitesDevisAPlanifier,
+      intvAPlanifier,
+      intvEnRetard,
+      intvAFacturer,
+      anomaliesQualite,
     };
-  }, [devisList, intervList]);
+  }, [devisList, interventionsList]);
 
-  // ============================================================================
-  // FILTRAGE DES TABLES DE SYNTHÈSE (DEVIS & INTERVENTIONS)
-  // ============================================================================
-
+  // Filtered Devis & Interventions
   const filteredDevis = useMemo(() => {
     return devisList.filter((d) => {
-      if (devisSavedFilter === 'A_CHIFFRER') {
-        if (!['À préparer', 'En préparation', 'À valider en interne'].includes(d.statutCommercial)) return false;
-      } else if (devisSavedFilter === 'RELANCES_RETARD') {
-        if (d.computed?.alerte !== 'Relance en retard' && d.computed?.alerte !== 'Réponse en retard') return false;
-      } else if (devisSavedFilter === 'VISITES') {
-        if (!d.visiteNecessaire && d.traitement !== 'En attente technicien') return false;
-      } else if (devisSavedFilter === 'BLOQUES') {
-        if (d.traitement !== 'Bloqué') return false;
-      } else if (devisSavedFilter === 'ACCEPTES') {
-        if (d.statutCommercial !== 'Accepté') return false;
-      }
-
+      if (devisStatutFilter !== 'ALL' && d.statutCommercial !== devisStatutFilter) return false;
       if (devisResponsableFilter !== 'ALL' && d.responsable !== devisResponsableFilter) return false;
-      if (devisCorpsEtatFilter !== 'ALL' && d.corpsEtat !== devisCorpsEtatFilter) return false;
-
       if (devisSearch.trim()) {
         const q = devisSearch.toLowerCase();
-        const hay = `${d.reference || ''} ${d.client} ${d.site || ''} ${d.objet || ''} ${d.corpsEtat || ''} ${
-          d.responsable || ''
-        } ${d.statutCommercial} ${d.traitement || ''} ${d.notes || ''}`.toLowerCase();
+        const hay = `${d.reference} ${d.client} ${d.site} ${d.objet} ${d.responsable} ${d.corpsEtat}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [devisList, devisSavedFilter, devisResponsableFilter, devisCorpsEtatFilter, devisSearch]);
+  }, [devisList, devisStatutFilter, devisResponsableFilter, devisSearch]);
 
   const filteredInterventions = useMemo(() => {
-    return intervList.filter((i) => {
-      if (intervSavedFilter === 'A_PLANIFIER') {
-        if (i.datePlanifiee && i.entreprise && i.statutOperationnel !== 'À planifier') return false;
-      } else if (intervSavedFilter === 'VISITES_DEVIS') {
-        if (!i.isVisiteDevis) return false;
-      } else if (intervSavedFilter === 'BLOQUEES') {
-        if (i.traitement !== 'Bloqué' && i.statutOperationnel !== 'Suspendue' && !i.motifBlocage) return false;
-      } else if (intervSavedFilter === 'A_VALIDER') {
-        if (i.statutOperationnel !== 'Terminée - à valider') return false;
-      } else if (intervSavedFilter === 'NON_FACTUREES') {
-        if (i.statutOperationnel !== 'Clôturée' || i.statutFacture === 'Facturée' || i.isVisiteDevis) return false;
-      }
-
-      if (intervTechFilter !== 'ALL' && i.entreprise !== intervTechFilter) return false;
-      if (intervCorpsEtatFilter !== 'ALL' && i.corpsEtat !== intervCorpsEtatFilter) return false;
-
-      if (intervSearch.trim()) {
-        const q = intervSearch.toLowerCase();
-        const hay = `${i.reference || ''} ${i.client || ''} ${i.chantier} ${i.objet || ''} ${i.entreprise || ''} ${
-          i.corpsEtat || ''
-        } ${i.statutOperationnel} ${i.motifBlocage || ''}`.toLowerCase();
+    return interventionsList.filter((i) => {
+      if (intvStatutFilter !== 'ALL' && i.statutOperationnel !== intvStatutFilter) return false;
+      if (intvTechFilter !== 'ALL' && i.entreprise !== intvTechFilter) return false;
+      if (intvSearch.trim()) {
+        const q = intvSearch.toLowerCase();
+        const hay = `${i.reference} ${i.client} ${i.chantier} ${i.objet} ${i.entreprise} ${i.corpsEtat}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [intervList, intervSavedFilter, intervTechFilter, intervCorpsEtatFilter, intervSearch]);
+  }, [interventionsList, intvStatutFilter, intvTechFilter, intvSearch]);
 
-  // ============================================================================
-  // SOUMISSION DES FICHES DEVIS (22 COLONNES) & INTERVENTIONS (23 COLONNES)
-  // ============================================================================
-
-  const handleSaveDevisDrawer = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedDevis) return;
-    const fd = new FormData(e.currentTarget);
-    const data: Record<string, any> = Object.fromEntries(fd.entries());
-    data.visiteNecessaire = fd.get('visiteNecessaire') === 'on';
-
-    // Validation progressive avant envoi au client
-    if (
-      ['Envoyé au client', 'Accepté'].includes(String(data.statutCommercial)) &&
-      (!data.amount || String(data.amount).trim() === '')
-    ) {
-      toast('Attention : Ce devis est marqué envoyé/accepté sans montant HT renseigné.', { icon: '⚠️' });
-    }
-
-    await updateDevisMutation.mutateAsync({ id: selectedDevis.id, data });
+  const openNewDevisDrawer = () => {
+    setIsCreatingDevis(true);
+    setDevisTab('qualif');
+    setSelectedDevis({
+      reference: '',
+      statutCommercial: 'À préparer',
+      traitement: 'À traiter',
+      priorite: 'Normale',
+      client: '',
+      site: '',
+      corpsEtat: 'Électricité',
+      objet: '',
+      origine: 'Client',
+      responsable: 'Anouar',
+      prochaineAction: 'Chiffrer',
+      amount: 0,
+      validiteJours: 30,
+      visiteNecessaire: false,
+      visiteTechnicien: '',
+      visiteHeureDebut: '08:30',
+      visiteHeureFin: '10:30',
+      visiteStatut: 'À planifier',
+    });
   };
 
-  const handleSaveIntervDrawer = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedInterv) return;
-    const fd = new FormData(e.currentTarget);
-    const data: Record<string, any> = Object.fromEntries(fd.entries());
-    data.isVisiteDevis = fd.get('isVisiteDevis') === 'on';
-
-    // Validation progressive avant clôture : exiger résultat technique + compte rendu sauf exception tracée
-    if (
-      data.statutOperationnel === 'Clôturée' &&
-      (!String(data.resultatTechnique || '').trim() || !String(data.compteRendu || '').trim())
-    ) {
-      if (!clotureExceptionConfirmed) {
-        toast.error(
-          'Avant clôture, veuillez renseigner le Résultat technique et le Compte rendu (ou cochez « Exception de clôture tracée »).'
-        );
-        return;
-      }
-    }
-
-    await updateIntervMutation.mutateAsync({ id: selectedInterv.id, data });
-    toast.success('Fiche Intervention enregistrée');
-    setClotureExceptionConfirmed(false);
+  const openNewIntvDrawer = () => {
+    setIsCreatingIntv(true);
+    setIntvTab('planif');
+    setSelectedIntv({
+      reference: '',
+      statutOperationnel: 'À planifier',
+      traitement: 'À traiter',
+      priorite: 'Normale',
+      client: '',
+      chantier: '',
+      corpsEtat: 'Électricité',
+      typeIntervention: 'Corrective',
+      objet: '',
+      entreprise: '',
+      heureDebut: '08:00',
+      heureFin: '12:00',
+      modePlanification: 'Planifiée',
+      statutFacture: 'Non facturée',
+    });
   };
 
   return (
-    <div className="anelec-cockpit">
-      {/* ======================================================================
-          BARRE DES 6 COMPTEURS OFFICIELS DU CLASSEUR ANELEC (TOUJOURS VISIBLE)
-          ====================================================================== */}
-      <section className="six-counters-strip" aria-label="Les 6 compteurs métier ANELEC">
-        <div
-          className="kpi-card kpi-devis-traiter"
-          onClick={() => {
-            setDevisSavedFilter('A_CHIFFRER');
-            navigate('/devis');
-          }}
-        >
-          <span className="kpi-label">Devis à traiter</span>
-          <strong className="kpi-value">{sixCounters.devisATraiter}</strong>
-          <span className="kpi-sub">À chiffrer / préparer</span>
-        </div>
-
-        <div
-          className="kpi-card kpi-devis-bloques"
-          onClick={() => {
-            setDevisSavedFilter('BLOQUES');
-            navigate('/devis');
-          }}
-        >
-          <span className="kpi-label">Devis bloqués</span>
-          <strong className="kpi-value">{sixCounters.devisBloques}</strong>
-          <span className="kpi-sub">Action requise</span>
-        </div>
-
-        <div
-          className="kpi-card kpi-devis-acceptes"
-          onClick={() => {
-            setDevisSavedFilter('ACCEPTES');
-            navigate('/devis');
-          }}
-        >
-          <span className="kpi-label">Devis acceptés</span>
-          <strong className="kpi-value">{sixCounters.devisAcceptes}</strong>
-          <span className="kpi-sub">Accords clients</span>
-        </div>
-
-        <div
-          className="kpi-card kpi-interv-traiter"
-          onClick={() => {
-            setIntervSavedFilter('A_PLANIFIER');
-            navigate('/interventions');
-          }}
-        >
-          <span className="kpi-label">Interventions à traiter</span>
-          <strong className="kpi-value">{sixCounters.intervATraiter}</strong>
-          <span className="kpi-sub">À affecter / planifier</span>
-        </div>
-
-        <div
-          className="kpi-card kpi-interv-bloquees"
-          onClick={() => {
-            setIntervSavedFilter('BLOQUEES');
-            navigate('/interventions');
-          }}
-        >
-          <span className="kpi-label">Interventions bloquées</span>
-          <strong className="kpi-value">{sixCounters.intervBloquees}</strong>
-          <span className="kpi-sub">Matériel / accès / attente</span>
-        </div>
-
-        <div
-          className="kpi-card kpi-interv-cloturees"
-          onClick={() => {
-            setIntervSavedFilter('ALL');
-            navigate('/interventions');
-          }}
-        >
-          <span className="kpi-label">Interventions clôturées</span>
-          <strong className="kpi-value">{sixCounters.intervCloturees}</strong>
-          <span className="kpi-sub">Dossiers terminés</span>
-        </div>
-      </section>
-
-      {/* ======================================================================
-          ESPACE 1 : « AUJOURD'HUI » (POSTE DE PILOTAGE QUOTIDIEN)
-          ====================================================================== */}
-      {activeSpace === 'aujourdhui' && (
-        <div className="today-workspace">
-          <div className="today-top-cta">
-            <div>
-              <h2 className="section-heading">File d’actions prioritaires — « À faire aujourd’hui »</h2>
-              <p className="section-subheading">
-                Où en est chaque dossier ? Qu’est-ce qui le bloque ? Qui doit faire quoi, et pour quand ?
-              </p>
-            </div>
-            <div className="today-quick-buttons">
-              <button type="button" className="btn btn-primary" onClick={() => setIsCreatingDevis(true)}>
-                + Nouveau Devis
-              </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setIsCreatingInterv(true)}>
-                + Nouvelle Intervention directe
-              </button>
-              <button type="button" className="btn btn-anelec-green" onClick={() => navigate('/planning')}>
-                🗓️ Ouvrir le Planning Techniciens
-              </button>
-            </div>
+    <Layout
+      activeSection={activeSection}
+      onSectionChange={handleSectionChange}
+      badges={{
+        aujourdhui:
+          queues.devisARelancer.length +
+          queues.devisAcceptesSansIntv.length +
+          queues.intvEnRetard.length,
+        planning: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
+        devis: devisList.length,
+        interventions: interventionsList.length,
+      }}
+      onOpenCommandPalette={() => setCmdOpen(true)}
+      onQuickNewDevis={openNewDevisDrawer}
+      onQuickNewIntervention={openNewIntvDrawer}
+    >
+      {/* =====================================================================
+          SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI")
+         ===================================================================== */}
+      {activeSection === 'aujourdhui' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div className="kpi-strip">
+            {[
+              {
+                title: 'Devis à relancer',
+                count: queues.devisARelancer.length,
+                subtitle: 'Relance prévue ou dépassée',
+                accent: '#f59e0b',
+                onClick: () => {
+                  setDevisStatutFilter('ALL');
+                  handleSectionChange('devis');
+                },
+              },
+              {
+                title: 'Échéances / Réponses en retard',
+                count: queues.devisProchesEcheance.length,
+                subtitle: 'Suivi date limite client',
+                accent: '#ef4444',
+                onClick: () => handleSectionChange('devis'),
+              },
+              {
+                title: 'Devis acceptés à convertir',
+                count: queues.devisAcceptesSansIntv.length,
+                subtitle: 'Sans intervention liée',
+                accent: '#10b981',
+                onClick: () => {
+                  setDevisStatutFilter('Accepté');
+                  handleSectionChange('devis');
+                },
+              },
+              {
+                title: 'Missions à planifier',
+                count: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
+                subtitle: `${queues.visitesDevisAPlanifier.length} visite(s) • ${queues.intvAPlanifier.length} travaux`,
+                accent: '#a855f7',
+                onClick: () => handleSectionChange('planning'),
+              },
+              {
+                title: 'Interventions en retard',
+                count: queues.intvEnRetard.length,
+                subtitle: 'Échéance dépassée',
+                accent: '#ef4444',
+                onClick: () => handleSectionChange('interventions'),
+              },
+              {
+                title: 'Terminées à facturer',
+                count: queues.intvAFacturer.length,
+                subtitle: 'Prêtes pour facturation',
+                accent: '#3b82f6',
+                onClick: () => {
+                  setIntvStatutFilter('Clôturée');
+                  handleSectionChange('interventions');
+                },
+              },
+            ].map((kpi) => (
+              <div
+                key={kpi.title}
+                className="kpi-card"
+                onClick={kpi.onClick}
+                style={{ borderTop: `3px solid ${kpi.accent}` }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    {kpi.title}
+                  </span>
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: kpi.accent,
+                      boxShadow: `0 0 8px ${kpi.accent}`,
+                    }}
+                  />
+                </div>
+                <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {kpi.count}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{kpi.subtitle}</div>
+              </div>
+            ))}
           </div>
 
-          <div className="today-queues-grid">
-            {/* File 1 : Relances arrivées à échéance */}
-            <div className="action-queue-card urgent-border">
-              <div className="queue-header">
-                <h3>🔔 Relances & réponses arrivées à échéance</h3>
-                <span className="queue-badge danger">{todayActionQueues.relancesEchues.length}</span>
+          {/* Live Technician Roster & Capacity Strip */}
+          <div className="pro-table-container" style={{ padding: '14px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '13.5px', fontWeight: 700 }}>
+                  Capacité & Affectation Équipes Terrain (Temps Réel)
+                </h2>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                  Cliquez sur un technicien pour ouvrir directement sa piste sur la Timeline Gantt
+                </p>
               </div>
-              <div className="queue-items">
-                {todayActionQueues.relancesEchues.length === 0 ? (
-                  <p className="queue-empty">Aucune relance en retard aujourd’hui.</p>
-                ) : (
-                  todayActionQueues.relancesEchues.map((d) => (
-                    <div key={d.id} className="action-line-item" onClick={() => setSelectedDevisId(d.id)}>
-                      <div className="action-line-main">
-                        <strong>{d.prochaineAction || 'Relancer le client'}</strong> — dossier{' '}
-                        <span className="mono-ref">{d.reference}</span> ({d.client}) — responsable :{' '}
-                        <strong>{d.responsable || 'Non assigné'}</strong>
-                      </div>
-                      <div className="action-line-meta">
-                        <span className="text-danger">{d.computed?.alerteExplication}</span>
-                        <span>Montant : {formatCurrency(d.amount)}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => handleSectionChange('planning')}
+              >
+                Ouvrir Console Dispatch & Gantt →
+              </button>
             </div>
 
-            {/* File 2 : Interventions & Visites Devis à affecter ou planifier */}
-            <div className="action-queue-card">
-              <div className="queue-header">
-                <h3>🗓️ Interventions & Visites Devis à planifier</h3>
-                <span className="queue-badge warning">{todayActionQueues.aPlanifier.length}</span>
-              </div>
-              <div className="queue-items">
-                {todayActionQueues.aPlanifier.length === 0 ? (
-                  <p className="queue-empty">Toutes les missions sont planifiées.</p>
-                ) : (
-                  todayActionQueues.aPlanifier.map((i) => (
-                    <div key={i.id} className="action-line-item" onClick={() => setSelectedIntervId(i.id)}>
-                      <div className="action-line-main">
-                        <strong>{i.isVisiteDevis ? '🟣 Planifier visite devis' : '🔧 Affecter / planifier'}</strong> —{' '}
-                        <span className="mono-ref">{i.reference}</span> ({i.client || i.chantier})
-                      </div>
-                      <div className="action-line-meta">
-                        <span>Technicien : {i.entreprise || 'À affecter'}</span>
-                        <button
-                          type="button"
-                          className="btn-link-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate('/planning');
-                          }}
-                        >
-                          Placer au planning →
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '10px' }}>
+              {techniciensList.map((tech) => {
+                const techIntvs = interventionsList.filter(
+                  (i) => i.entreprise === tech && i.statutOperationnel !== 'Clôturée'
+                );
+                const techVisites = devisList.filter(
+                  (d) => d.visiteTechnicien === tech && d.statutCommercial !== 'Refusé'
+                );
+                const totalMissions = techIntvs.length + techVisites.length;
 
-            {/* File 3 : Devis à chiffrer ou valider */}
-            <div className="action-queue-card">
-              <div className="queue-header">
-                <h3>📐 Devis à chiffrer ou à valider en interne</h3>
-                <span className="queue-badge info">{todayActionQueues.devisAChiffrer.length}</span>
-              </div>
-              <div className="queue-items">
-                {todayActionQueues.devisAChiffrer.map((d) => (
-                  <div key={d.id} className="action-line-item" onClick={() => setSelectedDevisId(d.id)}>
-                    <div className="action-line-main">
-                      <strong>{d.prochaineAction || 'Chiffrer'}</strong> —{' '}
-                      <span className="mono-ref">{d.reference}</span> ({d.client} • {d.site || 'Site'}) — responsable :{' '}
-                      <strong>{d.responsable || 'À assigner'}</strong>
+                return (
+                  <div
+                    key={tech}
+                    onClick={() => handleSectionChange('planning')}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '9px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, fontSize: '12.5px' }}>{tech}</span>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: totalMissions > 0 ? '#60a5fa' : 'var(--text-muted)',
+                        }}
+                      >
+                        {totalMissions} mission(s)
+                      </span>
                     </div>
-                    <div className="action-line-meta">
-                      <span>Statut : {d.statutCommercial}</span>
-                      <span>{d.visiteNecessaire ? `🟣 Visite : ${d.visiteStatut}` : formatCurrency(d.amount)}</span>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span style={{ color: '#d8b4fe' }}>{techVisites.length} visite(s)</span>
+                      <span>•</span>
+                      <span style={{ color: '#93c5fd' }}>{techIntvs.length} travaux</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* File 4 : Dossiers bloqués */}
-            <div className="action-queue-card urgent-border">
-              <div className="queue-header">
-                <h3>⛔ Dossiers bloqués (Devis & Interventions)</h3>
-                <span className="queue-badge danger">{todayActionQueues.dossiersBloques.length}</span>
-              </div>
-              <div className="queue-items">
-                {todayActionQueues.dossiersBloques.map((entry, idx) =>
-                  entry.kind === 'devis' ? (
-                    <div
-                      key={`b-d-${idx}`}
-                      className="action-line-item"
-                      onClick={() => setSelectedDevisId(entry.item.id)}
-                    >
-                      <div className="action-line-main">
-                        <strong>Débloquer devis</strong> — <span className="mono-ref">{entry.item.reference}</span> (
-                        {entry.item.client}) — responsable : <strong>{entry.item.responsable || '—'}</strong>
-                      </div>
-                      <div className="action-line-meta">
-                        <span className="text-danger">{entry.item.notes || 'En attente de déblocage'}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={`b-i-${idx}`}
-                      className="action-line-item"
-                      onClick={() => setSelectedIntervId(entry.item.id)}
-                    >
-                      <div className="action-line-main">
-                        <strong>Intervention bloquée</strong> — <span className="mono-ref">{entry.item.reference}</span>{' '}
-                        ({entry.item.chantier}) — technicien : <strong>{entry.item.entreprise || '—'}</strong>
-                      </div>
-                      <div className="action-line-meta">
-                        <span className="text-danger">
-                          Motif : {entry.item.motifBlocage || 'Motif à préciser'}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* File 5 : Travaux terminés à valider */}
-            <div className="action-queue-card">
-              <div className="queue-header">
-                <h3>✅ Travaux terminés — Validation technique</h3>
-                <span className="queue-badge success">{todayActionQueues.travauxAValider.length}</span>
-              </div>
-              <div className="queue-items">
-                {todayActionQueues.travauxAValider.length === 0 ? (
-                  <p className="queue-empty">Aucune intervention en attente de validation technique.</p>
-                ) : (
-                  todayActionQueues.travauxAValider.map((i) => (
-                    <div key={i.id} className="action-line-item" onClick={() => setSelectedIntervId(i.id)}>
-                      <div className="action-line-main">
-                        <strong>Valider le compte rendu</strong> — <span className="mono-ref">{i.reference}</span> (
-                        {i.client} • {i.chantier}) — réalisé par <strong>{i.entreprise || '—'}</strong>
-                      </div>
-                      <div className="action-line-meta">
-                        <span>Résultat : {i.resultatTechnique || 'À renseigner'}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* File 6 : Interventions clôturées mais non facturées */}
-            <div className="action-queue-card">
-              <div className="queue-header">
-                <h3>💶 Interventions clôturées mais non facturées</h3>
-                <span className="queue-badge warning">{todayActionQueues.clotureesNonFacturees.length}</span>
-              </div>
-              <div className="queue-items">
-                {todayActionQueues.clotureesNonFacturees.length === 0 ? (
-                  <p className="queue-empty">Toutes les interventions clôturées sont facturées.</p>
-                ) : (
-                  todayActionQueues.clotureesNonFacturees.map((i) => (
-                    <div key={i.id} className="action-line-item" onClick={() => setSelectedIntervId(i.id)}>
-                      <div className="action-line-main">
-                        <strong>Émettre la facture</strong> — <span className="mono-ref">{i.reference}</span> (
-                        {i.client} • {i.chantier})
-                      </div>
-                      <div className="action-line-meta">
-                        <span>Montant : {formatCurrency(i.amount)}</span>
-                        <span className="text-warning">Statut : Non facturée</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Section séparée : Contrôle Qualité des Données (séparé des retards !) */}
-          {todayActionQueues.qualiteAlerts.length > 0 && (
-            <div className="quality-alerts-box">
-              <div className="quality-header">
-                <h4>🔎 Contrôle qualité des dossiers (affiché séparément des retards opérationnels)</h4>
-                <span>{todayActionQueues.qualiteAlerts.length} point(s) d’attention</span>
-              </div>
-              <div className="quality-Chips">
-                {todayActionQueues.qualiteAlerts.map((qa, idx) => (
-                  <button key={idx} type="button" className="quality-chip" onClick={qa.onClick}>
-                    <strong>{qa.ref}</strong> ({qa.client}) : {qa.message}
+          {/* 4 Action Queues Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
+            <ActionQueueCard
+              title="Devis acceptés à convertir en Intervention"
+              badge={queues.devisAcceptesSansIntv.length}
+              accent="#10b981"
+              emptyText="Tous les devis acceptés ont une intervention liée."
+            >
+              {queues.devisAcceptesSansIntv.slice(0, 6).map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    padding: '9px 11px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <div
+                    style={{ cursor: 'pointer', minWidth: 0 }}
+                    onClick={() => {
+                      setIsCreatingDevis(false);
+                      setSelectedDevis(d);
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: '12.5px' }}>
+                      <span className="font-mono" style={{ color: '#10b981' }}>{d.reference || `DEV-${d.id}`}</span> — {d.client}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {d.objet || d.site || 'Prestation TCE'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => convertDevisMut.mutate(d.id)}
+                  >
+                    Créer Intervention
                   </button>
-                ))}
+                </div>
+              ))}
+            </ActionQueueCard>
+
+            <ActionQueueCard
+              title="Visites Devis & Travaux à planifier"
+              badge={queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length}
+              accent="#a855f7"
+              emptyText="Aucune visite ou intervention en attente de créneau."
+            >
+              {queues.visitesDevisAPlanifier.slice(0, 3).map((d) => (
+                <div
+                  key={`v-${d.id}`}
+                  style={{
+                    padding: '9px 11px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    borderLeft: '3px solid #a855f7',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                      <span className="font-mono" style={{ color: '#d8b4fe' }}>[VISITE DEVIS] {d.reference || `DEV-${d.id}`}</span> • {d.client}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.site || d.objet}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleSectionChange('planning')}
+                  >
+                    Dispatcher →
+                  </button>
+                </div>
+              ))}
+              {queues.intvAPlanifier.slice(0, 3).map((i) => (
+                <div
+                  key={`i-${i.id}`}
+                  style={{
+                    padding: '9px 11px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    borderLeft: '3px solid #3b82f6',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                      <span className="font-mono" style={{ color: '#93c5fd' }}>[TRAVAUX] {i.reference || `INT-${i.id}`}</span> • {i.client}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{i.objet || i.chantier}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleSectionChange('planning')}
+                  >
+                    Dispatcher →
+                  </button>
+                </div>
+              ))}
+            </ActionQueueCard>
+
+            <ActionQueueCard
+              title="Devis à relancer aujourd'hui"
+              badge={queues.devisARelancer.length}
+              accent="#f59e0b"
+              emptyText="Aucune relance commerciale en attente."
+            >
+              {queues.devisARelancer.slice(0, 5).map((d) => (
+                <div
+                  key={d.id}
+                  style={{
+                    padding: '9px 11px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                      setIsCreatingDevis(false);
+                      setSelectedDevis(d);
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                      <span className="font-mono" style={{ color: '#fbbf24' }}>{d.reference || `DEV-${d.id}`}</span> — {d.client}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Relance prévue : {formatDateFR(d.dateRelance)} • Resp: {d.responsable || '—'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() =>
+                      updateDevisMut.mutate({
+                        id: d.id,
+                        data: {
+                          dateRelance: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+                          prochaineAction: 'Relancer le client',
+                        },
+                      })
+                    }
+                  >
+                    Relancé (J+3)
+                  </button>
+                </div>
+              ))}
+            </ActionQueueCard>
+
+            <ActionQueueCard
+              title="Interventions terminées à facturer"
+              badge={queues.intvAFacturer.length}
+              accent="#3b82f6"
+              emptyText="Aucune intervention en attente de facturation."
+            >
+              {queues.intvAFacturer.slice(0, 5).map((i) => (
+                <div
+                  key={i.id}
+                  style={{
+                    padding: '9px 11px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                      setIsCreatingIntv(false);
+                      setSelectedIntv(i);
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                      <span className="font-mono" style={{ color: '#60a5fa' }}>{i.reference || `INT-${i.id}`}</span> — {i.client}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Tech: {i.entreprise || '—'} • Résultat: {i.resultatTechnique || 'Non renseigné'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() =>
+                      updateIntvMut.mutate({
+                        id: i.id,
+                        data: { statutFacture: 'Facturée' },
+                      })
+                    }
+                  >
+                    Marquer Facturée
+                  </button>
+                </div>
+              ))}
+            </ActionQueueCard>
+          </div>
+
+          {queues.anomaliesQualite.length > 0 && (
+            <div
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-default)',
+                borderLeft: '4px solid #64748b',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  Contrôle Qualité des Données (Séparé des urgences métier) • {queues.anomaliesQualite.length} fiche(s) à compléter
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Exemples : {queues.anomaliesQualite.slice(0, 3).map((a) => `${a.ref} (${a.message})`).join(' • ')}
+                </div>
               </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  const first = queues.anomaliesQualite[0];
+                  if (first.type === 'DEVIS') {
+                    setIsCreatingDevis(false);
+                    setSelectedDevis(first.item);
+                  } else {
+                    setIsCreatingIntv(false);
+                    setSelectedIntv(first.item);
+                  }
+                }}
+              >
+                Compléter la 1ère fiche
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ======================================================================
-          ESPACE 2 : « DEVIS » (TABLE DE SYNTHÈSE 8 COLONNES + FICHE 22 COLONNES)
-          ====================================================================== */}
-      {activeSpace === 'devis' && (
-        <section className="panel">
-          <div className="panel-header-modern">
-            <div>
-              <h2 className="panel-title">DEVIS — Pilotage commercial & relances</h2>
-              <p className="panel-subtitle">
-                Cliquez sur une ligne pour ouvrir la fiche complète (22 colonnes ANELEC, visites techniques & interventions liées).
-              </p>
+      {/* =====================================================================
+          SECTION 2 : CONSOLE DISPATCH & PLANNING TECHNICIENS
+         ===================================================================== */}
+      {activeSection === 'planning' && (
+        <PlanningBoard
+          devisList={devisList}
+          interventionsList={interventionsList}
+          techniciens={techniciensList}
+          onUpdateDevisPlanning={async (devisId, payload) => {
+            await updateDevisMut.mutateAsync({ id: devisId, data: payload });
+          }}
+          onUpdateInterventionPlanning={async (intvId, payload) => {
+            await updateIntvMut.mutateAsync({ id: intvId, data: payload });
+          }}
+          onOpenDevisDrawer={(d) => {
+            setIsCreatingDevis(false);
+            setSelectedDevis(d);
+          }}
+          onOpenInterventionDrawer={(i) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(i);
+          }}
+          onCreateQuickIntervention={async (payload) => {
+            await createIntvMut.mutateAsync(payload);
+          }}
+        />
+      )}
+
+      {/* =====================================================================
+          SECTION 3 : PIPELINE DEVIS (TABLEAU 8 COLONNES + KANBAN + DRAWER 22 COL)
+         ===================================================================== */}
+      {activeSection === 'devis' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="fsm-toolbar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-btn ${devisViewStyle === 'table' ? 'active' : ''}`}
+                  onClick={() => setDevisViewStyle('table')}
+                >
+                  Tableau Synthétique (8 col)
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-btn ${devisViewStyle === 'kanban' ? 'active' : ''}`}
+                  onClick={() => setDevisViewStyle('kanban')}
+                >
+                  Pipeline Kanban (Drag & Drop)
+                </button>
+              </div>
+
+              <input
+                type="text"
+                className="input"
+                style={{ width: '240px' }}
+                placeholder="Rechercher réf, client, site, objet..."
+                value={devisSearch}
+                onChange={(e) => setDevisSearch(e.target.value)}
+              />
+
+              <select
+                className="select"
+                style={{ width: '185px' }}
+                value={devisStatutFilter}
+                onChange={(e) => setDevisStatutFilter(e.target.value)}
+              >
+                <option value="ALL">Tous statuts commerciaux</option>
+                {STATUTS_COMMERCIAUX_DEVIS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="select"
+                style={{ width: '165px' }}
+                value={devisResponsableFilter}
+                onChange={(e) => setDevisResponsableFilter(e.target.value)}
+              >
+                <option value="ALL">Tous responsables</option>
+                {responsablesList.map((r) => (
+                  <option key={r} value={r}>
+                    Resp: {r}
+                  </option>
+                ))}
+              </select>
             </div>
-            <button type="button" className="btn btn-primary" onClick={() => setIsCreatingDevis(true)}>
+
+            <button type="button" className="btn btn-primary" onClick={openNewDevisDrawer}>
               + Nouveau Devis
             </button>
           </div>
 
-          {/* Filtres enregistrés + Recherche */}
-          <div className="saved-filters-bar">
-            <div className="saved-pills">
-              {[
-                { id: 'ALL', label: `Tous (${devisList.length})` },
-                { id: 'A_CHIFFRER', label: '📐 À chiffrer / valider' },
-                { id: 'RELANCES_RETARD', label: '🔔 Relances en retard' },
-                { id: 'VISITES', label: '🟣 Avec visite technique' },
-                { id: 'BLOQUES', label: '⛔ Bloqués' },
-                { id: 'ACCEPTES', label: '✅ Acceptés' },
-              ].map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`filter-pill-btn ${devisSavedFilter === f.id ? 'active' : ''}`}
-                  onClick={() => setDevisSavedFilter(f.id as any)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="filter-inputs-right">
-              <select
-                className="select select-sm"
-                value={devisResponsableFilter}
-                onChange={(e) => setDevisResponsableFilter(e.target.value)}
-              >
-                <option value="ALL">👤 Tous responsables</option>
-                {referentiels.responsables.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="select select-sm"
-                value={devisCorpsEtatFilter}
-                onChange={(e) => setDevisCorpsEtatFilter(e.target.value)}
-              >
-                <option value="ALL">🛠️ Tous corps d’état</option>
-                {referentiels.corps_etat.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                className="input input-sm"
-                placeholder="Rechercher réf, client, site, objet..."
-                value={devisSearch}
-                onChange={(e) => setDevisSearch(e.target.value)}
-                style={{ width: '240px' }}
-              />
-            </div>
-          </div>
-
-          {/* Table de synthèse (8 colonnes clés du document ANELEC) */}
-          <div className="table-wrapper">
-            <table className="data-table modern-table">
-              <thead>
-                <tr>
-                  <th>Référence</th>
-                  <th>Client / Site</th>
-                  <th>Objet & Corps d’état</th>
-                  <th>Montant HT</th>
-                  <th>Statut commercial</th>
-                  <th>Traitement</th>
-                  <th>Prochaine action / Resp.</th>
-                  <th>Échéance / Alerte</th>
-                </tr>
-              </thead>
-              <tbody>
-                {devisLoading ? (
+          {devisViewStyle === 'table' ? (
+            <div className="pro-table-container">
+              <table className="pro-table">
+                <thead>
                   <tr>
-                    <td colSpan={8} className="empty-cell">
-                      Chargement des devis...
-                    </td>
+                    <th>Référence</th>
+                    <th>Client & Site</th>
+                    <th>Corps d'état & Objet</th>
+                    <th>Responsable</th>
+                    <th>Montant HT</th>
+                    <th>Statut & Visite</th>
+                    <th>Échéance / Alerte</th>
+                    <th style={{ textAlign: 'right' }}>Actions 1-Clic</th>
                   </tr>
-                ) : filteredDevis.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="empty-cell">
-                      Aucun devis ne correspond à ces critères.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDevis.map((d) => (
+                </thead>
+                <tbody>
+                  {filteredDevis.map((d) => (
                     <tr
                       key={d.id}
-                      className={`clickable-row ${selectedDevisId === d.id ? 'selected-row' : ''}`}
-                      onClick={() => setSelectedDevisId(d.id)}
+                      onClick={() => {
+                        setIsCreatingDevis(false);
+                        setSelectedDevis(d);
+                      }}
                     >
-                      <td>
-                        <div className="mono-ref">{d.reference}</div>
-                        <PrioriteBadge priorite={d.priorite} />
-                      </td>
-                      <td>
-                        <div className="cell-primary-text">{d.client}</div>
-                        <div className="cell-secondary-text">📍 {d.site || 'Site à préciser'}</div>
-                      </td>
-                      <td>
-                        <div className="cell-primary-text">{d.objet || '—'}</div>
-                        <div className="cell-tags-row">
-                          <span className="metier-chip">{d.corpsEtat || 'TCE'}</span>
-                          {d.visiteNecessaire && (
-                            <span className="visite-chip">
-                              🟣 Visite : {d.visiteTechnicien || 'À affecter'} ({d.visiteStatut || 'À planifier'})
-                            </span>
-                          )}
-                          {(d.interventionsCount || 0) > 0 && (
-                            <span className="linked-chip">🔗 {d.interventionsCount} interv.</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <strong className={d.amount === null ? 'text-muted' : ''}>
-                          {formatCurrency(d.amount)}
-                        </strong>
-                        {d.computed?.joursOuverts !== null && d.computed?.joursOuverts !== undefined && (
-                          <div className="cell-secondary-text">{d.computed.joursOuverts} j. ouverts</div>
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#60a5fa' }}>
+                        {d.reference || `DEV-${d.id}`}
+                        {(d.interventionsCount || 0) > 0 && (
+                          <span
+                            style={{
+                              marginLeft: '6px',
+                              padding: '1px 5px',
+                              fontSize: '10px',
+                              borderRadius: '4px',
+                              background: 'rgba(16, 185, 129, 0.16)',
+                              color: '#34d399',
+                            }}
+                          >
+                            INT liée
+                          </span>
                         )}
                       </td>
                       <td>
-                        <StatutCommercialBadge statut={d.statutCommercial} />
+                        <div style={{ fontWeight: 700 }}>{d.client || '—'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.site || '—'}</div>
                       </td>
                       <td>
-                        <TraitementBadge traitement={d.traitement} />
+                        <div style={{ fontWeight: 600 }}>{d.corpsEtat || '—'}</div>
+                        <div
+                          style={{
+                            fontSize: '11.5px',
+                            color: 'var(--text-secondary)',
+                            maxWidth: '250px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {d.objet || '—'}
+                        </div>
+                      </td>
+                      <td>{d.responsable || '—'}</td>
+                      <td className="font-mono" style={{ fontWeight: 700 }}>
+                        {formatCurrency(d.amount)}
                       </td>
                       <td>
-                        <div className="cell-primary-text">{d.prochaineAction || 'Aucune'}</div>
-                        <div className="cell-secondary-text">👤 {d.responsable || 'Non assigné'}</div>
+                        <StatusPill statut={d.statutCommercial} />
+                        {(d.visiteNecessaire || d.visiteTechnicien) && (
+                          <div style={{ fontSize: '10.5px', color: '#d8b4fe', marginTop: '3px' }}>
+                            Visite : {d.visiteTechnicien || 'À affecter'}
+                          </div>
+                        )}
                       </td>
                       <td>
-                        <AlerteBadge
-                          alerte={d.computed?.alerte}
-                          explication={d.computed?.alerteExplication}
-                        />
-                        <div className="cell-secondary-text">
-                          {d.dateRelance
-                            ? `Relance : ${formatDateFR(d.dateRelance)}`
-                            : d.echeance
-                            ? `Limite : ${formatDateFR(d.echeance)}`
-                            : '—'}
+                        <span
+                          style={{
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                            color:
+                              d.computed?.alerte === 'Réponse en retard'
+                                ? '#ef4444'
+                                : d.computed?.alerte === 'Relance en retard'
+                                ? '#f59e0b'
+                                : 'var(--text-secondary)',
+                          }}
+                        >
+                          {d.computed?.alerte || 'À suivre'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              updateDevisMut.mutate({
+                                id: d.id,
+                                data: {
+                                  visiteNecessaire: true,
+                                  traitement: 'En attente technicien',
+                                  visiteStatut: 'À planifier',
+                                },
+                              });
+                              handleSectionChange('planning');
+                            }}
+                          >
+                            Planifier Visite
+                          </button>
+                          {(!d.interventionsCount || d.interventionsCount === 0) && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => convertDevisMut.mutate(d.id)}
+                            >
+                              → Intervention
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="kanban-grid">
+              {['À préparer', 'En préparation', 'À valider en interne', 'Envoyé au client', 'En négociation', 'Accepté'].map(
+                (colStatut) => {
+                  const colItems = filteredDevis.filter((d) => d.statutCommercial === colStatut);
+                  return (
+                    <div
+                      key={colStatut}
+                      className="kanban-column"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        const rawId = e.dataTransfer.getData('text/devis-id');
+                        if (!rawId) return;
+                        updateDevisMut.mutate({
+                          id: Number(rawId),
+                          data: { statutCommercial: colStatut },
+                        });
+                        toast.success(`Devis déplacé vers « ${colStatut} »`);
+                      }}
+                    >
+                      <div className="kanban-col-header">
+                        <span>{colStatut}</span>
+                        <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          {colItems.length}
+                        </span>
+                      </div>
+                      <div className="kanban-col-body">
+                        {colItems.map((d) => (
+                          <div
+                            key={d.id}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('text/devis-id', String(d.id))}
+                            onClick={() => {
+                              setIsCreatingDevis(false);
+                              setSelectedDevis(d);
+                            }}
+                            className="kanban-card"
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span className="font-mono" style={{ fontWeight: 700, fontSize: '11px', color: '#60a5fa' }}>
+                                {d.reference || `DEV-${d.id}`}
+                              </span>
+                              <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700 }}>
+                                {formatCurrency(d.amount)}
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: 700, fontSize: '12.5px' }}>{d.client}</div>
+                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                              {d.objet || d.site || '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ======================================================================
-          ESPACE 3 : « INTERVENTIONS » (TABLE 8 COLONNES + FICHE 23 COLONNES)
-          ====================================================================== */}
-      {activeSpace === 'interventions' && (
-        <section className="panel">
-          <div className="panel-header-modern">
-            <div>
-              <h2 className="panel-title">INTERVENTIONS — Préparation, exécution & facturation</h2>
-              <p className="panel-subtitle">
-                Création directe sans devis autorisée. Une intervention « À planifier » n’impose pas d’inventer une date.
-              </p>
+      {/* =====================================================================
+          SECTION 4 : INTERVENTIONS TCE (TABLEAU 8 COL + KANBAN + DRAWER 23 COL)
+         ===================================================================== */}
+      {activeSection === 'interventions' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="fsm-toolbar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-btn ${intvViewStyle === 'table' ? 'active' : ''}`}
+                  onClick={() => setIntvViewStyle('table')}
+                >
+                  Tableau Synthétique (8 col)
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-btn ${intvViewStyle === 'kanban' ? 'active' : ''}`}
+                  onClick={() => setIntvViewStyle('kanban')}
+                >
+                  Kanban Opérationnel
+                </button>
+              </div>
+
+              <input
+                type="text"
+                className="input"
+                style={{ width: '240px' }}
+                placeholder="Rechercher réf, client, site, technicien..."
+                value={intvSearch}
+                onChange={(e) => setIntvSearch(e.target.value)}
+              />
+
+              <select
+                className="select"
+                style={{ width: '175px' }}
+                value={intvStatutFilter}
+                onChange={(e) => setIntvStatutFilter(e.target.value)}
+              >
+                <option value="ALL">Tous statuts</option>
+                {STATUTS_OPERATIONNELS_INTERVENTION.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="select"
+                style={{ width: '165px' }}
+                value={intvTechFilter}
+                onChange={(e) => setIntvTechFilter(e.target.value)}
+              >
+                <option value="ALL">Tous techniciens</option>
+                {techniciensList.map((t) => (
+                  <option key={t} value={t}>
+                    Tech: {t}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" className="btn btn-anelec-green" onClick={() => navigate('/planning')}>
-                🗓️ Vue Planning Interactif
-              </button>
-              <button type="button" className="btn btn-primary" onClick={() => setIsCreatingInterv(true)}>
-                + Nouvelle Intervention
-              </button>
-            </div>
+
+            <button type="button" className="btn btn-primary" onClick={openNewIntvDrawer}>
+              + Nouvelle Intervention
+            </button>
           </div>
 
-          <div className="saved-filters-bar">
-            <div className="saved-pills">
+          {intvViewStyle === 'table' ? (
+            <div className="pro-table-container">
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>Référence</th>
+                    <th>Client & Chantier</th>
+                    <th>Corps d'état & Objet</th>
+                    <th>Technicien Terrain</th>
+                    <th>Créneau Planifié</th>
+                    <th>Statut Opérationnel</th>
+                    <th>Facturation</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInterventions.map((i) => (
+                    <tr
+                      key={i.id}
+                      onClick={() => {
+                        setIsCreatingIntv(false);
+                        setSelectedIntv(i);
+                      }}
+                    >
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#60a5fa' }}>
+                        {i.reference || `INT-${i.id}`}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700 }}>{i.client || '—'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{i.chantier || '—'}</div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{i.corpsEtat || i.typeIntervention || '—'}</div>
+                        <div
+                          style={{
+                            fontSize: '11.5px',
+                            color: 'var(--text-secondary)',
+                            maxWidth: '240px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {i.objet || '—'}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{i.entreprise || 'À affecter'}</td>
+                      <td className="font-mono" style={{ fontSize: '11.5px' }}>
+                        {formatDateFR(i.datePlanifiee)}
+                        {i.heureDebut && (
+                          <div style={{ color: '#60a5fa' }}>
+                            {i.heureDebut}–{i.heureFin || '12:00'}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <StatusPill statut={i.statutOperationnel} />
+                      </td>
+                      <td>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: '11px',
+                            color: i.statutFacture === 'Facturée' ? '#10b981' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {i.statutFacture || 'Non facturée'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleSectionChange('planning')}
+                        >
+                          Voir sur Gantt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="kanban-grid">
+              {['À planifier', 'Planifiée', 'En cours', 'Suspendue', 'Terminée - à valider', 'Clôturée'].map(
+                (colStatut) => {
+                  const colItems = filteredInterventions.filter((i) => i.statutOperationnel === colStatut);
+                  return (
+                    <div
+                      key={colStatut}
+                      className="kanban-column"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        const rawId = e.dataTransfer.getData('text/intv-id');
+                        if (!rawId) return;
+                        updateIntvMut.mutate({
+                          id: Number(rawId),
+                          data: { statutOperationnel: colStatut },
+                        });
+                        toast.success(`Intervention passée en « ${colStatut} »`);
+                      }}
+                    >
+                      <div className="kanban-col-header">
+                        <span>{colStatut}</span>
+                        <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          {colItems.length}
+                        </span>
+                      </div>
+                      <div className="kanban-col-body">
+                        {colItems.map((i) => (
+                          <div
+                            key={i.id}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('text/intv-id', String(i.id))}
+                            onClick={() => {
+                              setIsCreatingIntv(false);
+                              setSelectedIntv(i);
+                            }}
+                            className="kanban-card"
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span className="font-mono" style={{ fontWeight: 700, fontSize: '11px', color: '#60a5fa' }}>
+                                {i.reference || `INT-${i.id}`}
+                              </span>
+                              <span className="font-mono" style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                                {i.entreprise || 'Non affecté'}
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: 700, fontSize: '12.5px' }}>{i.client}</div>
+                            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{i.objet || i.chantier}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =====================================================================
+          SECTION 5 : RÉFÉRENTIELS MÉTIER ANELEC
+         ===================================================================== */}
+      {activeSection === 'referentiels' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="fsm-toolbar">
+            <div>
+              <h2 style={{ fontSize: '14px', fontWeight: 700 }}>Administration des Référentiels ANELEC</h2>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Ajoutez des techniciens, responsables, clients et corps d'état sans redéploiement.
+              </p>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newRefValue.trim()) return;
+                const currentVals = refs[newRefCategory] || [];
+                if (!currentVals.includes(newRefValue.trim())) {
+                  await referentielsApi.updateCategory(newRefCategory, [
+                    ...currentVals,
+                    newRefValue.trim(),
+                  ]);
+                  queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                  toast.success('Entrée ajoutée au référentiel');
+                }
+                setNewRefValue('');
+              }}
+              style={{ display: 'flex', gap: '8px' }}
+            >
+              <select
+                className="select"
+                style={{ width: '190px' }}
+                value={newRefCategory}
+                onChange={(e) => setNewRefCategory(e.target.value as keyof ReferentielsMap)}
+              >
+                <option value="techniciens">Techniciens terrain</option>
+                <option value="responsables">Responsables internes</option>
+                <option value="corps_etat">Corps d'état TCE</option>
+                <option value="clients">Clients récurrents</option>
+                <option value="origines">Origines / Provenances</option>
+              </select>
+              <input
+                type="text"
+                className="input"
+                style={{ width: '210px' }}
+                placeholder="Nouvelle valeur..."
+                value={newRefValue}
+                onChange={(e) => setNewRefValue(e.target.value)}
+              />
+              <button type="submit" className="btn btn-primary">
+                Ajouter
+              </button>
+            </form>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+            {[
+              { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList },
+              { key: 'responsables', label: 'Responsables Internes', items: responsablesList },
+              { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList },
+              { key: 'origines', label: 'Origines de demande', items: originesList },
+              { key: 'statuts_devis', label: 'Statuts Commerciaux Devis', items: [...STATUTS_COMMERCIAUX_DEVIS] },
+              { key: 'statuts_intv', label: 'Statuts Opérationnels Interventions', items: [...STATUTS_OPERATIONNELS_INTERVENTION] },
+            ].map((group) => (
+              <div key={group.key} className="pro-table-container" style={{ padding: '14px' }}>
+                <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', color: '#60a5fa' }}>
+                  {group.label} ({group.items.length})
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {group.items.map((val) => (
+                    <span
+                      key={val}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-default)',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {val}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          SLIDE-OVER INSPECTOR DRAWER : DEVIS (22 COLONNES ANELEC)
+         ===================================================================== */}
+      {selectedDevis && (
+        <div className="inspector-backdrop" onClick={() => setSelectedDevis(null)}>
+          <div className="inspector-drawer" onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border-default)',
+                background: 'var(--bg-elevated)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="font-mono" style={{ fontWeight: 800, fontSize: '14px', color: '#60a5fa' }}>
+                    {isCreatingDevis ? 'NOUVEAU DEVIS' : selectedDevis.reference || `DEV-${selectedDevis.id}`}
+                  </span>
+                  <StatusPill statut={selectedDevis.statutCommercial || 'À préparer'} />
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Fiche complète 22 colonnes ANELEC • Calculs automatiques Europe/Paris
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {!isCreatingDevis && selectedDevis.id && (
+                  <button
+                    type="button"
+                    className="btn btn-ai-dispatch btn-sm"
+                    onClick={() => convertDevisMut.mutate(selectedDevis.id!)}
+                  >
+                    Convertir → Intervention
+                  </button>
+                )}
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDevis(null)}>
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '10px 20px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                gap: '6px',
+              }}
+            >
               {[
-                { id: 'ALL', label: `Toutes (${intervList.length})` },
-                { id: 'A_PLANIFIER', label: '🗓️ À planifier / affecter' },
-                { id: 'VISITES_DEVIS', label: '🟣 Visites techniques Devis' },
-                { id: 'BLOQUEES', label: '⛔ Bloquées / Suspendues' },
-                { id: 'A_VALIDER', label: '✅ Terminées - à valider' },
-                { id: 'NON_FACTUREES', label: '💶 Clôturées non facturées' },
-              ].map((f) => (
+                { id: 'qualif', label: '1. Qualification & Visite' },
+                { id: 'chiffrage', label: '2. Chiffrage & Échéances' },
+                { id: 'relances', label: '3. Suivi & Relances' },
+                { id: 'historique', label: '4. Calculs & Historique' },
+              ].map((t) => (
                 <button
-                  key={f.id}
+                  key={t.id}
                   type="button"
-                  className={`filter-pill-btn ${intervSavedFilter === f.id ? 'active' : ''}`}
-                  onClick={() => setIntervSavedFilter(f.id as any)}
+                  className={`segmented-btn ${devisTab === t.id ? 'active' : ''}`}
+                  onClick={() => setDevisTab(t.id as any)}
                 >
-                  {f.label}
+                  {t.label}
                 </button>
               ))}
             </div>
 
-            <div className="filter-inputs-right">
-              <select
-                className="select select-sm"
-                value={intervTechFilter}
-                onChange={(e) => setIntervTechFilter(e.target.value)}
-              >
-                <option value="ALL">👷 Tous techniciens</option>
-                {referentiels.techniciens.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="select select-sm"
-                value={intervCorpsEtatFilter}
-                onChange={(e) => setIntervCorpsEtatFilter(e.target.value)}
-              >
-                <option value="ALL">🛠️ Tous corps d’état</option>
-                {referentiels.corps_etat.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="text"
-                className="input input-sm"
-                placeholder="Rechercher réf, site, client, panne..."
-                value={intervSearch}
-                onChange={(e) => setIntervSearch(e.target.value)}
-                style={{ width: '240px' }}
-              />
-            </div>
-          </div>
-
-          <div className="table-wrapper">
-            <table className="data-table modern-table">
-              <thead>
-                <tr>
-                  <th>Référence</th>
-                  <th>Client / Site</th>
-                  <th>Objet & Nature</th>
-                  <th>Technicien</th>
-                  <th>Date planifiée & Créneau</th>
-                  <th>Statut opérationnel</th>
-                  <th>Blocage / Résultat</th>
-                  <th>Alerte & Facturation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {intervLoading ? (
-                  <tr>
-                    <td colSpan={8} className="empty-cell">
-                      Chargement des interventions...
-                    </td>
-                  </tr>
-                ) : filteredInterventions.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="empty-cell">
-                      Aucune intervention ne correspond à ces critères.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredInterventions.map((i) => (
-                    <tr
-                      key={i.id}
-                      className={`clickable-row ${selectedIntervId === i.id ? 'selected-row' : ''}`}
-                      onClick={() => setSelectedIntervId(i.id)}
-                    >
-                      <td>
-                        <div className="mono-ref">{i.reference}</div>
-                        <PrioriteBadge priorite={i.priorite} />
-                      </td>
-                      <td>
-                        <div className="cell-primary-text">{i.client || 'Intervention directe'}</div>
-                        <div className="cell-secondary-text">📍 {i.chantier}</div>
-                      </td>
-                      <td>
-                        <div className="cell-primary-text">{i.objet || i.chantier}</div>
-                        <div className="cell-tags-row">
-                          <span className="metier-chip">{i.corpsEtat || 'TCE'}</span>
-                          <span className={i.isVisiteDevis ? 'visite-chip' : 'type-chip'}>
-                            {i.isVisiteDevis ? '🟣 Visite Devis' : i.typeIntervention || 'Corrective'}
-                          </span>
-                          {i.refDevisTexte && <span className="linked-chip">🔗 {i.refDevisTexte}</span>}
-                        </div>
-                      </td>
-                      <td>
-                        {i.entreprise ? (
-                          <span className="tech-pill">👷 {i.entreprise}</span>
-                        ) : (
-                          <span className="text-warning">À affecter</span>
-                        )}
-                      </td>
-                      <td>
-                        <div className="cell-primary-text">
-                          {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'Non planifiée'}
-                        </div>
-                        <div className="cell-secondary-text">
-                          {i.heureDebut && i.heureFin
-                            ? `🕒 ${i.heureDebut} – ${i.heureFin} (${i.computed?.dureeHeures || ''}h)`
-                            : 'Créneau à définir'}
-                        </div>
-                      </td>
-                      <td>
-                        <StatutOpBadge statut={i.statutOperationnel} />
-                        <div style={{ marginTop: '4px' }}>
-                          <TraitementBadge traitement={i.traitement} />
-                        </div>
-                      </td>
-                      <td>
-                        {i.motifBlocage ? (
-                          <span className="blocage-pill">⛔ {i.motifBlocage}</span>
-                        ) : i.resultatTechnique ? (
-                          <span className="resultat-pill">✓ {i.resultatTechnique}</span>
-                        ) : (
-                          <span className="cell-secondary-text">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <AlerteBadge
-                          alerte={i.computed?.alerteDelai}
-                          explication={i.computed?.alerteExplication}
-                        />
-                        {!i.isVisiteDevis && (
-                          <div className="cell-secondary-text">
-                            {i.statutFacture === 'Facturée'
-                              ? `💶 Facturée (${i.numeroFacture || 'Réf.'})`
-                              : 'Non facturée'}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* ======================================================================
-          ESPACE 4 : « PLANNING TECHNICIENS » (SOURIS + CLAVIER)
-          ====================================================================== */}
-      {activeSpace === 'planning' && (
-        <PlanningBoard
-          interventions={intervList}
-          devis={devisList}
-          techniciens={referentiels.techniciens}
-          corpsEtatList={referentiels.corps_etat}
-          onUpdateIntervention={(id, data) => updateIntervMutation.mutateAsync({ id, data })}
-          onCreateIntervention={(data) => createIntervMutation.mutateAsync(data)}
-          onConvertDevis={(id, data) => convertDevisMutation.mutateAsync({ id, data })}
-          onSelectIntervention={(i) => setSelectedIntervId(i.id)}
-          onSelectDevis={(d) => setSelectedDevisId(d.id)}
-        />
-      )}
-
-      {/* ======================================================================
-          ESPACE 5 : « RÉFÉRENTIELS » (L'ONGLET LISTES ADMINISTRABLE)
-          ====================================================================== */}
-      {activeSpace === 'referentiels' && (
-        <section className="panel">
-          <div className="panel-header-modern">
-            <div>
-              <h2 className="panel-title">RÉFÉRENTIELS MÉTIER ANELEC (Listes de choix administrables)</h2>
-              <p className="panel-subtitle">
-                Personnalisez les listes de Techniciens, Responsables, Clients, Corps d’état, Motifs de blocage et Résultats techniques.
-              </p>
-            </div>
-          </div>
-
-          <div className="referentiels-grid">
-            {(
-              [
-                { key: 'techniciens', title: '👷 Techniciens & Sous-traitants (Planning)' },
-                { key: 'responsables', title: '👤 Responsables administratifs & commerciaux' },
-                { key: 'clients', title: '🏢 Clients / Donneurs d’ordre' },
-                { key: 'corps_etat', title: '🛠️ Corps d’état TCE' },
-                { key: 'origines', title: '📥 Origines des demandes' },
-                { key: 'motifs_blocage', title: '⛔ Motifs de blocage terrain' },
-                { key: 'resultats_techniques', title: '✅ Résultats techniques (Clôture)' },
-              ] as Array<{ key: keyof ReferentielsMap; title: string }>
-            ).map(({ key, title }) => {
-              const items = referentiels[key] || [];
-              return (
-                <div key={key} className="ref-card">
-                  <div className="ref-card-header">
-                    <h3>{title}</h3>
-                    <span className="badge-count">{items.length}</span>
-                  </div>
-                  <div className="ref-tags-list">
-                    {items.map((val) => (
-                      <span key={val} className="ref-editable-tag">
-                        {val}
-                        <button
-                          type="button"
-                          title="Retirer de la liste"
-                          onClick={() => {
-                            const updated = items.filter((x) => x !== val);
-                            updateRefMutation.mutate({ categorie: key, valeurs: updated });
-                          }}
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <form
-                    className="ref-add-form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const v = (newRefValue[key] || '').trim();
-                      if (!v || items.includes(v)) return;
-                      updateRefMutation.mutate({ categorie: key, valeurs: [...items, v] });
-                      setNewRefValue({ ...newRefValue, [key]: '' });
-                    }}
-                  >
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {devisTab === 'qualif' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client / Donneur d'ordre *</label>
                     <input
-                      type="text"
-                      className="input input-sm"
-                      placeholder="Ajouter une valeur..."
-                      value={newRefValue[key] || ''}
-                      onChange={(e) => setNewRefValue({ ...newRefValue, [key]: e.target.value })}
-                    />
-                    <button type="submit" className="btn btn-primary btn-sm">
-                      Ajouter
-                    </button>
-                  </form>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ======================================================================
-          TIROIR LATÉRAL (DRAWER) : FICHE COMPLÈTE DEVIS (22 COLONNES + DOSSIER)
-          ====================================================================== */}
-      {selectedDevis && (
-        <div className="drawer-overlay" onClick={() => setSelectedDevisId(null)}>
-          <aside className="dossier-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="drawer-header">
-              <div>
-                <div className="drawer-badges-top">
-                  <span className="mono-ref">{selectedDevis.reference}</span>
-                  <StatutCommercialBadge statut={selectedDevis.statutCommercial} />
-                  <TraitementBadge traitement={selectedDevis.traitement} />
-                  <AlerteBadge
-                    alerte={selectedDevis.computed?.alerte}
-                    explication={selectedDevis.computed?.alerteExplication}
-                  />
-                </div>
-                <h2 className="drawer-title">
-                  {selectedDevis.client} — {selectedDevis.site || 'Site à préciser'}
-                </h2>
-              </div>
-              <button className="drawer-close" onClick={() => setSelectedDevisId(null)}>
-                &times;
-              </button>
-            </div>
-
-            {/* Explication de l'alerte calculée */}
-            <div className="drawer-alert-banner">
-              <div>
-                <strong>Diagnostic automatique :</strong> {selectedDevis.computed?.alerteExplication}
-                {selectedDevis.computed?.joursOuverts !== null && (
-                  <span> • Ouvert depuis {selectedDevis.computed?.joursOuverts} jour(s)</span>
-                )}
-                {selectedDevis.computed?.dateExpiration && (
-                  <span> • Expire le {formatDateFR(selectedDevis.computed.dateExpiration)}</span>
-                )}
-              </div>
-              <div className="drawer-quick-links">
-                <button
-                  type="button"
-                  className="btn btn-xs btn-visite"
-                  onClick={() =>
-                    convertDevisMutation.mutate({
-                      id: selectedDevis.id,
-                      data: {
-                        mode: 'visite',
-                        isVisiteDevis: true,
-                        entreprise: selectedDevis.visiteTechnicien || referentiels.techniciens[0],
-                        datePlanifiee: selectedDevis.visiteDate || undefined,
-                        heureDebut: selectedDevis.visiteHeureDebut || '09:00',
-                        heureFin: selectedDevis.visiteHeureFin || '10:30',
-                      },
-                    })
-                  }
-                >
-                  🟣 + Créer Visite Technique au Planning
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-xs btn-primary"
-                  onClick={() =>
-                    convertDevisMutation.mutate({
-                      id: selectedDevis.id,
-                      data: {
-                        mode: 'travaux',
-                        isVisiteDevis: false,
-                        entreprise: referentiels.techniciens[0],
-                      },
-                    })
-                  }
-                >
-                  🔧 + Créer Intervention Travaux liée
-                </button>
-              </div>
-            </div>
-
-            <form key={selectedDevis.id} className="drawer-body-form" onSubmit={handleSaveDevisDrawer}>
-              {/* 1. Identification (Colonnes A, B, C, D, E, F) */}
-              <fieldset className="drawer-section">
-                <legend>1. Identification de la demande (Colonnes A à F)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">A. Réf. devis</label>
-                    <input name="reference" className="input" defaultValue={selectedDevis.reference || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">B. Client (Donneur d’ordre)</label>
-                    <input
-                      name="client"
-                      list="list-clients"
                       className="input"
-                      defaultValue={selectedDevis.client}
-                      required
+                      value={selectedDevis.client || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, client: e.target.value })}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">F. Origine</label>
-                    <select name="origine" className="select" defaultValue={selectedDevis.origine || "Donneur d'ordre"}>
-                      {referentiels.origines.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Site / Immeuble / Adresse</label>
+                    <input
+                      className="input"
+                      value={selectedDevis.site || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, site: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Corps d'état TCE</label>
+                    <select
+                      className="select"
+                      value={selectedDevis.corpsEtat || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, corpsEtat: e.target.value })}
+                    >
+                      {corpsEtatList.map((t) => (
+                        <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
-                </div>
-
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">C. Site / Adresse d’exécution</label>
-                    <input
-                      name="site"
-                      className="input"
-                      placeholder="Ex: Agence Orléans, Supermarché Saran..."
-                      defaultValue={selectedDevis.site || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">E. Corps d’état</label>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Responsable interne (Chargé d'affaires)</label>
                     <select
-                      name="corpsEtat"
                       className="select"
-                      defaultValue={selectedDevis.corpsEtat || 'Tous corps d’état'}
+                      value={selectedDevis.responsable || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, responsable: e.target.value })}
                     >
-                      {referentiels.corps_etat.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
+                      {responsablesList.map((r) => (
+                        <option key={r} value={r}>{r}</option>
                       ))}
                     </select>
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">D. Objet / Travaux demandés</label>
-                  <input name="objet" className="input" defaultValue={selectedDevis.objet || ''} />
-                </div>
-              </fieldset>
-
-              {/* 2. Décision, Statut commercial, Traitement & Prochaine action (Colonnes J, K, O, Q, R) */}
-              <fieldset className="drawer-section">
-                <legend>2. Décision commerciale & Suivi administratif (Colonnes J, K, O, Q, R)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">J. Statut commercial du devis</label>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Statut Commercial</label>
                     <select
-                      name="statutCommercial"
                       className="select"
-                      defaultValue={selectedDevis.statutCommercial}
+                      value={selectedDevis.statutCommercial || 'À préparer'}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, statutCommercial: e.target.value })}
                     >
                       {STATUTS_COMMERCIAUX_DEVIS.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
+                        <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">K. Traitement administratif</label>
-                    <select name="traitement" className="select" defaultValue={selectedDevis.traitement || 'À traiter'}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Traitement Administratif</label>
+                    <select
+                      className="select"
+                      value={selectedDevis.traitement || 'À traiter'}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, traitement: e.target.value })}
+                    >
                       {TRAITEMENTS_ADMIN.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
+                        <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">R. Priorité</label>
-                    <select name="priorite" className="select" defaultValue={selectedDevis.priorite || 'Normale'}>
-                      {PRIORITES.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">O. Prochaine action attendue</label>
-                    <select
-                      name="prochaineAction"
-                      className="select"
-                      defaultValue={selectedDevis.prochaineAction || 'Chiffrer'}
-                    >
-                      {PROCHAINES_ACTIONS_DEVIS.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Q. Responsable du dossier</label>
-                    <select name="responsable" className="select" defaultValue={selectedDevis.responsable || ''}>
-                      <option value="">— Non assigné —</option>
-                      {referentiels.responsables.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">P. Date de relance prévue</label>
-                    <input type="date" name="dateRelance" className="input" defaultValue={selectedDevis.dateRelance || ''} />
-                  </div>
-                </div>
-              </fieldset>
-
-              {/* 3. Chiffrage & Calendrier commercial (Colonnes G, H, I, L, M, N, U) */}
-              <fieldset className="drawer-section">
-                <legend>3. Chiffrage & Calendrier commercial (Colonnes G, H, I, L, M, N, U)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">L. Montant HT (€) (vide = inconnu)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="amount"
-                      className="input"
-                      placeholder="Non chiffré"
-                      defaultValue={selectedDevis.amount ?? ''}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Objet / Description des travaux</label>
+                    <textarea
+                      className="textarea"
+                      rows={3}
+                      value={selectedDevis.objet || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, objet: e.target.value })}
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">M. Validité (jours)</label>
-                    <input
-                      type="number"
-                      name="validiteJours"
-                      className="input"
-                      placeholder="Ex: 30"
-                      defaultValue={selectedDevis.validiteJours ?? ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">N. Expiration calculée</label>
-                    <input
-                      className="input"
-                      disabled
-                      value={
-                        selectedDevis.computed?.dateExpiration
-                          ? formatDateFR(selectedDevis.computed.dateExpiration)
-                          : 'Non applicable'
-                      }
-                    />
-                  </div>
-                </div>
 
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">G. Date demande</label>
-                    <input type="date" name="dateCreated" className="input" defaultValue={selectedDevis.dateCreated || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">H. Date limite de réponse</label>
-                    <input type="date" name="echeance" className="input" defaultValue={selectedDevis.echeance || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">I. Date d’envoi au client</label>
-                    <input type="date" name="dateEnvoi" className="input" defaultValue={selectedDevis.dateEnvoi || ''} />
-                  </div>
-                </div>
-              </fieldset>
-
-              {/* 4. Visite technique pour faire le devis (Synchronisée avec le Planning Techniciens !) */}
-              <fieldset className="drawer-section highlight-visite-section">
-                <legend>🟣 4. Visite technique sur site pour établir le devis (Auto-Planning)</legend>
-                <label className="checkbox-inline-label">
-                  <input
-                    type="checkbox"
-                    name="visiteNecessaire"
-                    defaultChecked={Boolean(selectedDevis.visiteNecessaire)}
-                  />
-                  <span>
-                    Ce devis nécessite le passage d’un technicien sur site (crée/met à jour automatiquement le créneau dans le Planning)
-                  </span>
-                </label>
-
-                <div className="form-row-4" style={{ marginTop: '10px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Technicien visite</label>
-                    <select
-                      name="visiteTechnicien"
-                      className="select"
-                      defaultValue={selectedDevis.visiteTechnicien || ''}
-                    >
-                      <option value="">— À affecter —</option>
-                      {referentiels.techniciens.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Date visite</label>
-                    <input type="date" name="visiteDate" className="input" defaultValue={selectedDevis.visiteDate || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure début</label>
-                    <input
-                      type="time"
-                      name="visiteHeureDebut"
-                      className="input"
-                      defaultValue={selectedDevis.visiteHeureDebut || '09:00'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure fin</label>
-                    <input
-                      type="time"
-                      name="visiteHeureFin"
-                      className="input"
-                      defaultValue={selectedDevis.visiteHeureFin || '10:30'}
-                    />
-                  </div>
-                </div>
-              </fieldset>
-
-              {/* 5. Interventions liées & Commentaires (Colonnes S, T) */}
-              <fieldset className="drawer-section">
-                <legend>5. Interventions liées & Commentaires (Colonnes S et T)</legend>
-                <div className="form-group">
-                  <label className="form-label">S. Réf. intervention(s) liée(s)</label>
-                  <input
-                    name="refInterventionTexte"
-                    className="input"
-                    defaultValue={selectedDevis.refInterventionTexte || ''}
-                  />
-                </div>
-                {(selectedDevis as any).interventions?.length > 0 && (
-                  <div className="linked-items-box">
-                    {(selectedDevis as any).interventions.map((li: any) => (
-                      <button
-                        key={li.id}
-                        type="button"
-                        className="linked-item-pill"
-                        onClick={() => {
-                          setSelectedDevisId(null);
-                          setSelectedIntervId(li.id);
-                        }}
-                      >
-                        🔗 {li.reference} • {li.isVisiteDevis ? '🟣 Visite Devis' : '🔧 Travaux'} •{' '}
-                        {li.entreprise || 'À affecter'} ({formatDateFR(li.datePlanifiee)}) • {li.statutOperationnel}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="form-group" style={{ marginTop: '8px' }}>
-                  <label className="form-label">T. Commentaires / Notes dossier</label>
-                  <textarea name="notes" className="textarea" rows={3} defaultValue={selectedDevis.notes || ''} />
-                </div>
-              </fieldset>
-
-              {/* 6. Historique horodaté du dossier */}
-              <fieldset className="drawer-section">
-                <legend>6. Historique & Traçabilité du dossier</legend>
-                <div className="history-timeline">
-                  {(selectedDevis.historique || []).length === 0 ? (
-                    <p className="text-muted">Aucun événement enregistré.</p>
-                  ) : (
-                    (selectedDevis.historique || []).map((ev: any) => (
-                      <div key={ev.id} className="history-event-row">
-                        <span className="history-dot" />
-                        <div>
-                          <div className="history-action">
-                            <strong>{ev.action}</strong> <span className="history-author">par {ev.auteur}</span>
-                          </div>
-                          {ev.details && <div className="history-details">{ev.details}</div>}
-                          <div className="history-date">
-                            {new Date(ev.date).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </fieldset>
-
-              <div className="drawer-footer">
-                <button
-                  type="button"
-                  className="btn btn-destructive"
-                  onClick={() => {
-                    if (confirm('Supprimer définitivement ce devis ?')) {
-                      deleteDevisMutation.mutate(selectedDevis.id);
-                    }
-                  }}
-                >
-                  Supprimer
-                </button>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn btn-ghost" onClick={() => setSelectedDevisId(null)}>
-                    Fermer
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={updateDevisMutation.isPending}>
-                    {updateDevisMutation.isPending ? 'Enregistrement...' : 'Enregistrer la fiche Devis'}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </aside>
-        </div>
-      )}
-
-      {/* ======================================================================
-          TIROIR LATÉRAL (DRAWER) : FICHE COMPLÈTE INTERVENTION (23 COLONNES)
-          ====================================================================== */}
-      {selectedInterv && (
-        <div className="drawer-overlay" onClick={() => setSelectedIntervId(null)}>
-          <aside className="dossier-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="drawer-header">
-              <div>
-                <div className="drawer-badges-top">
-                  <span className="mono-ref">{selectedInterv.reference}</span>
-                  <StatutOpBadge statut={selectedInterv.statutOperationnel} />
-                  <TraitementBadge traitement={selectedInterv.traitement} />
-                  <AlerteBadge
-                    alerte={selectedInterv.computed?.alerteDelai}
-                    explication={selectedInterv.computed?.alerteExplication}
-                  />
-                </div>
-                <h2 className="drawer-title">
-                  {selectedInterv.client || 'Client'} — {selectedInterv.chantier}
-                </h2>
-              </div>
-              <button className="drawer-close" onClick={() => setSelectedIntervId(null)}>
-                &times;
-              </button>
-            </div>
-
-            <div className="drawer-alert-banner">
-              <div>
-                <strong>Suivi délai :</strong> {selectedInterv.computed?.alerteExplication}
-                {selectedInterv.devisId && (
-                  <button
-                    type="button"
-                    className="btn-link-sm"
-                    style={{ marginLeft: '12px' }}
-                    onClick={() => {
-                      const dId = selectedInterv.devisId!;
-                      setSelectedIntervId(null);
-                      setSelectedDevisId(dId);
+                  {/* VISITE TECHNIQUE BLOCK */}
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      background: 'rgba(168, 85, 247, 0.1)',
+                      border: '1px solid rgba(168, 85, 247, 0.35)',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '10px',
                     }}
                   >
-                    🔗 Voir le Devis d’origine ({selectedInterv.refDevisTexte || `#${selectedInterv.devisId}`})
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                className="btn btn-xs btn-anelec-green"
-                onClick={() => {
-                  setSelectedIntervId(null);
-                  navigate('/planning');
-                }}
-              >
-                🗓️ Voir sur le Planning
-              </button>
-            </div>
-
-            <form key={selectedInterv.id} className="drawer-body-form" onSubmit={handleSaveIntervDrawer}>
-              {/* 1. Identification (Colonnes A, B, C, D, E, F, H) */}
-              <fieldset className="drawer-section">
-                <legend>1. Identification & Devis lié éventuel (Colonnes A à F, H)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">A. Réf. intervention</label>
-                    <input name="reference" className="input" defaultValue={selectedInterv.reference || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">B. Réf. devis lié (optionnel)</label>
-                    <input name="refDevisTexte" className="input" defaultValue={selectedInterv.refDevisTexte || ''} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">F. Origine</label>
-                    <select name="origine" className="select" defaultValue={selectedInterv.origine || "Donneur d'ordre"}>
-                      {referentiels.origines.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">C. Client (Donneur d’ordre)</label>
-                    <input
-                      name="client"
-                      list="list-clients"
-                      className="input"
-                      defaultValue={selectedInterv.client || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">D. Site / Adresse d’intervention</label>
-                    <input name="chantier" className="input" defaultValue={selectedInterv.chantier} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">H. Corps d’état</label>
-                    <select
-                      name="corpsEtat"
-                      className="select"
-                      defaultValue={selectedInterv.corpsEtat || 'Tous corps d’état'}
-                    >
-                      {referentiels.corps_etat.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">E. Objet / Panne / Travaux</label>
-                  <input name="objet" className="input" defaultValue={selectedInterv.objet || ''} />
-                </div>
-              </fieldset>
-
-              {/* 2. Nature, Mode de planification & Priorité séparés (Colonnes G, I) */}
-              <fieldset className="drawer-section">
-                <legend>2. Nature, Mode de planification & Priorité (Colonnes G et I séparées)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">G. Nature / Type d’intervention</label>
-                    <select
-                      name="typeIntervention"
-                      className="select"
-                      defaultValue={selectedInterv.typeIntervention || 'Corrective'}
-                    >
-                      {TYPES_INTERVENTION.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Mode de planification</label>
-                    <select
-                      name="modePlanification"
-                      className="select"
-                      defaultValue={selectedInterv.modePlanification || 'Planifiée'}
-                    >
-                      {MODES_PLANIFICATION.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">I. Priorité</label>
-                    <select name="priorite" className="select" defaultValue={selectedInterv.priorite || 'Normale'}>
-                      {PRIORITES.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <label className="checkbox-inline-label" style={{ marginTop: '6px' }}>
-                  <input
-                    type="checkbox"
-                    name="isVisiteDevis"
-                    defaultChecked={Boolean(selectedInterv.isVisiteDevis)}
-                  />
-                  <span>🟣 Il s’agit d’une visite technique pour préparer un devis</span>
-                </label>
-              </fieldset>
-
-              {/* 3. Affectation Technicien & Créneau Horaire Planning (Colonnes J, K, N, O, P, Q) */}
-              <fieldset className="drawer-section">
-                <legend>3. Affectation Technicien & Planning Horaire (Colonnes J, K, N, O, P, Q)</legend>
-                <div className="form-row-4">
-                  <div className="form-group">
-                    <label className="form-label">N. Technicien / Sous-traitant</label>
-                    <select name="entreprise" className="select" defaultValue={selectedInterv.entreprise || ''}>
-                      <option value="">— À affecter —</option>
-                      {referentiels.techniciens.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">K. Date planifiée (optionnelle)</label>
-                    <input
-                      type="date"
-                      name="datePlanifiee"
-                      className="input"
-                      defaultValue={selectedInterv.datePlanifiee || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure début</label>
-                    <input
-                      id="drawer-heure-debut"
-                      type="time"
-                      name="heureDebut"
-                      className="input"
-                      defaultValue={selectedInterv.heureDebut || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure fin</label>
-                    <input
-                      id="drawer-heure-fin"
-                      type="time"
-                      name="heureFin"
-                      className="input"
-                      defaultValue={selectedInterv.heureFin || ''}
-                    />
-                  </div>
-                </div>
-
-                {/* Saisie rapide d'intervalle au clavier */}
-                <div className="form-group">
-                  <label className="form-label">
-                    ⌨️ Saisie rapide d’intervalle au clavier (ex: <code>08:30-11:30</code>, <code>14h-17h</code>,{' '}
-                    <code>matin</code>, <code>aprem</code>)
-                  </label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Tapez un intervalle horaire puis Entrée..."
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const parsed = parseTimeIntervalInput(e.currentTarget.value);
-                        if (parsed) {
-                          const hd = document.getElementById('drawer-heure-debut') as HTMLInputElement | null;
-                          const hf = document.getElementById('drawer-heure-fin') as HTMLInputElement | null;
-                          if (hd) hd.value = parsed.heureDebut;
-                          if (hf) hf.value = parsed.heureFin;
-                          toast.success(`Créneau appliqué : ${parsed.heureDebut} - ${parsed.heureFin}`);
-                        } else {
-                          toast.error('Format invalide. Ex: 08:30-11:30 ou 14h-17h');
-                        }
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="form-row-4">
-                  <div className="form-group">
-                    <label className="form-label">J. Date demande</label>
-                    <input
-                      type="date"
-                      name="dateDemande"
-                      className="input"
-                      defaultValue={selectedInterv.dateDemande || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">O. Date début réelle</label>
-                    <input
-                      type="date"
-                      name="dateDebut"
-                      className="input"
-                      defaultValue={selectedInterv.dateDebut || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">P. Date fin réelle</label>
-                    <input
-                      type="date"
-                      name="dateReelle"
-                      className="input"
-                      defaultValue={selectedInterv.dateReelle || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Q. Échéance</label>
-                    <input type="date" name="echeance" className="input" defaultValue={selectedInterv.echeance || ''} />
-                  </div>
-                </div>
-              </fieldset>
-
-              {/* 4. Avancement terrain, Blocage & Résultat technique (Colonnes L, M, S, T, W) */}
-              <fieldset className="drawer-section">
-                <legend>4. Avancement, Blocage & Compte rendu (Colonnes L, M, S, T, W)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">L. Statut opérationnel</label>
-                    <select
-                      name="statutOperationnel"
-                      className="select"
-                      defaultValue={selectedInterv.statutOperationnel}
-                    >
-                      {STATUTS_OPERATIONNELS_INTERVENTION.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">M. Traitement administratif</label>
-                    <select
-                      name="traitement"
-                      className="select"
-                      defaultValue={selectedInterv.traitement || 'À traiter'}
-                    >
-                      {TRAITEMENTS_ADMIN.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">T. Motif de blocage</label>
-                    <select name="motifBlocage" className="select" defaultValue={selectedInterv.motifBlocage || ''}>
-                      <option value="">— Aucun blocage —</option>
-                      {referentiels.motifs_blocage.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">S. Résultat technique</label>
-                  <input
-                    name="resultatTechnique"
-                    list="list-resultats"
-                    className="input"
-                    placeholder="Sélectionner ou saisir le résultat technique..."
-                    defaultValue={selectedInterv.resultatTechnique || ''}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">W. Compte rendu / Actions restantes</label>
-                  <textarea
-                    name="compteRendu"
-                    className="textarea"
-                    rows={3}
-                    placeholder="Travaux réalisés, réserves éventuelles, suite à donner..."
-                    defaultValue={selectedInterv.compteRendu || ''}
-                  />
-                </div>
-
-                <label className="checkbox-inline-label">
-                  <input
-                    type="checkbox"
-                    checked={clotureExceptionConfirmed}
-                    onChange={(e) => setClotureExceptionConfirmed(e.target.checked)}
-                  />
-                  <span>
-                    Autoriser une procédure d’exception tracée si clôture sans compte rendu complet
-                  </span>
-                </label>
-              </fieldset>
-
-              {/* 5. Facturation (Colonnes U, V) — La facture n'indique pas un paiement ! */}
-              <fieldset className="drawer-section">
-                <legend>5. Suivi de facturation (Colonnes U et V — hors suivi d’encaissement)</legend>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">U. Numéro de facture (réf. externe)</label>
-                    <input
-                      name="numeroFacture"
-                      className="input"
-                      placeholder="Ex: FAC-2026-089"
-                      defaultValue={selectedInterv.numeroFacture || ''}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">V. Statut facture</label>
-                    <select
-                      name="statutFacture"
-                      className="select"
-                      defaultValue={selectedInterv.statutFacture || 'Non facturée'}
-                    >
-                      {STATUTS_FACTURE.map((sf) => (
-                        <option key={sf} value={sf}>
-                          {sf}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Montant HT (€)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="amount"
-                      className="input"
-                      defaultValue={selectedInterv.amount ?? ''}
-                    />
-                  </div>
-                </div>
-              </fieldset>
-
-              {/* 6. Historique */}
-              <fieldset className="drawer-section">
-                <legend>6. Historique & Traçabilité</legend>
-                <div className="history-timeline">
-                  {(selectedInterv.historique || []).map((ev: any) => (
-                    <div key={ev.id} className="history-event-row">
-                      <span className="history-dot" />
-                      <div>
-                        <div className="history-action">
-                          <strong>{ev.action}</strong> <span className="history-author">par {ev.auteur}</span>
-                        </div>
-                        {ev.details && <div className="history-details">{ev.details}</div>}
-                        <div className="history-date">
-                          {new Date(ev.date).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}
-                        </div>
-                      </div>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: '#d8b4fe', fontSize: '12.5px' }}>
+                        Visite Technique Préalable (Synchronisée avec le Planning Techniciens)
+                      </span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedDevis.visiteNecessaire)}
+                          onChange={(e) =>
+                            setSelectedDevis({
+                              ...selectedDevis,
+                              visiteNecessaire: e.target.checked,
+                              visiteStatut: e.target.checked ? 'À planifier' : 'Non requise',
+                            })
+                          }
+                        />
+                        Visite requise
+                      </label>
                     </div>
-                  ))}
-                </div>
-              </fieldset>
-
-              <div className="drawer-footer">
-                <button
-                  type="button"
-                  className="btn btn-destructive"
-                  onClick={() => {
-                    if (confirm('Supprimer définitivement cette intervention ?')) {
-                      deleteIntervMutation.mutate(selectedInterv.id);
-                    }
-                  }}
-                >
-                  Supprimer
-                </button>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn btn-ghost" onClick={() => setSelectedIntervId(null)}>
-                    Fermer
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={updateIntervMutation.isPending}>
-                    {updateIntervMutation.isPending ? 'Enregistrement...' : 'Enregistrer la fiche Intervention'}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </aside>
-        </div>
-      )}
-
-      {/* ======================================================================
-          MODALE CRÉATION PROGRESSIVE DEVIS (NE DEMANDE QUE CE QUI EST DISPONIBLE)
-          ====================================================================== */}
-      {isCreatingDevis && (
-        <div className="modal-overlay" onClick={() => setIsCreatingDevis(false)}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Nouveau Devis (Saisie progressive ANELEC)</h2>
-              <button className="modal-close" onClick={() => setIsCreatingDevis(false)}>
-                &times;
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                const payload: Record<string, any> = Object.fromEntries(fd.entries());
-                payload.visiteNecessaire = fd.get('visiteNecessaire') === 'on';
-                createDevisMutation.mutate(payload);
-              }}
-            >
-              <div className="modal-body">
-                <p className="progressive-hint">
-                  💡 Saisie progressive : seuls les éléments connus à la réception sont nécessaires. Un montant vide reste « Non chiffré ».
-                </p>
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Client / Donneur d’ordre</label>
-                    <input
-                      name="client"
-                      list="list-clients"
-                      className="input"
-                      placeholder="Ex: EMALEC, GMS, C-Multi-Serv (ou laisser vide pour boîte de réception)"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Site / Adresse</label>
-                    <input name="site" className="input" placeholder="Ex: Agence Orléans Centre" />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Objet / Travaux demandés *</label>
-                  <input
-                    name="objet"
-                    className="input"
-                    placeholder="Ex: Remplacement armoire électrique / reprise CVC"
-                    required
-                  />
-                </div>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">Corps d’état</label>
-                    <select name="corpsEtat" className="select" defaultValue="Tous corps d’état">
-                      {referentiels.corps_etat.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Origine</label>
-                    <select name="origine" className="select" defaultValue="Donneur d'ordre">
-                      {referentiels.origines.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Responsable</label>
-                    <select name="responsable" className="select" defaultValue="Zehair">
-                      <option value="">— Non assigné —</option>
-                      {referentiels.responsables.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">Montant HT (€) (optionnel)</label>
-                    <input type="number" step="0.01" name="amount" className="input" placeholder="Inconnu" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Date limite réponse</label>
-                    <input type="date" name="echeance" className="input" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Priorité</label>
-                    <select name="priorite" className="select" defaultValue="Normale">
-                      {PRIORITES.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="highlight-visite-box">
-                  <label className="checkbox-inline-label">
-                    <input type="checkbox" name="visiteNecessaire" />
-                    <span>
-                      🟣 Programmer une visite technique d’un technicien pour faire ce devis (ajoute au Planning)
-                    </span>
-                  </label>
-                  <div className="form-row-3" style={{ marginTop: '8px' }}>
-                    <div className="form-group">
-                      <label className="form-label">Technicien</label>
-                      <select name="visiteTechnicien" className="select">
-                        <option value="">— À affecter —</option>
-                        {referentiels.techniciens.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Technicien Visite</label>
+                      <select
+                        className="select"
+                        value={selectedDevis.visiteTechnicien || ''}
+                        onChange={(e) =>
+                          setSelectedDevis({
+                            ...selectedDevis,
+                            visiteNecessaire: true,
+                            visiteTechnicien: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">À affecter</option>
+                        {techniciensList.map((t) => (
+                          <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Date visite (optionnelle)</label>
-                      <input type="date" name="visiteDate" className="input" />
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Date Visite</label>
+                      <input
+                        type="date"
+                        className="input"
+                        value={selectedDevis.visiteDate ? selectedDevis.visiteDate.slice(0, 10) : ''}
+                        onChange={(e) =>
+                          setSelectedDevis({
+                            ...selectedDevis,
+                            visiteNecessaire: true,
+                            visiteDate: e.target.value || null,
+                          })
+                        }
+                      />
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Créneau horaire</label>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input type="time" name="visiteHeureDebut" className="input" defaultValue="09:00" />
-                        <input type="time" name="visiteHeureFin" className="input" defaultValue="10:30" />
-                      </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Heure début</label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={selectedDevis.visiteHeureDebut || '08:30'}
+                        onChange={(e) => setSelectedDevis({ ...selectedDevis, visiteHeureDebut: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Heure fin</label>
+                      <input
+                        type="time"
+                        className="input"
+                        value={selectedDevis.visiteHeureFin || '10:30'}
+                        onChange={(e) => setSelectedDevis({ ...selectedDevis, visiteHeureFin: e.target.value })}
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setIsCreatingDevis(false)}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={createDevisMutation.isPending}>
-                  Créer le devis
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              )}
 
-      {/* ======================================================================
-          MODALE CRÉATION INTERVENTION DIRECTE (SANS DEVIS OBLIGATOIRE)
-          ====================================================================== */}
-      {isCreatingInterv && (
-        <div className="modal-overlay" onClick={() => setIsCreatingInterv(false)}>
-          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Nouvelle Intervention (Directe ou Planifiée)</h2>
-              <button className="modal-close" onClick={() => setIsCreatingInterv(false)}>
-                &times;
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                const payload: Record<string, any> = Object.fromEntries(fd.entries());
-                payload.isVisiteDevis = fd.get('isVisiteDevis') === 'on';
-                createIntervMutation.mutate(payload);
-              }}
-            >
-              <div className="modal-body">
-                <p className="progressive-hint">
-                  💡 Une demande « À planifier » peut être enregistrée sans date planifiée ni devis préalable.
-                </p>
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Client (Donneur d’ordre)</label>
-                    <input name="client" list="list-clients" className="input" placeholder="Ex: EMALEC, IPC..." />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Site / Adresse *</label>
+              {devisTab === 'chiffrage' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Montant HT (€)</label>
                     <input
-                      name="chantier"
+                      type="number"
+                      className="input font-mono"
+                      value={selectedDevis.amount ?? ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, amount: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Origine / Provenance</label>
+                    <select
+                      className="select"
+                      value={selectedDevis.origine || 'Client'}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, origine: e.target.value })}
+                    >
+                      {originesList.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date demande</label>
+                    <input
+                      type="date"
                       className="input"
-                      placeholder="Ex: Clinique de l'Archette — Olivet"
-                      required
+                      value={selectedDevis.dateCreated ? selectedDevis.dateCreated.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        setSelectedDevis({
+                          ...selectedDevis,
+                          dateCreated: e.target.value || undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date limite (Échéance)</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={selectedDevis.echeance ? selectedDevis.echeance.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        setSelectedDevis({
+                          ...selectedDevis,
+                          echeance: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date envoi au client</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={selectedDevis.dateEnvoi ? selectedDevis.dateEnvoi.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        setSelectedDevis({
+                          ...selectedDevis,
+                          dateEnvoi: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Validité (jours)</label>
+                    <input
+                      type="number"
+                      className="input font-mono"
+                      value={selectedDevis.validiteJours ?? 30}
+                      onChange={(e) =>
+                        setSelectedDevis({
+                          ...selectedDevis,
+                          validiteJours: parseInt(e.target.value, 10) || null,
+                        })
+                      }
                     />
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Objet / Panne / Travaux *</label>
-                  <input name="objet" className="input" placeholder="Ex: Fuite réseau ECS / Dépannage TGBT" required />
-                </div>
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label className="form-label">Nature d’intervention</label>
-                    <select name="typeIntervention" className="select" defaultValue="Corrective">
-                      {TYPES_INTERVENTION.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Corps d’état</label>
-                    <select name="corpsEtat" className="select" defaultValue="Électricité">
-                      {referentiels.corps_etat.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Priorité</label>
-                    <select name="priorite" className="select" defaultValue="Normale">
-                      {PRIORITES.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+              )}
 
-                <div className="form-row-4">
-                  <div className="form-group">
-                    <label className="form-label">Technicien (optionnel)</label>
-                    <select name="entreprise" className="select">
-                      <option value="">— À affecter —</option>
-                      {referentiels.techniciens.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
+              {devisTab === 'relances' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Prochaine Action</label>
+                    <select
+                      className="select"
+                      value={selectedDevis.prochaineAction || 'Chiffrer'}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, prochaineAction: e.target.value })}
+                    >
+                      {PROCHAINES_ACTIONS_DEVIS.map((a) => (
+                        <option key={a} value={a}>{a}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Date planifiée (optionnelle)</label>
-                    <input type="date" name="datePlanifiee" className="input" />
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date de relance prévue</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={selectedDevis.dateRelance ? selectedDevis.dateRelance.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        setSelectedDevis({
+                          ...selectedDevis,
+                          dateRelance: e.target.value || null,
+                        })
+                      }
+                    />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure début</label>
-                    <input type="time" name="heureDebut" className="input" defaultValue="08:30" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure fin</label>
-                    <input type="time" name="heureFin" className="input" defaultValue="11:30" />
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Notes / Commentaires de suivi</label>
+                    <textarea
+                      className="textarea"
+                      rows={4}
+                      value={selectedDevis.notes || ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, notes: e.target.value })}
+                    />
                   </div>
                 </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setIsCreatingInterv(false)}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={createIntervMutation.isPending}>
-                  Enregistrer l’intervention
-                </button>
-              </div>
-            </form>
+              )}
+
+              {devisTab === 'historique' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div
+                    style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: '6px' }}>Champs Calculés Automatiquement (Europe/Paris)</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <div>Jours ouverts : <strong>{selectedDevis.computed?.joursOuverts ?? '—'}</strong></div>
+                      <div>Date expiration : <strong>{formatDateFR(selectedDevis.computed?.dateExpiration)}</strong></div>
+                      <div>Alerte : <strong>{selectedDevis.computed?.alerte || 'À suivre'}</strong></div>
+                      <div>Détail : <strong>{selectedDevis.computed?.alerteExplication || '—'}</strong></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '14px 20px',
+                borderTop: '1px solid var(--border-default)',
+                background: 'var(--bg-elevated)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button type="button" className="btn btn-secondary" onClick={() => setSelectedDevis(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  if (isCreatingDevis || !selectedDevis.id) {
+                    createDevisMut.mutate(selectedDevis);
+                  } else {
+                    updateDevisMut.mutate({ id: selectedDevis.id, data: selectedDevis });
+                    toast.success('Devis enregistré');
+                  }
+                }}
+              >
+                {isCreatingDevis ? 'Créer le Devis' : 'Enregistrer les modifications'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Datalists pour saisie libre + choix issus des référentiels */}
-      <datalist id="list-clients">
-        {referentiels.clients.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
-      <datalist id="list-resultats">
-        {referentiels.resultats_techniques.map((r) => (
-          <option key={r} value={r} />
-        ))}
-      </datalist>
+      {/* =====================================================================
+          SLIDE-OVER INSPECTOR DRAWER : INTERVENTION (23 COLONNES ANELEC)
+         ===================================================================== */}
+      {selectedIntv && (
+        <div className="inspector-backdrop" onClick={() => setSelectedIntv(null)}>
+          <div className="inspector-drawer" onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border-default)',
+                background: 'var(--bg-elevated)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="font-mono" style={{ fontWeight: 800, fontSize: '14px', color: '#60a5fa' }}>
+                    {isCreatingIntv ? 'NOUVELLE INTERVENTION' : selectedIntv.reference || `INT-${selectedIntv.id}`}
+                  </span>
+                  <StatusPill statut={selectedIntv.statutOperationnel || 'À planifier'} />
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Fiche complète 23 colonnes ANELEC • Synchronisée avec la Timeline Gantt
+                </div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedIntv(null)}>
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                padding: '10px 20px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                gap: '6px',
+              }}
+            >
+              {[
+                { id: 'planif', label: '1. Affectation & Créneau' },
+                { id: 'terrain', label: '2. Exécution Terrain & Résultat' },
+                { id: 'facturation', label: '3. Facturation' },
+                { id: 'historique', label: '4. Alertes & Devis lié' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`segmented-btn ${intvTab === t.id ? 'active' : ''}`}
+                  onClick={() => setIntvTab(t.id as any)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {intvTab === 'planif' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client</label>
+                    <input
+                      className="input"
+                      value={selectedIntv.client || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, client: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Chantier / Site / Adresse *</label>
+                    <input
+                      className="input"
+                      value={selectedIntv.chantier || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, chantier: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Technicien Terrain (Intervenant)</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.entreprise || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, entreprise: e.target.value })}
+                    >
+                      <option value="">À affecter</option>
+                      {techniciensList.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Type d'intervention</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.typeIntervention || 'Corrective'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, typeIntervention: e.target.value })}
+                    >
+                      {TYPES_INTERVENTION.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date planifiée</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={selectedIntv.datePlanifiee ? selectedIntv.datePlanifiee.slice(0, 10) : ''}
+                      onChange={(e) =>
+                        setSelectedIntv({
+                          ...selectedIntv,
+                          datePlanifiee: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Statut Opérationnel</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.statutOperationnel || 'À planifier'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, statutOperationnel: e.target.value })}
+                    >
+                      {STATUTS_OPERATIONNELS_INTERVENTION.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Heure début</label>
+                    <input
+                      type="time"
+                      className="input"
+                      value={selectedIntv.heureDebut || '08:00'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, heureDebut: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Heure fin</label>
+                    <input
+                      type="time"
+                      className="input"
+                      value={selectedIntv.heureFin || '12:00'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, heureFin: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Priorité</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.priorite || 'Normale'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, priorite: e.target.value })}
+                    >
+                      {PRIORITES.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Mode de planification</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.modePlanification || 'Planifiée'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, modePlanification: e.target.value })}
+                    >
+                      {MODES_PLANIFICATION.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Objet / Description des travaux</label>
+                    <textarea
+                      className="textarea"
+                      rows={3}
+                      value={selectedIntv.objet || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, objet: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {intvTab === 'terrain' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Résultat technique</label>
+                    <input
+                      className="input"
+                      value={selectedIntv.resultatTechnique || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, resultatTechnique: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Motif de blocage (si suspendue/bloquée)</label>
+                    <input
+                      className="input"
+                      value={selectedIntv.motifBlocage || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, motifBlocage: e.target.value })}
+                    />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Compte-rendu d'intervention terrain</label>
+                    <textarea
+                      className="textarea"
+                      rows={4}
+                      value={selectedIntv.compteRendu || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, compteRendu: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {intvTab === 'facturation' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Statut Facturation</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.statutFacture || 'Non facturée'}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, statutFacture: e.target.value })}
+                    >
+                      {STATUTS_FACTURE.map((sf) => (
+                        <option key={sf} value={sf}>{sf}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Numéro de Facture</label>
+                    <input
+                      className="input font-mono"
+                      value={selectedIntv.numeroFacture || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, numeroFacture: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {intvTab === 'historique' && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: '6px' }}>Calculs & Alertes</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Alerte délai : <strong>{selectedIntv.computed?.alerteDelai || 'À suivre'}</strong> • Détail :{' '}
+                    <strong>{selectedIntv.computed?.alerteExplication || '—'}</strong>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '14px 20px',
+                borderTop: '1px solid var(--border-default)',
+                background: 'var(--bg-elevated)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button type="button" className="btn btn-secondary" onClick={() => setSelectedIntv(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  if (isCreatingIntv || !selectedIntv.id) {
+                    createIntvMut.mutate(selectedIntv);
+                  } else {
+                    updateIntvMut.mutate({ id: selectedIntv.id, data: selectedIntv });
+                    toast.success('Intervention enregistrée');
+                  }
+                }}
+              >
+                {isCreatingIntv ? "Créer l'Intervention" : 'Enregistrer les modifications'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          GLOBAL CTRL+K COMMAND PALETTE
+         ===================================================================== */}
+      {cmdOpen && (
+        <div className="cmd-palette-backdrop" onClick={() => setCmdOpen(false)}>
+          <div className="cmd-palette-modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                autoFocus
+                type="text"
+                className="input"
+                style={{ border: 'none', background: 'transparent', fontSize: '13.5px', padding: '2px 0' }}
+                placeholder="Tapez une référence (DEV-..., INT-...), un client, un technicien ou une commande..."
+                value={cmdQuery}
+                onChange={(e) => setCmdQuery(e.target.value)}
+              />
+              <span className="kbd-shortcut">ESC</span>
+            </div>
+
+            <div style={{ maxHeight: '380px', overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', padding: '4px 8px', textTransform: 'uppercase' }}>
+                Commandes Rapides
+              </div>
+              {[
+                { label: 'Ouvrir Console Dispatch & Timeline Gantt', action: () => handleSectionChange('planning') },
+                { label: 'Créer un Nouveau Devis (22 colonnes)', action: openNewDevisDrawer },
+                { label: 'Créer une Nouvelle Intervention (23 colonnes)', action: openNewIntvDrawer },
+                { label: 'Aller au Centre de Pilotage (Aujourd’hui)', action: () => handleSectionChange('aujourdhui') },
+              ].map((cmd) => (
+                <button
+                  key={cmd.label}
+                  type="button"
+                  onClick={() => {
+                    cmd.action();
+                    setCmdOpen(false);
+                  }}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: '7px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '12.5px',
+                    fontWeight: 500,
+                  }}
+                >
+                  → {cmd.label}
+                </button>
+              ))}
+
+              {cmdQuery.trim() && (
+                <>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', padding: '8px 8px 4px', textTransform: 'uppercase' }}>
+                    Résultats Devis & Interventions
+                  </div>
+                  {devisList
+                    .filter((d) =>
+                      `${d.reference} ${d.client} ${d.site} ${d.objet}`
+                        .toLowerCase()
+                        .includes(cmdQuery.toLowerCase())
+                    )
+                    .slice(0, 5)
+                    .map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingDevis(false);
+                          setSelectedDevis(d);
+                          setCmdOpen(false);
+                        }}
+                        style={{
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                          borderRadius: '7px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>
+                          <strong className="font-mono" style={{ color: '#a855f7' }}>[DEVIS] {d.reference || `DEV-${d.id}`}</strong> — {d.client}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.statutCommercial}</span>
+                      </button>
+                    ))}
+                  {interventionsList
+                    .filter((i) =>
+                      `${i.reference} ${i.client} ${i.chantier} ${i.objet} ${i.entreprise}`
+                        .toLowerCase()
+                        .includes(cmdQuery.toLowerCase())
+                    )
+                    .slice(0, 5)
+                    .map((i) => (
+                      <button
+                        key={i.id}
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingIntv(false);
+                          setSelectedIntv(i);
+                          setCmdOpen(false);
+                        }}
+                        style={{
+                          textAlign: 'left',
+                          padding: '8px 10px',
+                          borderRadius: '7px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>
+                          <strong className="font-mono" style={{ color: '#3b82f6' }}>[INTERVENTION] {i.reference || `INT-${i.id}`}</strong> — {i.client}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{i.entreprise || i.statutOperationnel}</span>
+                      </button>
+                    ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+}
+
+function ActionQueueCard({
+  title,
+  badge,
+  accent,
+  emptyText,
+  children,
+}: {
+  title: string;
+  badge: number;
+  accent: string;
+  emptyText: string;
+  children: React.ReactNode;
+}) {
+  const hasItems = React.Children.count(children) > 0;
+  return (
+    <div className="pro-table-container" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: accent }} />
+          <h3 style={{ fontSize: '13px', fontWeight: 700 }}>{title}</h3>
+        </div>
+        <span
+          className="font-mono"
+          style={{
+            padding: '1px 8px',
+            borderRadius: '999px',
+            fontSize: '11px',
+            fontWeight: 700,
+            background: `${accent}22`,
+            color: accent,
+          }}
+        >
+          {badge}
+        </span>
+      </div>
+      {hasItems ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>{children}</div>
+      ) : (
+        <div style={{ padding: '16px 8px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
+          {emptyText}
+        </div>
+      )}
     </div>
+  );
+}
+
+function StatusPill({ statut }: { statut: string }) {
+  const colorMap: Record<string, { bg: string; fg: string }> = {
+    Accepté: { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
+    Clôturée: { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
+    'Terminée - à valider': { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
+    Planifiée: { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
+    Affectée: { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
+    'En cours': { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
+    'En attente technicien': { bg: 'rgba(168, 85, 247, 0.18)', fg: '#d8b4fe' },
+    'Envoyé au client': { bg: 'rgba(168, 85, 247, 0.18)', fg: '#d8b4fe' },
+    'En négociation': { bg: 'rgba(245, 158, 11, 0.18)', fg: '#fbbf24' },
+    'À planifier': { bg: 'rgba(245, 158, 11, 0.18)', fg: '#fbbf24' },
+    Suspendue: { bg: 'rgba(239, 68, 68, 0.18)', fg: '#f87171' },
+    Refusé: { bg: 'rgba(239, 68, 68, 0.15)', fg: '#f87171' },
+  };
+  const st = colorMap[statut] || { bg: 'rgba(148, 163, 184, 0.15)', fg: '#94a3b8' };
+
+  return (
+    <span className="status-pill" style={{ background: st.bg, color: st.fg }}>
+      <span className="status-dot" style={{ background: st.fg }} />
+      {statut}
+    </span>
   );
 }

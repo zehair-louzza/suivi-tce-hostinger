@@ -1,545 +1,787 @@
-// Interactive Technician Planning Board (Mouse Drag & Drop + Mouse Resize/Draw + Keyboard Interval Input)
-import React, { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Devis,
   Intervention,
-  formatDateFR,
+  DEFAULT_REFERENTIELS,
   parseTimeIntervalInput,
   computeDurationHours,
 } from '../lib/api';
 import toast from 'react-hot-toast';
 
+export interface PlanningSlotItem {
+  id: string;
+  kind: 'VISITE_DEVIS' | 'INTERVENTION' | 'URGENCE';
+  sourceType: 'DEVIS' | 'INTERVENTION';
+  sourceId: number;
+  reference: string;
+  title: string;
+  client: string;
+  site: string;
+  typePrestation: string;
+  priorite: string;
+  statut: string;
+  technicien: string;
+  date: string; // YYYY-MM-DD or ''
+  heureDebut: string; // HH:mm
+  heureFin: string; // HH:mm
+  durationHours: number;
+  rawDevis?: Devis;
+  rawIntervention?: Intervention;
+}
+
 interface PlanningBoardProps {
-  interventions: Intervention[];
-  devis: Devis[];
-  techniciens: string[];
-  corpsEtatList: string[];
-  onUpdateIntervention: (id: number, data: Partial<Intervention>) => Promise<any>;
-  onCreateIntervention: (data: any) => Promise<any>;
-  onConvertDevis: (
+  devisList: Devis[];
+  interventionsList: Intervention[];
+  techniciens?: string[];
+  onUpdateDevisPlanning: (
     devisId: number,
-    data: {
-      mode: 'visite' | 'travaux';
-      isVisiteDevis: boolean;
+    payload: {
+      visiteNecessaire?: boolean;
+      visiteTechnicien?: string;
+      visiteDate?: string | null;
+      visiteHeureDebut?: string;
+      visiteHeureFin?: string;
+      visiteStatut?: string;
+      traitement?: string;
+    }
+  ) => Promise<void>;
+  onUpdateInterventionPlanning: (
+    interventionId: number,
+    payload: {
       entreprise?: string;
-      datePlanifiee?: string;
+      datePlanifiee?: string | null;
       heureDebut?: string;
       heureFin?: string;
+      statutOperationnel?: string;
+      modePlanification?: string;
     }
-  ) => Promise<any>;
-  onSelectIntervention: (intervention: Intervention) => void;
-  onSelectDevis: (devis: Devis) => void;
+  ) => Promise<void>;
+  onOpenDevisDrawer: (devis: Devis) => void;
+  onOpenInterventionDrawer: (intervention: Intervention) => void;
+  onCreateQuickIntervention?: (payload: Partial<Intervention>) => Promise<void>;
 }
 
-const DAYS_LABELS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-const TIMELINE_START_HOUR = 7;  // 07:00
-const TIMELINE_END_HOUR = 19;   // 19:00
-const TOTAL_TIMELINE_MINUTES = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60; // 720 min
+const START_HOUR = 7; // 07:00
+const END_HOUR = 19; // 19:00
+const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 720 min
+const HOURS_ARRAY = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 
-function getMondayOfISOWeek(baseDate: Date): Date {
-  const d = new Date(baseDate);
-  const day = d.getDay(); // 0 = Sun, 1 = Mon...
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
+const TECH_SPECIALTIES: Record<string, { role: string; color: string }> = {
+  Anouar: { role: 'Chef Équipe CFO/CFA', color: '#3b82f6' },
+  Mohamed: { role: 'Technicien CVC / Plomberie', color: '#10b981' },
+  Haitam: { role: 'Électricien Tertiaire', color: '#8b5cf6' },
+  Jamal: { role: 'Multi-technique TCE', color: '#f59e0b' },
+  Manneh: { role: 'Installation & Tirage', color: '#06b6d4' },
+  Yankoubou: { role: 'Maintenance & Dépannage', color: '#ec4899' },
+  'Sous-traitant': { role: 'Renfort Externe TCE', color: '#64748b' },
+};
+
+function toDateKey(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) {
+    return d.slice(0, 10);
+  }
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(dt.getTime())) return '';
+  const yyyy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+function getMonday(d: Date): Date {
+  const dt = new Date(d);
+  const day = dt.getDay();
+  const diff = dt.getDate() - day + (day === 0 ? -6 : 1);
+  dt.setDate(diff);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
 }
 
-function timeToMinutes(hhmm?: string | null): number | null {
-  if (!hhmm) return null;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
-  if (!m) return null;
+function addDays(d: Date, days: number): Date {
+  const dt = new Date(d);
+  dt.setDate(dt.getDate() + days);
+  return dt;
+}
+
+function formatDayShort(d: Date): string {
+  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+function timeToMinutes(hhmm: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+  if (!m) return 8 * 60;
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
-function minutesToHHMM(totalMin: number): string {
-  const snapped = Math.round(totalMin / 15) * 15;
-  const clamped = Math.max(TIMELINE_START_HOUR * 60, Math.min(TIMELINE_END_HOUR * 60, snapped));
+function minutesToTime(totalMin: number): string {
+  const clamped = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60, Math.round(totalMin / 15) * 15));
   const h = Math.floor(clamped / 60);
   const m = clamped % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 export function PlanningBoard({
-  interventions,
-  devis,
-  techniciens,
-  corpsEtatList,
-  onUpdateIntervention,
-  onCreateIntervention,
-  onConvertDevis,
-  onSelectIntervention,
-  onSelectDevis,
+  devisList,
+  interventionsList,
+  techniciens = DEFAULT_REFERENTIELS.techniciens,
+  onUpdateDevisPlanning,
+  onUpdateInterventionPlanning,
+  onOpenDevisDrawer,
+  onOpenInterventionDrawer,
+  onCreateQuickIntervention,
 }: PlanningBoardProps) {
-  // View mode: 'week' (Techniciens × Jours) or 'timeline' (Grille Horaire 07:00-19:00)
-  const [viewMode, setViewMode] = useState<'week' | 'timeline'>('week');
-  const [currentMonday, setCurrentMonday] = useState<Date>(() => getMondayOfISOWeek(new Date()));
-  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(() => {
-    const todayDay = new Date().getDay();
-    return todayDay >= 1 && todayDay <= 6 ? todayDay - 1 : 0;
-  });
-
-  // Filters
+  const [viewMode, setViewMode] = useState<'gantt' | 'week' | 'columns'>('gantt');
+  const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
+  const [selectedDayKey, setSelectedDayKey] = useState<string>(() => toDateKey(new Date()));
+  const [filterKind, setFilterKind] = useState<'ALL' | 'VISITE_DEVIS' | 'INTERVENTION' | 'URGENCE'>('ALL');
   const [filterTech, setFilterTech] = useState<string>('ALL');
-  const [filterType, setFilterType] = useState<'ALL' | 'VISITE' | 'TRAVAUX' | 'URGENCE'>('ALL');
-  const [filterCorpsEtat, setFilterCorpsEtat] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [backlogCollapsed, setBacklogCollapsed] = useState<boolean>(false);
 
-  // Inline keyboard interval editor state
-  const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
-  const [intervalInputText, setIntervalInputText] = useState<string>('');
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [keyboardIntervalText, setKeyboardIntervalText] = useState<string>('');
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [inlineInputVal, setInlineInputVal] = useState<string>('');
 
-  // Quick create modal / popover when drawing a time range with the mouse
-  const [drawnSlot, setDrawnSlot] = useState<{
+  const [draggedSlot, setDraggedSlot] = useState<PlanningSlotItem | null>(null);
+  const [resizingState, setResizingState] = useState<{
+    slot: PlanningSlotItem;
+    edge: 'left' | 'right';
+    trackRect: DOMRect;
+    previewDebut: string;
+    previewFin: string;
+  } | null>(null);
+
+  const [drawState, setDrawState] = useState<{
     technicien: string;
-    dateISO: string;
+    dateKey: string;
+    startMin: number;
+    currentMin: number;
+  } | null>(null);
+
+  const [drawnSlotModal, setDrawnSlotModal] = useState<{
+    technicien: string;
+    dateKey: string;
     heureDebut: string;
     heureFin: string;
   } | null>(null);
-  const [quickSlotForm, setQuickSlotForm] = useState<{
-    sourceType: 'new_intervention' | 'new_visite' | 'existing_backlog';
-    backlogItemId: string;
-    client: string;
-    chantier: string;
-    objet: string;
-    corpsEtat: string;
-    priorite: string;
-  }>({
-    sourceType: 'new_intervention',
-    backlogItemId: '',
-    client: '',
-    chantier: '',
-    objet: '',
-    corpsEtat: 'Électricité',
-    priorite: 'Normale',
+  const [quickClient, setQuickClient] = useState('');
+  const [quickSite, setQuickSite] = useState('');
+  const [quickObjet, setQuickObjet] = useState('');
+  const [quickKind, setQuickKind] = useState<'INTERVENTION' | 'VISITE_DEVIS'>('INTERVENTION');
+  const [quickPriorite, setQuickPriorite] = useState('Normale');
+  const [quickIntervalText, setQuickIntervalText] = useState('');
+
+  const trackRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const [nowMinutes, setNowMinutes] = useState<number>(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
   });
 
-  // Mouse drag-to-draw / resize state on the hourly timeline
-  const [mouseDragState, setMouseDragState] = useState<{
-    mode: 'draw' | 'resize-start' | 'resize-end' | 'move';
-    technicien: string;
-    dateISO: string;
-    interventionId?: number;
-    startMin: number;
-    currentMin: number;
-    initialStartMin?: number;
-    initialEndMin?: number;
-  } | null>(null);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = new Date();
+      setNowMinutes(now.getHours() * 60 + now.getMinutes());
+    }, 30000);
+    return () => clearInterval(t);
+  }, []);
 
-  const timelineTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  // Compute the 6 days of the selected week (Lun -> Sam)
   const weekDays = useMemo(() => {
-    return DAYS_LABELS.map((label, idx) => {
-      const d = new Date(currentMonday);
-      d.setDate(currentMonday.getDate() + idx);
-      const iso = toISODate(d);
-      const isToday = iso === toISODate(new Date());
+    return Array.from({ length: 6 }, (_, i) => {
+      const date = addDays(weekStart, i);
       return {
-        index: idx,
-        label,
-        shortDate: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
-        iso,
-        isToday,
+        date,
+        key: toDateKey(date),
+        label: formatDayShort(date),
+        isToday: toDateKey(date) === toDateKey(new Date()),
       };
     });
-  }, [currentMonday]);
+  }, [weekStart]);
 
-  const activeTimelineDay = weekDays[selectedDayIndex] || weekDays[0];
+  // Build unified Planning items from Devis + Interventions
+  const allItems = useMemo<PlanningSlotItem[]>(() => {
+    const list: PlanningSlotItem[] = [];
 
-  // Filtered technicians
-  const visibleTechniciens = useMemo(() => {
-    if (filterTech === 'ALL') return techniciens;
-    return techniciens.filter((t) => t === filterTech);
-  }, [techniciens, filterTech]);
+    for (const d of devisList) {
+      const needsVisit =
+        d.visiteNecessaire ||
+        d.traitement === 'En attente technicien' ||
+        Boolean(d.visiteDate) ||
+        Boolean(d.visiteTechnicien);
 
-  // Filter interventions helper
-  const matchesFilters = (item: Intervention) => {
-    if (filterType === 'VISITE' && !item.isVisiteDevis) return false;
-    if (filterType === 'TRAVAUX' && item.isVisiteDevis) return false;
-    if (
-      filterType === 'URGENCE' &&
-      item.priorite !== 'Urgente' &&
-      item.typeIntervention !== 'Dépannage' &&
-      item.typeIntervention !== 'Urgente'
-    ) {
-      return false;
+      const isAcceptedWithoutIntervention =
+        d.statutCommercial === 'Accepté' && (!d.interventionsCount || d.interventionsCount === 0);
+
+      if (needsVisit || isAcceptedWithoutIntervention) {
+        const hDebut = d.visiteHeureDebut || '08:30';
+        const hFin = d.visiteHeureFin || '10:30';
+        list.push({
+          id: `devis-${d.id}`,
+          kind: 'VISITE_DEVIS',
+          sourceType: 'DEVIS',
+          sourceId: d.id,
+          reference: d.reference || `DEV-${d.id}`,
+          title: d.objet || 'Visite technique Devis',
+          client: d.client || 'Client à préciser',
+          site: d.site || 'Site à préciser',
+          typePrestation: d.corpsEtat || 'Visite Devis',
+          priorite: d.priorite || 'Normale',
+          statut: d.visiteStatut || d.statutCommercial || 'À planifier',
+          technicien: d.visiteTechnicien || '',
+          date: toDateKey(d.visiteDate),
+          heureDebut: hDebut,
+          heureFin: hFin,
+          durationHours: computeDurationHours(hDebut, hFin) ?? 2,
+          rawDevis: d,
+        });
+      }
     }
-    if (filterCorpsEtat !== 'ALL' && item.corpsEtat !== filterCorpsEtat) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const hay = `${item.reference || ''} ${item.client || ''} ${item.chantier || ''} ${item.objet || ''} ${item.entreprise || ''}`.toLowerCase();
-      if (!hay.includes(q)) return false;
+
+    for (const intv of interventionsList) {
+      if (intv.statutOperationnel === 'Annulée') continue;
+      const hDebut = intv.heureDebut || '08:00';
+      const hFin = intv.heureFin || '12:00';
+      const isUrgent =
+        intv.priorite === 'Urgente' ||
+        intv.typeIntervention === 'Dépannage' ||
+        intv.typeIntervention === 'Urgente';
+      const isVisite = Boolean(intv.isVisiteDevis) || intv.typeIntervention === 'Visite technique devis';
+
+      list.push({
+        id: `intv-${intv.id}`,
+        kind: isUrgent ? 'URGENCE' : isVisite ? 'VISITE_DEVIS' : 'INTERVENTION',
+        sourceType: 'INTERVENTION',
+        sourceId: intv.id,
+        reference: intv.reference || `INT-${intv.id}`,
+        title: intv.objet || 'Intervention technique',
+        client: intv.client || 'Client',
+        site: intv.chantier || 'Site',
+        typePrestation: intv.corpsEtat || intv.typeIntervention || 'Intervention',
+        priorite: intv.priorite || 'Normale',
+        statut: intv.statutOperationnel || 'À planifier',
+        technicien: intv.entreprise || '',
+        date: toDateKey(intv.datePlanifiee),
+        heureDebut: hDebut,
+        heureFin: hFin,
+        durationHours: computeDurationHours(hDebut, hFin) ?? 4,
+        rawIntervention: intv,
+      });
     }
-    return true;
-  };
 
-  // Unscheduled / Backlog items ("À placer dans le planning")
-  const backlogInterventions = useMemo(() => {
-    return interventions.filter(
-      (i) =>
-        (!i.datePlanifiee || !i.entreprise || !techniciens.includes(i.entreprise)) &&
-        !['Clôturée', 'Annulée'].includes(i.statutOperationnel) &&
-        matchesFilters(i)
-    );
-  }, [interventions, techniciens, filterType, filterCorpsEtat, searchQuery]);
+    return list;
+  }, [devisList, interventionsList]);
 
-  // Devis that need a visit or were accepted but have no linked intervention yet
-  const actionableDevisForPlanning = useMemo(() => {
-    return devis.filter((d) => {
-      const hasLinked = (d.interventionsCount || 0) > 0;
-      const needsVisite = d.visiteNecessaire || d.traitement === 'En attente technicien';
-      const isAcceptedReady = d.statutCommercial === 'Accepté' || d.prochaineAction === 'Planifier après accord';
-      return !hasLinked && (needsVisite || isAcceptedReady);
+  const filteredItems = useMemo(() => {
+    return allItems.filter((item) => {
+      if (filterKind !== 'ALL' && item.kind !== filterKind) return false;
+      if (filterTech !== 'ALL' && item.technicien !== filterTech) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const hay = `${item.reference} ${item.title} ${item.client} ${item.site} ${item.technicien} ${item.typePrestation}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
     });
-  }, [devis]);
+  }, [allItems, filterKind, filterTech, searchQuery]);
 
-  // Detect overlapping slots for a technician on a given day
-  const getOverlappingIds = (daySlots: Intervention[]): Set<number> => {
-    const overlaps = new Set<number>();
-    for (let a = 0; a < daySlots.length; a++) {
-      const sA = timeToMinutes(daySlots[a].heureDebut || '08:00') ?? 480;
-      const eA = timeToMinutes(daySlots[a].heureFin || '10:00') ?? 600;
-      for (let b = a + 1; b < daySlots.length; b++) {
-        const sB = timeToMinutes(daySlots[b].heureDebut || '08:00') ?? 480;
-        const eB = timeToMinutes(daySlots[b].heureFin || '10:00') ?? 600;
-        if (sA < eB && sB < eA) {
-          overlaps.add(daySlots[a].id);
-          overlaps.add(daySlots[b].id);
+  const unscheduledItems = useMemo(() => {
+    return filteredItems.filter((i) => !i.date || !i.technicien || i.statut === 'À planifier');
+  }, [filteredItems]);
+
+  const scheduledItems = useMemo(() => {
+    return filteredItems.filter((i) => Boolean(i.date) && Boolean(i.technicien));
+  }, [filteredItems]);
+
+  const selectedSlot = useMemo(
+    () => allItems.find((i) => i.id === selectedSlotId) || null,
+    [allItems, selectedSlotId]
+  );
+
+  const applySlotSchedule = useCallback(
+    async (
+      item: PlanningSlotItem,
+      updates: { technicien?: string; date?: string | null; heureDebut?: string; heureFin?: string; statut?: string }
+    ) => {
+      const nextTech = updates.technicien !== undefined ? updates.technicien : item.technicien;
+      const nextDate = updates.date !== undefined ? updates.date : item.date;
+      const nextDebut = updates.heureDebut || item.heureDebut || '08:00';
+      const nextFin = updates.heureFin || item.heureFin || '10:00';
+
+      try {
+        if (item.sourceType === 'DEVIS') {
+          await onUpdateDevisPlanning(item.sourceId, {
+            visiteNecessaire: true,
+            visiteTechnicien: nextTech,
+            visiteDate: nextDate || null,
+            visiteHeureDebut: nextDebut,
+            visiteHeureFin: nextFin,
+            visiteStatut: nextDate && nextTech ? 'Planifiée' : 'À planifier',
+          });
+        } else {
+          await onUpdateInterventionPlanning(item.sourceId, {
+            entreprise: nextTech,
+            datePlanifiee: nextDate || null,
+            heureDebut: nextDebut,
+            heureFin: nextFin,
+            statutOperationnel: updates.statut || (nextDate && nextTech ? 'Planifiée' : 'À planifier'),
+            modePlanification: 'Planifiée',
+          });
+        }
+        toast.success(`${item.reference} → ${nextTech || 'File'} (${nextDebut}–${nextFin})`);
+      } catch {
+        toast.error('Erreur lors de la mise à jour du planning');
+      }
+    },
+    [onUpdateDevisPlanning, onUpdateInterventionPlanning]
+  );
+
+  useEffect(() => {
+    if (!resizingState && !drawState) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (resizingState) {
+        const { slot, edge, trackRect } = resizingState;
+        const relX = Math.max(0, Math.min(trackRect.width, e.clientX - trackRect.left));
+        const pointerMin = START_HOUR * 60 + (relX / trackRect.width) * TOTAL_MINUTES;
+        const snappedMin = Math.round(pointerMin / 15) * 15;
+
+        const curStart = timeToMinutes(slot.heureDebut);
+        const curEnd = timeToMinutes(slot.heureFin);
+
+        if (edge === 'left') {
+          const newStart = Math.max(START_HOUR * 60, Math.min(curEnd - 30, snappedMin));
+          setResizingState((prev) =>
+            prev ? { ...prev, previewDebut: minutesToTime(newStart) } : null
+          );
+        } else {
+          const newEnd = Math.min(END_HOUR * 60, Math.max(curStart + 30, snappedMin));
+          setResizingState((prev) =>
+            prev ? { ...prev, previewFin: minutesToTime(newEnd) } : null
+          );
+        }
+      } else if (drawState) {
+        const trackEl = trackRefs.current[drawState.technicien];
+        if (!trackEl) return;
+        const rect = trackEl.getBoundingClientRect();
+        const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const pointerMin = START_HOUR * 60 + (relX / rect.width) * TOTAL_MINUTES;
+        const snappedMin = Math.round(pointerMin / 15) * 15;
+        setDrawState((prev) => (prev ? { ...prev, currentMin: snappedMin } : null));
+      }
+    };
+
+    const handleMouseUp = async () => {
+      if (resizingState) {
+        const { slot, previewDebut, previewFin } = resizingState;
+        setResizingState(null);
+        if (previewDebut !== slot.heureDebut || previewFin !== slot.heureFin) {
+          await applySlotSchedule(slot, { heureDebut: previewDebut, heureFin: previewFin });
+        }
+      } else if (drawState) {
+        const startMin = Math.min(drawState.startMin, drawState.currentMin);
+        const endMin = Math.max(drawState.startMin + 60, drawState.currentMin);
+        const hDebut = minutesToTime(startMin);
+        const hFin = minutesToTime(Math.min(END_HOUR * 60, endMin));
+        const tech = drawState.technicien;
+        const dateKey = drawState.dateKey;
+        setDrawState(null);
+
+        if (selectedSlot) {
+          await applySlotSchedule(selectedSlot, {
+            technicien: tech,
+            date: dateKey,
+            heureDebut: hDebut,
+            heureFin: hFin,
+          });
+        } else {
+          setQuickClient('');
+          setQuickSite('');
+          setQuickObjet('');
+          setQuickIntervalText(`${hDebut}-${hFin}`);
+          setDrawnSlotModal({
+            technicien: tech,
+            dateKey,
+            heureDebut: hDebut,
+            heureFin: hFin,
+          });
         }
       }
-    }
-    return overlaps;
-  };
+    };
 
-  // Drag & Drop handlers (HTML5 Drag for Week Matrix & Backlog)
-  const handleDragStartSlot = (e: React.DragEvent, item: Intervention) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({ kind: 'intervention', id: item.id }));
-    e.dataTransfer.effectAllowed = 'move';
-  };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingState, drawState, applySlotSchedule, selectedSlot, unscheduledItems]);
 
-  const handleDragStartDevis = (e: React.DragEvent, d: Devis, mode: 'visite' | 'travaux') => {
-    e.dataTransfer.setData(
-      'application/json',
-      JSON.stringify({ kind: 'devis', devisId: d.id, mode })
-    );
-    e.dataTransfer.effectAllowed = 'copyMove';
-  };
+  const nudgeSelectedSlot = useCallback(
+    async (action: 'EARLIER' | 'LATER' | 'SHORTER' | 'LONGER' | 'PREV_TECH' | 'NEXT_TECH') => {
+      if (!selectedSlot) return;
+      const startM = timeToMinutes(selectedSlot.heureDebut);
+      const endM = timeToMinutes(selectedSlot.heureFin);
+      const dur = Math.max(30, endM - startM);
 
-  const handleDropOnCell = async (
-    e: React.DragEvent,
-    technicien: string,
-    dateISO: string,
-    defaultHeureDebut?: string,
-    defaultHeureFin?: string
-  ) => {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData('application/json');
-    if (!raw) return;
-
-    try {
-      const payload = JSON.parse(raw);
-      if (payload.kind === 'intervention') {
-        const target = interventions.find((i) => i.id === payload.id);
-        if (!target) return;
-        const heureDebut = defaultHeureDebut || target.heureDebut || '08:30';
-        const heureFin = defaultHeureFin || target.heureFin || '11:30';
-        await onUpdateIntervention(target.id, {
-          entreprise: technicien,
-          datePlanifiee: dateISO,
-          heureDebut,
-          heureFin,
-          statutOperationnel:
-            target.statutOperationnel === 'À planifier' || target.statutOperationnel === 'Nouvelle demande'
-              ? 'Planifiée'
-              : target.statutOperationnel,
-          modePlanification: 'Planifiée',
+      if (action === 'EARLIER') {
+        const nextStart = Math.max(START_HOUR * 60, startM - 30);
+        await applySlotSchedule(selectedSlot, {
+          heureDebut: minutesToTime(nextStart),
+          heureFin: minutesToTime(nextStart + dur),
         });
-        toast.success(`Affecté à ${technicien} le ${formatDateFR(dateISO)} (${heureDebut}-${heureFin})`);
-      } else if (payload.kind === 'devis') {
-        const isVisite = payload.mode === 'visite';
-        const heureDebut = defaultHeureDebut || (isVisite ? '09:00' : '08:30');
-        const heureFin = defaultHeureFin || (isVisite ? '10:30' : '12:30');
-        await onConvertDevis(payload.devisId, {
-          mode: payload.mode,
-          isVisiteDevis: isVisite,
-          entreprise: technicien,
-          datePlanifiee: dateISO,
-          heureDebut,
-          heureFin,
+      } else if (action === 'LATER') {
+        const nextEnd = Math.min(END_HOUR * 60, endM + 30);
+        await applySlotSchedule(selectedSlot, {
+          heureDebut: minutesToTime(nextEnd - dur),
+          heureFin: minutesToTime(nextEnd),
         });
+      } else if (action === 'SHORTER') {
+        const nextEnd = Math.max(startM + 30, endM - 30);
+        await applySlotSchedule(selectedSlot, {
+          heureFin: minutesToTime(nextEnd),
+        });
+      } else if (action === 'LONGER') {
+        const nextEnd = Math.min(END_HOUR * 60, endM + 30);
+        await applySlotSchedule(selectedSlot, {
+          heureFin: minutesToTime(nextEnd),
+        });
+      } else if (action === 'PREV_TECH' || action === 'NEXT_TECH') {
+        const idx = techniciens.indexOf(selectedSlot.technicien);
+        const nextIdx =
+          action === 'NEXT_TECH'
+            ? (idx + 1) % techniciens.length
+            : (idx - 1 + techniciens.length) % techniciens.length;
+        await applySlotSchedule(selectedSlot, { technicien: techniciens[nextIdx] });
       }
-    } catch {
-      toast.error('Impossible de déplacer cet élément');
-    }
-  };
+    },
+    [selectedSlot, applySlotSchedule, techniciens]
+  );
 
-  // Keyboard interval submission ("08:30-11:00", "14h-17h30", "9h+2h", "matin")
-  const handleApplyKeyboardInterval = async (item: Intervention, rawInput?: string) => {
-    const textToParse = rawInput !== undefined ? rawInput : intervalInputText;
-    const parsed = parseTimeIntervalInput(textToParse);
+  const handleApplyKeyboardInterval = async (slot: PlanningSlotItem, rawText: string) => {
+    const parsed = parseTimeIntervalInput(rawText);
     if (!parsed) {
-      toast.error(
-        'Format non reconnu. Exemples : "08:30-11:00", "14h-17h30", "09:00+2h", "matin", "aprem"'
-      );
+      toast.error('Format non reconnu. Exemples : 08:30-11:00, 14h-17h30, 9h+2h, matin, aprem');
       return;
     }
-
-    await onUpdateIntervention(item.id, {
+    await applySlotSchedule(slot, {
       heureDebut: parsed.heureDebut,
       heureFin: parsed.heureFin,
     });
-    setEditingSlotId(null);
-    toast.success(`Créneau mis à jour : ${parsed.heureDebut} – ${parsed.heureFin}`);
+    setInlineEditId(null);
+    setKeyboardIntervalText(`${parsed.heureDebut}-${parsed.heureFin}`);
   };
 
-  // Shift slot by +/- minutes
-  const handleShiftSlot = async (item: Intervention, deltaMin: number) => {
-    const s = timeToMinutes(item.heureDebut || '08:30') ?? 510;
-    const e = timeToMinutes(item.heureFin || '11:30') ?? 690;
-    const newStart = Math.max(TIMELINE_START_HOUR * 60, Math.min(TIMELINE_END_HOUR * 60 - 30, s + deltaMin));
-    const duration = Math.max(30, e - s);
-    const newEnd = Math.min(TIMELINE_END_HOUR * 60, newStart + duration);
-    await onUpdateIntervention(item.id, {
-      heureDebut: minutesToHHMM(newStart),
-      heureFin: minutesToHHMM(newEnd),
-    });
-  };
-
-  // Duplicate slot to next day (multi-day chantier)
-  const handleDuplicateNextDay = async (item: Intervention) => {
-    if (!item.datePlanifiee) return;
-    const [y, m, d] = item.datePlanifiee.split('-').map(Number);
-    const nextDate = new Date(y, m - 1, d + 1);
-    if (nextDate.getDay() === 0) nextDate.setDate(nextDate.getDate() + 1); // skip Sunday
-    const nextISO = toISODate(nextDate);
-
-    await onCreateIntervention({
-      client: item.client,
-      chantier: item.chantier,
-      objet: `${item.objet || item.chantier} (Suite)`,
-      origine: item.origine,
-      typeIntervention: item.typeIntervention,
-      modePlanification: 'Planifiée',
-      corpsEtat: item.corpsEtat,
-      priorite: item.priorite,
-      datePlanifiee: nextISO,
-      statutOperationnel: 'Planifiée',
-      traitement: 'En cours de traitement',
-      entreprise: item.entreprise,
-      heureDebut: item.heureDebut || '08:30',
-      heureFin: item.heureFin || '12:00',
-      isVisiteDevis: item.isVisiteDevis,
-      devisId: item.devisId,
-      refDevisTexte: item.refDevisTexte,
-      amount: item.amount,
-    });
-    toast.success(`Créneau dupliqué au ${formatDateFR(nextISO)}`);
-  };
-
-  // ============================================================================
-  // MOUSE TIMELINE MANIPULATION (Click-and-Drag to Draw / Resize / Move)
-  // ============================================================================
-
-  const getMinutesFromMouseEvent = (e: React.MouseEvent, technicien: string): number => {
-    const track = timelineTrackRefs.current[technicien];
-    if (!track) return 8 * 60;
-    const rect = track.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    const ratio = relX / rect.width;
-    const rawMin = TIMELINE_START_HOUR * 60 + ratio * TOTAL_TIMELINE_MINUTES;
-    return Math.round(rawMin / 15) * 15; // Snap to 15-minute increments!
-  };
-
-  const handleTimelineMouseDownTrack = (e: React.MouseEvent, technicien: string) => {
-    if (e.button !== 0) return;
-    // Ignore if clicking inside an existing slot
-    if ((e.target as HTMLElement).closest('.timeline-slot-block')) return;
-    const startMin = getMinutesFromMouseEvent(e, technicien);
-    setMouseDragState({
-      mode: 'draw',
-      technicien,
-      dateISO: activeTimelineDay.iso,
-      startMin,
-      currentMin: Math.min(TIMELINE_END_HOUR * 60, startMin + 60),
-    });
-  };
-
-  const handleTimelineMouseDownResize = (
-    e: React.MouseEvent,
-    item: Intervention,
-    edge: 'resize-start' | 'resize-end'
-  ) => {
-    e.stopPropagation();
-    if (!item.entreprise) return;
-    const s = timeToMinutes(item.heureDebut || '08:30') ?? 510;
-    const end = timeToMinutes(item.heureFin || '11:30') ?? 690;
-    setMouseDragState({
-      mode: edge,
-      technicien: item.entreprise,
-      dateISO: activeTimelineDay.iso,
-      interventionId: item.id,
-      startMin: edge === 'resize-start' ? end : s,
-      currentMin: edge === 'resize-start' ? s : end,
-      initialStartMin: s,
-      initialEndMin: end,
-    });
-  };
-
-  const handleTimelineMouseMove = (e: React.MouseEvent, technicien: string) => {
-    if (!mouseDragState || mouseDragState.technicien !== technicien) return;
-    const min = getMinutesFromMouseEvent(e, technicien);
-    setMouseDragState((prev) => (prev ? { ...prev, currentMin: min } : null));
-  };
-
-  const handleTimelineMouseUp = async () => {
-    if (!mouseDragState) return;
-    const state = mouseDragState;
-    setMouseDragState(null);
-
-    const minA = Math.min(state.startMin, state.currentMin);
-    const minB = Math.max(state.startMin, state.currentMin);
-    const finalStart = minA;
-    const finalEnd = Math.max(minA + 30, minB); // minimum 30 min slot
-
-    const heureDebut = minutesToHHMM(finalStart);
-    const heureFin = minutesToHHMM(finalEnd);
-
-    if (state.mode === 'draw') {
-      setDrawnSlot({
-        technicien: state.technicien,
-        dateISO: state.dateISO,
-        heureDebut,
-        heureFin,
-      });
-      setQuickSlotForm((prev) => ({
-        ...prev,
-        sourceType: backlogInterventions.length > 0 ? 'existing_backlog' : 'new_intervention',
-        backlogItemId: backlogInterventions[0] ? String(backlogInterventions[0].id) : '',
-      }));
-    } else if (
-      (state.mode === 'resize-start' || state.mode === 'resize-end') &&
-      state.interventionId
-    ) {
-      await onUpdateIntervention(state.interventionId, {
-        heureDebut,
-        heureFin,
-      });
-      toast.success(`Horaire ajusté : ${heureDebut} – ${heureFin}`);
+  const handleSmartAutoDispatch = async () => {
+    if (unscheduledItems.length === 0) {
+      toast.success('Toutes les missions sont déjà planifiées !');
+      return;
     }
-  };
 
-  const handleConfirmDrawnSlot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!drawnSlot) return;
+    const priorityRank: Record<string, number> = { Urgente: 0, Haute: 1, Normale: 2, Basse: 3 };
+    const queue = [...unscheduledItems].sort(
+      (a, b) => (priorityRank[a.priorite] ?? 2) - (priorityRank[b.priorite] ?? 2)
+    );
 
-    if (quickSlotForm.sourceType === 'existing_backlog' && quickSlotForm.backlogItemId) {
-      const id = parseInt(quickSlotForm.backlogItemId, 10);
-      await onUpdateIntervention(id, {
-        entreprise: drawnSlot.technicien,
-        datePlanifiee: drawnSlot.dateISO,
-        heureDebut: drawnSlot.heureDebut,
-        heureFin: drawnSlot.heureFin,
-        statutOperationnel: 'Planifiée',
-        modePlanification: 'Planifiée',
-      });
-      toast.success('Mission affectée sur le créneau tracé à la souris !');
-    } else {
-      const isVisite = quickSlotForm.sourceType === 'new_visite';
-      await onCreateIntervention({
-        client: quickSlotForm.client || 'Client ANELEC',
-        chantier: quickSlotForm.chantier || quickSlotForm.client || 'Site à préciser',
-        objet:
-          quickSlotForm.objet ||
-          (isVisite ? '[Visite Devis] Relevé technique sur site' : 'Intervention planifiée'),
-        corpsEtat: quickSlotForm.corpsEtat,
-        priorite: quickSlotForm.priorite,
-        typeIntervention: isVisite ? 'Visite technique devis' : 'Corrective',
-        modePlanification: 'Planifiée',
-        statutOperationnel: 'Planifiée',
-        traitement: 'En cours de traitement',
-        entreprise: drawnSlot.technicien,
-        datePlanifiee: drawnSlot.dateISO,
-        heureDebut: drawnSlot.heureDebut,
-        heureFin: drawnSlot.heureFin,
-        isVisiteDevis: isVisite,
-      });
+    const candidateWindows = [
+      { debut: '08:00', fin: '10:00' },
+      { debut: '10:00', fin: '12:00' },
+      { debut: '13:30', fin: '15:30' },
+      { debut: '15:30', fin: '17:30' },
+    ];
+
+    const targetDate = selectedDayKey || weekDays[0]?.key || toDateKey(new Date());
+    const virtualOccupied = [...scheduledItems];
+    let assignedCount = 0;
+
+    for (const item of queue.slice(0, 8)) {
+      const preferredTechs = item.technicien
+        ? [item.technicien, ...techniciens.filter((t) => t !== item.technicien)]
+        : [...techniciens].sort((tA, tB) => {
+            const loadA = virtualOccupied
+              .filter((s) => s.technicien === tA && s.date === targetDate)
+              .reduce((acc, s) => acc + s.durationHours, 0);
+            const loadB = virtualOccupied
+              .filter((s) => s.technicien === tB && s.date === targetDate)
+              .reduce((acc, s) => acc + s.durationHours, 0);
+            return loadA - loadB;
+          });
+
+      let placed = false;
+      for (const tech of preferredTechs) {
+        if (placed) break;
+        for (const win of candidateWindows) {
+          const wStart = timeToMinutes(win.debut);
+          const wEnd =
+            item.kind === 'INTERVENTION'
+              ? Math.min(END_HOUR * 60, wStart + 180)
+              : timeToMinutes(win.fin);
+          const winFinStr = minutesToTime(wEnd);
+
+          const hasOverlap = virtualOccupied.some((s) => {
+            if (s.technicien !== tech || s.date !== targetDate) return false;
+            return timeToMinutes(s.heureDebut) < wEnd && timeToMinutes(s.heureFin) > wStart;
+          });
+
+          if (!hasOverlap) {
+            await applySlotSchedule(item, {
+              technicien: tech,
+              date: targetDate,
+              heureDebut: win.debut,
+              heureFin: winFinStr,
+            });
+            virtualOccupied.push({
+              ...item,
+              technicien: tech,
+              date: targetDate,
+              heureDebut: win.debut,
+              heureFin: winFinStr,
+              durationHours: computeDurationHours(win.debut, winFinStr) ?? 2,
+            });
+            assignedCount++;
+            placed = true;
+            break;
+          }
+        }
+      }
     }
-    setDrawnSlot(null);
+
+    toast.success(`${assignedCount} mission(s) auto-planifiée(s) sans conflit horaire`);
   };
 
-  // Navigate weeks
-  const changeWeek = (deltaWeeks: number) => {
-    const next = new Date(currentMonday);
-    next.setDate(currentMonday.getDate() + deltaWeeks * 7);
-    setCurrentMonday(next);
+  const computeGanttLanes = (slots: PlanningSlotItem[]) => {
+    const sorted = [...slots].sort(
+      (a, b) => timeToMinutes(a.heureDebut) - timeToMinutes(b.heureDebut)
+    );
+    const lanes: number[] = [];
+    const assignments: { slot: PlanningSlotItem; lane: number; hasConflict: boolean }[] = [];
+
+    for (const slot of sorted) {
+      const sStart = timeToMinutes(slot.heureDebut);
+      const sEnd = timeToMinutes(slot.heureFin);
+      let placedLane = -1;
+      for (let i = 0; i < lanes.length; i++) {
+        if (lanes[i] <= sStart) {
+          placedLane = i;
+          lanes[i] = sEnd;
+          break;
+        }
+      }
+      if (placedLane === -1) {
+        placedLane = lanes.length;
+        lanes.push(sEnd);
+      }
+
+      const hasConflict = sorted.some(
+        (other) =>
+          other.id !== slot.id &&
+          timeToMinutes(other.heureDebut) < sEnd &&
+          timeToMinutes(other.heureFin) > sStart
+      );
+
+      assignments.push({ slot, lane: placedLane, hasConflict });
+    }
+
+    return {
+      totalLanes: Math.max(1, lanes.length),
+      items: assignments,
+    };
   };
+
+  const getTechDayStats = (tech: string, dateKey: string) => {
+    const slots = scheduledItems.filter((s) => s.technicien === tech && s.date === dateKey);
+    const totalHours = slots.reduce((sum, s) => sum + s.durationHours, 0);
+    const pct = Math.min(100, Math.round((totalHours / 8) * 100));
+    return { slots, totalHours, pct };
+  };
+
+  const livePreviewInterval = useMemo(() => {
+    if (!keyboardIntervalText.trim()) return null;
+    const p = parseTimeIntervalInput(keyboardIntervalText);
+    if (!p) return null;
+    return {
+      ...p,
+      durationHours: computeDurationHours(p.heureDebut, p.heureFin) ?? 2,
+    };
+  }, [keyboardIntervalText]);
+
+  const showNowLine =
+    nowMinutes >= START_HOUR * 60 &&
+    nowMinutes <= END_HOUR * 60 &&
+    selectedDayKey === toDateKey(new Date());
+  const nowLeftPct = ((nowMinutes - START_HOUR * 60) / TOTAL_MINUTES) * 100;
 
   return (
-    <div className="planning-workspace">
-      {/* Top control bar */}
-      <div className="planning-header-bar">
-        <div className="planning-header-left">
-          <div className="view-switcher" role="tablist" aria-label="Mode d'affichage du planning">
+    <div className="fsm-console">
+      {/* 1. TOP DISPATCH COMMAND TOOLBAR */}
+      <div className="fsm-toolbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="segmented-control">
             <button
               type="button"
-              className={`view-switch-btn ${viewMode === 'week' ? 'active' : ''}`}
-              onClick={() => setViewMode('week')}
+              className={`segmented-btn ${viewMode === 'gantt' ? 'active' : ''}`}
+              onClick={() => setViewMode('gantt')}
             >
-              🗓️ Matrice Semaine (Techniciens × Jours)
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="14" y2="6" />
+                <line x1="8" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="16" y2="18" />
+              </svg>
+              Timeline Gantt Pro
             </button>
             <button
               type="button"
-              className={`view-switch-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-              onClick={() => setViewMode('timeline')}
+              className={`segmented-btn ${viewMode === 'week' ? 'active' : ''}`}
+              onClick={() => setViewMode('week')}
             >
-              ⏱️ Timeline Horaire (Souris & Clavier 07h–19h)
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="9" y1="4" x2="9" y2="20" />
+                <line x1="15" y1="4" x2="15" y2="20" />
+              </svg>
+              Matrice Semaine
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${viewMode === 'columns' ? 'active' : ''}`}
+              onClick={() => setViewMode('columns')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="5" height="18" rx="1" />
+                <rect x="10" y="3" width="5" height="18" rx="1" />
+                <rect x="17" y="3" width="4" height="18" rx="1" />
+              </svg>
+              Agenda Colonnes
             </button>
           </div>
 
-          <div className="week-navigator">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => changeWeek(-1)}>
-              ◀ Sem. préc.
-            </button>
-            <span className="week-range-label">
-              Semaine du <strong>{ weekDays[0].shortDate }</strong> au <strong>{ weekDays[5].shortDate }</strong>
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentMonday(getMondayOfISOWeek(new Date()))}
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                const prev = addDays(weekStart, -7);
+                setWeekStart(prev);
+                setSelectedDayKey(toDateKey(prev));
+              }}
             >
-              Aujourd’hui
+              ‹
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => changeWeek(1)}>
-              Sem. suiv. ▶
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                const today = new Date();
+                setWeekStart(getMonday(today));
+                setSelectedDayKey(toDateKey(today));
+              }}
+            >
+              Aujourd'hui
             </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                const next = addDays(weekStart, 7);
+                setWeekStart(next);
+                setSelectedDayKey(toDateKey(next));
+              }}
+            >
+              ›
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            {weekDays.map((d) => {
+              const active = selectedDayKey === d.key;
+              const countForDay = scheduledItems.filter((s) => s.date === d.key).length;
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => setSelectedDayKey(d.key)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '7px',
+                    fontSize: '11.5px',
+                    fontWeight: active ? 700 : 500,
+                    border: active
+                      ? '1px solid var(--brand-primary)'
+                      : d.isToday
+                      ? '1px solid rgba(16, 185, 129, 0.5)'
+                      : '1px solid var(--border-subtle)',
+                    background: active ? 'var(--brand-glow)' : 'var(--bg-elevated)',
+                    color: active ? '#60a5fa' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>{d.label}</span>
+                  {countForDay > 0 && (
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: '10px',
+                        padding: '0 5px',
+                        borderRadius: '999px',
+                        background: active ? '#3b82f6' : 'rgba(255,255,255,0.08)',
+                        color: active ? '#fff' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {countForDay}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="planning-header-filters">
-          <input
-            type="text"
-            className="input input-sm"
-            placeholder="Rechercher client, site, réf..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '200px' }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="segmented-control">
+            {[
+              { id: 'ALL', label: `Tout (${allItems.length})`, dot: null },
+              {
+                id: 'VISITE_DEVIS',
+                label: `Visites Devis (${allItems.filter((i) => i.kind === 'VISITE_DEVIS').length})`,
+                dot: '#a855f7',
+              },
+              {
+                id: 'INTERVENTION',
+                label: `Travaux (${allItems.filter((i) => i.kind === 'INTERVENTION').length})`,
+                dot: '#3b82f6',
+              },
+              {
+                id: 'URGENCE',
+                label: `Urgences (${allItems.filter((i) => i.kind === 'URGENCE').length})`,
+                dot: '#ef4444',
+              },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`segmented-btn ${filterKind === tab.id ? 'active' : ''}`}
+                onClick={() => setFilterKind(tab.id as any)}
+              >
+                {tab.dot && (
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: tab.dot }} />
+                )}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           <select
-            className="select select-sm"
+            className="select"
+            style={{ width: '155px', padding: '5px 9px', fontSize: '12px' }}
             value={filterTech}
             onChange={(e) => setFilterTech(e.target.value)}
-            aria-label="Filtrer par technicien"
           >
-            <option value="ALL">👷 Tous les techniciens ({techniciens.length})</option>
+            <option value="ALL">Tous techniciens</option>
             {techniciens.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -547,504 +789,1029 @@ export function PlanningBoard({
             ))}
           </select>
 
-          <select
-            className="select select-sm"
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
-            aria-label="Filtrer par type de mission"
+          <button
+            type="button"
+            onClick={handleSmartAutoDispatch}
+            className="btn btn-ai-dispatch btn-sm"
           >
-            <option value="ALL">📋 Tous types (Visites & Travaux)</option>
-            <option value="VISITE">🟣 Visites techniques Devis</option>
-            <option value="TRAVAUX">🔵 Interventions Travaux / SAV</option>
-            <option value="URGENCE">🔴 Urgences & Dépannages</option>
-          </select>
-
-          <select
-            className="select select-sm"
-            value={filterCorpsEtat}
-            onChange={(e) => setFilterCorpsEtat(e.target.value)}
-            aria-label="Filtrer par corps d'état"
-          >
-            <option value="ALL">🛠️ Tous corps d’état</option>
-            {corpsEtatList.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            Auto-Planifier ({unscheduledItems.length})
+          </button>
         </div>
       </div>
 
-      {/* Interactive instruction banner */}
-      <div className="planning-helper-strip">
-        <div className="helper-badges">
-          <span className="mission-legend-pill visite">🟣 Visite technique Devis</span>
-          <span className="mission-legend-pill travaux">🔵 Intervention Planifiée</span>
-          <span className="mission-legend-pill urgence">🔴 Urgence / Dépannage</span>
-          <span className="mission-legend-pill termine">🟢 Terminée / Clôturée</span>
-        </div>
-        <div className="helper-tips">
-          <span>🖱️ <strong>Souris :</strong> Glissez-déposez les cartes, étirez les bords ou dessinez un créneau sur la timeline.</span>
-          <span>⌨️ <strong>Clavier :</strong> Cliquez sur l’heure d’une mission et tapez <code>08:30-11:00</code>, <code>14h-17h30</code>, <code>9h+2h</code> ou <code>matin</code>.</span>
-        </div>
-      </div>
+      {/* 2. KEYBOARD-FIRST COMMAND & INTERVAL HUD */}
+      {selectedSlot && (
+        <div
+          style={{
+            background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.14) 0%, rgba(168, 85, 247, 0.12) 100%)',
+            border: '1px solid rgba(59, 130, 246, 0.45)',
+            borderRadius: '11px',
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span
+              className="font-mono"
+              style={{
+                padding: '3px 8px',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '11.5px',
+                background:
+                  selectedSlot.kind === 'VISITE_DEVIS'
+                    ? 'var(--visite-bg)'
+                    : selectedSlot.kind === 'URGENCE'
+                    ? 'var(--urgence-bg)'
+                    : 'var(--travaux-bg)',
+                color:
+                  selectedSlot.kind === 'VISITE_DEVIS'
+                    ? '#d8b4fe'
+                    : selectedSlot.kind === 'URGENCE'
+                    ? '#fca5a5'
+                    : '#93c5fd',
+                border: '1px solid rgba(255,255,255,0.15)',
+              }}
+            >
+              {selectedSlot.reference}
+            </span>
+            <span style={{ fontWeight: 700, fontSize: '13px' }}>{selectedSlot.client}</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>• {selectedSlot.title}</span>
+            <span className="font-mono" style={{ fontSize: '12px', color: '#60a5fa', fontWeight: 700 }}>
+              [{selectedSlot.technicien || 'Non affecté'} • {selectedSlot.heureDebut}–{selectedSlot.heureFin} ({selectedSlot.durationHours}h)]
+            </span>
+          </div>
 
-      <div className="planning-body-grid">
-        {/* LEFT/MAIN AREA: Matrix or Hourly Timeline */}
-        <div className="planning-main-canvas">
-          {viewMode === 'week' ? (
-            /* ================================================================
-               MODE 1: MATRICE SEMAINE (TECHNICIENS × JOURS LUN-SAM)
-               ================================================================ */
-            <div className="week-matrix-wrapper">
-              <table className="week-matrix-table">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await handleApplyKeyboardInterval(selectedSlot, keyboardIntervalText);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <input
+                type="text"
+                className="input font-mono"
+                style={{ width: '185px', padding: '5px 10px', fontSize: '12px' }}
+                placeholder="Ex: 08:30-11:00, 14h+2h, matin"
+                value={keyboardIntervalText}
+                onChange={(e) => setKeyboardIntervalText(e.target.value)}
+              />
+              {livePreviewInterval && (
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: '11px',
+                    color: '#10b981',
+                    background: 'rgba(16, 185, 129, 0.14)',
+                    padding: '3px 7px',
+                    borderRadius: '5px',
+                  }}
+                >
+                  → {livePreviewInterval.heureDebut}–{livePreviewInterval.heureFin} ({livePreviewInterval.durationHours}h)
+                </span>
+              )}
+              <button type="submit" className="btn btn-primary btn-sm">
+                Appliquer
+              </button>
+            </form>
+
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[
+                { label: 'Matin (8h-12h)', val: '08:00-12:00' },
+                { label: 'Aprem (13h30-17h30)', val: '13:30-17:30' },
+                { label: 'Journée', val: '08:00-17:00' },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleApplyKeyboardInterval(selectedSlot, p.val)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '3px', borderLeft: '1px solid var(--border-default)', paddingLeft: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => nudgeSelectedSlot('EARLIER')}
+              >
+                -30m
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => nudgeSelectedSlot('LATER')}
+              >
+                +30m
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => nudgeSelectedSlot('LONGER')}
+              >
+                Durée +30m
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() =>
+                  selectedSlot.rawDevis
+                    ? onOpenDevisDrawer(selectedSlot.rawDevis)
+                    : selectedSlot.rawIntervention
+                    ? onOpenInterventionDrawer(selectedSlot.rawIntervention)
+                    : undefined
+                }
+              >
+                Ouvrir fiche
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSelectedSlotId(null)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. MAIN WORKSPACE */}
+      <div className={`fsm-workspace ${backlogCollapsed ? 'backlog-collapsed' : ''}`}>
+        {!backlogCollapsed && (
+          <aside
+            className="fsm-dispatch-tray"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={async () => {
+              if (!draggedSlot) return;
+              await applySlotSchedule(draggedSlot, {
+                technicien: '',
+                date: null,
+                statut: 'À planifier',
+              });
+              setDraggedSlot(null);
+            }}
+          >
+            <div className="fsm-tray-header">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Bourse de Dispatch
+                  </span>
+                  <span
+                    className="font-mono"
+                    style={{
+                      padding: '1px 7px',
+                      borderRadius: '999px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: unscheduledItems.length > 0 ? 'rgba(245, 158, 11, 0.2)' : 'var(--bg-surface)',
+                      color: unscheduledItems.length > 0 ? '#fbbf24' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {unscheduledItems.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setBacklogCollapsed(true)}
+                >
+                  ‹
+                </button>
+              </div>
+
+              <input
+                type="text"
+                className="input"
+                placeholder="Filtrer réf, client, site..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '12px' }}
+              />
+            </div>
+
+            <div className="fsm-tray-list">
+              {unscheduledItems.length === 0 ? (
+                <div
+                  style={{
+                    padding: '28px 16px',
+                    textAlign: 'center',
+                    color: 'var(--text-muted)',
+                    fontSize: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                  <div>Aucune mission en attente. Tout est planifié !</div>
+                </div>
+              ) : (
+                unscheduledItems.map((item) => {
+                  const isSelected = selectedSlotId === item.id;
+                  const accent =
+                    item.kind === 'VISITE_DEVIS'
+                      ? '#a855f7'
+                      : item.kind === 'URGENCE'
+                      ? '#ef4444'
+                      : '#3b82f6';
+                  return (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={() => {
+                        setDraggedSlot(item);
+                        setSelectedSlotId(item.id);
+                      }}
+                      onDragEnd={() => setDraggedSlot(null)}
+                      onClick={() => {
+                        setSelectedSlotId(item.id);
+                        setKeyboardIntervalText(`${item.heureDebut}-${item.heureFin}`);
+                      }}
+                      style={{
+                        background: isSelected ? 'var(--bg-active)' : 'var(--bg-elevated)',
+                        border: isSelected ? `1.5px solid ${accent}` : '1px solid var(--border-default)',
+                        borderLeft: `4px solid ${accent}`,
+                        borderRadius: '9px',
+                        padding: '10px 11px',
+                        cursor: 'grab',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <span className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700, color: accent }}>
+                          {item.kind === 'VISITE_DEVIS' ? 'VISITE DEVIS' : item.kind === 'URGENCE' ? 'URGENCE' : 'TRAVAUX'} • {item.reference}
+                        </span>
+                        <span className="font-mono" style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                          {item.durationHours}h
+                        </span>
+                      </div>
+
+                      <div style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                        {item.client}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11.5px',
+                          color: 'var(--text-secondary)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {item.title}
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '6px',
+                          marginTop: '4px',
+                          paddingTop: '6px',
+                          borderTop: '1px solid var(--border-subtle)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <select
+                          className="select"
+                          style={{ padding: '3px 6px', fontSize: '11px', height: '25px' }}
+                          value=""
+                          onChange={async (e) => {
+                            if (!e.target.value) return;
+                            await applySlotSchedule(item, {
+                              technicien: e.target.value,
+                              date: selectedDayKey,
+                              heureDebut: item.heureDebut || '08:30',
+                              heureFin: item.heureFin || '10:30',
+                            });
+                          }}
+                        >
+                          <option value="">Affecter à ({selectedDayKey.slice(5)})...</option>
+                          {techniciens.map((t) => (
+                            <option key={t} value={t}>
+                              → {t}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '2px 6px', fontSize: '11px' }}
+                          onClick={() =>
+                            item.rawDevis
+                              ? onOpenDevisDrawer(item.rawDevis)
+                              : item.rawIntervention
+                              ? onOpenInterventionDrawer(item.rawIntervention)
+                              : undefined
+                          }
+                        >
+                          Fiche
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+        )}
+
+        <div className="fsm-canvas-card">
+          <div
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              background: 'var(--bg-elevated)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {backlogCollapsed && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setBacklogCollapsed(false)}
+                >
+                  Afficher Bourse ({unscheduledItems.length})
+                </button>
+              )}
+              <span style={{ fontWeight: 700, fontSize: '12.5px' }}>
+                {viewMode === 'gantt' && `Timeline Multi-Ressources • ${selectedDayKey}`}
+                {viewMode === 'week' && `Matrice Hebdomadaire Capacitaire • Semaine du ${weekDays[0]?.label}`}
+                {viewMode === 'columns' && `Agenda Vertical Multi-Techniciens • ${selectedDayKey}`}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+              <span>
+                <strong>Souris :</strong> Glisser-déposer • Étirer les bords • Tracer un créneau au clic-glisser
+              </span>
+              <span>•</span>
+              <span>
+                <strong>Clavier :</strong> Double-clic ou sélection → <code className="font-mono">08:30-11:00</code> / <code className="font-mono">14h+2h</code>
+              </span>
+            </div>
+          </div>
+
+          {viewMode === 'gantt' && (
+            <div style={{ overflowX: 'auto', flex: 1 }}>
+              <div style={{ minWidth: '960px' }}>
+                <div className="gantt-header-row">
+                  <div className="gantt-resource-col-header">
+                    <span>Technicien Terrain</span>
+                    <span>Charge / 8h</span>
+                  </div>
+                  <div className="gantt-time-ruler">
+                    {HOURS_ARRAY.map((hr) => (
+                      <div key={hr} className="gantt-hour-marker">
+                        <span>{String(hr).padStart(2, '0')}:00</span>
+                        <div className="gantt-half-tick" />
+                      </div>
+                    ))}
+                    {showNowLine && (
+                      <div className="gantt-now-line" style={{ left: `${nowLeftPct}%` }}>
+                        <span className="gantt-now-badge">{minutesToTime(nowMinutes)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {techniciens
+                  .filter((t) => filterTech === 'ALL' || t === filterTech)
+                  .map((tech) => {
+                    const { slots, totalHours, pct } = getTechDayStats(tech, selectedDayKey);
+                    const { totalLanes, items: laneItems } = computeGanttLanes(slots);
+                    const rowHeight = Math.max(78, totalLanes * 62 + 14);
+                    const meta = TECH_SPECIALTIES[tech] || { role: 'Technicien TCE', color: '#3b82f6' };
+
+                    const isDrawingHere =
+                      drawState && drawState.technicien === tech && drawState.dateKey === selectedDayKey;
+                    const drawStartM = isDrawingHere
+                      ? Math.min(drawState.startMin, drawState.currentMin)
+                      : 0;
+                    const drawEndM = isDrawingHere
+                      ? Math.max(drawState.startMin + 30, drawState.currentMin)
+                      : 0;
+                    const drawLeftPct = ((drawStartM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                    const drawWidthPct = ((drawEndM - drawStartM) / TOTAL_MINUTES) * 100;
+
+                    return (
+                      <div key={tech} className="gantt-resource-row">
+                        <div className="gantt-resource-info">
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                              <div
+                                style={{
+                                  width: '30px',
+                                  height: '30px',
+                                  borderRadius: '8px',
+                                  background: `${meta.color}22`,
+                                  border: `1px solid ${meta.color}66`,
+                                  color: meta.color,
+                                  fontWeight: 800,
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {tech.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '13px' }}>{tech}</div>
+                                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{meta.role}</div>
+                              </div>
+                            </div>
+                            <span
+                              className="font-mono"
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: totalHours > 8 ? '#ef4444' : totalHours >= 6 ? '#10b981' : 'var(--text-secondary)',
+                              }}
+                            >
+                              {totalHours.toFixed(1)}h
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              height: '5px',
+                              width: '100%',
+                              borderRadius: '999px',
+                              background: 'var(--bg-app)',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: '100%',
+                                width: `${pct}%`,
+                                background:
+                                  totalHours > 8
+                                    ? '#ef4444'
+                                    : totalHours >= 6
+                                    ? '#10b981'
+                                    : meta.color,
+                                borderRadius: '999px',
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div
+                          ref={(el) => {
+                            trackRefs.current[tech] = el;
+                          }}
+                          className="gantt-track-canvas"
+                          style={{ height: `${rowHeight}px` }}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            if (!draggedSlot) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                            const dropMin =
+                              START_HOUR * 60 + Math.round(((relX / rect.width) * TOTAL_MINUTES) / 15) * 15;
+                            const durMin = Math.max(60, Math.round(draggedSlot.durationHours * 60));
+                            const clampedStart = Math.max(
+                              START_HOUR * 60,
+                              Math.min(END_HOUR * 60 - durMin, dropMin)
+                            );
+                            const newDebut = minutesToTime(clampedStart);
+                            const newFin = minutesToTime(clampedStart + durMin);
+
+                            await applySlotSchedule(draggedSlot, {
+                              technicien: tech,
+                              date: selectedDayKey,
+                              heureDebut: newDebut,
+                              heureFin: newFin,
+                            });
+                            setDraggedSlot(null);
+                          }}
+                          onMouseDown={(e) => {
+                            if (e.target !== e.currentTarget) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                            const startMin =
+                              START_HOUR * 60 + Math.round(((relX / rect.width) * TOTAL_MINUTES) / 15) * 15;
+                            setDrawState({
+                              technicien: tech,
+                              dateKey: selectedDayKey,
+                              startMin,
+                              currentMin: startMin + 90,
+                            });
+                          }}
+                        >
+                          {showNowLine && (
+                            <div className="gantt-now-line" style={{ left: `${nowLeftPct}%` }} />
+                          )}
+
+                          {isDrawingHere && (
+                            <div
+                              className="gantt-ghost-selection font-mono"
+                              style={{
+                                left: `${Math.max(0, drawLeftPct)}%`,
+                                width: `${Math.max(4, drawWidthPct)}%`,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  background: '#2563eb',
+                                  color: '#fff',
+                                  padding: '2px 7px',
+                                  borderRadius: '5px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {minutesToTime(drawStartM)} → {minutesToTime(drawEndM)}
+                              </span>
+                            </div>
+                          )}
+
+                          {laneItems.map(({ slot, lane, hasConflict }) => {
+                            const isResizingThis = resizingState?.slot.id === slot.id;
+                            const dispDebut = isResizingThis ? resizingState.previewDebut : slot.heureDebut;
+                            const dispFin = isResizingThis ? resizingState.previewFin : slot.heureFin;
+
+                            const startM = Math.max(START_HOUR * 60, timeToMinutes(dispDebut));
+                            const endM = Math.min(END_HOUR * 60, Math.max(startM + 30, timeToMinutes(dispFin)));
+
+                            const leftPct = ((startM - START_HOUR * 60) / TOTAL_MINUTES) * 100;
+                            const widthPct = ((endM - startM) / TOTAL_MINUTES) * 100;
+                            const laneHeight = 56;
+                            const topPx = 8 + lane * (laneHeight + 6);
+
+                            const typeClass =
+                              slot.kind === 'VISITE_DEVIS'
+                                ? 'type-visite'
+                                : slot.kind === 'URGENCE'
+                                ? 'type-urgence'
+                                : 'type-travaux';
+
+                            const isSelected = selectedSlotId === slot.id;
+                            const isInlineEditing = inlineEditId === slot.id;
+
+                            return (
+                              <div
+                                key={slot.id}
+                                draggable={!isResizingThis && !isInlineEditing}
+                                onDragStart={(e) => {
+                                  e.stopPropagation();
+                                  setDraggedSlot(slot);
+                                  setSelectedSlotId(slot.id);
+                                }}
+                                onDragEnd={() => setDraggedSlot(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSlotId(slot.id);
+                                  setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                                }}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineEditId(slot.id);
+                                  setInlineInputVal(`${slot.heureDebut}-${slot.heureFin}`);
+                                }}
+                                className={`gantt-event-block ${typeClass} ${isSelected ? 'selected' : ''}`}
+                                style={{
+                                  left: `${leftPct}%`,
+                                  width: `${Math.max(4.5, widthPct)}%`,
+                                  top: `${topPx}px`,
+                                  height: `${laneHeight}px`,
+                                }}
+                              >
+                                <div
+                                  className="gantt-resize-handle left"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    const trackEl = trackRefs.current[tech];
+                                    if (!trackEl) return;
+                                    setResizingState({
+                                      slot,
+                                      edge: 'left',
+                                      trackRect: trackEl.getBoundingClientRect(),
+                                      previewDebut: slot.heureDebut,
+                                      previewFin: slot.heureFin,
+                                    });
+                                  }}
+                                />
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  {isInlineEditing ? (
+                                    <form
+                                      onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        await handleApplyKeyboardInterval(slot, inlineInputVal);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      style={{ display: 'flex', gap: '4px', width: '100%' }}
+                                    >
+                                      <input
+                                        autoFocus
+                                        type="text"
+                                        className="input font-mono"
+                                        style={{ padding: '1px 5px', fontSize: '10.5px', height: '20px' }}
+                                        value={inlineInputVal}
+                                        onChange={(e) => setInlineInputVal(e.target.value)}
+                                        onBlur={() => setInlineEditId(null)}
+                                      />
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <span className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700, color: '#ffffff' }}>
+                                        {dispDebut}–{dispFin}
+                                      </span>
+                                      <span className="font-mono" style={{ fontSize: '10px', opacity: 0.85 }}>
+                                        {slot.reference}
+                                      </span>
+                                    </>
+                                  )}
+                                  {hasConflict && (
+                                    <span
+                                      style={{
+                                        background: '#ef4444',
+                                        color: '#fff',
+                                        fontSize: '9px',
+                                        fontWeight: 800,
+                                        padding: '0 4px',
+                                        borderRadius: '3px',
+                                      }}
+                                    >
+                                      CONFLIT
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    color: '#ffffff',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {slot.client} — <span style={{ fontWeight: 400, opacity: 0.85 }}>{slot.title}</span>
+                                </div>
+
+                                <div
+                                  className="gantt-resize-handle right"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    const trackEl = trackRefs.current[tech];
+                                    if (!trackEl) return;
+                                    setResizingState({
+                                      slot,
+                                      edge: 'right',
+                                      trackRect: trackEl.getBoundingClientRect(),
+                                      previewDebut: slot.heureDebut,
+                                      previewFin: slot.heureFin,
+                                    });
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'week' && (
+            <div style={{ overflowX: 'auto', flex: 1 }}>
+              <table className="pro-table" style={{ minWidth: '980px', tableLayout: 'fixed' }}>
                 <thead>
                   <tr>
-                    <th className="tech-col-header">Technicien / Charge sem.</th>
-                    {weekDays.map((day) => (
+                    <th style={{ width: '190px' }}>Technicien</th>
+                    {weekDays.map((d) => (
                       <th
-                        key={day.iso}
-                        className={`day-col-header ${day.isToday ? 'is-today' : ''}`}
-                        onClick={() => {
-                          setSelectedDayIndex(day.index);
-                          setViewMode('timeline');
+                        key={d.key}
+                        onClick={() => setSelectedDayKey(d.key)}
+                        style={{
+                          cursor: 'pointer',
+                          background:
+                            selectedDayKey === d.key
+                              ? 'rgba(59, 130, 246, 0.12)'
+                              : 'var(--bg-elevated)',
+                          borderLeft: '1px solid var(--border-subtle)',
                         }}
-                        title="Cliquer pour ouvrir la Timeline Horaire détaillée de ce jour"
                       >
-                        <div className="day-header-top">
-                          <span className="day-name">{day.label}</span>
-                          <span className="day-date">{day.shortDate}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>{d.label}</span>
+                          {d.isToday && (
+                            <span style={{ color: '#10b981', fontSize: '10px' }}>● Auj.</span>
+                          )}
                         </div>
-                        {day.isToday && <span className="today-pill">Aujourd’hui</span>}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleTechniciens.map((tech) => {
-                    const techWeekSlots = interventions.filter(
-                      (i) =>
-                        i.entreprise === tech &&
-                        i.datePlanifiee &&
-                        weekDays.some((d) => d.iso === i.datePlanifiee) &&
-                        matchesFilters(i)
-                    );
-                    const totalWeekHours = techWeekSlots.reduce((acc, s) => {
-                      return acc + (computeDurationHours(s.heureDebut || '08:30', s.heureFin || '11:30') || 2);
-                    }, 0);
-                    const capacityPct = Math.min(100, Math.round((totalWeekHours / 39) * 100));
+                  {techniciens
+                    .filter((t) => filterTech === 'ALL' || t === filterTech)
+                    .map((tech) => {
+                      const meta = TECH_SPECIALTIES[tech] || { role: 'Technicien TCE', color: '#3b82f6' };
+                      const weekTotal = weekDays.reduce(
+                        (acc, d) => acc + getTechDayStats(tech, d.key).totalHours,
+                        0
+                      );
 
-                    return (
-                      <tr key={tech}>
-                        {/* Technician info & weekly capacity bar */}
-                        <td className="tech-row-cell">
-                          <div className="tech-identity">
-                            <div className="tech-avatar">{tech.slice(0, 2).toUpperCase()}</div>
-                            <div>
-                              <div className="tech-name">{tech}</div>
-                              <div className="tech-stats-sub">
-                                {techWeekSlots.length} mission{techWeekSlots.length > 1 ? 's' : ''} •{' '}
-                                <strong>{totalWeekHours}h</strong> / 39h
-                              </div>
+                      return (
+                        <tr key={tech}>
+                          <td style={{ verticalAlign: 'top', background: 'var(--bg-surface)' }}>
+                            <div style={{ fontWeight: 700, fontSize: '13px' }}>{tech}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{meta.role}</div>
+                            <div className="font-mono" style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              Hebdo : <strong>{weekTotal.toFixed(1)}h</strong> / 40h
                             </div>
-                          </div>
-                          <div className="capacity-bar-track" title={`Charge hebdomadaire : ${totalWeekHours}h / 39h (${capacityPct}%)`}>
-                            <div
-                              className={`capacity-bar-fill ${
-                                capacityPct > 90 ? 'overload' : capacityPct > 60 ? 'optimal' : 'light'
-                              }`}
-                              style={{ width: `${capacityPct}%` }}
-                            />
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* 6 day cells */}
-                        {weekDays.map((day) => {
-                          const cellSlots = techWeekSlots
-                            .filter((i) => i.datePlanifiee === day.iso)
-                            .sort((a, b) => (a.heureDebut || '08:00').localeCompare(b.heureDebut || '08:00'));
+                          {weekDays.map((d) => {
+                            const { slots, totalHours, pct } = getTechDayStats(tech, d.key);
+                            const sorted = [...slots].sort(
+                              (a, b) => timeToMinutes(a.heureDebut) - timeToMinutes(b.heureDebut)
+                            );
 
-                          const overlaps = getOverlappingIds(cellSlots);
-                          const dayHours = cellSlots.reduce(
-                            (sum, s) => sum + (computeDurationHours(s.heureDebut || '08:30', s.heureFin || '11:30') || 2),
-                            0
-                          );
-
-                          return (
-                            <td
-                              key={day.iso}
-                              className={`matrix-day-cell ${day.isToday ? 'is-today' : ''}`}
-                              onDragOver={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.add('drag-over');
-                              }}
-                              onDragLeave={(e) => e.currentTarget.classList.remove('drag-over')}
-                              onDrop={(e) => {
-                                e.currentTarget.classList.remove('drag-over');
-                                handleDropOnCell(e, tech, day.iso);
-                              }}
-                            >
-                              <div className="cell-top-bar">
-                                <span className="cell-hours-sum">
-                                  {dayHours > 0 ? `${dayHours}h planifiées` : 'Disponible'}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="cell-quick-add-btn"
-                                  title={`Ajouter un créneau pour ${tech} le ${day.label} ${day.shortDate}`}
-                                  onClick={() => {
-                                    setDrawnSlot({
-                                      technicien: tech,
-                                      dateISO: day.iso,
-                                      heureDebut: cellSlots.length > 0 ? '14:00' : '08:30',
-                                      heureFin: cellSlots.length > 0 ? '17:00' : '12:00',
-                                    });
+                            return (
+                              <td
+                                key={d.key}
+                                style={{
+                                  verticalAlign: 'top',
+                                  borderLeft: '1px solid var(--border-subtle)',
+                                  padding: '8px',
+                                  minHeight: '120px',
+                                }}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={async () => {
+                                  if (!draggedSlot) return;
+                                  await applySlotSchedule(draggedSlot, {
+                                    technicien: tech,
+                                    date: d.key,
+                                  });
+                                  setDraggedSlot(null);
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: '10.5px',
+                                    color: 'var(--text-muted)',
+                                    marginBottom: '6px',
                                   }}
                                 >
-                                  +
-                                </button>
-                              </div>
-
-                              <div className="cell-slots-stack">
-                                {cellSlots.map((slot) => {
-                                  const isConflict = overlaps.has(slot.id);
-                                  const isEditing = editingSlotId === slot.id;
-                                  const duration = computeDurationHours(slot.heureDebut, slot.heureFin);
-                                  const cardTone = slot.isVisiteDevis
-                                    ? 'tone-visite'
-                                    : ['Clôturée', 'Terminée - à valider'].includes(slot.statutOperationnel)
-                                    ? 'tone-termine'
-                                    : slot.priorite === 'Urgente' || slot.typeIntervention === 'Dépannage'
-                                    ? 'tone-urgence'
-                                    : 'tone-travaux';
-
-                                  return (
+                                  <div
+                                    style={{
+                                      flex: 1,
+                                      height: '4px',
+                                      background: 'var(--bg-app)',
+                                      borderRadius: '999px',
+                                      marginRight: '6px',
+                                      overflow: 'hidden',
+                                    }}
+                                  >
                                     <div
-                                      key={slot.id}
-                                      className={`planning-slot-card ${cardTone} ${isConflict ? 'has-conflict' : ''}`}
-                                      draggable
-                                      onDragStart={(e) => handleDragStartSlot(e, slot)}
-                                    >
-                                      {/* Time interval row: clickable to type keyboard interval! */}
-                                      <div className="slot-time-row">
-                                        {isEditing ? (
-                                          <form
-                                            className="inline-interval-form"
-                                            onSubmit={(e) => {
-                                              e.preventDefault();
-                                              handleApplyKeyboardInterval(slot);
-                                            }}
-                                          >
-                                            <input
-                                              type="text"
-                                              className="interval-keyboard-input"
-                                              value={intervalInputText}
-                                              onChange={(e) => setIntervalInputText(e.target.value)}
-                                              placeholder="ex: 08:30-11:30 ou matin"
-                                              autoFocus
-                                              onBlur={() => setEditingSlotId(null)}
-                                              onKeyDown={(e) => {
-                                                if (e.key === 'Escape') setEditingSlotId(null);
-                                              }}
-                                            />
-                                          </form>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            className="slot-time-pill"
-                                            title="Cliquer pour saisir l'intervalle au clavier (ex: 08:30-11:00, 14h-17h, matin)"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setEditingSlotId(slot.id);
-                                              setIntervalInputText(
-                                                `${slot.heureDebut || '08:30'}-${slot.heureFin || '11:30'}`
-                                              );
-                                            }}
-                                          >
-                                            ⌨️ {slot.heureDebut || '08:30'} – {slot.heureFin || '11:30'}
-                                            {duration ? ` (${duration}h)` : ''}
-                                          </button>
-                                        )}
+                                      style={{
+                                        width: `${pct}%`,
+                                        height: '100%',
+                                        background: totalHours > 8 ? '#ef4444' : '#3b82f6',
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="font-mono">{totalHours.toFixed(1)}h</span>
+                                </div>
 
-                                        <div className="slot-micro-actions">
-                                          <button
-                                            type="button"
-                                            title="Décaler de -30 min"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleShiftSlot(slot, -30);
-                                            }}
-                                          >
-                                            -30m
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Décaler de +30 min"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleShiftSlot(slot, 30);
-                                            }}
-                                          >
-                                            +30m
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Dupliquer sur le jour suivant"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDuplicateNextDay(slot);
-                                            }}
-                                          >
-                                            J+1
-                                          </button>
-                                        </div>
-                                      </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {sorted.map((slot) => {
+                                    const accent =
+                                      slot.kind === 'VISITE_DEVIS'
+                                        ? '#a855f7'
+                                        : slot.kind === 'URGENCE'
+                                        ? '#ef4444'
+                                        : '#3b82f6';
+                                    const isSelected = selectedSlotId === slot.id;
 
-                                      {/* Main body clickable to open full drawer */}
+                                    return (
                                       <div
-                                        className="slot-card-body"
-                                        onClick={() => onSelectIntervention(slot)}
+                                        key={slot.id}
+                                        draggable
+                                        onDragStart={() => {
+                                          setDraggedSlot(slot);
+                                          setSelectedSlotId(slot.id);
+                                        }}
+                                        onDragEnd={() => setDraggedSlot(null)}
+                                        onClick={() => {
+                                          setSelectedSlotId(slot.id);
+                                          setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                                        }}
+                                        style={{
+                                          padding: '6px 8px',
+                                          borderRadius: '7px',
+                                          background: isSelected ? 'var(--bg-active)' : 'var(--bg-elevated)',
+                                          border: isSelected
+                                            ? `1.5px solid ${accent}`
+                                            : '1px solid var(--border-default)',
+                                          borderLeft: `3.5px solid ${accent}`,
+                                          fontSize: '11.5px',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '3px',
+                                        }}
                                       >
-                                        <div className="slot-badges-line">
-                                          <span className="slot-ref-tag">{slot.reference}</span>
-                                          <span className="slot-type-tag">
-                                            {slot.isVisiteDevis ? '🟣 Visite Devis' : slot.typeIntervention || 'Travaux'}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700, color: accent }}>
+                                            {slot.heureDebut}–{slot.heureFin}
                                           </span>
-                                          {slot.corpsEtat && (
-                                            <span className="slot-metier-tag">{slot.corpsEtat}</span>
-                                          )}
+                                          <span className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                            {slot.reference}
+                                          </span>
                                         </div>
-                                        <div className="slot-client-title">
-                                          {slot.client ? `${slot.client} — ` : ''}
-                                          <span>{slot.chantier}</span>
+                                        <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                          {slot.client}
                                         </div>
-                                        {slot.objet && <div className="slot-objet-sub">{slot.objet}</div>}
-                                        {isConflict && (
-                                          <div className="slot-conflict-warning">
-                                            ⚠️ Chevauchement horaire détecté
-                                          </div>
-                                        )}
+                                        <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                          {slot.title}
+                                        </div>
                                       </div>
-
-                                      {/* Quick preset buttons */}
-                                      <div className="slot-quick-presets">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleApplyKeyboardInterval(slot, '08:00-12:00')}
-                                          title="Affecter au Matin (08:00-12:00)"
-                                        >
-                                          Matin
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleApplyKeyboardInterval(slot, '13:30-17:30')}
-                                          title="Affecter à l'Après-midi (13:30-17:30)"
-                                        >
-                                          Après-midi
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            onUpdateIntervention(slot.id, {
-                                              datePlanifiee: null,
-                                              statutOperationnel: 'À planifier',
-                                            })
-                                          }
-                                          title="Remettre dans le bac À planifier"
-                                        >
-                                          ↩ Bac
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
-          ) : (
-            /* ================================================================
-               MODE 2: TIMELINE HORAIRE INTERACTIVE (07:00 -> 19:00 À LA SOURIS)
-               ================================================================ */
-            <div className="timeline-view-container" onMouseUp={handleTimelineMouseUp}>
-              {/* Day selector tabs */}
-              <div className="timeline-day-tabs">
-                {weekDays.map((d) => (
-                  <button
-                    key={d.iso}
-                    type="button"
-                    className={`timeline-day-tab ${d.index === selectedDayIndex ? 'active' : ''} ${
-                      d.isToday ? 'today' : ''
-                    }`}
-                    onClick={() => setSelectedDayIndex(d.index)}
+          )}
+
+          {viewMode === 'columns' && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `64px repeat(${
+                  techniciens.filter((t) => filterTech === 'ALL' || t === filterTech).length
+                }, minmax(180px, 1fr))`,
+                overflowX: 'auto',
+                flex: 1,
+              }}
+            >
+              <div style={{ borderRight: '1px solid var(--border-default)', background: 'var(--bg-elevated)' }}>
+                <div style={{ height: '48px', borderBottom: '1px solid var(--border-default)' }} />
+                {HOURS_ARRAY.map((hr) => (
+                  <div
+                    key={hr}
+                    className="font-mono"
+                    style={{
+                      height: '56px',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      textAlign: 'right',
+                    }}
                   >
-                    <span>{d.label}</span>
-                    <strong>{d.shortDate}</strong>
-                  </button>
+                    {String(hr).padStart(2, '0')}:00
+                  </div>
                 ))}
               </div>
 
-              {/* Hours ruler header (07:00 to 19:00) */}
-              <div className="timeline-grid-header">
-                <div className="timeline-tech-col-label">Technicien ({activeTimelineDay.label} {activeTimelineDay.shortDate})</div>
-                <div className="timeline-hours-ruler">
-                  {Array.from({ length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 }).map((_, idx) => {
-                    const h = TIMELINE_START_HOUR + idx;
-                    return (
-                      <div key={h} className="ruler-hour-mark" style={{ left: `${(idx / 12) * 100}%` }}>
-                        <span>{String(h).padStart(2, '0')}:00</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Rows per technician */}
-              <div className="timeline-rows-list">
-                {visibleTechniciens.map((tech) => {
-                  const daySlots = interventions.filter(
-                    (i) =>
-                      i.entreprise === tech &&
-                      i.datePlanifiee === activeTimelineDay.iso &&
-                      matchesFilters(i)
-                  );
-                  const overlaps = getOverlappingIds(daySlots);
-
-                  // Preview box while drawing with mouse
-                  const isDrawingHere =
-                    mouseDragState &&
-                    mouseDragState.mode === 'draw' &&
-                    mouseDragState.technicien === tech;
-
-                  const drawStartMin = isDrawingHere
-                    ? Math.min(mouseDragState.startMin, mouseDragState.currentMin)
-                    : 0;
-                  const drawEndMin = isDrawingHere
-                    ? Math.max(drawStartMin + 30, Math.max(mouseDragState.startMin, mouseDragState.currentMin))
-                    : 0;
+              {techniciens
+                .filter((t) => filterTech === 'ALL' || t === filterTech)
+                .map((tech) => {
+                  const { slots, totalHours } = getTechDayStats(tech, selectedDayKey);
+                  const totalCanvasHeight = HOURS_ARRAY.length * 56;
 
                   return (
-                    <div key={tech} className="timeline-tech-row">
-                      <div className="timeline-tech-info">
-                        <div className="tech-avatar">{tech.slice(0, 2).toUpperCase()}</div>
-                        <div>
-                          <div className="tech-name">{tech}</div>
-                          <div className="tech-stats-sub">{daySlots.length} créneau(x)</div>
-                        </div>
-                      </div>
-
+                    <div
+                      key={tech}
+                      style={{ borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column' }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        if (!draggedSlot) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const relY = Math.max(0, e.clientY - rect.top - 48);
+                        const dropMin =
+                          START_HOUR * 60 +
+                          Math.round(((relY / totalCanvasHeight) * TOTAL_MINUTES) / 15) * 15;
+                        const durMin = Math.max(60, Math.round(draggedSlot.durationHours * 60));
+                        const clampedStart = Math.max(
+                          START_HOUR * 60,
+                          Math.min(END_HOUR * 60 - durMin, dropMin)
+                        );
+                        await applySlotSchedule(draggedSlot, {
+                          technicien: tech,
+                          date: selectedDayKey,
+                          heureDebut: minutesToTime(clampedStart),
+                          heureFin: minutesToTime(clampedStart + durMin),
+                        });
+                        setDraggedSlot(null);
+                      }}
+                    >
                       <div
-                        ref={(el) => {
-                          timelineTrackRefs.current[tech] = el;
-                        }}
-                        className="timeline-track-canvas"
-                        onMouseDown={(e) => handleTimelineMouseDownTrack(e, tech)}
-                        onMouseMove={(e) => handleTimelineMouseMove(e, tech)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          const dropMin = getMinutesFromMouseEvent(e, tech);
-                          const startHHMM = minutesToHHMM(dropMin);
-                          const endHHMM = minutesToHHMM(dropMin + 120);
-                          handleDropOnCell(e, tech, activeTimelineDay.iso, startHHMM, endHHMM);
+                        style={{
+                          height: '48px',
+                          padding: '8px 12px',
+                          borderBottom: '1px solid var(--border-default)',
+                          background: 'var(--bg-elevated)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
                         }}
                       >
-                        {/* Vertical half-hour grid lines */}
-                        {Array.from({ length: (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 2 }).map((_, idx) => (
+                        <span style={{ fontWeight: 700, fontSize: '12.5px' }}>{tech}</span>
+                        <span className="font-mono" style={{ fontSize: '11px', color: '#60a5fa' }}>
+                          {totalHours.toFixed(1)}h
+                        </span>
+                      </div>
+
+                      <div style={{ position: 'relative', height: `${totalCanvasHeight}px` }}>
+                        {HOURS_ARRAY.map((hr) => (
                           <div
-                            key={idx}
-                            className={`timeline-grid-line ${idx % 2 === 0 ? 'hour-line' : 'half-line'}`}
-                            style={{ left: `${(idx / 24) * 100}%` }}
+                            key={hr}
+                            style={{
+                              height: '56px',
+                              borderBottom: '1px dashed var(--border-subtle)',
+                            }}
                           />
                         ))}
 
-                        {/* Active mouse draw ghost */}
-                        {isDrawingHere && (
-                          <div
-                            className="timeline-draw-ghost"
-                            style={{
-                              left: `${((drawStartMin - TIMELINE_START_HOUR * 60) / TOTAL_TIMELINE_MINUTES) * 100}%`,
-                              width: `${((drawEndMin - drawStartMin) / TOTAL_TIMELINE_MINUTES) * 100}%`,
-                            }}
-                          >
-                            <span>
-                              {minutesToHHMM(drawStartMin)} – {minutesToHHMM(drawEndMin)}
-                            </span>
-                          </div>
-                        )}
+                        {slots.map((slot) => {
+                          const startM = Math.max(START_HOUR * 60, timeToMinutes(slot.heureDebut));
+                          const endM = Math.min(END_HOUR * 60, Math.max(startM + 30, timeToMinutes(slot.heureFin)));
+                          const topPx = ((startM - START_HOUR * 60) / TOTAL_MINUTES) * totalCanvasHeight;
+                          const heightPx = Math.max(36, ((endM - startM) / TOTAL_MINUTES) * totalCanvasHeight);
 
-                        {/* Rendered slots */}
-                        {daySlots.map((slot) => {
-                          const isResizingThis =
-                            mouseDragState &&
-                            mouseDragState.interventionId === slot.id &&
-                            (mouseDragState.mode === 'resize-start' || mouseDragState.mode === 'resize-end');
-
-                          const rawStart = isResizingThis
-                            ? Math.min(mouseDragState.startMin, mouseDragState.currentMin)
-                            : timeToMinutes(slot.heureDebut || '08:30') ?? 510;
-                          const rawEnd = isResizingThis
-                            ? Math.max(rawStart + 30, Math.max(mouseDragState.startMin, mouseDragState.currentMin))
-                            : timeToMinutes(slot.heureFin || '11:30') ?? 690;
-
-                          const clampedStart = Math.max(TIMELINE_START_HOUR * 60, rawStart);
-                          const clampedEnd = Math.min(TIMELINE_END_HOUR * 60, Math.max(clampedStart + 30, rawEnd));
-
-                          const leftPct =
-                            ((clampedStart - TIMELINE_START_HOUR * 60) / TOTAL_TIMELINE_MINUTES) * 100;
-                          const widthPct = ((clampedEnd - clampedStart) / TOTAL_TIMELINE_MINUTES) * 100;
-
-                          const isConflict = overlaps.has(slot.id);
-                          const toneClass = slot.isVisiteDevis
-                            ? 'tone-visite'
-                            : slot.priorite === 'Urgente'
-                            ? 'tone-urgence'
-                            : 'tone-travaux';
+                          const typeClass =
+                            slot.kind === 'VISITE_DEVIS'
+                              ? 'type-visite'
+                              : slot.kind === 'URGENCE'
+                              ? 'type-urgence'
+                              : 'type-travaux';
 
                           return (
                             <div
                               key={slot.id}
-                              className={`timeline-slot-block ${toneClass} ${isConflict ? 'has-conflict' : ''}`}
-                              style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                               draggable
-                              onDragStart={(e) => handleDragStartSlot(e, slot)}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onSelectIntervention(slot);
+                              onDragStart={() => {
+                                setDraggedSlot(slot);
+                                setSelectedSlotId(slot.id);
                               }}
-                              title={`${minutesToHHMM(clampedStart)} - ${minutesToHHMM(clampedEnd)} • ${
-                                slot.client || ''
-                              } (${slot.chantier}) — Étirez les bords gauche/droit à la souris !`}
+                              onDragEnd={() => setDraggedSlot(null)}
+                              onClick={() => {
+                                setSelectedSlotId(slot.id);
+                                setKeyboardIntervalText(`${slot.heureDebut}-${slot.heureFin}`);
+                              }}
+                              className={`gantt-event-block ${typeClass} ${
+                                selectedSlotId === slot.id ? 'selected' : ''
+                              }`}
+                              style={{
+                                left: '6px',
+                                right: '6px',
+                                top: `${topPx}px`,
+                                height: `${heightPx}px`,
+                              }}
                             >
-                              {/* Left resize handle */}
-                              <div
-                                className="slot-resize-handle left"
-                                title="Étirer le début à la souris"
-                                onMouseDown={(e) => handleTimelineMouseDownResize(e, slot, 'resize-start')}
-                              />
-
-                              <div className="timeline-slot-inner">
-                                <div className="timeline-slot-time">
-                                  {minutesToHHMM(clampedStart)}–{minutesToHHMM(clampedEnd)}
-                                  {slot.isVisiteDevis ? ' • 🟣 Visite Devis' : ''}
-                                </div>
-                                <div className="timeline-slot-title">
-                                  <strong>{slot.client || slot.reference}</strong> — {slot.chantier}
-                                </div>
-                                {slot.objet && <div className="timeline-slot-sub">{slot.objet}</div>}
+                              <div className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                                {slot.heureDebut}–{slot.heureFin} • {slot.reference}
                               </div>
-
-                              {/* Right resize handle */}
-                              <div
-                                className="slot-resize-handle right"
-                                title="Étirer la fin à la souris"
-                                onMouseDown={(e) => handleTimelineMouseDownResize(e, slot, 'resize-end')}
-                              />
+                              <div style={{ fontWeight: 700, fontSize: '11.5px' }}>{slot.client}</div>
+                              <div style={{ fontSize: '10.5px', opacity: 0.85 }}>{slot.title}</div>
                             </div>
                           );
                         })}
@@ -1052,316 +1819,184 @@ export function PlanningBoard({
                     </div>
                   );
                 })}
-              </div>
             </div>
           )}
         </div>
-
-        {/* RIGHT SIDEBAR: BACKLOG ("MISSIONS & VISITES DEVIS À PLACER") */}
-        <aside className="planning-backlog-sidebar">
-          <div className="backlog-header">
-            <h3>📥 À placer au planning</h3>
-            <span className="backlog-count">
-              {backlogInterventions.length + actionableDevisForPlanning.length}
-            </span>
-          </div>
-          <p className="backlog-subtitle">
-            Glissez une carte vers un technicien ou cliquez sur <strong>Affecter</strong>.
-          </p>
-
-          <div className="backlog-list">
-            {/* 1. Devis nécessitant une visite ou une intervention */}
-            {actionableDevisForPlanning.map((d) => {
-              const isVisite = d.visiteNecessaire || d.traitement === 'En attente technicien';
-              return (
-                <div
-                  key={`devis-${d.id}`}
-                  className={`backlog-card ${isVisite ? 'visite-card' : 'travaux-card'}`}
-                  draggable
-                  onDragStart={(e) => handleDragStartDevis(e, d, isVisite ? 'visite' : 'travaux')}
-                >
-                  <div className="backlog-card-top">
-                    <span className="backlog-badge">
-                      {isVisite ? '🟣 Visite Devis à créer' : '🔵 Devis Accepté à planifier'}
-                    </span>
-                    <span className="backlog-ref">{d.reference}</span>
-                  </div>
-                  <div className="backlog-client" onClick={() => onSelectDevis(d)}>
-                    <strong>{d.client}</strong> — {d.site || 'Site à préciser'}
-                  </div>
-                  {d.objet && <div className="backlog-objet">{d.objet}</div>}
-                  <div className="backlog-meta">
-                    <span>🛠️ {d.corpsEtat || 'TCE'}</span>
-                    <span>⚡ {d.priorite}</span>
-                  </div>
-                  <div className="backlog-quick-assign">
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-xs"
-                      onClick={() =>
-                        onConvertDevis(d.id, {
-                          mode: isVisite ? 'visite' : 'travaux',
-                          isVisiteDevis: isVisite,
-                          entreprise: d.visiteTechnicien || techniciens[0] || 'Anouar',
-                          datePlanifiee: activeTimelineDay.iso,
-                          heureDebut: isVisite ? '09:00' : '08:30',
-                          heureFin: isVisite ? '10:30' : '12:00',
-                        })
-                      }
-                    >
-                      + Placer ({d.visiteTechnicien || techniciens[0] || 'Anouar'} • {activeTimelineDay.label})
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* 2. Interventions / Visites en attente de date ou de technicien */}
-            {backlogInterventions.map((item) => (
-              <div
-                key={`interv-${item.id}`}
-                className={`backlog-card ${item.isVisiteDevis ? 'visite-card' : 'travaux-card'}`}
-                draggable
-                onDragStart={(e) => handleDragStartSlot(e, item)}
-              >
-                <div className="backlog-card-top">
-                  <span className="backlog-badge">
-                    {item.isVisiteDevis ? '🟣 Visite Devis' : `🔧 ${item.typeIntervention || 'Intervention'}`}
-                  </span>
-                  <span className="backlog-ref">{item.reference}</span>
-                </div>
-                <div className="backlog-client" onClick={() => onSelectIntervention(item)}>
-                  <strong>{item.client || 'Client'}</strong> — {item.chantier}
-                </div>
-                {item.objet && <div className="backlog-objet">{item.objet}</div>}
-                <div className="backlog-meta">
-                  <span>🛠️ {item.corpsEtat || 'TCE'}</span>
-                  <span>👷 {item.entreprise || 'Non affecté'}</span>
-                </div>
-                <div className="backlog-quick-assign">
-                  <select
-                    className="select select-xs"
-                    value=""
-                    onChange={(e) => {
-                      const chosenTech = e.target.value;
-                      if (!chosenTech) return;
-                      onUpdateIntervention(item.id, {
-                        entreprise: chosenTech,
-                        datePlanifiee: activeTimelineDay.iso,
-                        heureDebut: item.heureDebut || '08:30',
-                        heureFin: item.heureFin || '11:30',
-                        statutOperationnel: 'Planifiée',
-                        modePlanification: 'Planifiée',
-                      });
-                      toast.success(`Placé sur ${chosenTech} (${activeTimelineDay.label})`);
-                    }}
-                  >
-                    <option value="">Placer sur {activeTimelineDay.label} ({activeTimelineDay.shortDate})…</option>
-                    {techniciens.map((t) => (
-                      <option key={t} value={t}>
-                        👷 {t} ({item.heureDebut || '08:30'}-{item.heureFin || '11:30'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-
-            {backlogInterventions.length === 0 && actionableDevisForPlanning.length === 0 && (
-              <div className="backlog-empty">
-                ✅ Toutes les visites devis et interventions actives sont placées sur le planning !
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
-      {/* Modal when user draws a slot with the mouse or clicks '+' on a cell */}
-      {drawnSlot && (
-        <div className="modal-overlay" onClick={() => setDrawnSlot(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                Nouveau créneau — {drawnSlot.technicien} ({formatDateFR(drawnSlot.dateISO)})
-              </h2>
-              <button className="modal-close" onClick={() => setDrawnSlot(null)}>
-                &times;
+      {/* 4. QUICK-ASSIGN & QUICK-CREATE MODAL AFTER CLICK-DRAG DRAWING */}
+      {drawnSlotModal && (
+        <div className="cmd-palette-backdrop" onClick={() => setDrawnSlotModal(null)}>
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '540px', padding: '20px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700 }}>
+                  Nouveau créneau — {drawnSlotModal.technicien} ({drawnSlotModal.dateKey})
+                </h3>
+                <p className="font-mono" style={{ fontSize: '12px', color: '#60a5fa', marginTop: '2px' }}>
+                  {drawnSlotModal.heureDebut} → {drawnSlotModal.heureFin}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setDrawnSlotModal(null)}
+              >
+                ✕
               </button>
             </div>
-            <form onSubmit={handleConfirmDrawnSlot}>
-              <div className="modal-body">
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Heure début</label>
+
+            {unscheduledItems.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '7px', textTransform: 'uppercase' }}>
+                  Option A : Placer une mission existante en attente ({unscheduledItems.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
+                  {unscheduledItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={async () => {
+                        const parsed = parseTimeIntervalInput(quickIntervalText);
+                        await applySlotSchedule(item, {
+                          technicien: drawnSlotModal.technicien,
+                          date: drawnSlotModal.dateKey,
+                          heureDebut: parsed?.heureDebut || drawnSlotModal.heureDebut,
+                          heureFin: parsed?.heureFin || drawnSlotModal.heureFin,
+                        });
+                        setDrawnSlotModal(null);
+                      }}
+                      style={{
+                        textAlign: 'left',
+                        padding: '8px 11px',
+                        borderRadius: '8px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-default)',
+                        color: 'var(--text-primary)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                          {item.reference} — {item.client}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{item.title}</div>
+                      </div>
+                      <span className="btn btn-secondary btn-sm">Placer ici</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {onCreateQuickIntervention && (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const parsed = parseTimeIntervalInput(quickIntervalText);
+                  const hDebut = parsed?.heureDebut || drawnSlotModal.heureDebut;
+                  const hFin = parsed?.heureFin || drawnSlotModal.heureFin;
+                  await onCreateQuickIntervention({
+                    client: quickClient.trim() || 'Client ANELEC',
+                    chantier: quickSite.trim() || quickClient.trim() || 'Site à préciser',
+                    objet: quickObjet.trim() || (quickKind === 'VISITE_DEVIS' ? 'Visite technique devis' : 'Intervention travaux'),
+                    entreprise: drawnSlotModal.technicien,
+                    datePlanifiee: drawnSlotModal.dateKey,
+                    heureDebut: hDebut,
+                    heureFin: hFin,
+                    priorite: quickPriorite,
+                    isVisiteDevis: quickKind === 'VISITE_DEVIS',
+                    typeIntervention: quickKind === 'VISITE_DEVIS' ? 'Visite technique devis' : 'Corrective',
+                    statutOperationnel: 'Planifiée',
+                    modePlanification: 'Planifiée',
+                  });
+                  setDrawnSlotModal(null);
+                }}
+                style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}
+              >
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                  Option B : Créer directement une nouvelle mission sur ce créneau
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Intervalle au clavier (ex: 08:30-11:00, 14h+2h)</label>
                     <input
-                      type="time"
-                      className="input"
-                      value={drawnSlot.heureDebut}
-                      onChange={(e) => setDrawnSlot({ ...drawnSlot, heureDebut: e.target.value })}
-                      required
+                      className="input font-mono"
+                      value={quickIntervalText}
+                      onChange={(e) => setQuickIntervalText(e.target.value)}
+                      placeholder="08:00-11:00"
                     />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Heure fin</label>
-                    <input
-                      type="time"
-                      className="input"
-                      value={drawnSlot.heureFin}
-                      onChange={(e) => setDrawnSlot({ ...drawnSlot, heureFin: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Saisie rapide d’intervalle au clavier (optionnel)</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Tapez ex: 08:30-11:30, 14h-17h, matin, aprem puis Entrée"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const parsed = parseTimeIntervalInput(e.currentTarget.value);
-                        if (parsed) {
-                          setDrawnSlot({
-                            ...drawnSlot,
-                            heureDebut: parsed.heureDebut,
-                            heureFin: parsed.heureFin,
-                          });
-                          toast.success(`Intervalle appliqué : ${parsed.heureDebut} - ${parsed.heureFin}`);
-                        }
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Type d’affectation</label>
-                  <select
-                    className="select"
-                    value={quickSlotForm.sourceType}
-                    onChange={(e) =>
-                      setQuickSlotForm({
-                        ...quickSlotForm,
-                        sourceType: e.target.value as any,
-                      })
-                    }
-                  >
-                    {backlogInterventions.length > 0 && (
-                      <option value="existing_backlog">
-                        📥 Placer une mission en attente du bac ({backlogInterventions.length})
-                      </option>
-                    )}
-                    <option value="new_visite">🟣 Nouvelle Visite technique pour Devis</option>
-                    <option value="new_intervention">🔵 Nouvelle Intervention Travaux / Dépannage</option>
-                  </select>
-                </div>
-
-                {quickSlotForm.sourceType === 'existing_backlog' && backlogInterventions.length > 0 ? (
-                  <div className="form-group">
-                    <label className="form-label">Mission à affecter</label>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Nature de mission</label>
                     <select
                       className="select"
-                      value={quickSlotForm.backlogItemId}
-                      onChange={(e) =>
-                        setQuickSlotForm({ ...quickSlotForm, backlogItemId: e.target.value })
-                      }
+                      value={quickKind}
+                      onChange={(e) => setQuickKind(e.target.value as any)}
                     >
-                      {backlogInterventions.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.reference} — {b.client || ''} ({b.chantier})
-                        </option>
-                      ))}
+                      <option value="INTERVENTION">Intervention Travaux / Dépannage</option>
+                      <option value="VISITE_DEVIS">Visite Technique Devis</option>
                     </select>
                   </div>
-                ) : (
-                  <>
-                    <div className="form-row-2">
-                      <div className="form-group">
-                        <label className="form-label">Client (Donneur d’ordre)</label>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Ex: EMALEC, GMS, C-Multi-Serv..."
-                          value={quickSlotForm.client}
-                          onChange={(e) =>
-                            setQuickSlotForm({ ...quickSlotForm, client: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Site / Adresse</label>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Ex: Agence Orléans Centre"
-                          value={quickSlotForm.chantier}
-                          onChange={(e) =>
-                            setQuickSlotForm({ ...quickSlotForm, chantier: e.target.value })
-                          }
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Objet de la visite / intervention</label>
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Ex: Relevé côtes armoire électrique / Dépannage CVC"
-                        value={quickSlotForm.objet}
-                        onChange={(e) =>
-                          setQuickSlotForm({ ...quickSlotForm, objet: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="form-row-2">
-                      <div className="form-group">
-                        <label className="form-label">Corps d’état</label>
-                        <select
-                          className="select"
-                          value={quickSlotForm.corpsEtat}
-                          onChange={(e) =>
-                            setQuickSlotForm({ ...quickSlotForm, corpsEtat: e.target.value })
-                          }
-                        >
-                          {corpsEtatList.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Priorité</label>
-                        <select
-                          className="select"
-                          value={quickSlotForm.priorite}
-                          onChange={(e) =>
-                            setQuickSlotForm({ ...quickSlotForm, priorite: e.target.value })
-                          }
-                        >
-                          <option value="Basse">Basse</option>
-                          <option value="Normale">Normale</option>
-                          <option value="Haute">Haute</option>
-                          <option value="Urgente">Urgente</option>
-                        </select>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-ghost" onClick={() => setDrawnSlot(null)}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Enregistrer sur le planning
-                </button>
-              </div>
-            </form>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Client (Donneur d'ordre) *</label>
+                    <input
+                      required
+                      className="input"
+                      value={quickClient}
+                      onChange={(e) => setQuickClient(e.target.value)}
+                      placeholder="Ex: Presta maintenance"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Site / Chantier / Adresse *</label>
+                    <input
+                      required
+                      className="input"
+                      value={quickSite}
+                      onChange={(e) => setQuickSite(e.target.value)}
+                      placeholder="Ex: Immeuble Pasteur"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Objet de la mission</label>
+                    <input
+                      className="input"
+                      value={quickObjet}
+                      onChange={(e) => setQuickObjet(e.target.value)}
+                      placeholder="Description rapide..."
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Priorité</label>
+                    <select
+                      className="select"
+                      value={quickPriorite}
+                      onChange={(e) => setQuickPriorite(e.target.value)}
+                    >
+                      <option value="Normale">Normale</option>
+                      <option value="Haute">Haute</option>
+                      <option value="Urgente">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDrawnSlotModal(null)}>
+                    Annuler
+                  </button>
+                  <button type="submit" className="btn btn-primary btn-sm">
+                    Enregistrer sur le planning
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

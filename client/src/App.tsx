@@ -1,7 +1,5 @@
-// Main App component with routing for all 5 ANELEC spaces
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './stores/authStore';
-import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -17,15 +15,16 @@ function AppRoutes() {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100vh',
-          background: 'var(--color-panel-dark)',
+          background: '#090b10',
+          color: '#f8fafc',
         }}
       >
-        <div className="empty-state">
-          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="12" cy="12" r="10" strokeWidth="2" />
-            <path d="M12 6v6l4 2" strokeWidth="2" />
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
           </svg>
-          <p className="empty-state-text">Chargement du poste de pilotage ANELEC...</p>
+          <p style={{ fontSize: '13px', color: '#94a3b8' }}>Chargement d'ANELEC Dispatch Pro...</p>
         </div>
       </div>
     );
@@ -38,16 +37,10 @@ function AppRoutes() {
         path="/*"
         element={
           <ProtectedRoute>
-            <Layout />
+            <DashboardPage />
           </ProtectedRoute>
         }
-      >
-        <Route index element={<DashboardPage />} />
-        <Route path="devis" element={<DashboardPage />} />
-        <Route path="interventions" element={<DashboardPage />} />
-        <Route path="planning" element={<DashboardPage />} />
-        <Route path="referentiels" element={<DashboardPage />} />
-      </Route>
+      />
     </Routes>
   );
 }
