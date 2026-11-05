@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   adminApi,
@@ -12,6 +12,7 @@ import {
   formatDateFR,
 } from '../lib/api';
 import toast from 'react-hot-toast';
+import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -20,6 +21,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports';
 }
 
 const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: string }[] = [
@@ -87,9 +89,22 @@ export function AdminWorkstation({
   onOpenInterventionDrawer,
   onOpenDevisDrawer,
   onSwitchToMobilePreview,
+  initialSubTab,
 }: AdminWorkstationProps) {
   const queryClient = useQueryClient();
-  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports'>('users');
+  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports'>(
+    initialSubTab || 'users'
+  );
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
+
+  // Lightbox photos
+  const [lightboxPhotos, setLightboxPhotos] = useState<PhotoItem[] | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // Date filtre pointages
   const [pointageDate, setPointageDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -263,9 +278,16 @@ export function AdminWorkstation({
       Boolean(i.heureDebutReelle) ||
       Boolean(i.compteRendu) ||
       Boolean(i.elementsChiffrage) ||
+      i.statutRapport === 'Déclaré par technicien' ||
       i.statutOperationnel === 'Terminée - à valider' ||
       i.statutOperationnel === 'En cours'
   );
+
+  const pendingDeclarationsCount = declarationsList.filter(
+    (i) =>
+      i.statutRapport === 'Déclaré par technicien' ||
+      (Boolean(i.photos && i.photos.length > 0) && i.statutRapport !== 'Validé & Clôturé')
+  ).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -321,8 +343,24 @@ export function AdminWorkstation({
               type="button"
               className={`segmented-btn ${subTab === 'rapports' ? 'active' : ''}`}
               onClick={() => setSubTab('rapports')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               Déclarations & Rédaction Rapports ({declarationsList.length})
+              {pendingDeclarationsCount > 0 && (
+                <span
+                  style={{
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    animation: 'pulse 2s infinite',
+                  }}
+                >
+                  {pendingDeclarationsCount} en attente
+                </span>
+              )}
             </button>
           </div>
 
@@ -812,7 +850,42 @@ export function AdminWorkstation({
                         </td>
                         <td>
                           {intv.photos && intv.photos.length > 0 ? (
-                            <span className="badge badge-info">📷 {intv.photos.length} photo(s)</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div
+                                style={{ display: 'flex', gap: '4px', cursor: 'pointer' }}
+                                onClick={() => {
+                                  setLightboxPhotos(intv.photos as any);
+                                  setLightboxIndex(0);
+                                }}
+                                title="Cliquer pour voir les photos en plein écran"
+                              >
+                                {intv.photos.slice(0, 2).map((ph: any, idx: number) => (
+                                  <img
+                                    key={ph.id || idx}
+                                    src={ph.url}
+                                    alt=""
+                                    style={{
+                                      width: '36px',
+                                      height: '36px',
+                                      borderRadius: '6px',
+                                      objectFit: 'cover',
+                                      border: '1px solid var(--border-default)',
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                className="badge badge-info"
+                                style={{ cursor: 'pointer', border: 'none' }}
+                                onClick={() => {
+                                  setLightboxPhotos(intv.photos as any);
+                                  setLightboxIndex(0);
+                                }}
+                              >
+                                📷 {intv.photos.length} photo(s)
+                              </button>
+                            </div>
                           ) : (
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Aucune</span>
                           )}
@@ -1223,13 +1296,22 @@ export function AdminWorkstation({
 
             {selectedReportIntv.photos && selectedReportIntv.photos.length > 0 && (
               <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '11.5px', fontWeight: 700, marginBottom: '6px' }}>
-                  Photos prises par le technicien ({selectedReportIntv.photos.length}) :
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 700 }}>
+                    Photos prises par le technicien ({selectedReportIntv.photos.length}) :
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>
+                    🔍 Cliquez sur une photo pour l'agrandir / la télécharger
+                  </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                  {selectedReportIntv.photos.map((ph: any) => (
+                  {selectedReportIntv.photos.map((ph: any, idx: number) => (
                     <div
-                      key={ph.id}
+                      key={ph.id || idx}
+                      onClick={() => {
+                        setLightboxPhotos(selectedReportIntv.photos as any);
+                        setLightboxIndex(idx);
+                      }}
                       style={{
                         minWidth: '130px',
                         maxWidth: '130px',
@@ -1237,7 +1319,10 @@ export function AdminWorkstation({
                         overflow: 'hidden',
                         border: '1px solid var(--border-default)',
                         background: 'var(--bg-elevated)',
+                        cursor: 'pointer',
+                        transition: 'transform 0.15s ease',
                       }}
+                      title="Agrandir la photo"
                     >
                       <img
                         src={ph.url}
@@ -1246,7 +1331,9 @@ export function AdminWorkstation({
                       />
                       <div style={{ padding: '4px 6px', fontSize: '10px' }}>
                         <strong>{ph.category || 'PHOTO'}</strong>
-                        <div style={{ color: 'var(--text-secondary)' }}>{ph.caption || 'Sans légende'}</div>
+                        <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {ph.caption || 'Sans légende'}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1326,6 +1413,14 @@ export function AdminWorkstation({
             </div>
           </div>
         </div>
+      )}
+      {/* Visionneuse plein écran de photos (Lightbox) */}
+      {lightboxPhotos && (
+        <PhotoLightbox
+          photos={lightboxPhotos}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxPhotos(null)}
+        />
       )}
     </div>
   );

@@ -23,6 +23,7 @@ interface LayoutProps {
     devis?: number;
     interventions?: number;
     planning?: number;
+    admin?: number;
   };
   onOpenCommandPalette?: () => void;
   onQuickNewDevis?: () => void;
@@ -173,6 +174,8 @@ export function Layout({
       id: 'admin',
       label: 'Workstation Admin',
       subtitle: 'Droits, Pointages & Rapports',
+      badge: badges?.admin,
+      urgent: (badges?.admin || 0) > 0,
       shortcut: '6',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

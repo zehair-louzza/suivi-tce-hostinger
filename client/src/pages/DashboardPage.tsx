@@ -25,6 +25,8 @@ import { Layout, AppSection } from '../components/Layout';
 import { PlanningBoard } from '../components/PlanningBoard';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
+import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
+import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
 
@@ -102,6 +104,17 @@ export function DashboardPage() {
   const [isCreatingIntv, setIsCreatingIntv] = useState(false);
   const [intvTab, setIntvTab] = useState<'planif' | 'terrain' | 'facturation' | 'historique'>('planif');
 
+  // Sous-onglet actif pour Workstation Admin
+  const [adminSubTab, setAdminSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports'>('users');
+
+  // Lightbox photos plein écran
+  const [lightboxPhotos, setLightboxPhotos] = useState<PhotoItem[] | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Synchronisation temps réel via WebSockets
+  useDevisRealtime();
+  useInterventionRealtime();
+
   // Global Ctrl+K Command Palette
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState('');
@@ -124,13 +137,15 @@ export function DashboardPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Fetch Data
+  // Fetch Data (avec auto-actualisation toutes les 10s pour les interventions)
   const { data: devisRes } = useQuery({
     queryKey: ['devis'],
     queryFn: async () => {
       const r = await devisApi.list({ limit: 500 });
       return r.data;
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: intvRes } = useQuery({
@@ -139,6 +154,8 @@ export function DashboardPage() {
       const r = await interventionApi.list({ limit: 500 });
       return r.data;
     },
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: refRes } = useQuery({
@@ -264,6 +281,14 @@ export function DashboardPage() {
         i.statutFacture !== 'Facturée'
     );
 
+    const rapportsEnAttente = interventionsList.filter(
+      (i) =>
+        i.statutRapport === 'Déclaré par technicien' ||
+        (Boolean(i.photos && i.photos.length > 0) && i.statutRapport !== 'Validé & Clôturé') ||
+        (Boolean(i.actionsRealisees && i.actionsRealisees.length > 0) && i.statutRapport !== 'Validé & Clôturé') ||
+        i.statutOperationnel === 'Terminée - à valider'
+    );
+
     const anomaliesQualite: { type: 'DEVIS' | 'INTERVENTION'; ref: string; message: string; item: any }[] = [];
     for (const d of devisList) {
       for (const a of d.computed?.qualiteAlertes || []) {
@@ -284,6 +309,7 @@ export function DashboardPage() {
       intvAPlanifier,
       intvEnRetard,
       intvAFacturer,
+      rapportsEnAttente,
       anomaliesQualite,
     };
   }, [devisList, interventionsList]);
@@ -369,10 +395,12 @@ export function DashboardPage() {
         aujourdhui:
           queues.devisARelancer.length +
           queues.devisAcceptesSansIntv.length +
-          queues.intvEnRetard.length,
+          queues.intvEnRetard.length +
+          queues.rapportsEnAttente.length,
         planning: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
         devis: devisList.length,
         interventions: interventionsList.length,
+        admin: queues.rapportsEnAttente.length,
       }}
       onOpenCommandPalette={() => setCmdOpen(true)}
       onQuickNewDevis={openNewDevisDrawer}
@@ -427,6 +455,16 @@ export function DashboardPage() {
                 onClick: () => handleSectionChange('interventions'),
               },
               {
+                title: 'Rapports & Photos reçus',
+                count: queues.rapportsEnAttente.length,
+                subtitle: `${queues.rapportsEnAttente.length} déclaration(s) à valider`,
+                accent: '#06b6d4',
+                onClick: () => {
+                  setAdminSubTab('rapports');
+                  handleSectionChange('admin');
+                },
+              },
+              {
                 title: 'Terminées à facturer',
                 count: queues.intvAFacturer.length,
                 subtitle: 'Prêtes pour facturation',
@@ -464,6 +502,52 @@ export function DashboardPage() {
               </div>
             ))}
           </div>
+
+          {/* Bannière d'alerte Rapports & Photos reçus */}
+          {queues.rapportsEnAttente.length > 0 && (
+            <div
+              className="pro-table-container"
+              style={{
+                padding: '14px 18px',
+                borderLeft: '4px solid #06b6d4',
+                background: 'rgba(6, 182, 212, 0.08)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '24px' }}>📷</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                    🔔 {queues.rapportsEnAttente.length} Rapport(s) terrain avec photos reçus des techniciens en attente de vérification !
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Dernières déclarations :{' '}
+                    {queues.rapportsEnAttente
+                      .slice(0, 4)
+                      .map((r) => `${r.reference || `INT-${r.id}`} (${r.entreprise || 'Tech'})`)
+                      .join(' • ')}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#0891b2', borderColor: '#0891b2' }}
+                  onClick={() => {
+                    setAdminSubTab('rapports');
+                    handleSectionChange('admin');
+                  }}
+                >
+                  📝 Vérifier & Valider dans le Centre des Rapports →
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Live Technician Roster & Capacity Strip */}
           <div className="pro-table-container" style={{ padding: '14px 18px' }}>
@@ -1162,6 +1246,7 @@ export function DashboardPage() {
                     <th>Technicien Terrain</th>
                     <th>Créneau Planifié</th>
                     <th>Statut Opérationnel</th>
+                    <th>Photos & Rapport</th>
                     <th>Facturation</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -1210,6 +1295,58 @@ export function DashboardPage() {
                         <StatusPill statut={i.statutOperationnel} />
                       </td>
                       <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            {i.photos && i.photos.length > 0 ? (
+                              <button
+                                type="button"
+                                className="badge badge-info"
+                                style={{
+                                  cursor: 'pointer',
+                                  border: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightboxPhotos(i.photos as any);
+                                  setLightboxIndex(0);
+                                }}
+                                title="Voir les photos en haute résolution"
+                              >
+                                📷 {i.photos.length}
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Sans photo</span>
+                            )}
+                            {i.actionsRealisees && i.actionsRealisees.length > 0 && (
+                              <span
+                                className="badge badge-success"
+                                style={{ fontSize: '10px' }}
+                                title={`${i.actionsRealisees.length} actions déclarées`}
+                              >
+                                ✓ {i.actionsRealisees.length}
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`badge ${
+                              i.statutRapport === 'Validé & Clôturé'
+                                ? 'badge-success'
+                                : i.statutRapport === 'Déclaré par technicien' || (i.photos && i.photos.length > 0)
+                                ? 'badge-warning'
+                                : 'badge-neutral'
+                            }`}
+                            style={{ fontSize: '10px' }}
+                          >
+                            {i.statutRapport === 'Déclaré par technicien'
+                              ? '🔔 Reçu à valider'
+                              : i.statutRapport || 'À rédiger'}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
                         <span
                           className="font-mono"
                           style={{
@@ -1221,13 +1358,27 @@ export function DashboardPage() {
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleSectionChange('planning')}
-                        >
-                          Voir sur Gantt
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '2px 8px', fontSize: '11px' }}
+                            onClick={() => {
+                              setIsCreatingIntv(false);
+                              setSelectedIntv(i);
+                              setIntvTab('terrain');
+                            }}
+                          >
+                            📝 Vérifier
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleSectionChange('planning')}
+                          >
+                            Gantt
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1529,6 +1680,7 @@ export function DashboardPage() {
           techniciens={techniciensList}
           interventionsList={interventionsList}
           devisList={devisList}
+          initialSubTab={adminSubTab}
           onOpenInterventionDrawer={(intv) => {
             setIsCreatingIntv(false);
             setSelectedIntv(intv);
@@ -2015,7 +2167,10 @@ export function DashboardPage() {
             >
               {[
                 { id: 'planif', label: '1. Affectation & Créneau' },
-                { id: 'terrain', label: '2. Exécution Terrain & Résultat' },
+                {
+                  id: 'terrain',
+                  label: `2. Dossier Terrain & Photos ${(selectedIntv?.photos || []).length > 0 ? `(${selectedIntv!.photos!.length}) 📷` : ''}`,
+                },
                 { id: 'facturation', label: '3. Facturation' },
                 { id: 'historique', label: '4. Alertes & Devis lié' },
               ].map((t) => (
@@ -2155,31 +2310,321 @@ export function DashboardPage() {
               )}
 
               {intvTab === 'terrain' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Résultat technique</label>
-                    <input
-                      className="input"
-                      value={selectedIntv.resultatTechnique || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, resultatTechnique: e.target.value })}
-                    />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Bandeau de Statut et Pointage Réel */}
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        STATUT DU RAPPORT
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        <span
+                          className={`badge ${
+                            selectedIntv.statutRapport === 'Validé & Clôturé'
+                              ? 'badge-success'
+                              : selectedIntv.statutRapport === 'Déclaré par technicien'
+                              ? 'badge-warning'
+                              : 'badge-neutral'
+                          }`}
+                          style={{ fontSize: '12px', fontWeight: 700 }}
+                        >
+                          {selectedIntv.statutRapport || 'À déclarer / rédiger'}
+                        </span>
+                        {selectedIntv.entreprise && (
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            • Intervenant : <strong>{selectedIntv.entreprise}</strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <div
+                        style={{
+                          background: 'rgba(5, 150, 105, 0.1)',
+                          border: '1px solid rgba(5, 150, 105, 0.25)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>
+                          ☀️ ARRIVÉE RÉELLE POINTÉE
+                        </div>
+                        <div className="font-mono" style={{ fontSize: '14px', fontWeight: 800, color: '#059669' }}>
+                          {selectedIntv.heureDebutReelle || '— : —'}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          background: 'rgba(37, 99, 235, 0.1)',
+                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700 }}>
+                          🌙 DÉPART RÉEL POINTÉ
+                        </div>
+                        <div className="font-mono" style={{ fontSize: '14px', fontWeight: 800, color: '#2563eb' }}>
+                          {selectedIntv.heureFinReelle || '— : —'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Motif de blocage (si suspendue/bloquée)</label>
-                    <input
-                      className="input"
-                      value={selectedIntv.motifBlocage || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, motifBlocage: e.target.value })}
-                    />
+
+                  {/* Actions pré-remplies / réalisées sur site */}
+                  {selectedIntv.actionsRealisees && selectedIntv.actionsRealisees.length > 0 && (
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-default)',
+                      }}
+                    >
+                      <div style={{ fontSize: '11.5px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                        ✓ Prestations & Actions réalisées sur site ({selectedIntv.actionsRealisees.length}) :
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {selectedIntv.actionsRealisees.map((act, idx) => (
+                          <span key={idx} className="badge badge-success" style={{ fontSize: '11px', padding: '4px 8px' }}>
+                            ✓ {act}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dossier photographique du technicien */}
+                  <div
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700 }}>
+                        📷 Dossier Photos Terrain ({selectedIntv.photos?.length || 0})
+                      </div>
+                      <span style={{ fontSize: '10.5px', color: '#0284c7', fontWeight: 600 }}>
+                        Stockage optimisé (~50 Ko / photo) • Cliquez pour agrandir
+                      </span>
+                    </div>
+
+                    {selectedIntv.photos && selectedIntv.photos.length > 0 ? (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                          gap: '10px',
+                        }}
+                      >
+                        {selectedIntv.photos.map((ph, idx) => (
+                          <div
+                            key={ph.id || idx}
+                            onClick={() => {
+                              setLightboxPhotos(selectedIntv.photos as any);
+                              setLightboxIndex(idx);
+                            }}
+                            style={{
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              border: '1px solid var(--border-default)',
+                              background: 'var(--bg-surface)',
+                              cursor: 'pointer',
+                              position: 'relative',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                              transition: 'transform 0.15s ease',
+                            }}
+                            title="Agrandir en haute résolution"
+                          >
+                            <img
+                              src={ph.url}
+                              alt={ph.caption || 'Photo'}
+                              style={{ width: '100%', height: '90px', objectFit: 'cover' }}
+                            />
+                            <div style={{ padding: '4px 6px' }}>
+                              <div
+                                style={{
+                                  fontSize: '9.5px',
+                                  fontWeight: 800,
+                                  color: '#0284c7',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {ph.category || 'TERRAIN'}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: '10.5px',
+                                  color: 'var(--text-secondary)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {ph.caption || 'Sans légende'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '10px 0' }}>
+                        Aucune photo transmise pour le moment.
+                      </div>
+                    )}
                   </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Compte-rendu d'intervention terrain</label>
+
+                  {/* Relevé Chiffrage / Devis supplémentaire */}
+                  {selectedIntv.elementsChiffrage && (
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '10px',
+                        background: 'rgba(124, 58, 237, 0.08)',
+                        border: '1px solid rgba(124, 58, 237, 0.25)',
+                      }}
+                    >
+                      <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#7c3aed', marginBottom: '4px' }}>
+                        📐 Éléments relevés par le technicien pour chiffrage / devis :
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                        {selectedIntv.elementsChiffrage}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compte-rendu terrain */}
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Compte-rendu d'intervention terrain (relevé du technicien)
+                    </label>
                     <textarea
                       className="textarea"
                       rows={4}
                       value={selectedIntv.compteRendu || ''}
                       onChange={(e) => setSelectedIntv({ ...selectedIntv, compteRendu: e.target.value })}
+                      placeholder="Constatations et compte-rendu terrain..."
                     />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Résultat technique
+                      </label>
+                      <input
+                        className="input"
+                        value={selectedIntv.resultatTechnique || ''}
+                        onChange={(e) => setSelectedIntv({ ...selectedIntv, resultatTechnique: e.target.value })}
+                        placeholder="Ex: Intervention réalisée sans réserve"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Motif de blocage (si suspendue/bloquée)
+                      </label>
+                      <input
+                        className="input"
+                        value={selectedIntv.motifBlocage || ''}
+                        onChange={(e) => setSelectedIntv({ ...selectedIntv, motifBlocage: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rapport Final Officiel consolidé */}
+                  <div
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 700 }}>
+                        Rapport Final Officiel ANELEC GROUPE
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          const lines: string[] = [];
+                          lines.push(`RAPPORT OFFICIEL D'INTERVENTION — ANELEC GROUPE`);
+                          lines.push(`Référence : ${selectedIntv.reference || `INT-${selectedIntv.id}`}`);
+                          lines.push(`Client : ${selectedIntv.client || '—'} • Site : ${selectedIntv.chantier || '—'}`);
+                          lines.push(`Technicien : ${selectedIntv.entreprise || 'Non renseigné'}`);
+                          lines.push(`Date : ${formatDateFR(selectedIntv.datePlanifiee)} • Horaires réels pointés : ${selectedIntv.heureDebutReelle || '—'} à ${selectedIntv.heureFinReelle || '—'}`);
+                          if (selectedIntv.actionsRealisees?.length) {
+                            lines.push('');
+                            lines.push(`PRESTATIONS RÉALISÉES :`);
+                            selectedIntv.actionsRealisees.forEach((a) => lines.push(`- ${a}`));
+                          }
+                          if (selectedIntv.compteRendu) {
+                            lines.push('');
+                            lines.push(`CONSTATATIONS TERRAIN :`);
+                            lines.push(selectedIntv.compteRendu);
+                          }
+                          if (selectedIntv.photos?.length) {
+                            lines.push('');
+                            lines.push(`DOSSIER PHOTOS : ${selectedIntv.photos.length} photo(s) jointe(s).`);
+                          }
+                          lines.push('');
+                          lines.push(`CONCLUSION : ${selectedIntv.resultatTechnique || 'Intervention réalisée sans réserve.'}`);
+                          setSelectedIntv({
+                            ...selectedIntv,
+                            rapportFinal: lines.join('\n'),
+                            statutRapport: 'Validé & Clôturé',
+                            statutOperationnel: 'Clôturée',
+                          });
+                          toast.success('Rapport officiel pré-rempli et prêt à être validé');
+                        }}
+                      >
+                        ⚡ Générer depuis les données terrain
+                      </button>
+                    </div>
+                    <textarea
+                      className="textarea font-mono"
+                      rows={6}
+                      style={{ fontSize: '11.5px', lineHeight: 1.45 }}
+                      value={selectedIntv.rapportFinal || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, rapportFinal: e.target.value })}
+                      placeholder="Texte officiel du rapport client..."
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '11.5px', fontWeight: 600 }}>Statut rapport :</label>
+                        <select
+                          className="select"
+                          style={{ width: '200px' }}
+                          value={selectedIntv.statutRapport || 'Déclaré par technicien'}
+                          onChange={(e) => setSelectedIntv({ ...selectedIntv, statutRapport: e.target.value })}
+                        >
+                          <option value="Déclaré par technicien">Déclaré par technicien</option>
+                          <option value="Rapport rédigé">Rapport rédigé (en attente)</option>
+                          <option value="Validé & Clôturé">Validé & Clôturé</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2393,6 +2838,14 @@ export function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Visionneuse plein écran de photos (Lightbox) */}
+      {lightboxPhotos && (
+        <PhotoLightbox
+          photos={lightboxPhotos}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxPhotos(null)}
+        />
       )}
     </Layout>
   );

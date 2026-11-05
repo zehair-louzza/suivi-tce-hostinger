@@ -167,6 +167,23 @@ export function transformIntervention(i: any) {
   };
 }
 
+function sanitizePhotosJson(rawPhotos: any): string | null {
+  if (!Array.isArray(rawPhotos) || rawPhotos.length === 0) return null;
+  // Limite stricte : 10 photos max par mission pour éviter toute saturation de stockage
+  const capped = rawPhotos.slice(0, 10);
+  const sanitized = capped
+    .map((p, idx) => ({
+      id: p.id ? String(p.id).slice(0, 50) : `ph-${Date.now()}-${idx}`,
+      url: typeof p.url === 'string' ? p.url : '',
+      category: typeof p.category === 'string' ? p.category.slice(0, 60) : 'Terrain',
+      caption: typeof p.caption === 'string' ? p.caption.slice(0, 200) : '',
+      takenAt: typeof p.takenAt === 'string' ? p.takenAt : new Date().toISOString(),
+      auteur: typeof p.auteur === 'string' ? p.auteur.slice(0, 60) : '',
+    }))
+    .filter((p) => Boolean(p.url));
+  return sanitized.length > 0 ? JSON.stringify(sanitized) : null;
+}
+
 interventionRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
@@ -366,7 +383,7 @@ interventionRouter.post(
         heureDebutReelle: b.heureDebutReelle || null,
         heureFinReelle: b.heureFinReelle || null,
         actionsRealiseesJson: Array.isArray(b.actionsRealisees) ? JSON.stringify(b.actionsRealisees) : null,
-        photosJson: Array.isArray(b.photos) ? JSON.stringify(b.photos) : null,
+        photosJson: sanitizePhotosJson(b.photos),
         elementsChiffrage: b.elementsChiffrage || null,
         rapportFinal: b.rapportFinal || null,
         statutRapport: b.statutRapport || null,
@@ -394,6 +411,7 @@ interventionRouter.post(
     const transformed = transformIntervention(created);
     try {
       socketEvents.interventionCreated(userId, transformed);
+      socketEvents.broadcast('intervention:created', transformed);
     } catch {
       console.error('Intervention saved; real-time creation notification failed.');
     }
@@ -516,7 +534,7 @@ interventionRouter.patch(
         : null;
     }
     if (b.photos !== undefined) {
-      updateData.photosJson = Array.isArray(b.photos) ? JSON.stringify(b.photos) : null;
+      updateData.photosJson = sanitizePhotosJson(b.photos);
     }
     if (b.elementsChiffrage !== undefined) updateData.elementsChiffrage = b.elementsChiffrage || null;
     if (b.rapportFinal !== undefined) updateData.rapportFinal = b.rapportFinal || null;
@@ -568,6 +586,7 @@ interventionRouter.patch(
     const transformed = transformIntervention(updated);
     try {
       socketEvents.interventionUpdated(userId, transformed);
+      socketEvents.broadcast('intervention:updated', transformed);
     } catch {
       console.error('Intervention updated; real-time update notification failed.');
     }

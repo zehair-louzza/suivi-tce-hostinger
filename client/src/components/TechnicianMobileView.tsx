@@ -36,41 +36,7 @@ function getNowHHMM(): string {
   }
 }
 
-async function compressImageFileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Impossible de lire la photo'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Format image invalide'));
-      img.onload = () => {
-        const maxDim = 960;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(String(reader.result));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.78));
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
-}
+import { compressAndOptimizeImage, MAX_PHOTOS_PER_MISSION } from '../lib/imageOptimizer';
 
 export function TechnicianMobileView({
   techniciens,
@@ -299,20 +265,35 @@ export function TechnicianMobileView({
   ) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    const existingPhotos = Array.isArray(mission.photos) ? mission.photos : [];
+
+    if (existingPhotos.length >= MAX_PHOTOS_PER_MISSION) {
+      toast.error(`Limite de ${MAX_PHOTOS_PER_MISSION} photos atteinte pour préserver le stockage`);
+      e.target.value = '';
+      return;
+    }
+
     try {
+      const remainingSlots = MAX_PHOTOS_PER_MISSION - existingPhotos.length;
+      const countToProcess = Math.min(files.length, remainingSlots);
       const newPhotos: TerrainPhoto[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const dataUrl = await compressImageFileToDataUrl(files[i]);
+      let lastKo = 0;
+      let lastReduction = 0;
+
+      for (let i = 0; i < countToProcess; i++) {
+        const optimized = await compressAndOptimizeImage(files[i]);
+        lastKo = optimized.compressedSizeKo;
+        lastReduction = optimized.reductionPercent;
         newPhotos.push({
           id: `ph-${Date.now()}-${i}`,
-          url: dataUrl,
+          url: optimized.dataUrl,
           category: photoCategory,
           caption: photoCaption.trim() || `${photoCategory} — ${mission.reference}`,
           takenAt: new Date().toISOString(),
           auteur: currentTechnicien,
         });
       }
-      const existingPhotos = Array.isArray(mission.photos) ? mission.photos : [];
+
       await updateMissionMut.mutateAsync({
         id: mission.id,
         data: {
@@ -321,7 +302,9 @@ export function TechnicianMobileView({
         },
       });
       setPhotoCaption('');
-      toast.success(`📷 ${newPhotos.length} photo(s) enregistrée(s)`);
+      toast.success(
+        `📷 ${newPhotos.length} photo(s) optimisée(s) et enregistrée(s) (~${lastKo} Ko, -${lastReduction}%)`
+      );
     } catch {
       toast.error('Impossible de traiter la photo');
     } finally {
