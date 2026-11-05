@@ -238,16 +238,14 @@ export function Layout({
             onClick={() => handleSelectSection(isMobileTechOnly ? 'mobile_tech' : 'aujourdhui')}
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', overflow: 'hidden' }}
           >
-            <AnelecBrandMark />
-            {!collapsed && (
-              <div>
-                <div style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.07em', color: '#ffffff', lineHeight: 1.1 }}>
-                  ANELEC
-                </div>
-                <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.16em', color: '#60a5fa', textTransform: 'uppercase' }}>
-                  FSM DISPATCH PRO
-                </div>
-              </div>
+            {!collapsed ? (
+              <img
+                src="/brand/anelec-logo-white.png"
+                alt="ANELEC GROUPE"
+                style={{ height: '38px', maxWidth: '175px', objectFit: 'contain' }}
+              />
+            ) : (
+              <AnelecBrandMark />
             )}
           </div>
           <button
@@ -571,22 +569,20 @@ function AnelecBrandMark() {
   return (
     <div
       style={{
-        width: '34px',
-        height: '34px',
-        borderRadius: '9px',
-        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-        border: '1px solid rgba(59, 130, 246, 0.45)',
+        width: '36px',
+        height: '36px',
+        borderRadius: '10px',
+        background: '#ffffff',
+        border: '1px solid rgba(255, 255, 255, 0.6)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        boxShadow: '0 2px 10px rgba(59, 130, 246, 0.25)',
+        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.18)',
+        padding: '4px',
       }}
     >
-      <svg width="20" height="20" viewBox="0 0 100 100" fill="none" aria-hidden="true">
-        <path d="M50 10 L14 88 H33 L42 67 H58 L50 47 L67 88 H86 L50 10 Z" fill="#ffffff" />
-        <polygon points="47,54 57,54 51,69 61,69 44,92 49,73 41,73" fill="#3b82f6" />
-      </svg>
+      <img src="/brand/anelec-mark.png" alt="ANELEC Groupe" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
     </div>
   );
 }

@@ -1630,6 +1630,20 @@ body,
   animation: bubblePop 0.6s cubic-bezier(0.22, 1.2, 0.36, 1) both;
 }
 
+/* ---------- Adaptation des logos selon le mode clair / sombre ---------- */
+.logo-light-only {
+  display: inline-block !important;
+}
+.logo-dark-only {
+  display: none !important;
+}
+[data-theme="dark"] .logo-light-only {
+  display: none !important;
+}
+[data-theme="dark"] .logo-dark-only {
+  display: inline-block !important;
+}
+
 /* ---------- Mobile : moins de flou et de bulles pour préserver la batterie ---------- */
 @media (max-width: 768px) {
   :root,

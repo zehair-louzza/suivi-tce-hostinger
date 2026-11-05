@@ -81,30 +81,12 @@ export function LoginPage() {
           borderRight: '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-              border: '1px solid rgba(59, 130, 246, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="24" height="24" viewBox="0 0 100 100" fill="none">
-              <path d="M50 10 L14 88 H33 L42 67 H58 L50 47 L67 88 H86 L50 10 Z" fill="#ffffff" />
-              <polygon points="47,54 57,54 51,69 61,69 44,92 49,73 41,73" fill="#3b82f6" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '16px', letterSpacing: '0.08em' }}>ANELEC GROUPE</div>
-            <div style={{ fontSize: '11px', color: '#60a5fa', fontWeight: 700, letterSpacing: '0.14em' }}>
-              FIELD SERVICE & DISPATCH SUITE
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <img
+            src="/brand/anelec-logo-white.png"
+            alt="ANELEC GROUPE"
+            style={{ height: '52px', objectFit: 'contain' }}
+          />
         </div>
 
         <div style={{ maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -236,33 +218,19 @@ export function LoginPage() {
           }}
         >
           {/* En-tête mobile ANELEC visible sur téléphone */}
-          <div className="mobile-only-flex" style={{ alignItems: 'center', gap: '10px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '9px',
-                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                border: '1px solid rgba(59, 130, 246, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 100 100" fill="none">
-                <path d="M50 10 L14 88 H33 L42 67 H58 L50 47 L67 88 H86 L50 10 Z" fill="#ffffff" />
-                <polygon points="47,54 57,54 51,69 61,69 44,92 49,73 41,73" fill="#3b82f6" />
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '14px', letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
-                ANELEC GROUPE
-              </div>
-              <div style={{ fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 700, letterSpacing: '0.12em' }}>
-                DISPATCH & APP MOBILE TERRAIN
-              </div>
-            </div>
+          <div className="mobile-only-flex" style={{ alignItems: 'center', justifyContent: 'center', paddingBottom: '10px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <img
+              src="/brand/anelec-logo.png"
+              alt="ANELEC GROUPE"
+              className="logo-light-only"
+              style={{ height: '40px', objectFit: 'contain' }}
+            />
+            <img
+              src="/brand/anelec-logo-white.png"
+              alt="ANELEC GROUPE"
+              className="logo-dark-only"
+              style={{ height: '40px', objectFit: 'contain' }}
+            />
           </div>
 
           <div>
