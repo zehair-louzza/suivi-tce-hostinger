@@ -93,8 +93,21 @@ if (config.nodeEnv === 'production') {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDist, 'manifest.webmanifest'));
     });
-    app.use(express.static(clientDist));
+    app.use(
+      express.static(clientDist, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+          }
+        },
+      })
+    );
     app.get(/^\/(?!api|socket\.io).*/, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {

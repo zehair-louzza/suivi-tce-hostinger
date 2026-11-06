@@ -420,3 +420,71 @@ adminRouter.post(
     });
   })
 );
+
+// ============================================================================
+// 3. SUPPRESSION TOTALE ET DÉFINITIVE D'UN COMPTE & DE SA BASE DE DONNÉES (TENANT)
+// ============================================================================
+adminRouter.delete(
+  '/company/destroy',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+
+    if (!caller.isAdmin) {
+      throw new AppError(403, "Seul l'administrateur de l'entreprise peut initier la suppression totale du compte et de ses données", 'FORBIDDEN');
+    }
+
+    const companyId = caller.companyId;
+    if (!companyId) {
+      throw new AppError(400, "Aucun espace entreprise associé à ce compte", 'INVALID_COMPANY');
+    }
+
+    // Protection stricte de l'espace racine ANELEC GROUPE (ID 1)
+    if (companyId === 1 && caller.id === 1) {
+      const confirmPhrase = String(req.body?.confirmPhrase || '').trim();
+      if (confirmPhrase !== 'SUPPRIMER ANELEC GROUPE DEFINITIVEMENT') {
+        throw new AppError(400, "Sécurité racine ANELEC : veuillez saisir la phrase de confirmation exacte pour détruire l'espace principal", 'ROOT_PROTECTED');
+      }
+    }
+
+    const password = String(req.body?.password || '').trim();
+    if (!password) {
+      throw new AppError(400, 'Votre mot de passe administrateur est obligatoire pour confirmer cette suppression irréversible', 'PASSWORD_REQUIRED');
+    }
+
+    const adminUser = await prisma.user.findUnique({ where: { id: caller.id } });
+    if (!adminUser || !(await bcrypt.compare(password, adminUser.password))) {
+      throw new AppError(401, 'Mot de passe administrateur incorrect', 'INVALID_PASSWORD');
+    }
+
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      throw new AppError(404, 'Espace entreprise introuvable', 'NOT_FOUND');
+    }
+
+    // Suppression en cascade irréversible de l'ensemble des données de l'entreprise
+    await prisma.$transaction(async (tx) => {
+      // 1. Supprimer tous les pointages techniciens de l'entreprise
+      await tx.pointageTechnicien.deleteMany({ where: { companyId } });
+
+      // 2. Supprimer tous les référentiels métiers et compétences
+      await tx.referentiel.deleteMany({ where: { companyId } });
+
+      // 3. Supprimer toutes les interventions de l'entreprise
+      await tx.intervention.deleteMany({ where: { companyId } });
+
+      // 4. Supprimer tous les devis de l'entreprise
+      await tx.devis.deleteMany({ where: { companyId } });
+
+      // 5. Supprimer tous les comptes utilisateurs de l'entreprise
+      await tx.user.deleteMany({ where: { companyId } });
+
+      // 6. Supprimer l'entreprise elle-même
+      await tx.company.delete({ where: { id: companyId } });
+    });
+
+    res.json({
+      message: "L'espace entreprise " + company.name + " ainsi que l'ensemble de ses devis, interventions, plannings, pointages et comptes utilisateurs ont été DÉFINITIVEMENT et IRRÉVERSIBLEMENT supprimés de la base de données.",
+      destroyedCompanyId: companyId,
+    });
+  })
+);

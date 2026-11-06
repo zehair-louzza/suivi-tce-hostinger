@@ -13,6 +13,7 @@ import {
 } from '../lib/api';
 import toast from 'react-hot-toast';
 import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
+import { useAuth } from '../stores/authStore';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -21,7 +22,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
-  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules';
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'danger_zone';
 }
 
 const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: string }[] = [
@@ -92,9 +93,14 @@ export function AdminWorkstation({
   initialSubTab,
 }: AdminWorkstationProps) {
   const queryClient = useQueryClient();
-  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules'>(
+  const { user, logout } = useAuth();
+  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'danger_zone'>(
     initialSubTab || 'users'
   );
+  const [showDestroyModal, setShowDestroyModal] = useState(false);
+  const [destroyPassword, setDestroyPassword] = useState('');
+  const [destroyConfirmPhrase, setDestroyConfirmPhrase] = useState('');
+  const [isDestroying, setIsDestroying] = useState(false);
 
   // Règle Métier ANELEC : « On ne facture pas les devis, on facture uniquement les interventions »
   // Option sur la console Admin, AUTO-DÉCOCHÉE par défaut (false)
@@ -390,6 +396,18 @@ export function AdminWorkstation({
               onClick={() => setSubTab('billing_rules')}
             >
               ⚙️ Règles Facturation
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${subTab === 'danger_zone' ? 'active' : ''}`}
+              onClick={() => setSubTab('danger_zone')}
+              style={{
+                color: subTab === 'danger_zone' ? '#dc2626' : '#ef4444',
+                fontWeight: 700,
+                borderColor: subTab === 'danger_zone' ? '#dc2626' : undefined,
+              }}
+            >
+              ⚠️ Zone Danger & Clôture
             </button>
           </div>
 
@@ -1096,6 +1114,104 @@ export function AdminWorkstation({
         </div>
       )}
 
+      
+      {/* =====================================================================
+          SOUS-ONGLET 6 : ZONE DE DANGER - CLÔTURE DU COMPTE & SUPPRESSION BASE
+         ===================================================================== */}
+      {subTab === 'danger_zone' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div
+            style={{
+              padding: '24px',
+              borderRadius: '16px',
+              background: 'rgba(239, 68, 68, 0.05)',
+              border: '2px solid rgba(239, 68, 68, 0.4)',
+              boxShadow: '0 4px 20px rgba(239, 68, 68, 0.1)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <span style={{ fontSize: '28px' }}>⚠️</span>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626', margin: 0 }}>
+                  Zone de Danger : Clôture du Compte et Effacement Intégral de la Base de Données
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                  Suppression irréversible de votre entreprise et de l'ensemble de ses données rattachées.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '20px',
+              }}
+            >
+              <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#b91c1c', marginBottom: '10px' }}>
+                🛑 Avertissement Légal & Engagement RGPD (Action Définitive et Non Réversible)
+              </h4>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: '12px' }}>
+                Conformément aux réglementations RGPD et à nos engagements de stricte confidentialité (données cloisonnées hébergées en France sur Supabase / Hostinger), la demande de suppression de compte entraîne la <strong>destruction immédiate, complète et irréversible</strong> de toutes vos données sans possibilité de récupération :
+              </p>
+              <ul style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6, paddingLeft: '20px', margin: 0 }}>
+                <li><strong>Tous vos Devis :</strong> devis chiffrés, brouillons, devis validés, facturés et historiques d'affaires.</li>
+                <li><strong>Toutes vos Interventions :</strong> fiches chantiers, plannings techniciens, déclarations, heures, rapports PDF signés et photos.</li>
+                <li><strong>Tous vos Référentiels :</strong> grille de compétences, corps d'état, techniciens et véhicules.</li>
+                <li><strong>Tous les Pointages :</strong> historique complet des pointages matin/soir et feuilles de présence.</li>
+                <li><strong>Tous les Comptes Collaborateurs :</strong> accès administrateurs, conducteurs de travaux, chiffreurs et techniciens.</li>
+                <li><strong>Votre Entité Entreprise :</strong> raison sociale, SIRET/SIREN, clés et configurations.</li>
+              </ul>
+            </div>
+
+            {user?.companyId === 1 && (
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(234, 179, 8, 0.12)',
+                  border: '1px solid rgba(234, 179, 8, 0.4)',
+                  fontSize: '12px',
+                  color: '#854d0e',
+                  marginBottom: '20px',
+                  lineHeight: 1.5,
+                }}
+              >
+                🔒 <strong>Protection Espace Fondateur ANELEC GROUPE (ID 1) :</strong> Pour sécuriser l'espace racine contre toute fausse manipulation, une phrase d'authentification stricte est exigée en complément du mot de passe administrateur.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '13.5px',
+                  padding: '12px 22px',
+                  borderRadius: '10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+                onClick={() => {
+                  setDestroyPassword('');
+                  setDestroyConfirmPhrase('');
+                  setShowDestroyModal(true);
+                }}
+              >
+                <span>🗑️</span>
+                <span>Supprimer Définitivement mon Compte et ma Base de Données</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =====================================================================
           MODALE : CRÉATION D'UN UTILISATEUR AVEC DROITS PERSONNALISÉS
          ===================================================================== */}
@@ -1561,6 +1677,124 @@ export function AdminWorkstation({
           </div>
         </div>
       )}
+      
+      {/* =====================================================================
+          MODALE DE CONFIRMATION : DESTRUCTION TOTALE ET IRRÉVERSIBLE DU COMPTE
+         ===================================================================== */}
+      {showDestroyModal && (
+        <div className="inspector-backdrop" onClick={() => !isDestroying && setShowDestroyModal(false)}>
+          <div
+            className="pro-table-container"
+            style={{
+              maxWidth: '560px',
+              width: '92%',
+              padding: '24px',
+              background: 'var(--bg-elevated)',
+              border: '2px solid #dc2626',
+              boxShadow: '0 20px 40px rgba(220, 38, 38, 0.25)',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <span style={{ fontSize: '26px' }}>🚨</span>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#dc2626' }}>
+                Confirmation Obligatoire : Destruction Définitive
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
+              Vous êtes sur le point d'effacer <strong>définitivement et irrémédiablement</strong> l'ensemble de votre espace entreprise, vos devis, chantiers, plannings, pointages et comptes collaborateurs.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                  Mot de passe Administrateur *
+                </label>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder="Saisissez votre mot de passe pour valider"
+                  value={destroyPassword}
+                  onChange={(e) => setDestroyPassword(e.target.value)}
+                  disabled={isDestroying}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                  {user?.companyId === 1 ? (
+                    <>Phrase de confirmation stricte (tapez : <span style={{ color: '#dc2626', fontFamily: 'monospace' }}>SUPPRIMER ANELEC GROUPE DEFINITIVEMENT</span>) *</>
+                  ) : (
+                    <>Confirmation formelle (tapez : <span style={{ color: '#dc2626', fontFamily: 'monospace' }}>SUPPRIMER</span>) *</>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={user?.companyId === 1 ? 'SUPPRIMER ANELEC GROUPE DEFINITIVEMENT' : 'SUPPRIMER'}
+                  value={destroyConfirmPhrase}
+                  onChange={(e) => setDestroyConfirmPhrase(e.target.value)}
+                  disabled={isDestroying}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowDestroyModal(false)}
+                disabled={isDestroying}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontWeight: 800,
+                  opacity: (!destroyPassword || !destroyConfirmPhrase || isDestroying) ? 0.6 : 1,
+                }}
+                disabled={!destroyPassword || !destroyConfirmPhrase || isDestroying}
+                onClick={async () => {
+                  const isRoot = user?.companyId === 1;
+                  if (isRoot && destroyConfirmPhrase.trim() !== 'SUPPRIMER ANELEC GROUPE DEFINITIVEMENT') {
+                    toast.error('Veuillez saisir la phrase exacte : SUPPRIMER ANELEC GROUPE DEFINITIVEMENT');
+                    return;
+                  }
+                  if (!isRoot && destroyConfirmPhrase.trim() !== 'SUPPRIMER') {
+                    toast.error('Veuillez saisir le mot exact : SUPPRIMER');
+                    return;
+                  }
+                  setIsDestroying(true);
+                  try {
+                    const res = await adminApi.destroyCompany({
+                      password: destroyPassword,
+                      confirmPhrase: destroyConfirmPhrase.trim(),
+                    });
+                    toast.success(res.data.message || 'Compte et données supprimés définitivement', { duration: 6000 });
+                    setShowDestroyModal(false);
+                    await logout();
+                    window.location.href = '/login';
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.error || 'Erreur lors de la suppression du compte');
+                  } finally {
+                    setIsDestroying(false);
+                  }
+                }}
+              >
+                {isDestroying ? 'Destruction en cours...' : 'Confirmer la suppression irréversible'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Visionneuse plein écran de photos (Lightbox) */}
       {lightboxPhotos && (
         <PhotoLightbox

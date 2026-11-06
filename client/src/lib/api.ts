@@ -261,6 +261,8 @@ export const adminApi = {
     derniereInterventionRef?: string;
     commentaireJournee?: string;
   }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-out', payload),
+  destroyCompany: (payload: { password: string; confirmPhrase?: string }) =>
+    api.delete<{ message: string; destroyedCompanyId: number }>('/admin/company/destroy', { data: payload }),
 };
 
 export const healthApi = {

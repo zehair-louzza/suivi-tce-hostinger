@@ -3,7 +3,7 @@
  * - met en cache l'interface pour un démarrage rapide et un mode hors-ligne minimal
  * - ne met JAMAIS en cache les données métier (/api) ni le temps réel (/socket.io)
  */
-const CACHE_VERSION = 'anelec-tce-v4';
+const CACHE_VERSION = 'anelec-tce-v5';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 const SHELL_URLS = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
