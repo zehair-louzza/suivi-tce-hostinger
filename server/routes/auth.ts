@@ -7,8 +7,78 @@ import { AppError } from '../middleware/errorHandler.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getEffectivePermissions } from '../../shared/types.js';
 import { z } from 'zod';
+import crypto from 'crypto';
+import { sendConfirmationEmail } from '../services/emailService.js';
 
 export const authRouter = Router();
+
+// Confirmation d'e-mail et acceptation contractuelle des conditions
+authRouter.get(
+  '/confirm-email',
+  asyncHandler(async (req: Request, res: Response) => {
+    const token = String(req.query.token || '').trim();
+    if (!token) {
+      return res.status(400).send('<h1>Lien de confirmation invalide</h1><p>Le jeton de validation est manquant.</p>');
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { confirmationToken: token },
+      include: { company: true },
+    });
+
+    if (!user) {
+      return res.status(404).send('<h1>Jeton d\'activation introuvable ou déjà utilisé</h1><p>Veuillez contacter le support ANELEC GROUPE.</p>');
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        active: true,
+        emailConfirmed: true,
+        confirmationToken: null,
+        termsAcceptedAt: new Date(),
+        termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
+      },
+    });
+
+    const companyName = user.company?.name || 'votre entreprise';
+    const loginUrl = (process.env.APP_URL || 'https://suivi.anelecgroupe.com') + '/login?activated=1';
+
+    return res.send(`<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espace Activé avec Succès — ANELEC TCE</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0f1d; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+    .card { max-width: 540px; background: #0f1422; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.5); }
+    .icon { font-size: 52px; margin-bottom: 16px; }
+    h1 { font-size: 22px; font-weight: 800; margin: 0 0 12px 0; color: #00bf63; }
+    p { font-size: 14px; line-height: 1.6; color: #94a3b8; margin: 0 0 24px 0; }
+    .btn { display: inline-block; background: #00bf63; color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; padding: 14px 32px; border-radius: 10px; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .legal-note { font-size: 11px; color: #64748b; margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✅</div>
+    <h1>Espace Entreprise Activé !</h1>
+    <p>
+      Félicitations <strong>${user.name}</strong> ! Votre compte administrateur et l'espace de <strong>${companyName}</strong> ont été certifiés et activés avec succès.<br /><br />
+      Les conditions contractuelles et la politique RGPD ont été formellement validées et enregistrées.
+    </p>
+    <a href="${loginUrl}" class="btn">Accéder à la plateforme ANELEC TCE</a>
+    <div class="legal-note">
+      Hébergement sécurisé souverain en France (Supabase & Hostinger) • ANELEC GROUPE
+    </div>
+  </div>
+</body>
+</html>`);
+  })
+);
+
 
 function asyncHandler(handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler {
   return (req, res, next) => {
@@ -96,6 +166,7 @@ const publicUserSelect = {
   technicienNom: true,
   permissionsJson: true,
   active: true,
+  emailConfirmed: true,
   companyId: true,
   company: {
     select: {
@@ -197,6 +268,9 @@ authRouter.post(
     // Tout créateur d'espace entreprise est ADMINISTRATEUR de son espace
     const role = 'ADMIN';
 
+    const confirmationToken = crypto.randomBytes(32).toString('hex');
+    const confirmationSentAt = new Date();
+
     const user = await prisma.user.create({
       data: {
         email: data.email,
@@ -204,14 +278,29 @@ authRouter.post(
         name: data.name,
         role,
         companyId,
+        active: false,
+        emailConfirmed: false,
+        confirmationToken,
+        confirmationSentAt,
       },
       select: publicUserSelect,
     });
 
-    const pub = formatPublicUser(user);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
-    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
-    res.status(201).json({ user: pub, accessToken: tokens.accessToken, message: 'Espace Entreprise créé avec succès' });
+    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com
+    const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
+    await sendConfirmationEmail({
+      toEmail: data.email,
+      recipientName: data.name,
+      companyName: compName,
+      confirmationToken,
+    });
+
+    res.status(201).json({
+      message: "Demande enregistrée avec succès. Un e-mail de confirmation avec les conditions d'activation a été envoyé à " + data.email + " depuis zehair@anelecgroupe.com. Veuillez cliquer sur le lien reçu pour activer votre espace entreprise.",
+      emailSent: true,
+      email: data.email,
+      requiresConfirmation: true,
+    });
   })
 );
 
@@ -230,7 +319,14 @@ authRouter.post(
     if (!user || !(await bcrypt.compare(data.password, user.password))) {
       throw new AppError(401, 'Email ou mot de passe incorrect', 'INVALID_CREDENTIALS');
     }
-    if (user.active === false) {
+    if ((user as any).emailConfirmed === false && user.id !== 1) {
+      throw new AppError(
+        403,
+        "Votre espace entreprise est en attente d'activation. Veuillez consulter votre boîte mail (" + user.email + ") et cliquer sur le lien de confirmation envoyé par zehair@anelecgroupe.com pour accepter les conditions et activer votre compte.",
+        'EMAIL_NOT_CONFIRMED'
+      );
+    }
+    if (user.active === false && user.id !== 1) {
       throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
     }
 

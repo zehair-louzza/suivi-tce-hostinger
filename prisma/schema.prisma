@@ -33,6 +33,11 @@ model User {
   technicienNom      String?
   permissionsJson    String?
   active             Boolean             @default(true)
+  emailConfirmed     Boolean             @default(false)
+  confirmationToken  String?
+  confirmationSentAt DateTime?
+  termsAcceptedAt    DateTime?
+  termsAcceptedIp    String?
   companyId          Int?
   company            Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())

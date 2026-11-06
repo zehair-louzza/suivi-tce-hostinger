@@ -63,10 +63,12 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [emailConfirmationSentTo, setEmailConfirmationSentTo] = useState<string | null>(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
 
   const from = (location.state as any)?.from?.pathname || '/';
+  const isJustActivated = new URLSearchParams(location.search).get('activated') === '1';
 
   const loginForm = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -106,8 +108,9 @@ export function LoginPage() {
         data.companyName.trim(),
         cleanedSiret
       );
-      toast.success(`Espace entreprise "${data.companyName.trim()}" initialisé avec succès !`);
-      navigate(from, { replace: true });
+      setEmailConfirmationSentTo(data.email.trim());
+      setActiveTab('login');
+      toast.success("E-mail de confirmation expédié depuis zehair@anelecgroupe.com !");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Erreur lors de la création de l'espace");
     }
@@ -186,6 +189,60 @@ export function LoginPage() {
             Gestion des Devis, Interventions TCE, Dispatch & Planning Techniciens
           </p>
         </div>
+
+                {/* BANNIÈRE DE VALIDATION SI ACTIVÉ VIA LE LIEN D'EMAIL */}
+        {isJustActivated && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '12px',
+              background: 'rgba(0, 191, 99, 0.1)',
+              border: '1px solid rgba(0, 191, 99, 0.35)',
+              marginBottom: '20px',
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'center',
+              fontSize: '12.5px',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>✅</span>
+            <div>
+              <strong>Votre espace entreprise est validé et activé !</strong>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Vous pouvez maintenant vous connecter avec votre email et mot de passe.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BANNIÈRE D'ATTENTE DE CONFIRMATION EMAIL */}
+        {emailConfirmationSentTo && (
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: '12px',
+              background: 'rgba(0, 191, 99, 0.08)',
+              border: '1px solid rgba(0, 191, 99, 0.3)',
+              marginBottom: '20px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-start',
+              fontSize: '12.5px',
+              color: 'var(--text-primary)',
+              lineHeight: 1.5,
+            }}
+          >
+            <span style={{ fontSize: '22px' }}>📩</span>
+            <div>
+              <strong>E-mail de confirmation envoyé à {emailConfirmationSentTo}</strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Un e-mail d'activation expédié depuis <strong>zehair@anelecgroupe.com</strong> vient de vous être envoyé.
+                Veuillez cliquer sur le lien reçu pour <strong>valider les conditions d'utilisation et activer votre espace entreprise</strong> avant de vous connecter.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ONGLETS MODERNES */}
         <div
