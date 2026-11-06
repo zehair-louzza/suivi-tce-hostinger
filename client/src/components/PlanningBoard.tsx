@@ -68,6 +68,7 @@ interface PlanningBoardProps {
   onNavigateToRentabilite?: () => void;
   technicienCompetences?: Record<string, string[]>;
   corpsEtatList?: string[];
+  clientsList?: string[];
   onUpdateCompetences?: (competences: Record<string, string[]>) => Promise<void>;
   equipesJournalieres?: EquipeJournaliere[];
   onUpdateEquipes?: (equipes: EquipeJournaliere[]) => Promise<void>;
@@ -147,6 +148,7 @@ export function PlanningBoard({
   onNavigateToRentabilite,
   technicienCompetences = DEFAULT_TECHNICIEN_COMPETENCES,
   corpsEtatList = DEFAULT_REFERENTIELS.corps_etat,
+  clientsList = DEFAULT_REFERENTIELS.clients,
   onUpdateCompetences,
   equipesJournalieres = [],
   onUpdateEquipes,
@@ -252,6 +254,7 @@ export function PlanningBoard({
     heureFin: string;
   } | null>(null);
   const [quickClient, setQuickClient] = useState('');
+  const [isCustomQuickClient, setIsCustomQuickClient] = useState(false);
   const [quickSite, setQuickSite] = useState('');
   const [quickObjet, setQuickObjet] = useState('');
   const [quickKind, setQuickKind] = useState<'INTERVENTION' | 'VISITE_DEVIS'>('INTERVENTION');
@@ -629,6 +632,7 @@ export function PlanningBoard({
           });
         } else {
           setQuickClient('');
+          setIsCustomQuickClient(false);
           setQuickSite('');
           setQuickObjet('');
           setQuickIntervalText(`${hDebut}-${hFin}`);
@@ -3726,13 +3730,53 @@ export function PlanningBoard({
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Client (Donneur d'ordre) *</label>
-                    <input
+                    <select
                       required
-                      className="input"
-                      value={quickClient}
-                      onChange={(e) => setQuickClient(e.target.value)}
-                      placeholder="Ex: Presta maintenance"
-                    />
+                      className="select"
+                      value={isCustomQuickClient ? '__CUSTOM__' : quickClient}
+                      onChange={(e) => {
+                        if (e.target.value === '__CUSTOM__') {
+                          setIsCustomQuickClient(true);
+                          setQuickClient('');
+                        } else {
+                          setIsCustomQuickClient(false);
+                          setQuickClient(e.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">— Sélectionner un Donneur d'ordre —</option>
+                      {clientsList.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      {quickClient && !clientsList.includes(quickClient) && (
+                        <option value={quickClient}>{quickClient} (Personnalisé)</option>
+                      )}
+                      <option value="__CUSTOM__">+ Nouveau donneur d'ordre (saisie libre)...</option>
+                    </select>
+                    {isCustomQuickClient && (
+                      <div style={{ marginTop: '6px', display: 'flex', gap: '6px' }}>
+                        <input
+                          required
+                          className="input"
+                          style={{ flex: 1, borderColor: '#2563eb' }}
+                          value={quickClient}
+                          onChange={(e) => setQuickClient(e.target.value)}
+                          placeholder="Ex: Presta maintenance"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Revenir à la liste déroulante"
+                          onClick={() => {
+                            setIsCustomQuickClient(false);
+                            setQuickClient(clientsList[0] || '');
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Site / Chantier / Adresse *</label>

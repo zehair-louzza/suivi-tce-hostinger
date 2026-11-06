@@ -196,6 +196,26 @@ export function DashboardPage() {
   const originesList = refs.origines?.length ? refs.origines : DEFAULT_REFERENTIELS.origines;
   const clientsList = refs.clients?.length ? refs.clients : DEFAULT_REFERENTIELS.clients;
 
+  // Gestion des menus déroulants automatisés Donneurs d'ordre / Clients
+  const [isCustomDevisClient, setIsCustomDevisClient] = useState(false);
+  const [isCustomIntvClient, setIsCustomIntvClient] = useState(false);
+
+  const devisClientOptions = useMemo(() => {
+    const list = [...clientsList];
+    if (selectedDevis?.client && !list.includes(selectedDevis.client)) {
+      list.push(selectedDevis.client);
+    }
+    return list;
+  }, [clientsList, selectedDevis?.client]);
+
+  const intvClientOptions = useMemo(() => {
+    const list = [...clientsList];
+    if (selectedIntv?.client && !list.includes(selectedIntv.client)) {
+      list.push(selectedIntv.client);
+    }
+    return list;
+  }, [clientsList, selectedIntv?.client]);
+
   // Actions dynamiques sur les référentiels
   const [editingRef, setEditingRef] = useState<{ category: string; oldValue: string; currentVal: string } | null>(null);
   const [confirmDeleteRef, setConfirmDeleteRef] = useState<{ category: string; value: string } | null>(null);
@@ -597,6 +617,7 @@ export function DashboardPage() {
 
   const openNewDevisDrawer = () => {
     setIsCreatingDevis(true);
+    setIsCustomDevisClient(false);
     setDevisTab('qualif');
     setSelectedDevis({
       reference: '',
@@ -622,6 +643,7 @@ export function DashboardPage() {
 
   const openNewIntvDrawer = () => {
     setIsCreatingIntv(true);
+    setIsCustomIntvClient(false);
     setIntvTab('planif');
     setSelectedIntv({
       reference: '',
@@ -782,6 +804,7 @@ export function DashboardPage() {
             techniciens={techniciensList}
             technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
             corpsEtatList={corpsEtatList}
+            clientsList={clientsList}
             onUpdateCompetences={async (nextMap) => {
               await referentielsApi.updateCompetences(nextMap);
               queryClient.invalidateQueries({ queryKey: ['referentiels'] });
@@ -2233,11 +2256,50 @@ export function DashboardPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client / Donneur d'ordre *</label>
-                    <input
-                      className="input"
-                      value={selectedDevis.client || ''}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, client: e.target.value })}
-                    />
+                    <select
+                      className="select"
+                      value={isCustomDevisClient ? '__CUSTOM__' : (selectedDevis.client || '')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '__CUSTOM__') {
+                          setIsCustomDevisClient(true);
+                        } else {
+                          setIsCustomDevisClient(false);
+                          setSelectedDevis({ ...selectedDevis, client: val });
+                        }
+                      }}
+                    >
+                      <option value="">— Sélectionner un Donneur d'ordre —</option>
+                      {devisClientOptions.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      <option value="__CUSTOM__">+ Nouveau donneur d'ordre (saisie libre)...</option>
+                    </select>
+                    {isCustomDevisClient && (
+                      <div style={{ marginTop: '6px', display: 'flex', gap: '6px' }}>
+                        <input
+                          className="input"
+                          style={{ flex: 1, borderColor: '#2563eb' }}
+                          placeholder="Saisir le nom du donneur d'ordre..."
+                          value={selectedDevis.client || ''}
+                          onChange={(e) => setSelectedDevis({ ...selectedDevis, client: e.target.value })}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Revenir à la liste déroulante"
+                          onClick={() => {
+                            setIsCustomDevisClient(false);
+                            if (!clientsList.includes(selectedDevis.client || '')) {
+                              setSelectedDevis({ ...selectedDevis, client: clientsList[0] || '' });
+                            }
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Site / Immeuble / Adresse</label>
@@ -2690,12 +2752,51 @@ export function DashboardPage() {
               {intvTab === 'planif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client</label>
-                    <input
-                      className="input"
-                      value={selectedIntv.client || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, client: e.target.value })}
-                    />
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client / Donneur d'ordre *</label>
+                    <select
+                      className="select"
+                      value={isCustomIntvClient ? '__CUSTOM__' : (selectedIntv.client || '')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '__CUSTOM__') {
+                          setIsCustomIntvClient(true);
+                        } else {
+                          setIsCustomIntvClient(false);
+                          setSelectedIntv({ ...selectedIntv, client: val });
+                        }
+                      }}
+                    >
+                      <option value="">— Sélectionner un Donneur d'ordre —</option>
+                      {intvClientOptions.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      <option value="__CUSTOM__">+ Nouveau donneur d'ordre (saisie libre)...</option>
+                    </select>
+                    {isCustomIntvClient && (
+                      <div style={{ marginTop: '6px', display: 'flex', gap: '6px' }}>
+                        <input
+                          className="input"
+                          style={{ flex: 1, borderColor: '#2563eb' }}
+                          placeholder="Saisir le nom du donneur d'ordre..."
+                          value={selectedIntv.client || ''}
+                          onChange={(e) => setSelectedIntv({ ...selectedIntv, client: e.target.value })}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          title="Revenir à la liste déroulante"
+                          onClick={() => {
+                            setIsCustomIntvClient(false);
+                            if (!clientsList.includes(selectedIntv.client || '')) {
+                              setSelectedIntv({ ...selectedIntv, client: clientsList[0] || '' });
+                            }
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Chantier / Site / Adresse *</label>
