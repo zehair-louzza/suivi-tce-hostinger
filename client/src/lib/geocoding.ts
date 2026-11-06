@@ -48,12 +48,12 @@ export interface OptimizedTour {
   routePolyline: [number, number][]; // Coordonnées réelles [lat, lng] pour la ligne Leaflet
 }
 
-// Point de départ par défaut (Siège ANELEC GROUPE - Île-de-France)
-export const DEFAULT_DEPOT_ADDRESS = '93 rue de Paris, 75000 Paris';
+// Point de départ officiel fixe (Siège & Bureau ANELEC GROUPE - Paris 2e)
+export const DEFAULT_DEPOT_ADDRESS = '9 Rue des Colonnes, 75002 Paris';
 export const DEFAULT_DEPOT_COORDS: GeoPoint = {
-  lat: 48.8566,
-  lng: 2.3522,
-  label: 'Siège & Dépôt ANELEC GROUPE (Point de Départ)',
+  lat: 48.869742,
+  lng: 2.339379,
+  label: 'Siège & Bureau ANELEC GROUPE (Départ & Retour de Tournée)',
 };
 
 const CACHE_KEY = 'anelec_geo_cache_v2';

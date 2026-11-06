@@ -68,3 +68,16 @@
   .sidebar-item svg { width: 16px; height: 16px; }
   .legend { padding: 16px; }
 }
+
+/* Responsive Leaflet Map styles */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  font-family: inherit;
+  z-index: 1;
+}
+.anelec-map-depot-pin,
+.anelec-map-step-pin {
+  background: transparent !important;
+  border: none !important;
+}
