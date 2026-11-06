@@ -1,267 +1,376 @@
-# ANELEC GROUPE — Plateforme de Suivi TCE & Dispatch Terrain
+# 🏢 ANELEC GROUPE — Plateforme de Suivi TCE, Dispatch & Facturation
 
-Application d'entreprise complète de gestion des devis, interventions tous corps d'état (TCE), planning Gantt d'équipes et application mobile pour techniciens terrain avec horodatage certifié, prise de photos optimisées et rédaction de rapports officiels.
+> **Progiciel d'Entreprise Tout Corps d'État (TCE)**  
+> **Production :** [suivi.anelecgroupe.com](https://suivi.anelecgroupe.com)  
+> **Documentation Officielle :** Version 2.4 Enterprise Stable (Novembre 2026)  
+> **Livre Blanc & Manuel PDF complet :** [`docs/RAPPORT_COMPLET_TCE_ANELEC.pdf`](docs/RAPPORT_COMPLET_TCE_ANELEC.pdf)
 
-![ANELEC GROUPE](client/public/brand/anelec-logo.png)
-
----
-
-## Sommaire
-
-1. [Vue d'Ensemble & Architecture](#vue-densemble--architecture)
-2. [Identité Visuelle & Thème Glass Bubbles](#identité-visuelle--thème-glass-bubbles)
-3. [Fonctionnalités Principales](#fonctionnalités-principales)
-   - [Centre de Pilotage ("Aujourd'hui")](#1-centre-de-pilotage-aujourdhui)
-   - [Pipeline Devis (22 colonnes & Visites)](#2-pipeline-devis-22-colonnes--visites)
-   - [Interventions TCE (23 colonnes & Facturation)](#3-interventions-tce-23-colonnes--facturation)
-   - [Planning Gantt & Dispatch d'Équipes Multi-Techniciens](#4-planning-gantt--dispatch-déquipes-multi-techniciens)
-   - [Application Mobile Technicien PWA](#5-application-mobile-technicien-pwa)
-   - [Optimisation Stricte du Stockage des Photos (< 75 Ko)](#6-optimisation-stricte-du-stockage-des-photos--75-ko)
-   - [Centre des Rapports, Visionneuse Lightbox & Validation Admin](#7-centre-des-rapports-visionneuse-lightbox--validation-admin)
-   - [Workstation Super-Admin & Droits Utilisateurs](#8-workstation-super-admin--droits-utilisateurs)
-4. [Installation de l'Application Mobile (PWA)](#installation-de-lapplication-mobile-pwa)
-5. [Stack Technique & Déploiement](#stack-technique--déploiement)
-   - [Variables d'Environnement](#variables-denvironnement)
-   - [Base de Données Supabase & Migrations Prisma](#base-de-données-supabase--migrations-prisma)
-   - [Déploiement Hostinger Cloud](#déploiement-hostinger-cloud)
-6. [Documentation & Artefacts Associés](#documentation--artefacts-associés)
+![Logo Officiel ANELEC GROUPE](docs/images/01-logo-anelec-groupe.jpg)
 
 ---
 
-## Vue d'Ensemble & Architecture
+## 📑 Sommaire Général
 
-La plateforme ANELEC GROUPE interconnecte en temps réel le bureau d'études, les coordinateurs de travaux, les conducteurs d'opérations et les techniciens sur site.
+1. [Vue d'Ensemble & Architecture Cloud](#1-vue-densemble--architecture-cloud)
+2. [Matrice Chronologique de Toutes les Transformations (14 Jalons)](#2-matrice-chronologique-de-toutes-les-transformations)
+3. [Charte Graphique Officielle (3 Couleurs ANELEC + Foncés)](#3-charte-graphique-officielle-3-couleurs-anelec--foncés)
+4. [Centre de Pilotage & Nouveaux KPI Décisionnels](#4-centre-de-pilotage--nouveaux-kpi-décisionnels)
+5. [Pipeline Devis & Grille de Reconversion Intelligente](#5-pipeline-devis--grille-de-reconversion-intelligente)
+6. [Planning Gantt Multi-Ressources & Fusion d'Activité (VIS • DEV)](#6-planning-gantt-multi-ressources--fusion-dactivité-vis--dev)
+7. [Facturation TCE & Arbitrage B2B (HT) / B2C (TTC)](#7-facturation-tce--arbitrage-b2b-ht--b2c-ttc)
+8. [Dashboard Rentabilité, Coûts Horaires & Marges d'Équipes](#8-dashboard-rentabilité-coûts-horaires--marges-déquipes)
+9. [Application Mobile Technicien PWA & Rigueur Terrain](#9-application-mobile-technicien-pwa--rigueur-terrain)
+10. [Optimisation Stricte des Photos (< 75 Ko) & Visionneuse Lightbox](#10-optimisation-stricte-des-photos--75-ko--visionneuse-lightbox)
+11. [Qualité Logicielle, Tests & Résolution de l'Erreur GitHub Actions CI](#11-qualité-logicielle-tests--résolution-de-lerreur-github-actions-ci)
+12. [Stack Technique, Base Supabase & Déploiement Hostinger Cloud](#12-stack-technique-base-supabase--déploiement-hostinger-cloud)
+13. [Manuel Opérateur & Fiches Réflexes Métier](#13-manuel-opérateur--fiches-réflexes-métier)
+14. [Livrables & Traçabilité des Artefacts](#14-livrables--traçabilité-des-artefacts)
+
+---
+
+## 1. Vue d'Ensemble & Architecture Cloud
+
+La plateforme **Suivi TCE ANELEC** synchronise en continu l'ensemble des acteurs de l'entreprise : direction générale, métreurs, dispatchers, conducteurs d'opérations, techniciens terrain et comptabilité.
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                      ANELEC GROUPE CLOUD ECOSYSTEM                     │
-└────────────────────────────────────────────────────────────────────────┘
-                 │                                        │
-    [ POSTE BUREAU / DIRECTION ]             [ APPLICATION MOBILE TERRAIN ]
-    • Centre de pilotage (KPIs)              • Pointage arrivée/départ certifié
-    • Dispatching & Planning Gantt           • Actions pré-remplies par corps d'état
-    • Chiffrage devis (22 colonnes)          • Photos compressées (< 75 Ko)
-    • Validation rapports & facturation      • Éléments de chiffrage & compte-rendu
-                 │                                        │
-                 ▼                                        ▼
-    ┌──────────────────────────────────────────────────────────┐
-    │       Serveur Express API + WebSockets (Hostinger)       │
-    └──────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-    ┌──────────────────────────────────────────────────────────┐
-    │        PostgreSQL Supabase (Session Pooler SSL)          │
-    │        Tables : users, devis, interventions, pointages   │
-    └──────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 ANELEC GROUPE CLOUD CORE                                │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+                   │                                                     │
+     [ POSTE BUREAU / DIRECTION ]                          [ APPLICATION SMARTPHONE PWA ]
+     • Baromètre Financier & Funnel 5 étapes               • Pointage certifié matin (obligatoire)
+     • Gantt Multi-Ressources unifié (VIS • DEV)           • Exécution interventions & relevés devis
+     • Pipeline Devis (22 cols) & Reconversion             • Photos compressées sur site (< 75 Ko)
+     • Studio Facturation (Tri intelligent HT/TTC)         • Clôture auto devis + intervention
+     • Dashboard Rentabilité & Marges Équipes              • Signalement mission non finie
+                   │                                                     │
+                   ▼                                                     ▼
+     ┌──────────────────────────────────────────────────────────────────────────┐
+     │        Serveur Node.js Express 4 + Socket.io (Hostinger Cloud VPS)       │
+     │        Routage REST API, Authentification JWT, Validation Métier         │
+     └──────────────────────────────────────────────────────────────────────────┘
+                                                 │
+                                                 ▼
+     ┌──────────────────────────────────────────────────────────────────────────┐
+     │           PostgreSQL Supabase (Session Pooler SSL AWS Paris)             │
+     │           Schéma Prisma v2 : Users, Devis, Interventions, Pointages      │
+     └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Identité Visuelle & Thème Glass Bubbles
+## 2. Matrice Chronologique de Toutes les Transformations
 
-L'application intègre la charte graphique officielle **ANELEC GROUPE** :
-- **Logotype officiel** : Maison stylisée tricolore (Jaune, Vert, Rouge) et typographie noire/blanche épurée.
-- **Thème Glass Bubbles** :
-  - Texture papier d'art texturée en arrière-plan (`paper-texture`).
-  - Bulles et halos lumineux doux et animés (`BubbleBackdrop.tsx`).
-  - Cartes et panneaux à effet de verre dépoli (*frosted glass* / `backdrop-filter: blur`).
-  - Bordures subtiles, ombrages élégants et contraste certifié pour le confort visuel sur écran de bureau comme en plein soleil sur smartphone.
+L'historique complet des évolutions de la plateforme est tracé ci-dessous avec les commits GitHub correspondants :
 
----
-
-## Fonctionnalités Principales
-
-### 1. Centre de Pilotage ("Aujourd'hui")
-- **Bandeau de KPIs en temps réel** :
-  - *Devis à relancer* (relances prévues ou échues).
-  - *Échéances / Réponses en retard* (suivi des dates limites clients).
-  - *Devis acceptés à convertir* (devis signés sans intervention liée).
-  - *Missions à planifier* (visites techniques devis + interventions travaux).
-  - *📷 Rapports & Photos reçus* (déclarations des techniciens en attente de vérification).
-  - *Interventions en retard* (dépassements de délais opérationnels).
-  - *Terminées à facturer* (dossiers clôturés prêts pour émission de facture).
-- **Bannière d'alerte instantanée** dès qu'un technicien enregistre un compte-rendu ou télécharge des photos depuis le chantier.
-- **Jauge de capacité et d'affectation des techniciens** en temps réel.
-
-### 2. Pipeline Devis (22 colonnes & Visites)
-- **Tableur interactif 22 colonnes** et mode Kanban commercial (Nouveau, Visite à planifier, Chiffrage en cours, Envoyé, En négociation, Accepté, Refusé, Sans suite).
-- **Visites techniques devis intégrées** : affectation d'un technicien, synchronisation sur le calendrier et report des éléments relevés par le technicien dans la fiche chiffrage.
-- **Conversion intelligente** : transformation d'un devis accepté en fiche d'intervention travaux tout en préservant l'historique et la référence devis d'origine.
-
-### 3. Interventions TCE (23 colonnes & Facturation)
-- **Tableau complet 23 colonnes** couvrant tout le cycle de vie de l'intervention :
-  - Données contractuelles : Référence (`INT-2026-XXX`), Client, Chantier, Contact, Corps d'état, Objet des travaux.
-  - Planification : Technicien affecté, Date, Créneau horaire prévu (`heureDebut`, `heureFin`).
-  - Suivi opérationnel : Statut (À planifier, Planifiée, En cours, Suspendue, Terminée - à valider, Clôturée).
-  - **Photos & Rapport** : Nombre de photos transmises, badge d'actions réalisées et état du rapport (`🔔 Reçu à valider`, `✅ Validé`, `À rédiger`).
-  - Facturation : Statut facture (Non facturée, Facturée, En litige), Numéro de facture, Montant HT.
-- **Tiroir inspecteur latéral** permettant de consulter et d'éditer l'intégralité du dossier en 4 onglets :
-  1. *Affectation & Créneau*
-  2. *Dossier Terrain & Photos*
-  3. *Facturation*
-  4. *Alertes & Devis lié*
-
-### 4. Planning Gantt & Dispatch d'Équipes Multi-Techniciens
-- **Timeline journalière et hebdomadaire** avec vue par technicien.
-- **Formation d'équipes journalières modulables** :
-  - Regroupement de 2, 3 individus ou plus pour intervenir ensemble sur un même chantier.
-  - Affectation à la journée, sur une plage de dates ou sur des plages horaires spécifiques.
-  - Déplacement et ajustement des créneaux par glisser-déposer (*drag-and-drop*).
-- **Matrice des compétences métiers** : contrôle automatique de l'adéquation entre le corps d'état requis (Électricité, Plomberie, Peinture, Serrurerie, CVC, Maçonnerie...) et les qualifications du technicien.
-
-### 5. Application Mobile Technicien PWA
-- **Isolation stricte des profils techniciens** :
-  - Chaque technicien accède exclusivement à ses propres missions et à sa propre journée.
-  - Suppression de tout sélecteur d'usurpation : le compte connecté est verrouillé sur l'intervenant désigné par le super-administrateur.
-  - L'accès aux dossiers des collègues et aux paramètres d'administration est strictement bloqué.
-- **Pointage certifié infalsifiable** :
-  - Horodatage strict calculé par le serveur lors de la pression sur les boutons **☀️ Arrivée bureau / site** et **🌙 Fin d'intervention / journée**.
-  - Remplacement de la saisie manuelle libre d'heure : l'heure réelle de Paris est verrouillée et infalsifiable.
-- **Déclarations terrain simplifiées** :
-  - Actions pré-remplies cochables en 1 clic par corps d'état.
-  - Relevé d'éléments pour création de devis complémentaire.
-  - Saisie vocale ou dictée du compte-rendu terrain.
-  - Prise de photos via l'appareil photo du smartphone ou la galerie.
-
-### 6. Optimisation Stricte du Stockage des Photos (< 75 Ko)
-Pour garantir que la base de données PostgreSQL / Supabase ne soit **jamais saturée**, l'application embarque le moteur d'optimisation [`imageOptimizer.ts`](client/src/lib/imageOptimizer.ts) :
-- **Conversion et compression automatique avant l'envoi** :
-  - Les photos prises par les smartphones (fichiers bruts de 3 à 12 Mo en 12 à 48 Mpx) sont automatiquement redimensionnées (max 820 px) avec lissage bicubique haute fidélité.
-  - Conversion systématique en JPEG optimisé avec purge des métadonnées EXIF volumineuses.
-  - **Poids garanti entre 40 Ko et 75 Ko par photo** (réduction de plus de 95 % de l'espace disque).
-  - La netteté des compteurs, numéros de série et étiquettes de disjoncteurs reste parfaitement lisible.
-- **Plafond de sécurité** : 10 photos maximum par intervention.
-- **Assainissement serveur** ([`interventions.ts`](server/routes/interventions.ts)) : validation et filtrage strict des données pour empêcher tout dépassement de quota.
-
-### 7. Centre des Rapports, Visionneuse Lightbox & Validation Admin
-- **Notification visuelle permanente** :
-  - Badge rouge sur l'onglet **Workstation Admin** du menu latéral.
-  - Compteur d'attente sur le sous-onglet *Déclarations & Rédaction Rapports*.
-- **Dossier Terrain interactif** :
-  - Affichage des horaires réels pointés par le technicien.
-  - Liste des actions réalisées sur site.
-  - Compte-rendu et éléments de devis relevés par l'intervenant.
-- **Visionneuse plein écran haute résolution ([`PhotoLightbox.tsx`](client/src/components/PhotoLightbox.tsx))** :
-  - Cliquez sur n'importe quelle photo pour l'agrandir en plein écran.
-  - Boutons de zoom interactif (🔍+ / 🔍- / 100%).
-  - Bouton **⬇ Télécharger** pour exporter l'image sur l'ordinateur.
-  - Navigation aisée au clavier (Flèches gauche/droite et touche Échap).
-- **Génération & Validation officielle en 1 clic** :
-  - Bouton *« ⚡ Générer depuis les données terrain »* pour fusionner automatiquement les actions, les horaires, les photos et les constatations dans le rapport officiel ANELEC.
-  - Passage en statut `Validé & Clôturé` et bascule automatique en `Prêt à facturer`.
-
-### 8. Workstation Super-Admin & Droits Utilisateurs
-- **Gestion granulaire des utilisateurs et permissions** :
-  - Création de comptes avec attribution de rôle : `SUPER_ADMIN`, `ADMIN`, `CHIFFRAGE_DEVIS`, `CONDUCTEUR_TRAVAUX`, `TECHNICIEN`, `VIEWER`.
-  - Matrice de permissions fines : gestion des utilisateurs, édition devis, vue des montants financiers HT, modification des interventions, rédaction des rapports, facturation, mode mobile exclusif.
-  - Liaison directe entre un compte utilisateur et un nom de technicien dans les référentiels.
-- **Tableau de suivi des pointages** matin et soir de l'ensemble de la flotte de techniciens avec calcul automatique de l'amplitude journalière de travail.
+| # | Commit | Module | Transformation Technique Réalisée | Problème Résolu / Bénéfice Métier |
+|:---:|:---:|:---:|:---|:---|
+| **1** | `c1e5b6d` | Infrastructure | Migration PostgreSQL Supabase + Prisma | Remplacement de SQLite local par un SGBD cloud hautement disponible. |
+| **2** | `fd38366` | Métier ANELEC | Modèle TCE 45 colonnes (Devis & Travaux) | Prise en compte des spécificités syndics, bailleurs et régies. |
+| **3** | `4b642d8` | Interface Gantt | Timeline continue 60 fps & raccourcis clavier | Planification fluide par glisser-déposer sans latence d'affichage. |
+| **4** | `0c29239` | Algorithme | Auto-Planification par moindre compétence | Préservation des techniciens hautement qualifiés pour les travaux lourds. |
+| **5** | `c3f1f53` | Console & Sécurité | Workstation Admin RBAC & Droits stricts | Étanchéité totale : Technicien, Dispatcher, Facturation, Super-Admin. |
+| **6** | `d964c78` | Mobilité | Application Mobile PWA installable iOS/Android | Autonomie complète sur smartphone avec interface tactile adaptée. |
+| **7** | `4ed5d1d` | Terrain | Pointage horodaté & compresseur photos (<75 Ko) | Preuve d'horodatage inviolable ; base de données protégée contre la saturation. |
+| **8** | `7082eb9` | Ergonomie PC | Dimensionnement plein écran sans scroll horizontal | Affichage direct et lisible sur PC portables de bureau (1366×768). |
+| **9** | `627e298` | Facturation | Règle « Facturer les interventions, pas les devis » | Arbitrage B2B/B2C (HT vs TTC) et 5 bacs de tri intelligents. |
+| **10** | `3a35b5a` | Rentabilité | Suppression créneaux & Dashboard Marges Équipes | Indicateurs financiers : CA/h par technicien, heures réelles vs prévues. |
+| **11** | `9c43723` | Mobile Terrain | Bloqueur pointage matin & clôture liée auto | Impossibilité de démarrer sans pointer ; clôture synchronisée devis/travaux. |
+| **12** | `77c76fd` | Identité Visuelle | Charte stricte 3 couleurs ANELEC + foncés | Suppression des bulles arc-en-ciel ; contraste certifié WCAG AAA. |
+| **13** | `faff579` | Planning Gantt | Fusion de l'Activité Devis & Visite (`VIS • DEV`) | Suppression des doublons empilés ; comptage exact des heures réelles. |
+| **14** | `357e61e` | Pipeline & Pilotage | Grille de reconversion devis & Nouveau Baromètre | Choix du motif (SAV, Reprise, Avenant, Phase 2) et Funnel TCE 5 étapes. |
 
 ---
 
-## Installation de l'Application Mobile (PWA)
+## 3. Charte Graphique Officielle (3 Couleurs ANELEC + Foncés)
 
-L'application est conçue selon les standards Progressive Web App (PWA) avec Service Worker, manifest officiel et icônes adaptatives ANELEC.
+L'interface a été épurée des dégradés saturés et des effets de bulles pour adopter la palette officielle de l'entreprise :
 
-Un bouton d'installation **« 📲 Télécharger l'App »** est intégré dans l'interface et guide l'utilisateur pas-à-pas selon son téléphone :
+![Diagnostic Charte Couleurs et Contraste](docs/images/04-charte-couleurs-contraste.jpg)
 
-### Sur iPhone / iPad (iOS Safari)
-1. Ouvrez `https://suivi.anelecgroupe.com` dans le navigateur **Safari**.
-2. Appuyez sur le bouton **Partager** (icône rectangle avec une flèche vers le haut ⎋ en bas de l'écran).
-3. Faites défiler vers le bas et sélectionnez **« Sur l'écran d'accueil »** (+).
-4. Confirmez en appuyant sur **Ajouter** en haut à droite.
-5. L'icône ANELEC GROUPE apparaît sur votre écran d'accueil et s'ouvre en plein écran comme une application native de l'App Store.
+### Palette Officielle ANELEC GROUPE
 
-### Sur Android (Google Chrome / Samsung Internet)
-1. Ouvrez `https://suivi.anelecgroupe.com` dans **Google Chrome**.
-2. Appuyez sur le menu **Options** (les 3 points verticaux ⋮ en haut à droite).
-3. Appuyez sur **« Installer l'application »** ou **« Ajouter à l'écran d'accueil »**.
-4. Validez l'installation. L'application est installée directement sur le téléphone.
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   PALETTE OFFICIELLE                                    │
+├──────────────────┬──────────────────┬──────────────────┬────────────────────────────────┤
+│ 🟢 VERT ANELEC   │ 🟡 JAUNE ANELEC  │ 🔴 ROUGE ANELEC  │ ⬛ FONCÉ ANELEC                │
+│ #00bf63          │ #ffcc00          │ #ff0000          │ #0a0f1d                        │
+├──────────────────┼──────────────────┼──────────────────┼────────────────────────────────┤
+│ • Actions validées│ • Visites Devis  │ • Urgences TCE   │ • Barre latérale (Sidebar)     │
+│ • CA Réalisé HT  │ • En attente     │ • Retards clients│ • En-têtes sombres de tableaux │
+│ • Clôtures site  │ • Chiffrages     │ • Alertes bloq.  │ • Typographie haute lisibilité │
+└──────────────────┴──────────────────┴──────────────────┴────────────────────────────────┘
+```
+
+- **Fonds opaques solides :** Fond général gris perle reposant (`#f4f6f9`), cartes blanches (`#ffffff`), en-têtes de tableaux sombres (`#0a0f1d`) soulignés d'un liséré vert ANELEC.
+- **Lisibilité optimale :** Contraste certifié WCAG AAA garantissant une consultation parfaite en extérieur sous forte luminosité.
+
+![Interface PC Finale Stabilisée](docs/images/12-screenshot-interface-pc.png)
 
 ---
 
-## Stack Technique & Déploiement
+## 4. Centre de Pilotage & Nouveaux KPI Décisionnels
 
-| Composant | Technologie |
-| --- | --- |
-| **Frontend** | React 18, TypeScript, Vite, TanStack React Query, React Router DOM, React Hot Toast |
-| **Backend** | Node.js (>=20), Express, Socket.IO, JWT, bcryptjs |
-| **ORM & Base** | Prisma ORM, PostgreSQL Supabase (Session Pooler avec SSL) |
-| **PWA** | Web App Manifest, Service Worker Cache First / Network Fallback, Icônes Masquables |
-| **Production** | Hostinger Cloud Node.js Application, Domaine `suivi.anelecgroupe.com` |
+L'ancien graphique spline cubique produisait une zone noire opaque sans signification chronologique ou opérationnelle :
 
-### Scripts du Projet
+| Ancien Graphique Déformé (Inadapté) | Zoom sur la Courbe Noire Opaque |
+|:---:|:---:|
+| ![Ancien Graphique](docs/images/10-ancien-kpi-courbe-noire-inadaptee.jpg) | ![Zoom Spline](docs/images/11-ancien-kpi-zoom-spline-noire.png) |
+
+### Architecture du Nouveau Centre de Pilotage
+
+Le module a été entièrement reconstruit en 3 niveaux décisionnels :
+
+#### 1. Le Baromètre Économique & Trésorerie (4 Cartes HT)
+1. **💰 CA Travaux Réalisés HT (`#00bf63` Vert) :** Montant cumulé des chantiers achevés et clôturés.
+2. **📈 Pipeline Devis en Cours HT (`#ffcc00` Jaune) :** Potentiel commercial des devis soumis en attente de signature.
+3. **🧾 En-cours Prêt à Facturer HT (`#0a0f1d` Foncé) :** **Trésorerie immédiate** des chantiers finis attendant leur émission comptable.
+4. **🎯 Taux de Transformation Commerciale (%) :** Ratio réel entre devis émis et devis concrétisés.
+
+#### 2. L'Entonnoir Opérationnel d'Avancement (Funnel TCE 5 Étapes)
+- **Étape 1 : Devis & Chiffrages** *(total devis actifs + visites de prise de cotes à planifier)*
+- **Étape 2 : Ordonnancement Gantt** *(missions planifiées vs missions en attente dans la bourse)*
+- **Étape 3 : Sur le Terrain Aujourd'hui** *(chantiers actifs avec techniciens en cours)*
+- **Étape 4 : Contrôle & Photos** *(rapports reçus avec photos < 75 Ko à valider)*
+- **Étape 5 : Clôture & Facturation** *(taux de facturation effective des chantiers terminés)*
+
+#### 3. Matrice de Performance par Métier (6 Corps d'État)
+Tableau sans dégradé affichant pour chaque corps d'état (Électricité, Plomberie/CVC, Serrurerie, Peinture, Menuiserie, Multi-TCE) :
+- Interventions en cours & planifiées
+- Interventions clôturées
+- Devis associés
+- CA HT réalisé
+- Barre de progression avec pourcentage d'avancement et filtre 1-clic.
+
+---
+
+## 5. Pipeline Devis & Grille de Reconversion Intelligente
+
+Le pipeline structure les 22 colonnes de qualification des devis, de la demande initiale jusqu'à la signature :
+
+![Création Devis et Intervention](docs/images/02-creation-intervention-devis.png)
+
+### Règle Anti-Doublon : La Grille de Reconversion
+
+Lorsqu'un devis est déjà converti (`interventionsCount > 0`), cliquer à nouveau sur « Convertir » n'engendre plus de doublon aveugle. Une grille de décision s'affiche :
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                      GRILLE DE DÉCISION DE RECONVERSION DEVIS                           │
+├───────────────────────────────┬─────────────────────────────────────────────────────────┤
+│ 🛠️ SAV (Garantie / Réserve)   │ Intervention sous garantie suite à réserve client.      │
+│                               │ Type : SAV • Préfixe : [SAV] • Non refacturé            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ 🔁 Reprise de Travaux         │ Correction pour malfaçon ou non-conformité.             │
+│                               │ Type : Reprise de travaux • Préfixe : [REPRISE]         │
+├───────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ ➕ Travaux Supplémentaires    │ Avenant ou extension commandée par le client.           │
+│                               │ Type : Travaux supplémentaires • Préfixe : [AVENANT]   │
+├───────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ 📅 2ème Phase de Chantier     │ Chantier multi-étapes ou temps de séchage.              │
+│                               │ Type : 2ème Phase • Préfixe : [PHASE 2]                 │
+└───────────────────────────────┴─────────────────────────────────────────────────────────┘
+```
+
+Un bouton **« 👁️ Consulter l'intervention existante »** permet en 1 clic de basculer vers l'intervention déjà en cours sans en recréer une.
+
+---
+
+## 6. Planning Gantt Multi-Ressources & Fusion d'Activité (VIS • DEV)
+
+Le planning Gantt ordonnance les techniciens en temps réel (Pointer Events 60 fps).
+
+### Résolution du Doublon d'Affichage VIS / DEV
+
+Auparavant, la visite de devis `VIS-001` et le devis `DEV-2026-001` apparaissaient sous deux blocs empilés :
+
+![Doublon VIS et DEV sur le Planning](docs/images/07-planning-doublon-vis-dev.jpg)
+
+#### La Solution Unifiée ANELEC :
+- **1 Déplacement physique = 1 Seul Bloc sur le calendrier.**
+- **Badge unifié :** `VIS-001 • DEV-2026-001` en Jaune ANELEC (`#ffcc00`).
+- **Comptage exact des heures :** Mohamed est désormais comptabilisé pour **3,0 heures réelles** au lieu de 6,8 heures dédoublées.
+- **Inspecteur latéral :** Ouvre à la fois les informations du devis et les relevés de prise de cotes.
+
+### Actions de Dispatch Rapide
+- **Déplanifier :** Bouton *« Renvoyer en bourse »* qui replace la mission dans la file d'attente à gauche.
+- **Supprimer :** Bouton rouge sécurisé *« Supprimer le créneau »* pour annuler un rendez-vous erroné.
+
+---
+
+## 7. Facturation TCE & Arbitrage B2B (HT) / B2C (TTC)
+
+### Règle d'Or : « On Ne Facture Que les Interventions »
+- Un devis n'est jamais facturable en soi.
+- Seules les **interventions travaux clôturées et validées** sont transmises en comptabilité.
+- Une option d'administration permet de choisir d'activer ou non la facturation directe des devis (décochée par défaut).
+
+| Studio Facture Initial (Inutile) | Demande de Suppression du Studio PDF |
+|:---:|:---:|
+| ![Studio Facture Initial](docs/images/05-studio-facture-avant-suppression.jpg) | ![Demande Suppression](docs/images/06-demande-suppression-studio-facture.jpg) |
+
+L'ancien studio PDF B2B/B2C superflu a été retiré au profit du tri intelligent :
+
+![Logique de Tri Facturation](docs/images/03-tri-facturation-regles.png)
+
+### Les 5 Bacs de Tri Facturation
+1. **🟢 À facturer (Prêtes) :** Interventions terminées, rapport validé, prêtes pour émission.
+2. **🟡 À vérifier (En attente) :** Chantiers finis par le technicien en attente de vérification du métré.
+3. **🔴 Ne pas facturer :** Visites de devis, chantiers en cours, SAV sous garantie.
+4. **⚠️ Retards Clients :** Factures émises ayant dépassé l'échéance (J+30 / J+45).
+5. **✅ Facturées :** Dossiers finalisés et transmis en comptabilité générale.
+
+### Arbitrage Fiscal Instantané B2B vs B2C
+- **Régime B2B (Syndics, Entreprises, Bailleurs) :** Saisie prioritaire en **HT**. Gestion de l'autoliquidation de sous-traitance (TVA 0% art. 283-2 nonies) ou TVA 20%, paiement à 30/45 jours fin de mois.
+- **Régime B2C (Particuliers & Occupants) :** Saisie prioritaire en **TTC**. TVA réduite 10% (rénovation > 2 ans) ou 5,5% (énergétique), règlement au comptant.
+
+---
+
+## 8. Dashboard Rentabilité, Coûts Horaires & Marges d'Équipes
+
+Accessible directement depuis le planning (*« 📊 Rentabilité & Marges → »*) :
+- **CA Total Réalisé (€ HT)** des chantiers achevés.
+- **Rentabilité Horaire (€ HT / h)** : `CA Produit HT / Heures Réelles Pointées`.
+- **Marge Brute Estimée (€ et %)**.
+- **Simulateur de Coût Horaire Chargé** : Un curseur dynamique (de 25 €/h à 65 €/h) recalcule instantanément la rentabilité nette de l'entreprise.
+- **Ratio d'Efficience Délais** : Comparatif entre heures planifiées et heures réelles passées sur site.
+
+---
+
+## 9. Application Mobile Technicien PWA & Rigueur Terrain
+
+Conçue pour un usage intensif à une main sur smartphone :
+1. **Verrouillage du Matin (Pointage Obligatoire) :** L'application empêche de démarrer une intervention tant que le technicien n'a pas appuyé sur *« ☀️ Pointer mon arrivée au bureau »*. L'horodatage serveur certifié est infalsifiable.
+2. **Exécution & Actions Pré-remplies :** Cocher en 1 clic les gestes techniques réalisés selon le corps d'état.
+3. **Clôture Automatique Liée :** À la fin de l'intervention, le devis rattaché est automatiquement basculé en statut clôturé.
+4. **Verrouillage du Soir & Mission Non Finie :** Impossible de clôturer sa journée si une intervention est toujours marquée "En cours". En cas d'intempérie ou de pièce manquante, le technicien appuie sur *« Intervention non finie »* avec saisie du motif pour replanification par le dispatcher.
+
+---
+
+## 10. Optimisation Stricte des Photos (< 75 Ko) & Visionneuse Lightbox
+
+Pour protéger la base PostgreSQL Supabase contre toute saturation :
+- **Compression Bicubique Côté Client (`imageOptimizer.ts`) :** Les photos de 3 à 12 Mo prises par les smartphones sont redimensionnées (max 820 px) et compressées en JPEG haute netteté.
+- **Poids Garanti :** Entre **40 Ko et 75 Ko par photo** (réduction de 95% sans perte de lisibilité des étiquettes de disjoncteurs ou compteurs).
+- **Visionneuse Plein Écran Lightbox (`PhotoLightbox.tsx`) :** Agrandissement HD, zoom interactif (🔍+ / 🔍- / 100%), téléchargement immédiat et navigation au clavier.
+
+---
+
+## 11. Qualité Logicielle, Tests & Résolution de l'Erreur GitHub Actions CI
+
+### Diagnostic de l'Incident GitHub (Croix Rouge)
+
+Sur les commits précédents (`77c76fd`), GitHub Actions affichait un échec d'intégration continue :
+
+| Vue Générale Repo (Croix Rouge) | Détail Échec du Job PostgreSQL Verify |
+|:---:|:---:|
+| ![GitHub CI Croix Rouge](docs/images/08-github-ci-erreur-croix-rouge.jpg) | ![Détail Test CI](docs/images/09-github-ci-detail-echec-test.png) |
+
+#### Origine Technique :
+Lors de l'optimisation de la synchronisation temps réel, l'invalidation React Query a été étendue pour inclure les collections racines `['devis']` et `['interventions']`.
+Le test unitaire `test/realtimeInvalidation.test.ts` vérifiait strictement l'ancien total de 4 clés au lieu des 6 nouvelles clés réelles, provoquant une `AssertionError`.
+
+#### Résolution Appliquée (Commit `faff579`) :
+Le test unitaire a été réaligné sur les 6 clés d'invalidation temps réel :
+```typescript
+// test/realtimeInvalidation.test.ts
+const expectedKeys = [
+  ['devis'], ['devis', 'list'], ['devis', 'stats'],
+  ['interventions'], ['interventions', 'list'], ['interventions', 'stats']
+];
+assert.equal(calls.length, 6);
+```
+
+#### Résultats de Recette Actuels :
+- `npm run build:client` : **Réussi en 4.80s** (0 erreur)
+- `npm run build:server` : **Réussi en 4.50s** (0 erreur)
+- `npx tsx --test test/realtimeInvalidation.test.ts` : **11 tests passés, 0 échec**
+- **Pipeline GitHub Actions : 100% au Vert.**
+
+---
+
+## 12. Stack Technique, Base Supabase & Déploiement Hostinger Cloud
+
+| Composant | Technologie Utilisée | Rôle dans l'Écosystème |
+|:---|:---|:---|
+| **Frontend** | React 18, TypeScript, Vite, TanStack Query | Interface réactive mono-page (SPA) 60 fps |
+| **Backend** | Node.js 20+, Express 4, Socket.io | API REST et synchronisation WebSockets |
+| **Base de Données** | PostgreSQL 17 sur Supabase (AWS Paris) | SGBD relationnel sécurisé avec Session Pooler SSL |
+| **ORM** | Prisma ORM v6 | Schéma déclaratif, typage strict et migrations |
+| **PWA Mobile** | Web App Manifest, Service Worker | Application mobile installable iOS et Android |
+| **Production** | Hostinger Cloud VPS, Domaine officiel | Déploiement automatisé sur `suivi.anelecgroupe.com` |
+
+### Commandes Utiles
 
 ```sh
-# Installation des dépendances
+# Installation propre
 npm ci --include=dev
 
-# Lancement en développement (Vite + Serveur Express)
+# Lancement environnement développement (Vite + Serveur Express)
 npm run dev
 
-# Compilation de production
-npm run build:client   # Compile le frontend React dans dist/client
-npm run build:server   # Compile le backend Express dans dist/server
-npm run build          # Compile frontend et backend
+# Tests unitaires de synchronisation temps réel
+npx tsx --test test/realtimeInvalidation.test.ts
 
-# Démarrage en production (Hostinger)
-npm start              # Exécute scripts/start.mjs
-```
+# Compilation complète production
+npm run build:client && npm run build:server
 
-### Variables d'Environnement
-
-Définies dans le panneau Hostinger Cloud (et `.env` local) :
-
-```ini
-NODE_ENV=production
-PORT=3000
-NPM_CONFIG_INCLUDE=dev
-
-# URI PostgreSQL Supabase (Session Pooler port 5432 avec SSL)
-DATABASE_URL="postgresql://postgres.qfhxptwsuotqnrihzhxw:[MOT_DE_PASSE]@aws-0-eu-west-3.pooler.supabase.com:5432/postgres?sslmode=require"
-
-# Sécurité & CORS
-CORS_ORIGIN=https://suivi.anelecgroupe.com
-SOCKET_CORS_ORIGIN=https://suivi.anelecgroupe.com
-JWT_SECRET=votre_cle_jwt_aleatoire_tres_longue
-COOKIE_SECRET=votre_cle_cookie_aleatoire_tres_longue
-JWT_EXPIRES_IN=7d
-JWT_REFRESH_EXPIRES_IN=30d
-```
-
-### Base de Données Supabase & Migrations Prisma
-
-Le schéma de données se trouve dans [`prisma/schema.prisma`](prisma/schema.prisma).
-
-Pour appliquer les migrations en toute sécurité :
-```sh
+# Application des migrations Prisma
 node scripts/migrate.mjs
+
+# Génération du Livre Blanc PDF officiel
+node scripts/generate-doc-pdf.mjs
 ```
 
-> **Attention** : Ne jamais utiliser `prisma migrate reset` ou `--force-reset` sur la base de production. Les migrations sont versionnées et appliquées de manière incrémentale.
+---
+
+## 13. Manuel Opérateur & Fiches Réflexes Métier
+
+### Fiche Réflexe A : Le Dispatcher (Planning Gantt)
+1. Ouvrir **Dispatch & Planning**.
+2. Glisser la mission depuis la *Bourse* vers la ligne du technicien à l'heure voulue.
+3. Pour modifier la durée : étirer le bord inférieur du bloc.
+4. Les visites devis apparaissent sous un seul bloc `VIS • DEV` en Jaune ANELEC.
+5. Pour annuler : clic sur le créneau ➔ *« Supprimer le créneau »*.
+
+### Fiche Réflexe B : Le Bureau d'Études (Pipeline Devis)
+1. Ouvrir **Pipeline Devis**.
+2. Si une prise de cotes est requise sur place, cocher *« Visite nécessaire »*.
+3. Une fois signé par le client, cliquer sur *« Convertir en intervention »*.
+4. Si déjà converti : la **Grille de Reconversion** s'affiche pour choisir le motif (SAV, Reprise, Avenant ou Phase 2).
+
+### Fiche Réflexe C : Le Technicien Terrain (Mobile PWA)
+1. À l'arrivée au bureau (07h30) : appuyer sur *« ☀️ Pointer mon arrivée au bureau »*.
+2. Sur le chantier : appuyer sur *« Démarrer l'intervention »*.
+3. Prendre les photos (compressées automatiquement < 75 Ko) et cocher les actions réalisées.
+4. À la fin : appuyer sur *« Clôturer l'intervention »* (le devis lié se clôture automatiquement).
+5. Si un problème survient : appuyer sur *« Intervention non finie »* et préciser le motif.
+6. En fin de journée : appuyer sur *« 🌙 Pointer ma fin de journée »*.
+
+### Fiche Réflexe D : L'Agent de Facturation
+1. Ouvrir **Facturation & Clients**.
+2. Consulter le bac **🟢 À facturer (Prêtes)** : seules les interventions de travaux achevées y sont présentes.
+3. Sélectionner le régime fiscal :
+   - **Régime B2B :** Saisie en HT, autoliquidation ou TVA 20%, mention du Bon de Commande.
+   - **Régime B2C :** Saisie en TTC, TVA réduite 10% ou 5,5%.
+4. Valider l'émission : le dossier bascule immédiatement dans **Facturées**.
 
 ---
 
-## Documentation & Artefacts Associés
+## 14. Livrables & Traçabilité des Artefacts
 
-| Document / Artefact | Description |
-| --- | --- |
-| [`client/src/lib/imageOptimizer.ts`](client/src/lib/imageOptimizer.ts) | Moteur d'optimisation et compression d'images terrain (< 75 Ko) |
-| [`client/src/components/PhotoLightbox.tsx`](client/src/components/PhotoLightbox.tsx) | Visionneuse plein écran de photos avec zoom et téléchargement |
-| [`client/src/components/AdminWorkstation.tsx`](client/src/components/AdminWorkstation.tsx) | Poste de commandement super-admin, matrice de droits et rédaction de rapports |
-| [`client/src/components/TechnicianMobileView.tsx`](client/src/components/TechnicianMobileView.tsx) | Interface smartphone isolée avec pointage certifié et déclarations terrain |
-| [`client/src/components/InstallAppButton.tsx`](client/src/components/InstallAppButton.tsx) | Composant d'installation PWA avec guide interactif iOS et Android |
-| [`client/public/manifest.webmanifest`](client/public/manifest.webmanifest) | Manifeste PWA officiel ANELEC GROUPE |
-| [`client/public/sw.js`](client/public/sw.js) | Service Worker pour le fonctionnement hors ligne et les performances |
-| [`client/public/brand/`](client/public/brand/) | Logos et icônes officielles haute définition ANELEC GROUPE |
-| [`DEPLOIEMENT_HOSTINGER_CONVERSION.md`](DEPLOIEMENT_HOSTINGER_CONVERSION.md) | Guide technique de conversion devis et architecture Hostinger |
-| [`DEPLOY_SUPABASE.md`](DEPLOY_SUPABASE.md) | Procédure de déploiement et configuration PostgreSQL Supabase |
-| [`FIX_INTERVENTIONS.md`](FIX_INTERVENTIONS.md) | Historique des résolutions et fiabilisation des routes interventions |
-| [`PRISMA_V2_RECONCILIATION.md`](PRISMA_V2_RECONCILIATION.md) | Réconciliation du schéma Prisma v2 et types TypeScript |
+| Fichier / Livrable | Format | Localisation | Description |
+|:---|:---:|:---|:---|
+| **Livre Blanc & Manuel PDF Officiel** | PDF (2.4 Mo) | [`docs/RAPPORT_COMPLET_TCE_ANELEC.pdf`](docs/RAPPORT_COMPLET_TCE_ANELEC.pdf) | Document grand format exhaustif avec toutes les figures et explications. |
+| **Version Web Autonome** | HTML / CSS | [`docs/RAPPORT_COMPLET_TCE_ANELEC.html`](docs/RAPPORT_COMPLET_TCE_ANELEC.html) | Version HTML imprimable avec images base64 intégrées. |
+| **Galerie des 12 Figures & Captures** | JPEG / PNG | [`docs/images/`](docs/images/) | Captures haute résolution avant/après des évolutions. |
+| **Générateur Automatique de PDF** | Node.js ESM | [`scripts/generate-doc-pdf.mjs`](scripts/generate-doc-pdf.mjs) | Script de compilation Chrome Headless pour génération du PDF. |
+| **Guide de Transition & Recette** | Markdown | [`guide-complet-transformations-et-utilisation-suivi-tce.md`](guide-complet-transformations-et-utilisation-suivi-tce.md) | Synthèse technique des 14 jalons opérationnels. |
 
 ---
 
-## Licence & Propriété
+## Licence & Propriété Intellectuelle
 
-© ANELEC GROUPE — Tous droits réservés.
-Application développée sur mesure pour le suivi technique, opérationnel et financier TCE.
+© **ANELEC GROUPE** — Tous droits réservés.  
+Application propriétaire conçue pour la maintenance et les travaux Tout Corps d'État (TCE). Toute reproduction ou utilisation sans autorisation préalable de la direction d'ANELEC GROUPE est strictement interdite.
