@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../stores/authStore';
-import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
@@ -69,10 +68,9 @@ export function LoginPage() {
   const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
 
   // Google OAuth State
-  const [googleClientId, setGoogleClientId] = useState<string>('116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com');
+  const googleClientId = '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com';
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showGoogleOnboardingModal, setShowGoogleOnboardingModal] = useState(false);
-  const [showGoogleConfigModal, setShowGoogleConfigModal] = useState(false);
   const [pendingGoogleCredential, setPendingGoogleCredential] = useState<string | null>(null);
   const [pendingGoogleProfile, setPendingGoogleProfile] = useState<{ email: string; name: string; picture?: string } | null>(null);
   const [googleCompanyName, setGoogleCompanyName] = useState('');
@@ -80,12 +78,14 @@ export function LoginPage() {
   const [googleAcceptTerms, setGoogleAcceptTerms] = useState(false);
   const [googleOnboardingError, setGoogleOnboardingError] = useState<string | null>(null);
 
-  // Initialisation Google Identity Services (GIS)
+  // Initialisation Google Identity Services (GIS & OAuth 2.0)
   useEffect(() => {
     const initGis = (id: string) => {
       const g = (window as any).google;
-      if (g?.accounts?.id) {
-        try {
+      if (!g?.accounts) return;
+
+      try {
+        if (g.accounts.id) {
           g.accounts.id.initialize({
             client_id: id,
             callback: (response: { credential: string }) => {
@@ -94,25 +94,50 @@ export function LoginPage() {
             auto_select: false,
             cancel_on_tap_outside: true,
           });
-        } catch (e) {
-          console.warn('Erreur initialisation Google GIS :', e);
+
+          // Rendu du bouton officiel Google pour une compatibilité navigateur sans faille
+          const loginBtn = document.getElementById('google-login-btn-container');
+          if (loginBtn) {
+            loginBtn.innerHTML = '';
+            g.accounts.id.renderButton(loginBtn, {
+              type: 'standard',
+              theme: 'outline',
+              size: 'large',
+              text: 'continue_with',
+              shape: 'rectangular',
+              width: 380,
+              locale: 'fr',
+            });
+          }
+
+          const registerBtn = document.getElementById('google-register-btn-container');
+          if (registerBtn) {
+            registerBtn.innerHTML = '';
+            g.accounts.id.renderButton(registerBtn, {
+              type: 'standard',
+              theme: 'outline',
+              size: 'large',
+              text: 'signup_with',
+              shape: 'rectangular',
+              width: 380,
+              locale: 'fr',
+            });
+          }
         }
+      } catch (e) {
+        console.warn('Erreur initialisation Google GIS :', e);
       }
     };
 
     initGis(googleClientId);
+    const timer1 = setTimeout(() => initGis(googleClientId), 600);
+    const timer2 = setTimeout(() => initGis(googleClientId), 1600);
 
-    api
-      .get<{ googleClientId: string }>('/auth/config')
-      .then((res) => {
-        const id = res.data?.googleClientId || googleClientId;
-        if (id) {
-          setGoogleClientId(id);
-          initGis(id);
-        }
-      })
-      .catch(() => {});
-  }, [googleClientId]);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [googleClientId, activeTab]);
 
   const handleGoogleCredential = async (
     credential: string,
@@ -155,18 +180,32 @@ export function LoginPage() {
 
   const triggerGoogleAuth = (_tab: 'login' | 'register') => {
     const g = (window as any).google;
+    // 1. Déclenchement popup OAuth 2.0 direct (ouvre instantanément la fenêtre Google officielle)
+    if (googleClientId && g?.accounts?.oauth2) {
+      try {
+        const client = g.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'openid email profile',
+          callback: (tokenResponse: any) => {
+            if (tokenResponse?.access_token) {
+              handleGoogleCredential(tokenResponse.access_token);
+            }
+          },
+        });
+        client.requestAccessToken();
+        return;
+      } catch (err) {
+        console.warn('OAuth2 direct error:', err);
+      }
+    }
+
+    // 2. Repli One Tap Google Identity
     if (googleClientId && g?.accounts?.id) {
       try {
-        g.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            setShowGoogleConfigModal(true);
-          }
-        });
-      } catch {
-        setShowGoogleConfigModal(true);
+        g.accounts.id.prompt();
+      } catch (err) {
+        console.warn('Google prompt error:', err);
       }
-    } else {
-      setShowGoogleConfigModal(true);
     }
   };
 
@@ -460,36 +499,38 @@ export function LoginPage() {
             noValidate
           >
             {/* BOUTON GOOGLE DIRECT */}
-            <button
-              type="button"
-              onClick={() => triggerGoogleAuth('login')}
-              disabled={isGoogleLoading}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                border: '1px solid var(--border-default, #cbd5e1)',
-                background: 'var(--bg-elevated, #ffffff)',
-                color: 'var(--text-primary, #0f172a)',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>{isGoogleLoading ? 'Connexion Google...' : 'Continuer avec Google'}</span>
-            </button>
+            <div id="google-login-btn-container" style={{ display: 'flex', justifyContent: 'center', minHeight: '44px' }}>
+              <button
+                type="button"
+                onClick={() => triggerGoogleAuth('login')}
+                disabled={isGoogleLoading}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-default, #cbd5e1)',
+                  background: 'var(--bg-elevated, #ffffff)',
+                  color: 'var(--text-primary, #0f172a)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>{isGoogleLoading ? 'Connexion Google...' : 'Continuer avec Google'}</span>
+              </button>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -4px 0' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
@@ -580,36 +621,38 @@ export function LoginPage() {
             noValidate
           >
             {/* BOUTON GOOGLE DIRECT INSCRIPTION RAPIDE */}
-            <button
-              type="button"
-              onClick={() => triggerGoogleAuth('register')}
-              disabled={isGoogleLoading}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                border: '1px solid var(--border-default, #cbd5e1)',
-                background: 'var(--bg-elevated, #ffffff)',
-                color: 'var(--text-primary, #0f172a)',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>{isGoogleLoading ? 'Connexion Google...' : 'Inscription directe avec Google'}</span>
-            </button>
+            <div id="google-register-btn-container" style={{ display: 'flex', justifyContent: 'center', minHeight: '44px' }}>
+              <button
+                type="button"
+                onClick={() => triggerGoogleAuth('register')}
+                disabled={isGoogleLoading}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-default, #cbd5e1)',
+                  background: 'var(--bg-elevated, #ffffff)',
+                  color: 'var(--text-primary, #0f172a)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>{isGoogleLoading ? 'Connexion Google...' : 'Inscription directe avec Google'}</span>
+              </button>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -2px 0' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
@@ -1091,84 +1134,7 @@ export function LoginPage() {
         </div>
       )}
 
-      {/* MODALE D'ASSISTANCE / MODE TEST GOOGLE OAUTH */}
-      {showGoogleConfigModal && (
-        <div className="inspector-backdrop" onClick={() => setShowGoogleConfigModal(false)}>
-          <div
-            className="pro-table-container"
-            style={{
-              maxWidth: '520px',
-              width: '92%',
-              padding: '24px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-default)',
-              boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
-              borderRadius: '16px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '24px' }}>🔐</span>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>
-                Connexion Google Direct (OAuth 2.0)
-              </h3>
-            </div>
-
-            <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '14px' }}>
-              Le connecteur Google Identity Services est complètement intégré au code backend et frontend de votre application.
-            </p>
-
-            <div
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                background: 'rgba(59, 130, 246, 0.08)',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
-                fontSize: '12px',
-                color: 'var(--text-primary)',
-                lineHeight: 1.5,
-                marginBottom: '16px',
-              }}
-            >
-              ℹ️ <strong>Pour activer la fenêtre officielle Google en production :</strong>
-              <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                Renseignez simplement la variable <code>GOOGLE_CLIENT_ID</code> dans votre fichier <code>.env</code> (créée gratuitement depuis <em>Google Cloud Console &gt; Identifiants OAuth 2.0 Web</em>).
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowGoogleConfigModal(false);
-                  const demoEmail = 'artisan.' + Math.floor(1000 + Math.random() * 9000) + '@gmail.com';
-                  handleGoogleCredential(`simulated_google_:${demoEmail}:Artisan Partenaire`);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                }}
-              >
-                <span>🚀</span>
-                <span>Tester l'Inscription Google Immédiate (Simulation en direct)</span>
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setShowGoogleConfigModal(false)}
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {/* MODALE CGU & RGPD */}
       <LegalTermsModal

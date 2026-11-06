@@ -433,15 +433,29 @@ authRouter.post(
       name = parts[2] || 'Utilisateur Google Direct';
       picture = 'https://lh3.googleusercontent.com/a/default-user';
     } else {
-      // Validation officielle du jeton Google Identity Services via tokeninfo
+      // Validation officielle du jeton Google (prend en charge ID Token et Access Token OAuth2)
       try {
-        const googleRes = await fetch(
-          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(data.credential)}`
-        );
-        if (!googleRes.ok) {
-          throw new AppError(401, 'Jeton Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
+        let profile: any;
+        if (data.credential.startsWith('ya29.')) {
+          // Jeton d'accès OAuth2
+          const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${data.credential}` },
+          });
+          if (!userinfoRes.ok) {
+            throw new AppError(401, 'Jeton d\x27accès Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
+          }
+          profile = await userinfoRes.json();
+        } else {
+          // Jeton d'identité ID Token (GIS)
+          const googleRes = await fetch(
+            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(data.credential)}`
+          );
+          if (!googleRes.ok) {
+            throw new AppError(401, 'Jeton Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
+          }
+          profile = await googleRes.json();
         }
-        const profile = (await googleRes.json()) as any;
+
         if (profile.email_verified !== 'true' && profile.email_verified !== true) {
           throw new AppError(400, "L'adresse email Google n'a pas été certifiée par Google", 'EMAIL_NOT_VERIFIED');
         }
