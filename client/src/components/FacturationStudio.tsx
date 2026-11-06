@@ -130,6 +130,23 @@ function diffDaysISO(dateA: string, dateB: string): number {
   return Math.round((utc1 - utc2) / 86400000);
 }
 
+function extractDateParts(rawDate?: string | null): { year: string; month: string; day: string } | null {
+  if (!rawDate) return null;
+  const s = String(rawDate).trim();
+  if (s.includes('-')) {
+    const parts = s.slice(0, 10).split('-');
+    if (parts.length >= 3) {
+      return { year: parts[0], month: parts[1].padStart(2, '0'), day: parts[2].padStart(2, '0') };
+    }
+  } else if (s.includes('/')) {
+    const parts = s.split('/');
+    if (parts.length >= 3) {
+      return { year: parts[2].slice(0, 4), month: parts[1].padStart(2, '0'), day: parts[0].padStart(2, '0') };
+    }
+  }
+  return null;
+}
+
 export function FacturationStudio({
   devisList,
   interventionsList,
@@ -144,6 +161,11 @@ export function FacturationStudio({
   const [filterSegment, setFilterSegment] = useState<'ALL' | ClientSegmentType>('ALL');
   const [filterFlux, setFilterFlux] = useState<'ALL' | InterventionFluxType>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Filtres temporels : Jour, Mois, Année
+  const [filterYear, setFilterYear] = useState<string>('ALL');
+  const [filterMonth, setFilterMonth] = useState<string>('ALL');
+  const [filterDay, setFilterDay] = useState<string>('ALL');
 
   // Overrides manuels B2B / B2C par ID d'intervention
   const [segmentOverrides, setSegmentOverrides] = useState<Record<number, ClientSegmentType>>({});
@@ -508,11 +530,46 @@ export function FacturationStudio({
     };
   }, [enrichedDossiers]);
 
+  // Liste dynamique des années présentes
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const curYear = new Date().getFullYear();
+    years.add(String(curYear));
+    years.add(String(curYear - 1));
+    enrichedDossiers.forEach((d) => {
+      const parts = extractDateParts(
+        d.intervention.dateReelle ||
+        d.intervention.datePlanifiee ||
+        d.intervention.dateDebut ||
+        d.intervention.dateDemande ||
+        (d.intervention.createdAt ? String(d.intervention.createdAt).slice(0, 10) : '')
+      );
+      if (parts?.year) years.add(parts.year);
+    });
+    return Array.from(years).sort().reverse();
+  }, [enrichedDossiers]);
+
   const filteredDossiers = useMemo(() => {
     return enrichedDossiers.filter((d) => {
       if (filterCategory !== 'ALL' && d.category !== filterCategory) return false;
       if (filterSegment !== 'ALL' && d.segment !== filterSegment) return false;
       if (filterFlux !== 'ALL' && d.fluxType !== filterFlux) return false;
+
+      // Filtrage par jour, mois, année
+      if (filterYear !== 'ALL' || filterMonth !== 'ALL' || filterDay !== 'ALL') {
+        const parts = extractDateParts(
+          d.intervention.dateReelle ||
+          d.intervention.datePlanifiee ||
+          d.intervention.dateDebut ||
+          d.intervention.dateDemande ||
+          (d.intervention.createdAt ? String(d.intervention.createdAt).slice(0, 10) : '')
+        );
+        if (!parts) return false;
+        if (filterYear !== 'ALL' && parts.year !== filterYear) return false;
+        if (filterMonth !== 'ALL' && parts.month !== filterMonth) return false;
+        if (filterDay !== 'ALL' && parts.day !== filterDay.padStart(2, '0')) return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const hay = `${d.intervention.reference} ${d.intervention.client} ${d.intervention.chantier} ${d.intervention.objet} ${d.intervention.entreprise} ${d.intervention.numeroFacture || ''} ${d.linkedDevis?.reference || ''} ${d.fluxLabel} ${d.whyTitle} ${d.delayRootCause}`.toLowerCase();
@@ -520,7 +577,16 @@ export function FacturationStudio({
       }
       return true;
     });
-  }, [enrichedDossiers, filterCategory, filterSegment, filterFlux, searchQuery]);
+  }, [
+    enrichedDossiers,
+    filterCategory,
+    filterSegment,
+    filterFlux,
+    filterYear,
+    filterMonth,
+    filterDay,
+    searchQuery,
+  ]);
 
   const handleToggleFacture = async (dossier: EnrichedBillingDossier) => {
     const isBilled = dossier.intervention.statutFacture === 'Facturée';
@@ -908,6 +974,97 @@ Service Client & Facturation — ANELEC GROUPE`;
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+        </div>
+
+        {/* Barre de filtres temporels : Jour, Mois, Année */}
+        <div
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: '8px',
+            flexWrap: 'wrap',
+            paddingTop: '8px',
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+        >
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            📅 Filtre Temporel :
+          </span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            {/* Filtre Année */}
+            <select
+              className="select"
+              style={{ width: '130px', height: '32px', fontSize: '11.5px', padding: '2px 8px' }}
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              title="Filtrer par Année"
+            >
+              <option value="ALL">Année (Toutes)</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  Année {yr}
+                </option>
+              ))}
+            </select>
+
+            {/* Filtre Mois */}
+            <select
+              className="select"
+              style={{ width: '140px', height: '32px', fontSize: '11.5px', padding: '2px 8px' }}
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              title="Filtrer par Mois"
+            >
+              <option value="ALL">Mois (Tous)</option>
+              <option value="01">01 - Janvier</option>
+              <option value="02">02 - Février</option>
+              <option value="03">03 - Mars</option>
+              <option value="04">04 - Avril</option>
+              <option value="05">05 - Mai</option>
+              <option value="06">06 - Juin</option>
+              <option value="07">07 - Juillet</option>
+              <option value="08">08 - Août</option>
+              <option value="09">09 - Septembre</option>
+              <option value="10">10 - Octobre</option>
+              <option value="11">11 - Novembre</option>
+              <option value="12">12 - Décembre</option>
+            </select>
+
+            {/* Filtre Jour */}
+            <select
+              className="select"
+              style={{ width: '110px', height: '32px', fontSize: '11.5px', padding: '2px 8px' }}
+              value={filterDay}
+              onChange={(e) => setFilterDay(e.target.value)}
+              title="Filtrer par Jour"
+            >
+              <option value="ALL">Jour (Tous)</option>
+              {Array.from({ length: 31 }, (_, idx) => String(idx + 1).padStart(2, '0')).map((d) => (
+                <option key={d} value={d}>
+                  Jour {d}
+                </option>
+              ))}
+            </select>
+
+            {(filterYear !== 'ALL' || filterMonth !== 'ALL' || filterDay !== 'ALL') && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ height: '32px', padding: '2px 10px', fontSize: '11px', color: '#dc2626' }}
+                onClick={() => {
+                  setFilterYear('ALL');
+                  setFilterMonth('ALL');
+                  setFilterDay('ALL');
+                }}
+                title="Effacer le filtre temporel"
+              >
+                ✕ Effacer date ({filteredDossiers.length} résultat{filteredDossiers.length > 1 ? 's' : ''})
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

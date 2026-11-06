@@ -66,8 +66,13 @@ async function getCallerUser(req: Request) {
   if (!u || u.active === false) {
     throw new AppError(403, 'Compte désactivé ou inexistant', 'FORBIDDEN');
   }
-  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
-  const isAdmin = u.id === 1 || effectiveRole === 'ADMIN';
+  let hasAdminPerm = false;
+  try {
+    const p = u.permissionsJson ? JSON.parse(u.permissionsJson) : null;
+    if (p?.canManageUsers) hasAdminPerm = true;
+  } catch {}
+  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' || u.role === 'ADMIN' ? 'ADMIN' : u.role;
+  const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
   return { ...u, effectiveRole, isAdmin };
 }
 
@@ -151,6 +156,9 @@ adminRouter.put(
     if (!existing) {
       throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
     }
+    if (caller.id !== 1 && caller.companyId && existing.companyId && existing.companyId !== caller.companyId) {
+      throw new AppError(403, 'Accès non autorisé à cet utilisateur', 'FORBIDDEN');
+    }
 
     const updateData: any = {};
     if (name !== undefined) updateData.name = String(name).trim();
@@ -193,6 +201,13 @@ adminRouter.delete(
     const id = parseInt(req.params.id, 10);
     if (id === 1 || id === req.user?.userId) {
       throw new AppError(400, 'Impossible de supprimer le compte Super-Administrateur principal', 'FORBIDDEN');
+    }
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
+    }
+    if (caller.id !== 1 && caller.companyId && existing.companyId && existing.companyId !== caller.companyId) {
+      throw new AppError(403, 'Accès non autorisé à cet utilisateur', 'FORBIDDEN');
     }
     await prisma.user.delete({ where: { id } });
     res.json({ message: 'Compte utilisateur supprimé' });

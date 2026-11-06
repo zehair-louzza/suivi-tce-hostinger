@@ -27,7 +27,8 @@ referentielsRouter.get('/', async (req: Request, res: Response) => {
   };
 
   for (const r of rows) {
-    const key = r.categorie as keyof ReferentielsMap;
+    const rawCat = r.categorie === 'corpsEtat' ? 'corps_etat' : r.categorie;
+    const key = rawCat as keyof ReferentielsMap;
     if (key === 'technicien_competences') {
       try {
         const parsed = JSON.parse(r.valeurs);
@@ -75,7 +76,8 @@ referentielsRouter.get('/', async (req: Request, res: Response) => {
 
 // PUT /api/referentiels/:categorie - Met à jour une liste de choix, la matrice technicien_competences ou equipes_journalieres
 referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
-  const categorie = req.params.categorie as keyof ReferentielsMap;
+  const rawCat = req.params.categorie === 'corpsEtat' ? 'corps_etat' : req.params.categorie;
+  const categorie = rawCat as keyof ReferentielsMap;
   const companyId = req.user?.companyId || 1;
 
   if (categorie === 'technicien_competences') {

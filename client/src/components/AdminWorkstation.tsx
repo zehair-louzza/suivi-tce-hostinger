@@ -330,12 +330,23 @@ export function AdminWorkstation({
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div className="segmented-control drawer-subtabs-strip" style={{ maxWidth: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', maxWidth: '100%' }}>
+          <div
+            className="segmented-control drawer-subtabs-strip"
+            style={{
+              maxWidth: '100%',
+              overflowX: 'auto',
+              display: 'flex',
+              flexWrap: 'nowrap',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+            }}
+          >
             <button
               type="button"
               className={`segmented-btn ${subTab === 'users' ? 'active' : ''}`}
               onClick={() => setSubTab('users')}
+              style={{ flexShrink: 0 }}
             >
               <span className="desktop-only-el">Utilisateurs & Droits ({users.length})</span>
               <span className="mobile-only-el">Users ({users.length})</span>
@@ -344,6 +355,7 @@ export function AdminWorkstation({
               type="button"
               className={`segmented-btn ${subTab === 'roles_guide' ? 'active' : ''}`}
               onClick={() => setSubTab('roles_guide')}
+              style={{ flexShrink: 0 }}
             >
               <span className="desktop-only-el">Définition des Rôles & Droits</span>
               <span className="mobile-only-el">Rôles</span>
@@ -352,6 +364,7 @@ export function AdminWorkstation({
               type="button"
               className={`segmented-btn ${subTab === 'pointages' ? 'active' : ''}`}
               onClick={() => setSubTab('pointages')}
+              style={{ flexShrink: 0 }}
             >
               <span className="desktop-only-el">Pointages Matin / Soir Techniciens</span>
               <span className="mobile-only-el">Pointages</span>
@@ -360,7 +373,7 @@ export function AdminWorkstation({
               type="button"
               className={`segmented-btn ${subTab === 'rapports' ? 'active' : ''}`}
               onClick={() => setSubTab('rapports')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}
             >
               <span className="desktop-only-el">Déclarations & Rédaction Rapports ({declarationsList.length})</span>
               <span className="mobile-only-el">Rapports ({declarationsList.length})</span>
@@ -384,6 +397,7 @@ export function AdminWorkstation({
               type="button"
               className={`segmented-btn ${subTab === 'billing_rules' ? 'active' : ''}`}
               onClick={() => setSubTab('billing_rules')}
+              style={{ flexShrink: 0 }}
             >
               <span className="desktop-only-el">⚙️ Règles Facturation</span>
               <span className="mobile-only-el">⚙️ Règles</span>
@@ -396,6 +410,7 @@ export function AdminWorkstation({
                 color: subTab === 'danger_zone' ? '#dc2626' : '#ef4444',
                 fontWeight: 700,
                 borderColor: subTab === 'danger_zone' ? '#dc2626' : undefined,
+                flexShrink: 0,
               }}
             >
               <span className="desktop-only-el">⚠️ Zone Danger & Clôture</span>
@@ -406,6 +421,7 @@ export function AdminWorkstation({
           <button
             type="button"
             className="btn btn-primary btn-sm"
+            style={{ flexShrink: 0 }}
             onClick={() => {
               handleSelectRoleForCreate('CHIFFRAGE_DEVIS');
               setShowCreateModal(true);
@@ -486,7 +502,11 @@ export function AdminWorkstation({
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => openEditUserModal(u)}
+                        title="Cliquer pour modifier les permissions et droits"
+                      >
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', maxWidth: '380px' }}>
                           {perms.canManageUsers && <span className="badge badge-danger" style={{ fontSize: '10px' }}>Admin</span>}
                           {perms.canEditDevis && <span className="badge badge-info" style={{ fontSize: '10px' }}>Devis</span>}
@@ -496,8 +516,8 @@ export function AdminWorkstation({
                           {perms.canWriteReports && <span className="badge badge-success" style={{ fontSize: '10px' }}>Rapports</span>}
                           {perms.canManageBilling && <span className="badge badge-warning" style={{ fontSize: '10px' }}>Facturation</span>}
                           {perms.mobileOnly && <span className="badge badge-warning" style={{ fontSize: '10px' }}>📱 Mobile</span>}
-                          <span className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                            ({activePermCount} droits)
+                          <span className="font-mono" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 600 }}>
+                            ✏️ ({activePermCount} droits)
                           </span>
                         </div>
                       </td>
@@ -616,7 +636,7 @@ export function AdminWorkstation({
           SOUS-ONGLET 2 : DÉFINITION COMPLÈTE DES RÔLES & DROITS PAR INTERVENANT
          ===================================================================== */}
       {subTab === 'roles_guide' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', maxWidth: '100%' }}>
           {Object.values(ROLE_DEFINITIONS).map((r) => (
             <div
               key={r.code}
@@ -1463,7 +1483,7 @@ export function AdminWorkstation({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Mot de passe initial *</label>
                   <input
@@ -1520,7 +1540,7 @@ export function AdminWorkstation({
                 <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
                   Matrice des Droits de Modification (Personnalisable) :
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
                   {PERMISSION_LABELS.map((p) => (
                     <label
                       key={p.key}
@@ -1602,7 +1622,7 @@ export function AdminWorkstation({
               }}
               style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Rôle Métier ANELEC</label>
                   <select
@@ -1661,7 +1681,7 @@ export function AdminWorkstation({
                 <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
                   Permissions Granulaires Actives :
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
                   {PERMISSION_LABELS.map((p) => (
                     <label
                       key={p.key}

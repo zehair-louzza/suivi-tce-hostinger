@@ -60,6 +60,11 @@ export function RentabiliteKpiView({
   const [selectedPeriod, setSelectedPeriod] = useState<'ALL' | 'MONTH' | 'WEEK'>('ALL');
   // Filtre statut
   const [filterStatut, setFilterStatut] = useState<'ALL' | 'CLOTUREE'>('ALL');
+  // Filtres Année et Mois
+  const [filterYear, setFilterYear] = useState<string>('ALL');
+  const [filterMonth, setFilterMonth] = useState<string>('ALL');
+  // Métrique du graphe en bâtonnets
+  const [chartMetric, setChartMetric] = useState<'ca' | 'hours' | 'margin' | 'hourlyRevenue'>('ca');
   // Coût horaire moyen paramétrable (€/h chargé)
   const [hourlyCostParam, setHourlyCostParam] = useState<number>(35);
   // Tri du tableau des techniciens
@@ -72,12 +77,37 @@ export function RentabiliteKpiView({
   const today = useMemo(() => new Date(), []);
   const currentMonthPrefix = useMemo(() => today.toISOString().slice(0, 7), [today]);
 
+  // Liste des années disponibles
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const curYear = new Date().getFullYear();
+    years.add(String(curYear));
+    years.add(String(curYear - 1));
+    interventionsList.forEach((intv) => {
+      const rawDate = intv.datePlanifiee || intv.dateReelle || intv.dateDemande || (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '');
+      if (rawDate) {
+        const y = rawDate.slice(0, 4);
+        if (y && !isNaN(Number(y))) years.add(y);
+      }
+    });
+    return Array.from(years).sort().reverse();
+  }, [interventionsList]);
+
   // Filtrage des interventions par période
   const periodFilteredInterventions = useMemo(() => {
     return interventionsList.filter((intv) => {
       if (filterStatut === 'CLOTUREE') {
         const statut = intv.statutOperationnel || '';
         if (statut !== 'Clôturée' && statut !== 'Terminée - à valider') return false;
+      }
+
+      if (filterYear !== 'ALL' || filterMonth !== 'ALL') {
+        const rawDate = intv.datePlanifiee || intv.dateReelle || intv.dateDemande || (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '');
+        if (!rawDate) return false;
+        const y = rawDate.slice(0, 4);
+        const m = rawDate.length >= 7 ? rawDate.slice(5, 7) : '';
+        if (filterYear !== 'ALL' && y !== filterYear) return false;
+        if (filterMonth !== 'ALL' && m !== filterMonth) return false;
       }
 
       if (selectedPeriod === 'MONTH') {
@@ -91,7 +121,7 @@ export function RentabiliteKpiView({
       }
       return true;
     });
-  }, [interventionsList, filterStatut, selectedPeriod, currentMonthPrefix, today]);
+  }, [interventionsList, filterStatut, filterYear, filterMonth, selectedPeriod, currentMonthPrefix, today]);
 
   // Agrégation des KPI par Technicien
   const techniciensStats = useMemo<TechPerformanceStats[]>(() => {
@@ -435,6 +465,67 @@ export function RentabiliteKpiView({
               </button>
             </div>
 
+            {/* Filtre Année & Mois */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <select
+                className="select"
+                style={{ width: '120px', height: '32px', fontSize: '11.5px', padding: '2px 8px' }}
+                value={filterYear}
+                onChange={(e) => {
+                  setFilterYear(e.target.value);
+                  setSelectedPeriod('ALL');
+                }}
+                title="Filtrer par Année"
+              >
+                <option value="ALL">Année (Toutes)</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="select"
+                style={{ width: '130px', height: '32px', fontSize: '11.5px', padding: '2px 8px' }}
+                value={filterMonth}
+                onChange={(e) => {
+                  setFilterMonth(e.target.value);
+                  setSelectedPeriod('ALL');
+                }}
+                title="Filtrer par Mois"
+              >
+                <option value="ALL">Mois (Tous)</option>
+                <option value="01">01 - Janvier</option>
+                <option value="02">02 - Février</option>
+                <option value="03">03 - Mars</option>
+                <option value="04">04 - Avril</option>
+                <option value="05">05 - Mai</option>
+                <option value="06">06 - Juin</option>
+                <option value="07">07 - Juillet</option>
+                <option value="08">08 - Août</option>
+                <option value="09">09 - Septembre</option>
+                <option value="10">10 - Octobre</option>
+                <option value="11">11 - Novembre</option>
+                <option value="12">12 - Décembre</option>
+              </select>
+
+              {(filterYear !== 'ALL' || filterMonth !== 'ALL') && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ height: '32px', padding: '2px 8px', fontSize: '11px', color: '#dc2626' }}
+                  onClick={() => {
+                    setFilterYear('ALL');
+                    setFilterMonth('ALL');
+                  }}
+                  title="Réinitialiser filtres d'année et mois"
+                >
+                  ✕ Effacer date
+                </button>
+              )}
+            </div>
+
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -624,6 +715,184 @@ export function RentabiliteKpiView({
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
+
+      {/* =====================================================================
+          GRAPHE EN BÂTONNETS : PERFORMANCE & RENTABILITÉ DES TECHNICIENS
+         ===================================================================== */}
+      {activeViewTab === 'techniciens' && (
+        <div
+          className="pro-table-container"
+          style={{
+            padding: '16px 20px',
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                📊 Comparatif en Bâtonnets des Techniciens
+                <span className="font-mono" style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+                  ({filteredAndSortedTechniciens.length} technicien{filteredAndSortedTechniciens.length > 1 ? 's' : ''})
+                </span>
+              </h3>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
+                Visualisation comparative directe de la production, du temps passé sur site et de la rentabilité.
+              </p>
+            </div>
+
+            {/* Commutateur de métrique du graphe */}
+            <div className="segmented-control" style={{ flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={`segmented-btn ${chartMetric === 'ca' ? 'active' : ''}`}
+                onClick={() => setChartMetric('ca')}
+                style={{ fontSize: '11.5px', padding: '4px 10px' }}
+              >
+                💶 CA HT (€)
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${chartMetric === 'hours' ? 'active' : ''}`}
+                onClick={() => setChartMetric('hours')}
+                style={{ fontSize: '11.5px', padding: '4px 10px' }}
+              >
+                ⏱️ Heures Travaillées
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${chartMetric === 'hourlyRevenue' ? 'active' : ''}`}
+                onClick={() => setChartMetric('hourlyRevenue')}
+                style={{ fontSize: '11.5px', padding: '4px 10px' }}
+              >
+                ⚡ Débit Horaire (€/h)
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn ${chartMetric === 'margin' ? 'active' : ''}`}
+                onClick={() => setChartMetric('margin')}
+                style={{ fontSize: '11.5px', padding: '4px 10px' }}
+              >
+                📈 Marge Estimée (€)
+              </button>
+            </div>
+          </div>
+
+          {/* Visualisation en barres horizontales ultra lisible sur PC et mobile */}
+          {filteredAndSortedTechniciens.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>
+              Aucune donnée pour la période sélectionnée.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(() => {
+                const getVal = (t: TechPerformanceStats) => {
+                  if (chartMetric === 'ca') return t.totalMontantHT;
+                  if (chartMetric === 'hours') return t.totalRealHours;
+                  if (chartMetric === 'hourlyRevenue') return t.hourlyRevenueHT;
+                  return Math.max(0, t.estimatedMarginHT);
+                };
+                const maxVal = Math.max(...filteredAndSortedTechniciens.map(getVal), 1);
+
+                return filteredAndSortedTechniciens.map((tech, idx) => {
+                  const val = getVal(tech);
+                  const pct = Math.min(100, Math.max(5, Math.round((val / maxVal) * 100)));
+
+                  let barColor = 'linear-gradient(90deg, #2563eb, #3b82f6)';
+                  let formattedVal = '';
+                  if (chartMetric === 'ca') {
+                    barColor = 'linear-gradient(90deg, #0284c7, #38bdf8)';
+                    formattedVal = `${formatCurrency(tech.totalMontantHT)} HT`;
+                  } else if (chartMetric === 'hours') {
+                    barColor = 'linear-gradient(90deg, #7c3aed, #a855f7)';
+                    formattedVal = `${tech.totalRealHours}h réelles (${tech.totalPlannedHours}h prévues)`;
+                  } else if (chartMetric === 'hourlyRevenue') {
+                    barColor = tech.hourlyRevenueHT >= 65
+                      ? 'linear-gradient(90deg, #059669, #10b981)'
+                      : 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+                    formattedVal = `${tech.hourlyRevenueHT} € HT / heure`;
+                  } else {
+                    barColor = tech.estimatedMarginHT >= 0
+                      ? 'linear-gradient(90deg, #059669, #34d399)'
+                      : 'linear-gradient(90deg, #dc2626, #f87171)';
+                    formattedVal = `${formatCurrency(tech.estimatedMarginHT)} HT (${tech.marginRate}%)`;
+                  }
+
+                  return (
+                    <div
+                      key={tech.technicien}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '5px',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontSize: '12px' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: idx === 0 ? '#fef3c7' : '#e2e8f0',
+                              color: idx === 0 ? '#b45309' : '#475569',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10.5px',
+                              fontWeight: 800,
+                            }}
+                          >
+                            {idx + 1}
+                          </span>
+                          {tech.technicien}
+                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>
+                            • {tech.clotureesCount} mission{tech.clotureesCount > 1 ? 's' : ''} clôturée{tech.clotureesCount > 1 ? 's' : ''}
+                          </span>
+                        </span>
+
+                        <span className="font-mono" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '12.5px' }}>
+                          {formattedVal}
+                        </span>
+                      </div>
+
+                      {/* Barre en bâtonnet */}
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '14px',
+                          background: '#e2e8f0',
+                          borderRadius: '999px',
+                          overflow: 'hidden',
+                          position: 'relative',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${pct}%`,
+                            height: '100%',
+                            background: barColor,
+                            borderRadius: '999px',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* =====================================================================
           4. VUE A : TABLEAU COMPARATIF DÉTAILLÉ PAR TECHNICIEN

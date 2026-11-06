@@ -194,6 +194,56 @@ export function DashboardPage() {
   const responsablesList = refs.responsables?.length ? refs.responsables : DEFAULT_REFERENTIELS.responsables;
   const corpsEtatList = refs.corps_etat?.length ? refs.corps_etat : DEFAULT_REFERENTIELS.corps_etat;
   const originesList = refs.origines?.length ? refs.origines : DEFAULT_REFERENTIELS.origines;
+  const clientsList = refs.clients?.length ? refs.clients : DEFAULT_REFERENTIELS.clients;
+
+  // Actions dynamiques sur les référentiels
+  const handleDeleteRefValue = async (category: string, valueToRemove: string) => {
+    if (!window.confirm(`Supprimer « ${valueToRemove} » de la catégorie ${category} ?`)) return;
+    const rawVals = (refs as any)[category] || [];
+    const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
+    const nextVals = currentVals.filter((v) => v !== valueToRemove);
+    try {
+      await referentielsApi.updateCategory(category as any, nextVals);
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+      toast.success(`« ${valueToRemove} » supprimé du référentiel`);
+    } catch {
+      toast.error('Erreur lors de la suppression');
+    }
+  };
+
+  const handleInlineAddRef = async (category: string, newValue: string) => {
+    const trimmed = newValue.trim();
+    if (!trimmed) return;
+    const rawVals = (refs as any)[category] || [];
+    const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
+    if (currentVals.includes(trimmed)) {
+      toast('Cette valeur existe déjà dans cette catégorie', { icon: 'ℹ️' });
+      return;
+    }
+    try {
+      await referentielsApi.updateCategory(category as any, [...currentVals, trimmed]);
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+      toast.success(`« ${trimmed} » ajouté au référentiel`);
+    } catch {
+      toast.error("Erreur lors de l'ajout");
+    }
+  };
+
+  const handleEditRefValue = async (category: string, oldValue: string) => {
+    const updated = window.prompt(`Modifier la valeur :`, oldValue);
+    if (!updated || updated.trim() === oldValue.trim()) return;
+    const trimmed = updated.trim();
+    const rawVals = (refs as any)[category] || [];
+    const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
+    const nextVals = currentVals.map((v) => (v === oldValue ? trimmed : v));
+    try {
+      await referentielsApi.updateCategory(category as any, nextVals);
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+      toast.success(`Valeur mise à jour : « ${trimmed} »`);
+    } catch {
+      toast.error('Erreur lors de la modification');
+    }
+  };
 
   // Mutations
   const createDevisMut = useMutation({
@@ -1740,36 +1790,137 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', maxWidth: '100%' }}>
               {[
-                { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList },
-                { key: 'responsables', label: 'Responsables Internes', items: responsablesList },
-                { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList },
-                { key: 'origines', label: 'Origines de demande', items: originesList },
-                { key: 'statuts_devis', label: 'Statuts Commerciaux Devis', items: [...STATUTS_COMMERCIAUX_DEVIS] },
-                { key: 'statuts_intv', label: 'Statuts Opérationnels Interventions', items: [...STATUTS_OPERATIONNELS_INTERVENTION] },
+                { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList, editable: true, itemSingular: 'technicien' },
+                { key: 'responsables', label: 'Responsables Internes', items: responsablesList, editable: true, itemSingular: 'responsable' },
+                { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList, editable: true, itemSingular: "corps d'état" },
+                { key: 'clients', label: 'Clients Récurrents', items: clientsList, editable: true, itemSingular: 'client' },
+                { key: 'origines', label: 'Origines de demande', items: originesList, editable: true, itemSingular: 'origine' },
+                { key: 'statuts_devis', label: 'Statuts Commerciaux Devis (Fixes)', items: [...STATUTS_COMMERCIAUX_DEVIS], editable: false, itemSingular: '' },
+                { key: 'statuts_intv', label: 'Statuts Opérationnels (Fixes)', items: [...STATUTS_OPERATIONNELS_INTERVENTION], editable: false, itemSingular: '' },
               ].map((group) => (
-                <div key={group.key} className="pro-table-container" style={{ padding: '14px' }}>
-                  <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', color: '#60a5fa' }}>
-                    {group.label} ({group.items.length})
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {group.items.map((val) => (
+                <div
+                  key={group.key}
+                  className="pro-table-container"
+                  style={{
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#1e293b' }}>
+                        {group.label}
+                      </span>
                       <span
-                        key={val}
+                        className="font-mono"
                         style={{
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border-default)',
-                          fontSize: '12px',
-                          fontWeight: 500,
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          border: '1px solid #e2e8f0',
                         }}
                       >
-                        {val}
+                        {group.items.length}
                       </span>
-                    ))}
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {group.items.map((val) => (
+                        <div
+                          key={val}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            background: '#f8fafc',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '7px',
+                            padding: '3px 8px',
+                            fontSize: '12px',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span
+                            style={{
+                              cursor: group.editable ? 'pointer' : 'default',
+                              fontWeight: 600,
+                              color: '#1e293b',
+                            }}
+                            title={group.editable ? 'Cliquer pour modifier ou renommer' : val}
+                            onClick={() => {
+                              if (group.editable) handleEditRefValue(group.key, val);
+                            }}
+                          >
+                            {val}
+                          </span>
+
+                          {group.editable && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteRefValue(group.key, val);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#94a3b8',
+                                cursor: 'pointer',
+                                padding: '0 2px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                lineHeight: 1,
+                              }}
+                              title={`Supprimer « ${val} » du référentiel`}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
+                  {group.editable && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const input = e.currentTarget.elements.namedItem('inlineVal') as HTMLInputElement;
+                        const v = input?.value?.trim();
+                        if (v) {
+                          handleInlineAddRef(group.key, v);
+                          input.value = '';
+                        }
+                      }}
+                      style={{ display: 'flex', gap: '6px', marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}
+                    >
+                      <input
+                        name="inlineVal"
+                        type="text"
+                        className="input"
+                        placeholder={`+ Ajouter un ${group.itemSingular}...`}
+                        style={{ height: '30px', fontSize: '11.5px', padding: '2px 8px', flex: 1 }}
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}
+                      >
+                        + Ajouter
+                      </button>
+                    </form>
+                  )}
                 </div>
               ))}
             </div>
