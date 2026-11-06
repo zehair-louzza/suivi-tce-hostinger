@@ -63,6 +63,9 @@ interface PlanningBoardProps {
   onOpenDevisDrawer: (devis: Devis) => void;
   onOpenInterventionDrawer: (intervention: Intervention) => void;
   onCreateQuickIntervention?: (payload: Partial<Intervention>) => Promise<void>;
+  onDeleteDevis?: (devisId: number) => Promise<void>;
+  onDeleteIntervention?: (interventionId: number) => Promise<void>;
+  onNavigateToRentabilite?: () => void;
   technicienCompetences?: Record<string, string[]>;
   corpsEtatList?: string[];
   onUpdateCompetences?: (competences: Record<string, string[]>) => Promise<void>;
@@ -139,6 +142,9 @@ export function PlanningBoard({
   onOpenDevisDrawer,
   onOpenInterventionDrawer,
   onCreateQuickIntervention,
+  onDeleteDevis,
+  onDeleteIntervention,
+  onNavigateToRentabilite,
   technicienCompetences = DEFAULT_TECHNICIEN_COMPETENCES,
   corpsEtatList = DEFAULT_REFERENTIELS.corps_etat,
   onUpdateCompetences,
@@ -147,6 +153,10 @@ export function PlanningBoard({
 }: PlanningBoardProps) {
   const [skillsModalOpen, setSkillsModalOpen] = useState(false);
   const [customSkillInputs, setCustomSkillInputs] = useState<Record<string, string>>({});
+
+  // Modale de suppression / déplanification
+  const [slotToDelete, setSlotToDelete] = useState<PlanningSlotItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // ==========================================================================
   // ÉQUIPES JOURNALIÈRES (Curseur Souris Drag & Drop + Option dépliante + Dates + Heures)
@@ -1291,6 +1301,18 @@ export function PlanningBoard({
             </svg>
             Auto-Planifier ({unscheduledItems.length})
           </button>
+
+          {onNavigateToRentabilite && (
+            <button
+              type="button"
+              onClick={onNavigateToRentabilite}
+              className="btn btn-secondary btn-sm"
+              style={{ color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}
+              title="Consulter les KPI de rentabilité des techniciens et équipes"
+            >
+              📊 Rentabilité & Marges →
+            </button>
+          )}
         </div>
       </div>
 
@@ -1409,6 +1431,31 @@ export function PlanningBoard({
                   }
                 >
                   Ouvrir fiche
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)' }}
+                  title="Retirer ce créneau du planning et le renvoyer dans la liste d'attente à planifier"
+                  onClick={async () => {
+                    await applySlotSchedule(selectedSlot, {
+                      date: null,
+                      statut: 'À planifier',
+                    });
+                    setSelectedSlotId(null);
+                    setSliderPreview(null);
+                  }}
+                >
+                  ↩️ Déplanifier
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ color: '#dc2626', borderColor: 'rgba(220, 38, 38, 0.4)' }}
+                  title="Supprimer définitivement cette intervention ou devis"
+                  onClick={() => setSlotToDelete(selectedSlot)}
+                >
+                  🗑️ Supprimer
                 </button>
                 <button
                   type="button"
@@ -3078,6 +3125,28 @@ export function PlanningBoard({
                                       <span className="font-mono" style={{ fontSize: '10px', opacity: 0.85 }}>
                                         {slot.reference}
                                       </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSlotToDelete(slot);
+                                        }}
+                                        title="Options de suppression / déplanification"
+                                        style={{
+                                          background: 'rgba(0,0,0,0.25)',
+                                          border: 'none',
+                                          borderRadius: '3px',
+                                          cursor: 'pointer',
+                                          padding: '1px 3px',
+                                          color: '#ffffff',
+                                          opacity: 0.85,
+                                          fontSize: '10px',
+                                          lineHeight: 1,
+                                          marginLeft: 'auto',
+                                        }}
+                                      >
+                                        🗑️
+                                      </button>
                                     </>
                                   )}
                                   {hasConflict && (
@@ -3436,8 +3505,31 @@ export function PlanningBoard({
                                 height: `${heightPx}px`,
                               }}
                             >
-                              <div className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700 }}>
-                                {slot.heureDebut}–{slot.heureFin} • {slot.reference}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                                <div className="font-mono" style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                                  {slot.heureDebut}–{slot.heureFin} • {slot.reference}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSlotToDelete(slot);
+                                  }}
+                                  title="Options de suppression / déplanification"
+                                  style={{
+                                    background: 'rgba(0,0,0,0.25)',
+                                    border: 'none',
+                                    borderRadius: '3px',
+                                    cursor: 'pointer',
+                                    padding: '1px 3px',
+                                    color: '#ffffff',
+                                    opacity: 0.85,
+                                    fontSize: '10px',
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  🗑️
+                                </button>
                               </div>
                               <div style={{ fontWeight: 700, fontSize: '11.5px' }}>{slot.client}</div>
                               <div style={{ fontSize: '10.5px', opacity: 0.85 }}>{slot.title}</div>
@@ -3759,6 +3851,143 @@ export function PlanningBoard({
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
               <button type="button" className="btn btn-primary" onClick={() => setSkillsModalOpen(false)}>
                 Terminé
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE DE CONFIRMATION SUPPRESSION / DÉPLANIFICATION */}
+      {slotToDelete && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => {
+            if (!isDeleting) setSlotToDelete(null);
+          }}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '520px', padding: '24px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  flexShrink: 0,
+                }}
+              >
+                🗑️
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Gérer / Supprimer le créneau
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  {slotToDelete.sourceType === 'DEVIS' ? 'Visite / Devis' : 'Intervention'} :{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>{slotToDelete.reference}</strong> — {slotToDelete.client}
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                  Planifié le {slotToDelete.date || 'Date non définie'} ({slotToDelete.heureDebut} - {slotToDelete.heureFin}) avec {slotToDelete.technicien || 'Non affecté'}.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '18px',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}
+            >
+              💡 <strong>Deux choix s'offrent à vous :</strong>
+              <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                <li><strong>Déplanifier uniquement</strong> : Conserve le dossier intact dans la base et le renvoie en liste d'attente à planifier ultérieurement.</li>
+                <li><strong>Supprimer définitivement</strong> : Efface irréversiblement ce dossier de l'application et de la base de données.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={isDeleting}
+                onClick={() => setSlotToDelete(null)}
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={isDeleting}
+                style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)' }}
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    await applySlotSchedule(slotToDelete, {
+                      date: null,
+                      statut: 'À planifier',
+                    });
+                    if (selectedSlotId === slotToDelete.id) {
+                      setSelectedSlotId(null);
+                      setSliderPreview(null);
+                    }
+                    setSlotToDelete(null);
+                  } catch (err) {
+                    console.error('Erreur déplanification:', err);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+              >
+                ↩️ Déplanifier uniquement
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={isDeleting}
+                style={{ background: '#dc2626', color: '#ffffff', border: 'none', fontWeight: 700 }}
+                onClick={async () => {
+                  try {
+                    setIsDeleting(true);
+                    if (slotToDelete.sourceType === 'DEVIS') {
+                      if (onDeleteDevis) {
+                        await onDeleteDevis(slotToDelete.sourceId);
+                      }
+                    } else {
+                      if (onDeleteIntervention) {
+                        await onDeleteIntervention(slotToDelete.sourceId);
+                      }
+                    }
+                    if (selectedSlotId === slotToDelete.id) {
+                      setSelectedSlotId(null);
+                      setSliderPreview(null);
+                    }
+                    setSlotToDelete(null);
+                  } catch (err) {
+                    console.error('Erreur suppression:', err);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+              >
+                {isDeleting ? 'Suppression...' : '🗑️ Supprimer définitivement'}
               </button>
             </div>
           </div>

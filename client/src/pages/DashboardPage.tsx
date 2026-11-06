@@ -24,6 +24,7 @@ import {
 import { Layout, AppSection } from '../components/Layout';
 import { PlanningBoard } from '../components/PlanningBoard';
 import { FacturationStudio } from '../components/FacturationStudio';
+import { RentabiliteKpiView } from '../components/RentabiliteKpiView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
@@ -47,6 +48,7 @@ export function DashboardPage() {
     if (pathname.startsWith('/devis')) return 'devis';
     if (pathname.startsWith('/interventions')) return 'interventions';
     if (pathname.startsWith('/facturation')) return 'facturation';
+    if (pathname.startsWith('/rentabilite')) return 'rentabilite';
     if (pathname.startsWith('/referentiels')) return 'referentiels';
     if (pathname.startsWith('/admin')) return 'admin';
     if (pathname.startsWith('/mobile')) return 'mobile_tech';
@@ -78,6 +80,7 @@ export function DashboardPage() {
       devis: '/devis',
       interventions: '/interventions',
       facturation: '/facturation',
+      rentabilite: '/rentabilite',
       referentiels: '/referentiels',
       admin: '/admin',
       mobile_tech: '/mobile',
@@ -238,6 +241,28 @@ export function DashboardPage() {
       }
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur mise à jour intervention'),
+  });
+
+  const deleteDevisMut = useMutation({
+    mutationFn: (id: number) => devisApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devis'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      toast.success('Devis supprimé avec succès');
+      if (selectedDevis) setSelectedDevis(null);
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur lors de la suppression du devis'),
+  });
+
+  const deleteIntvMut = useMutation({
+    mutationFn: (id: number) => interventionApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      queryClient.invalidateQueries({ queryKey: ['devis'] });
+      toast.success('Intervention supprimée avec succès');
+      if (selectedIntv) setSelectedIntv(null);
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur lors de la suppression de l\'intervention'),
   });
 
   // =========================================================================
@@ -1311,6 +1336,13 @@ export function DashboardPage() {
           onCreateQuickIntervention={async (payload) => {
             await createIntvMut.mutateAsync(payload);
           }}
+          onDeleteDevis={async (id) => {
+            await deleteDevisMut.mutateAsync(id);
+          }}
+          onDeleteIntervention={async (id) => {
+            await deleteIntvMut.mutateAsync(id);
+          }}
+          onNavigateToRentabilite={() => handleSectionChange('rentabilite')}
         />
       )}
 
@@ -1891,6 +1923,22 @@ export function DashboardPage() {
           onOpenPhotoLightbox={(photos, idx) => {
             setLightboxPhotos(photos);
             setLightboxIndex(idx);
+          }}
+        />
+      )}
+
+      {/* =====================================================================
+          SECTION 4C : ANALYSE DE RENTABILITÉ TECHNICIENS & ÉQUIPES TCE
+         ===================================================================== */}
+      {activeSection === 'rentabilite' && (
+        <RentabiliteKpiView
+          interventionsList={interventionsList}
+          devisList={devisList}
+          techniciens={techniciensList}
+          onNavigateToPlanning={() => handleSectionChange('planning')}
+          onOpenInterventionDrawer={(intv) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(intv);
           }}
         />
       )}

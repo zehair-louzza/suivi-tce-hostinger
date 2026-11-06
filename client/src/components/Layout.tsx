@@ -11,6 +11,7 @@ export type AppSection =
   | 'devis'
   | 'interventions'
   | 'facturation'
+  | 'rentabilite'
   | 'referentiels'
   | 'admin'
   | 'mobile_tech';
@@ -177,10 +178,23 @@ export function Layout({
       ),
     },
     {
+      id: 'rentabilite',
+      label: 'Rentabilité & Équipes',
+      subtitle: 'KPIs Techniciens & Marges',
+      shortcut: '6',
+      icon: (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      ),
+    },
+    {
       id: 'referentiels',
       label: 'Référentiels Métier',
       subtitle: 'Équipes & paramètres',
-      shortcut: '6',
+      shortcut: '7',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="3" />
@@ -194,7 +208,7 @@ export function Layout({
       subtitle: 'Droits, Pointages & Rapports',
       badge: badges?.admin,
       urgent: (badges?.admin || 0) > 0,
-      shortcut: '7',
+      shortcut: '8',
       icon: (
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -565,6 +579,10 @@ export function Layout({
                   ? 'Devis'
                   : item.id === 'interventions'
                   ? 'Travaux'
+                  : item.id === 'facturation'
+                  ? 'Factures'
+                  : item.id === 'rentabilite'
+                  ? 'Rentabilité'
                   : item.id === 'admin'
                   ? 'Admin'
                   : item.id === 'mobile_tech'
