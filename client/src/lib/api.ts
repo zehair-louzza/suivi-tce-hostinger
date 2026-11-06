@@ -23,6 +23,7 @@ import {
   EquipeJournaliere,
   ClientProfile,
   ClientProfileType,
+  ClientServiceContact,
   DEFAULT_CLIENT_PROFILES,
   SendReportEmailPayload,
   STATUTS_COMMERCIAUX_DEVIS,
@@ -47,6 +48,7 @@ export type {
   EquipeJournaliere,
   ClientProfile,
   ClientProfileType,
+  ClientServiceContact,
   SendReportEmailPayload,
 };
 export {

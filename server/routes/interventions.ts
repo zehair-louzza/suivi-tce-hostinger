@@ -654,7 +654,13 @@ interventionRouter.post(
     }
 
     const { toEmail, ccEmail, subject, customMessage, rapportFinal, includePhotos } = req.body || {};
-    if (!toEmail || typeof toEmail !== 'string' || !toEmail.includes('@')) {
+    const rawTo = String(toEmail || '').trim();
+    const validEmails = rawTo
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.includes('@'));
+
+    if (validEmails.length === 0) {
       throw new AppError(
         400,
         "Une adresse e-mail de destinataire valide est obligatoire pour l'envoi du rapport",
@@ -675,7 +681,7 @@ interventionRouter.post(
 
     // Envoi sécurisé via emailService (Zoho Mail ou simulation sécurisée)
     const emailSent = await sendInterventionReportEmail({
-      toEmail: String(toEmail).trim().toLowerCase(),
+      toEmail: validEmails.join(', '),
       ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
       subject: subject || `[RAPPORT INTERVENTION] ${transformed.reference} • ${transformed.client} • ${transformed.chantier}`,
       customMessage: customMessage || undefined,

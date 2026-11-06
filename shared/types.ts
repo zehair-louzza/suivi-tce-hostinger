@@ -18,6 +18,21 @@ export const DEFAULT_CLIENTS = [
 
 export type ClientProfileType = 'DONNEUR_ORDRE' | 'ENTREPRISE' | 'PARTICULIER' | 'SOUS_TRAITANT';
 
+/**
+ * Service / Département interne d'un client ou donneur d'ordre avec email dédié
+ */
+export interface ClientServiceContact {
+  id: string;
+  nomService: string; // ex: "Service Travaux & Technique", "Comptabilité & Facturation", "Gestionnaire / Exploitation", etc.
+  email: string; // ex: "travaux@client.fr"
+  contactNom?: string; // ex: "M. Thomas Leroy"
+  contactRole?: string; // ex: "Responsable Technique"
+  telephone?: string; // ex: "01 42 68 55 10"
+  recevoirRapports?: boolean; // Reçoit les rapports d'intervention par défaut
+  recevoirFactures?: boolean; // Reçoit les factures
+  recevoirDevis?: boolean; // Reçoit les devis
+}
+
 export interface ClientProfile {
   id: string;
   nom: string;
@@ -34,6 +49,7 @@ export interface ClientProfile {
   tauxHoraireNegocie?: number;
   consignesParticulieres?: string;
   notesInternes?: string;
+  services?: ClientServiceContact[]; // Multiples services et adresses email de l'entreprise
   active: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -55,6 +71,37 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '45 jours fin de mois',
     tauxHoraireNegocie: 58,
     consignesParticulieres: 'Validation contradictoire obligatoire sur site. Rapport complet avec photos Avant/Après à transmettre sous 48h maximum.',
+    services: [
+      {
+        id: 'srv-pm-travaux',
+        nomService: 'Service Travaux & Maintenance',
+        email: 'travaux@prestamaintenance.fr',
+        contactNom: 'M. Thomas Leroy',
+        contactRole: 'Conducteur d’Opérations',
+        telephone: '01 42 68 55 01',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-pm-compta',
+        nomService: 'Comptabilité & Facturation',
+        email: 'facturation@prestamaintenance.fr',
+        contactNom: 'Mme Claire Valette',
+        contactRole: 'Responsable Comptable Fournisseurs',
+        telephone: '01 42 68 55 05',
+        recevoirFactures: true,
+        recevoirRapports: false,
+      },
+      {
+        id: 'srv-pm-direction',
+        nomService: 'Direction Technique & Exploitation',
+        email: 'direction@prestamaintenance.fr',
+        contactNom: 'M. Marc Delorme',
+        contactRole: 'Directeur Général Adjoint',
+        telephone: '01 42 68 55 00',
+        recevoirRapports: true,
+      },
+    ],
     active: true,
   },
   {
@@ -72,6 +119,25 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '30 jours fin de mois',
     tauxHoraireNegocie: 60,
     consignesParticulieres: "Mentionner impérativement les heures réelles d'arrivée et départ du technicien sur le bon d'attachement.",
+    services: [
+      {
+        id: 'srv-plr-tech',
+        nomService: 'Pôle Technique Régional',
+        email: 'agence.larochelle@presta.fr',
+        contactNom: 'Mme Sophie Martin',
+        contactRole: 'Conductrice Travaux Charente-Maritime',
+        telephone: '05 46 00 12 35',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-plr-compta',
+        nomService: 'Comptabilité Régionale',
+        email: 'compta.larochelle@presta.fr',
+        contactNom: 'Pôle Factures Agences',
+        recevoirFactures: true,
+      },
+    ],
     active: true,
   },
   {
@@ -89,6 +155,24 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '30 jours',
     tauxHoraireNegocie: 55,
     consignesParticulieres: 'Photos Avant et Après obligatoires sur chaque tâche réalisée. Rapport par email à adresser à dispatch@c-multiserv.com.',
+    services: [
+      {
+        id: 'srv-cms-dispatch',
+        nomService: "Cellule Dispatch & Rapports d'Activité",
+        email: 'dispatch@c-multiserv.com',
+        contactNom: 'Centre de Gestion National',
+        telephone: '01 84 19 22 11',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-cms-facturation',
+        nomService: 'Facturation & Règlements Fournisseurs',
+        email: 'facturation@c-multiserv.com',
+        telephone: '01 84 19 22 15',
+        recevoirFactures: true,
+      },
+    ],
     active: true,
   },
   {
@@ -106,6 +190,24 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '45 jours fin de mois',
     tauxHoraireNegocie: 62,
     consignesParticulieres: 'Rapport technique avec détail des pièces et fournitures posées.',
+    services: [
+      {
+        id: 'srv-gms-travaux',
+        nomService: 'Pôle Suivi de Travaux & Rapports',
+        email: 'interventions@gms-services.fr',
+        contactNom: 'M. Antoine Garnier',
+        telephone: '01 53 10 40 71',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-gms-compta',
+        nomService: 'Service Comptabilité Clients/Fournisseurs',
+        email: 'compta@gms-services.fr',
+        telephone: '01 53 10 40 75',
+        recevoirFactures: true,
+      },
+    ],
     active: true,
   },
   {
@@ -123,6 +225,23 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '45 jours',
     tauxHoraireNegocie: 59,
     consignesParticulieres: "Envoi systématique du compte rendu technique dès signature du bon d'intervention.",
+    services: [
+      {
+        id: 'srv-ema-ops',
+        nomService: 'Service Exploitation & Conduite d’Activité',
+        email: 'operations@emalec.com',
+        contactNom: 'M. Nicolas Perrin',
+        telephone: '04 72 26 80 02',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-ema-factures',
+        nomService: 'Pôle Facturation & Dépenses Sous-Traitance',
+        email: 'factures@emalec.com',
+        recevoirFactures: true,
+      },
+    ],
     active: true,
   },
   {
@@ -140,6 +259,29 @@ export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
     delaiPaiement: '30 jours',
     tauxHoraireNegocie: 65,
     consignesParticulieres: 'Devis complémentaire requis si dépassement de la commande initiale.',
+    services: [
+      {
+        id: 'srv-ipc-tech',
+        nomService: 'Direction Technique & Rapports de Chantier',
+        email: 'technique@ipc-groupe.fr',
+        contactNom: 'M. Laurent Mercier',
+        telephone: '01 40 12 34 57',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-ipc-be',
+        nomService: "Bureau d'Études & Devis",
+        email: 'devis@ipc-groupe.fr',
+        recevoirDevis: true,
+      },
+      {
+        id: 'srv-ipc-compta',
+        nomService: 'Comptabilité Fournisseurs',
+        email: 'compta@ipc-groupe.fr',
+        recevoirFactures: true,
+      },
+    ],
     active: true,
   },
   {

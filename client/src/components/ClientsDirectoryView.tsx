@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ClientProfile, ClientProfileType } from '../lib/api';
+import { ClientProfile, ClientProfileType, ClientServiceContact } from '../lib/api';
 import toast from 'react-hot-toast';
 
 interface ClientsDirectoryViewProps {
@@ -65,13 +65,92 @@ export function ClientsDirectoryView({
       tauxHoraireNegocie: 60,
       consignesParticulieres: '',
       notesInternes: '',
+      services: [
+        {
+          id: `srv-travaux-${Date.now()}`,
+          nomService: 'Service Travaux & Technique',
+          email: '',
+          recevoirRapports: true,
+          recevoirDevis: true,
+        },
+        {
+          id: `srv-compta-${Date.now()}`,
+          nomService: 'Comptabilité & Facturation',
+          email: '',
+          recevoirFactures: true,
+          recevoirRapports: false,
+        },
+      ],
       active: true,
     });
   };
 
   const handleOpenEdit = (profile: ClientProfile) => {
     setIsCreating(false);
-    setEditingProfile({ ...profile });
+    setEditingProfile({
+      ...profile,
+      services: profile.services ? [...profile.services] : [],
+    });
+  };
+
+  const handleAddService = (preset?: 'travaux' | 'compta' | 'gestion' | 'autre') => {
+    if (!editingProfile) return;
+    const currentServices = editingProfile.services || [];
+    let newService: ClientServiceContact;
+    const id = `srv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+    if (preset === 'travaux') {
+      newService = {
+        id,
+        nomService: 'Service Travaux & Technique',
+        email: '',
+        contactRole: 'Responsable Opérations',
+        recevoirRapports: true,
+        recevoirDevis: true,
+      };
+    } else if (preset === 'compta') {
+      newService = {
+        id,
+        nomService: 'Comptabilité & Facturation',
+        email: '',
+        contactRole: 'Comptable Fournisseurs',
+        recevoirFactures: true,
+        recevoirRapports: false,
+      };
+    } else if (preset === 'gestion') {
+      newService = {
+        id,
+        nomService: 'Gestionnaire / Syndic / Exploitation',
+        email: '',
+        contactRole: 'Gestionnaire Technique',
+        recevoirRapports: true,
+      };
+    } else {
+      newService = {
+        id,
+        nomService: 'Nouveau Service',
+        email: '',
+        recevoirRapports: true,
+      };
+    }
+
+    setEditingProfile({
+      ...editingProfile,
+      services: [...currentServices, newService],
+    });
+  };
+
+  const handleUpdateService = (index: number, updates: Partial<ClientServiceContact>) => {
+    if (!editingProfile || !editingProfile.services) return;
+    const nextServices = [...editingProfile.services];
+    nextServices[index] = { ...nextServices[index], ...updates };
+    setEditingProfile({ ...editingProfile, services: nextServices });
+  };
+
+  const handleRemoveService = (index: number) => {
+    if (!editingProfile || !editingProfile.services) return;
+    const nextServices = editingProfile.services.filter((_, idx) => idx !== index);
+    setEditingProfile({ ...editingProfile, services: nextServices });
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -100,6 +179,19 @@ export function ClientsDirectoryView({
         tauxHoraireNegocie: editingProfile.tauxHoraireNegocie ? Number(editingProfile.tauxHoraireNegocie) : undefined,
         consignesParticulieres: (editingProfile.consignesParticulieres || '').trim(),
         notesInternes: (editingProfile.notesInternes || '').trim(),
+        services: (editingProfile.services || [])
+          .filter((s) => s.nomService?.trim() || s.email?.trim())
+          .map((s, idx) => ({
+            id: s.id || `srv-${idx}-${Date.now()}`,
+            nomService: (s.nomService || 'Service').trim(),
+            email: (s.email || '').trim().toLowerCase(),
+            contactNom: (s.contactNom || '').trim() || undefined,
+            contactRole: (s.contactRole || '').trim() || undefined,
+            telephone: (s.telephone || '').trim() || undefined,
+            recevoirRapports: s.recevoirRapports !== false,
+            recevoirFactures: Boolean(s.recevoirFactures),
+            recevoirDevis: Boolean(s.recevoirDevis),
+          })),
         active: editingProfile.active !== false,
         updatedAt: new Date().toISOString(),
       };
@@ -433,6 +525,77 @@ export function ClientsDirectoryView({
                       <span className="font-mono">{p.siret}</span>
                     </div>
                   )}
+
+                  {/* Services & Adresses E-mails Dédiées */}
+                  {p.services && p.services.length > 0 && (
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          🏢 Services & Contacts Rattachés ({p.services.length})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {p.services.map((srv) => (
+                          <div
+                            key={srv.id}
+                            style={{
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              padding: '6px 10px',
+                              fontSize: '11.5px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                            }}
+                          >
+                            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                              <div style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '💶' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '🔧' : srv.nomService.toLowerCase().includes('gestion') ? '🏢' : '📋'}</span>
+                                <span>{srv.nomService}</span>
+                                {srv.contactNom && <span style={{ color: '#64748b', fontWeight: 500 }}>• {srv.contactNom}</span>}
+                              </div>
+                              {srv.email && (
+                                <a
+                                  href={`mailto:${srv.email}`}
+                                  style={{
+                                    color: '#2563eb',
+                                    fontWeight: 600,
+                                    fontSize: '11px',
+                                    textDecoration: 'none',
+                                    display: 'block',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  ✉️ {srv.email}
+                                </a>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                              {srv.recevoirRapports && (
+                                <span title="Reçoit les rapports d'intervention" style={{ fontSize: '9.5px', fontWeight: 700, background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px' }}>
+                                  Rapports
+                                </span>
+                              )}
+                              {srv.recevoirFactures && (
+                                <span title="Reçoit les factures" style={{ fontSize: '9.5px', fontWeight: 700, background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: '4px' }}>
+                                  Factures
+                                </span>
+                              )}
+                              {srv.recevoirDevis && (
+                                <span title="Reçoit les devis" style={{ fontSize: '9.5px', fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px' }}>
+                                  Devis
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Consignes particulières */}
@@ -663,6 +826,199 @@ export function ClientsDirectoryView({
                     onChange={(e) => setEditingProfile({ ...editingProfile, contactRole: e.target.value })}
                   />
                 </div>
+              </div>
+
+              {/* Section Multi-Services & Multi-Emails Dédiés */}
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>🏢</span>
+                        <span>Services de l'Entreprise & Adresses E-mail Dédiées</span>
+                      </h4>
+                      <span style={{ fontSize: '11px', background: '#e2e8f0', color: '#334155', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
+                        {(editingProfile.services || []).length} service(s)
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '11.5px', color: '#64748b', margin: '2px 0 0 0' }}>
+                      Ajoutez les différents services (Travaux, Comptabilité, Gestionnaires, etc.) avec leurs adresses e-mail pour l'envoi ciblé des rapports, factures et devis.
+                    </p>
+                  </div>
+
+                  {/* Boutons d'ajout rapide par type de service */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => handleAddService('travaux')}
+                    >
+                      + 🔧 Travaux / Technique
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => handleAddService('compta')}
+                    >
+                      + 💶 Facturation / Compta
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => handleAddService('gestion')}
+                    >
+                      + 🏢 Gestion / Syndic
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => handleAddService('autre')}
+                    >
+                      + Autre service
+                    </button>
+                  </div>
+                </div>
+
+                {/* Liste interactive des services */}
+                {(!editingProfile.services || editingProfile.services.length === 0) ? (
+                  <div style={{ textAlign: 'center', padding: '16px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '12px' }}>
+                    Aucun service spécifique configuré. Cliquez sur l'un des boutons ci-dessus pour ajouter le service Travaux, Comptabilité ou Gestionnaire.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {editingProfile.services.map((srv, srvIdx) => (
+                      <div
+                        key={srv.id || srvIdx}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '10px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                        }}
+                      >
+                        {/* Ligne 1 : Nom service, Email, Contact, Téléphone */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
+                          <div>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '2px' }}>
+                              Nom du Service *
+                            </label>
+                            <input
+                              required
+                              type="text"
+                              className="input"
+                              style={{ fontSize: '12px', padding: '6px 8px' }}
+                              placeholder="ex: Service Travaux..."
+                              value={srv.nomService}
+                              onChange={(e) => handleUpdateService(srvIdx, { nomService: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '2px' }}>
+                              Adresse E-mail Dédiée *
+                            </label>
+                            <input
+                              required
+                              type="email"
+                              className="input"
+                              style={{ fontSize: '12px', padding: '6px 8px' }}
+                              placeholder="ex: travaux@client.fr"
+                              value={srv.email}
+                              onChange={(e) => handleUpdateService(srvIdx, { email: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '2px' }}>
+                              Interlocuteur
+                            </label>
+                            <input
+                              type="text"
+                              className="input"
+                              style={{ fontSize: '12px', padding: '6px 8px' }}
+                              placeholder="ex: M. Dupont"
+                              value={srv.contactNom || ''}
+                              onChange={(e) => handleUpdateService(srvIdx, { contactNom: e.target.value })}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '2px' }}>
+                              Téléphone
+                            </label>
+                            <input
+                              type="tel"
+                              className="input"
+                              style={{ fontSize: '12px', padding: '6px 8px' }}
+                              placeholder="ex: 01 42..."
+                              value={srv.telephone || ''}
+                              onChange={(e) => handleUpdateService(srvIdx, { telephone: e.target.value })}
+                            />
+                          </div>
+
+                          <div style={{ paddingTop: '16px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              title="Supprimer ce service"
+                              style={{ padding: '6px 8px', color: '#dc2626', borderColor: '#fca5a5' }}
+                              onClick={() => handleRemoveService(srvIdx)}
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ligne 2 : Options de routage automatique (Rapports, Factures, Devis) */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', paddingTop: '4px', borderTop: '1px solid #f1f5f9', fontSize: '11.5px' }}>
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>Routage automatique :</span>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: '#166534', fontWeight: 600 }}>
+                            <input
+                              type="checkbox"
+                              checked={srv.recevoirRapports !== false}
+                              onChange={(e) => handleUpdateService(srvIdx, { recevoirRapports: e.target.checked })}
+                            />
+                            <span>Recevoir les Rapports d'intervention</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: '#0369a1', fontWeight: 600 }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(srv.recevoirFactures)}
+                              onChange={(e) => handleUpdateService(srvIdx, { recevoirFactures: e.target.checked })}
+                            />
+                            <span>Recevoir les Factures</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: '#92400e', fontWeight: 600 }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(srv.recevoirDevis)}
+                              onChange={(e) => handleUpdateService(srvIdx, { recevoirDevis: e.target.checked })}
+                            />
+                            <span>Recevoir les Devis</span>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>

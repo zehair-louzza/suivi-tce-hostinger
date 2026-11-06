@@ -30,12 +30,26 @@ export function SendReportEmailModal({
 
     // Chercher la fiche technique correspondant au client pour pré-remplir l'email
     const clientName = (intervention.client || '').trim().toLowerCase();
-    const matchedProfile = clientProfiles.find(
+    const matched = clientProfiles.find(
       (p) => p.nom.trim().toLowerCase() === clientName
     );
 
-    const defaultEmail = matchedProfile?.email || '';
-    setToEmail(defaultEmail);
+    let defaultEmails: string[] = [];
+    if (matched?.services && matched.services.length > 0) {
+      // Chercher d'abord les services dédiés aux rapports d'intervention
+      const reportServices = matched.services.filter((s) => s.recevoirRapports && s.email);
+      if (reportServices.length > 0) {
+        defaultEmails = reportServices.map((s) => s.email.trim());
+      } else {
+        const firstWithEmail = matched.services.find((s) => s.email);
+        if (firstWithEmail) defaultEmails = [firstWithEmail.email.trim()];
+      }
+    }
+    if (defaultEmails.length === 0 && matched?.email) {
+      defaultEmails = [matched.email.trim()];
+    }
+
+    setToEmail(defaultEmails.join(', '));
     setCcEmail('');
 
     const ref = intervention.reference || `INT-${intervention.id}`;
@@ -58,10 +72,46 @@ export function SendReportEmailModal({
 
   if (!isOpen || !intervention) return null;
 
+  const toggleServiceToEmail = (emailToAdd: string) => {
+    const clean = emailToAdd.trim().toLowerCase();
+    const currentList = toEmail
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (currentList.includes(clean)) {
+      const nextList = currentList.filter((e) => e !== clean);
+      setToEmail(nextList.join(', '));
+    } else {
+      const nextList = [...currentList, clean];
+      setToEmail(nextList.join(', '));
+    }
+  };
+
+  const toggleServiceCc = (emailToAdd: string) => {
+    const clean = emailToAdd.trim().toLowerCase();
+    const currentList = ccEmail
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (currentList.includes(clean)) {
+      const nextList = currentList.filter((e) => e !== clean);
+      setCcEmail(nextList.join(', '));
+    } else {
+      const nextList = [...currentList, clean];
+      setCcEmail(nextList.join(', '));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!toEmail.trim() || !toEmail.includes('@')) {
-      toast.error('Veuillez renseigner une adresse email destinataire valide');
+    const rawTo = toEmail.trim();
+    const validEmails = rawTo
+      .split(',')
+      .map((e) => e.trim())
+      .filter((e) => e.includes('@'));
+
+    if (validEmails.length === 0) {
+      toast.error('Veuillez renseigner au moins une adresse email destinataire valide');
       return;
     }
 
@@ -217,23 +267,116 @@ export function SendReportEmailModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '20px 24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Sélection rapide par Services de l'Entreprise */}
+          {matchedProfile?.services && matchedProfile.services.length > 0 && (
+            <div
+              style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🏢</span>
+                  <span>Services rattachés à {matchedProfile.nom} ({matchedProfile.services.length}) :</span>
+                </span>
+                <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 600 }}>
+                  Sélectionnez les services destinataires du rapport
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {matchedProfile.services.map((srv) => {
+                  const srvMail = srv.email.toLowerCase();
+                  const isSelectedInTo = toEmail.toLowerCase().includes(srvMail);
+                  const isSelectedInCc = ccEmail.toLowerCase().includes(srvMail);
+                  return (
+                    <div
+                      key={srv.id}
+                      style={{
+                        background: isSelectedInTo ? '#15803d' : '#ffffff',
+                        color: isSelectedInTo ? '#ffffff' : '#0f172a',
+                        border: `1px solid ${isSelectedInTo ? '#15803d' : '#cbd5e1'}`,
+                        borderRadius: '8px',
+                        padding: '5px 10px',
+                        fontSize: '11.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleServiceToEmail(srv.email)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 600,
+                          fontSize: '11.5px',
+                        }}
+                      >
+                        <span>{isSelectedInTo ? '✓' : '+'}</span>
+                        <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '💶' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '🔧' : '🏢'}</span>
+                        <strong>{srv.nomService}</strong>
+                        <span style={{ opacity: isSelectedInTo ? 0.9 : 0.6, fontSize: '11px' }}>({srv.email})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        title={isSelectedInCc ? 'Retirer de la copie (CC)' : 'Mettre en copie (CC)'}
+                        onClick={() => toggleServiceCc(srv.email)}
+                        style={{
+                          background: isSelectedInCc ? '#0284c7' : isSelectedInTo ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                          color: isSelectedInCc || isSelectedInTo ? '#ffffff' : '#334155',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isSelectedInCc ? '✓ CC' : '+ CC'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px', display: 'block' }}>
-                Email Destinataire (Client) *
+                Email(s) Destinataire(s) *
               </label>
               <input
                 required
-                type="email"
+                type="text"
                 className="input"
-                placeholder="ex: travaux@prestamaintenance.fr"
+                placeholder="ex: travaux@client.fr, direction@client.fr..."
                 value={toEmail}
                 onChange={(e) => setToEmail(e.target.value)}
               />
+              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', display: 'block' }}>
+                Plusieurs adresses séparées par des virgules possibles
+              </span>
             </div>
             <div>
               <label style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', marginBottom: '4px', display: 'block' }}>
-                Email en Copie (CC)
+                Email(s) en Copie (CC)
               </label>
               <input
                 type="text"
@@ -242,6 +385,9 @@ export function SendReportEmailModal({
                 value={ccEmail}
                 onChange={(e) => setCcEmail(e.target.value)}
               />
+              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', display: 'block' }}>
+                Adresses en copie d'information
+              </span>
             </div>
           </div>
 

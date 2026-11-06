@@ -324,10 +324,21 @@ export async function sendInterventionReportEmail({
     }
 
     const t = getTransporter();
+    const recipients = toEmail
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.includes('@'));
+    const ccRecipients = ccEmail
+      ? ccEmail
+          .split(',')
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => e.includes('@'))
+      : undefined;
+
     await t.sendMail({
       from: `"${companyName}" <${SMTP_USER}>`,
-      to: toEmail,
-      cc: ccEmail ? ccEmail.split(',').map((e) => e.trim()).filter(Boolean) : undefined,
+      to: recipients.length > 0 ? recipients : toEmail,
+      cc: ccRecipients && ccRecipients.length > 0 ? ccRecipients : undefined,
       subject: mailSubject,
       html: htmlContent,
       text: `Rapport officiel d'intervention ${ref}\nClient : ${clientName}\nSite : ${site}\nDate : ${dateExecution}\n\nCompte rendu :\n${intervention.rapportFinal || 'Travaux réalisés avec succès.'}\n\nEnvoyé par ${senderName} (${companyName})`,

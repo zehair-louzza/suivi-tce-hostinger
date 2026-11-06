@@ -247,6 +247,21 @@ referentielsRouter.put(
           tauxHoraireNegocie: typeof f.tauxHoraireNegocie === 'number' ? f.tauxHoraireNegocie : undefined,
           consignesParticulieres: f.consignesParticulieres ? String(f.consignesParticulieres).trim() : undefined,
           notesInternes: f.notesInternes ? String(f.notesInternes).trim() : undefined,
+          services: Array.isArray(f.services)
+            ? f.services
+                .filter((s: any) => s && (s.nomService || s.email))
+                .map((s: any, idx: number) => ({
+                  id: s.id || `srv-${idx}-${Date.now()}`,
+                  nomService: String(s.nomService || 'Service').trim(),
+                  email: String(s.email || '').trim().toLowerCase(),
+                  contactNom: s.contactNom ? String(s.contactNom).trim() : undefined,
+                  contactRole: s.contactRole ? String(s.contactRole).trim() : undefined,
+                  telephone: s.telephone ? String(s.telephone).trim() : undefined,
+                  recevoirRapports: s.recevoirRapports !== false,
+                  recevoirFactures: Boolean(s.recevoirFactures),
+                  recevoirDevis: Boolean(s.recevoirDevis),
+                }))
+            : [],
           active: f.active !== false,
           updatedAt: new Date().toISOString(),
         }));
