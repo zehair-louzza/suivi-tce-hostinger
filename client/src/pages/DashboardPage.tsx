@@ -29,6 +29,9 @@ import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
 import { TourneeMapOptimizer } from '../components/TourneeMapOptimizer';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
+import { DashboardSynthese } from '../components/dashboard/DashboardSynthese';
+import { DashboardOperations } from '../components/dashboard/DashboardOperations';
+import { DashboardAnalyse } from '../components/dashboard/DashboardAnalyse';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
@@ -90,6 +93,9 @@ export function DashboardPage() {
     };
     navigate(pathMap[sec]);
   };
+
+  // Dashboard Sub-Tabs (Synthèse / Opérations / Analyse - Refonte ANELEC)
+  const [dashboardTab, setDashboardTab] = useState<'synthese' | 'operations' | 'analyse'>('synthese');
 
   // Table vs Kanban view modes for Devis & Interventions (Jobber / Linear style)
   const [devisViewStyle, setDevisViewStyle] = useState<'table' | 'kanban'>('table');
@@ -499,817 +505,102 @@ export function DashboardPage() {
       onQuickNewIntervention={openNewIntvDrawer}
     >
       {/* =====================================================================
-          SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI")
+          SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI" / TABLEAU DE BORD)
          ===================================================================== */}
       {activeSection === 'aujourdhui' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          {/* =================================================================
-              1. BAROMÈTRE ÉCONOMIQUE & FINANCIER ANELEC (4 CARTES HAUT IMPACT)
-             ================================================================= */}
-          {(() => {
-            const totalCAClotureHT = interventionsList
-              .filter((i) => ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel))
-              .reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
-
-            const totalDevisPipelineHT = devisList
-              .filter((d) => ['Envoyé au client', 'En négociation', 'À préparer', 'En préparation'].includes(d.statutCommercial))
-              .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
-
-            const totalAFacturerHT = interventionsList
-              .filter(
-                (i) =>
-                  ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel) &&
-                  i.statutFacture !== 'Facturée'
-              )
-              .reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
-
-            const devisAcceptes = devisList.filter((d) => d.statutCommercial === 'Accepté');
-            const tauxTransformation =
-              devisList.length > 0 ? Math.round((devisAcceptes.length / devisList.length) * 100) : 0;
-
-            const intvClotureesCount = interventionsList.filter((i) =>
-              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
-            ).length;
-
-            const intvAFacturerCount = interventionsList.filter(
-              (i) =>
-                ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel) &&
-                i.statutFacture !== 'Facturée'
-            ).length;
-
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
-                {/* Carte 1 : CA Réalisé */}
-                <div
-                  className="kpi-card"
-                  onClick={() => handleSectionChange('interventions')}
-                  style={{
-                    borderTop: '4px solid #00bf63',
-                    background: '#ffffff',
-                    cursor: 'pointer',
-                    padding: '14px 16px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
-                      💰 CA Travaux Réalisés
-                    </span>
-                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '10px', fontWeight: 700, border: '1px solid #a7f3d0' }}>
-                      Exécuté HT
-                    </span>
-                  </div>
-                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
-                    {formatCurrency(totalCAClotureHT)}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    {intvClotureesCount} chantier(s) terminé(s) ou clôturé(s)
-                  </div>
-                </div>
-
-                {/* Carte 2 : Pipeline Devis */}
-                <div
-                  className="kpi-card"
-                  onClick={() => handleSectionChange('devis')}
-                  style={{
-                    borderTop: '4px solid #ffcc00',
-                    background: '#ffffff',
-                    cursor: 'pointer',
-                    padding: '14px 16px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>
-                      📈 Pipeline Devis en Cours
-                    </span>
-                    <span className="badge" style={{ background: '#fffbeb', color: '#b45309', fontSize: '10px', fontWeight: 700, border: '1px solid #fde68a' }}>
-                      Potentiel HT
-                    </span>
-                  </div>
-                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
-                    {formatCurrency(totalDevisPipelineHT)}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    {devisList.filter((d) => ['Envoyé au client', 'En négociation'].includes(d.statutCommercial)).length} devis en négociation active
-                  </div>
-                </div>
-
-                {/* Carte 3 : Encours Prêt à Facturer */}
-                <div
-                  className="kpi-card"
-                  onClick={() => handleSectionChange('facturation')}
-                  style={{
-                    borderTop: '4px solid #0a0f1d',
-                    background: '#ffffff',
-                    cursor: 'pointer',
-                    padding: '14px 16px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0a0f1d' }}>
-                      🧾 En-cours Prêt à Facturer
-                    </span>
-                    <span className="badge" style={{ background: '#f1f5f9', color: '#0f172a', fontSize: '10px', fontWeight: 700, border: '1px solid #cbd5e1' }}>
-                      Trésorerie HT
-                    </span>
-                  </div>
-                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0a0f1d', margin: '4px 0' }}>
-                    {formatCurrency(totalAFacturerHT)}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    {intvAFacturerCount} intervention(s) à facturer immédiatement
-                  </div>
-                </div>
-
-                {/* Carte 4 : Taux de Transformation */}
-                <div
-                  className="kpi-card"
-                  onClick={() => handleSectionChange('devis')}
-                  style={{
-                    borderTop: '4px solid #00bf63',
-                    background: '#ffffff',
-                    cursor: 'pointer',
-                    padding: '14px 16px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
-                      🎯 Taux de Transformation
-                    </span>
-                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '10px', fontWeight: 700, border: '1px solid #a7f3d0' }}>
-                      Signés
-                    </span>
-                  </div>
-                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#00bf63', margin: '4px 0' }}>
-                    {tauxTransformation}%
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748b' }}>
-                    {devisAcceptes.length} devis accepté(s) sur {devisList.length} total
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* =================================================================
-              2. ENTONNOIR OPÉRATIONNEL D'AVANCEMENT DES TRAVAUX (FUNNEL TCE)
-             ================================================================= */}
-          {(() => {
-            const devisEnCours = devisList.filter(
-              (d) => !['Refusé', 'Annulé'].includes(d.statutCommercial || '')
-            );
-            const devisVisites = devisList.filter((d) => Boolean(d.visiteNecessaire));
-            const missionsAPlanifier =
-              queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length;
-            const missionsPlanifiees = interventionsList.filter(
-              (i) => i.statutOperationnel === 'Planifiée'
-            ).length;
-            const interventionsEnCours = interventionsList.filter(
-              (i) => i.statutOperationnel === 'En cours'
-            );
-            const rapportsAValider = queues.rapportsEnAttente.length;
-            const clotureesCount = interventionsList.filter((i) =>
-              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
-            ).length;
-            const factureesCount = interventionsList.filter(
-              (i) => i.statutFacture === 'Facturée'
-            ).length;
-
-            const funnelSteps = [
-              {
-                step: '1',
-                title: 'Devis & Chiffrages',
-                count: devisEnCours.length,
-                sub: `${devisVisites.length} visite(s) requise(s)`,
-                color: '#ffcc00',
-                textColor: '#b45309',
-                bgColor: '#fffbeb',
-                action: () => handleSectionChange('devis'),
-              },
-              {
-                step: '2',
-                title: 'Ordonnancement Gantt',
-                count: missionsPlanifiees,
-                sub: `${missionsAPlanifier} en attente de créneau`,
-                color: '#0a0f1d',
-                textColor: '#0f172a',
-                bgColor: '#f1f5f9',
-                action: () => handleSectionChange('planning'),
-              },
-              {
-                step: '3',
-                title: 'Sur le Terrain Aujourd’hui',
-                count: interventionsEnCours.length,
-                sub: `${interventionsEnCours.map((i) => i.entreprise).filter(Boolean).join(', ') || 'Aucun en cours'}`,
-                color: '#ffcc00',
-                textColor: '#b45309',
-                bgColor: '#fffbeb',
-                action: () => handleSectionChange('interventions'),
-              },
-              {
-                step: '4',
-                title: 'Rapports & Photos Reçus',
-                count: rapportsAValider,
-                sub: 'À vérifier avant facturation',
-                color: '#dc2626',
-                textColor: '#b91c1c',
-                bgColor: '#fef2f2',
-                action: () => {
-                  setAdminSubTab('rapports');
-                  handleSectionChange('admin');
-                },
-              },
-              {
-                step: '5',
-                title: 'Clôturées & Facturées',
-                count: clotureesCount,
-                sub: `${factureesCount} facturées (${clotureesCount > 0 ? Math.round((factureesCount / clotureesCount) * 100) : 100}%)`,
-                color: '#00bf63',
-                textColor: '#047857',
-                bgColor: '#ecfdf5',
-                action: () => handleSectionChange('facturation'),
-              },
-            ];
-
-            return (
-              <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div>
-                    <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>🚀</span> Entonnoir d'Avancement des Travaux (Cycle Complet ANELEC)
-                    </h2>
-                    <p style={{ fontSize: '11.5px', color: '#64748b', margin: '3px 0 0 0' }}>
-                      Suivi séquentiel en temps réel : de la qualification commerciale à la facturation finale
-                    </p>
-                  </div>
-                  <span className="badge" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700, fontSize: '11px' }}>
-                    ● Synchronisation 100% Temps Réel
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-                  {funnelSteps.map((f, idx) => (
-                    <div
-                      key={f.step}
-                      onClick={f.action}
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: '10px',
-                        background: f.bgColor,
-                        border: `1.5px solid ${f.color}50`,
-                        borderTop: `4px solid ${f.color}`,
-                        cursor: 'pointer',
-                        transition: 'transform 0.12s ease',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '10px', fontWeight: 800, color: f.textColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            Étape {f.step}
-                          </span>
-                          {idx < funnelSteps.length - 1 && (
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>➔</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
-                          {f.title}
-                        </div>
-                      </div>
-                      <div style={{ marginTop: '10px' }}>
-                        <div className="font-mono" style={{ fontSize: '26px', fontWeight: 900, color: f.textColor }}>
-                          {f.count}
-                        </div>
-                        <div style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {f.sub}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* =================================================================
-              3. MATRICE D'ACTIVITÉ & RENTABILITÉ PAR CORPS D'ÉTAT (TABLEAU PRO)
-             ================================================================= */}
-          {(() => {
-            const corpsEtatDefs = [
-              { trade: 'Électricité', label: '⚡ Électricité Tertiaire & CFO/CFA', icon: '⚡' },
-              { trade: 'Plomberie', label: '🔧 Plomberie, Chauffage & CVC', icon: '🔧' },
-              { trade: 'Serrurerie', label: '🔑 Serrurerie, Accès & Dépannage', icon: '🔑' },
-              { trade: 'Peinture', label: '🎨 Peinture, Ravalement & Finition', icon: '🎨' },
-              { trade: 'Menuiserie', label: '🪟 Menuiserie, Faux Plafond & Agencement', icon: '🪟' },
-              { trade: 'Tous corps', label: '🏗️ Rénovation Complète & Multi-TCE', icon: '🏗️' },
-            ];
-
-            const tradeRows = corpsEtatDefs.map((def) => {
-              const key = def.trade.toLowerCase();
-              const intvs = interventionsList.filter((i) =>
-                (i.corpsEtat || '').toLowerCase().includes(key)
-              );
-              const devis = devisList.filter((d) =>
-                (d.corpsEtat || '').toLowerCase().includes(key)
-              );
-              const activeIntvs = intvs.filter((i) =>
-                ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel)
-              );
-              const closedIntvs = intvs.filter((i) =>
-                ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
-              );
-              const caTrade = closedIntvs.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
-              const progressPct = intvs.length > 0 ? Math.round((closedIntvs.length / intvs.length) * 100) : 0;
-
-              return {
-                ...def,
-                totalIntvs: intvs.length,
-                activeIntvs: activeIntvs.length,
-                closedIntvs: closedIntvs.length,
-                devisCount: devis.length,
-                caTrade,
-                progressPct,
-              };
-            });
-
-            return (
-              <div className="pro-table-container" style={{ background: '#ffffff', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                      🏗️ Tableau de Bord d'Avancement par Pôle Métier (Corps d'État)
-                    </h3>
-                    <p style={{ fontSize: '11.5px', color: '#64748b', margin: '2px 0 0 0' }}>
-                      Répartition analytique des volumes, de l'état d'avancement et du CA réalisé par spécialité
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleSectionChange('interventions')}
-                  >
-                    Voir toutes les interventions →
-                  </button>
-                </div>
-
-                <table className="pro-table" style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '28%' }}>Pôle Métier / Corps d'État</th>
-                      <th style={{ width: '16%' }}>En Cours / Planifiées</th>
-                      <th style={{ width: '14%' }}>Clôturées</th>
-                      <th style={{ width: '12%' }}>Devis Associés</th>
-                      <th style={{ width: '15%' }}>CA Réalisé HT</th>
-                      <th style={{ width: '15%', textAlign: 'right' }}>Complétion</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tradeRows.map((row) => (
-                      <tr
-                        key={row.trade}
-                        onClick={() => {
-                          setIntvSearch(row.trade);
-                          handleSectionChange('interventions');
-                        }}
-                      >
-                        <td>
-                          <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#0f172a' }}>
-                            {row.label}
-                          </div>
-                        </td>
-                        <td>
-                          <span
-                            className="font-mono"
-                            style={{
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              color: row.activeIntvs > 0 ? '#b45309' : '#64748b',
-                            }}
-                          >
-                            {row.activeIntvs} active(s)
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className="font-mono"
-                            style={{
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              color: row.closedIntvs > 0 ? '#047857' : '#64748b',
-                            }}
-                          >
-                            {row.closedIntvs} terminée(s)
-                          </span>
-                        </td>
-                        <td>
-                          <span className="font-mono" style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
-                            {row.devisCount} devis
-                          </span>
-                        </td>
-                        <td>
-                          <span className="font-mono" style={{ fontWeight: 800, fontSize: '12.5px', color: '#0f172a' }}>
-                            {formatCurrency(row.caTrade)}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '70px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                              <div
-                                style={{
-                                  width: `${row.progressPct}%`,
-                                  background: row.progressPct >= 75 ? '#00bf63' : row.progressPct >= 40 ? '#ffcc00' : '#0a0f1d',
-                                  height: '100%',
-                                }}
-                              />
-                            </div>
-                            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#0f172a', minWidth: '32px' }}>
-                              {row.progressPct}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })()}
-
-          {/* Bannière d'alerte Rapports & Photos reçus */}
-          {queues.rapportsEnAttente.length > 0 && (
-            <div
-              className="pro-table-container"
-              style={{
-                padding: '14px 18px',
-                borderLeft: '4px solid #06b6d4',
-                background: 'rgba(6, 182, 212, 0.08)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '12px',
+        <>
+          {dashboardTab === 'synthese' && (
+            <DashboardSynthese
+              devisList={devisList}
+              interventionsList={interventionsList}
+              techniciensList={techniciensList}
+              queues={queues}
+              activeTab={dashboardTab}
+              onTabChange={setDashboardTab}
+              onNavigateSection={handleSectionChange}
+              onOpenDevis={(d) => {
+                setIsCreatingDevis(false);
+                setSelectedDevis(d);
               }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '24px' }}>📷</span>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                    🔔 {queues.rapportsEnAttente.length} Rapport(s) terrain avec photos reçus des techniciens en attente de vérification !
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Dernières déclarations :{' '}
-                    {queues.rapportsEnAttente
-                      .slice(0, 4)
-                      .map((r) => `${r.reference || `INT-${r.id}`} (${r.entreprise || 'Tech'})`)
-                      .join(' • ')}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ background: '#0891b2', borderColor: '#0891b2' }}
-                  onClick={() => {
-                    setAdminSubTab('rapports');
-                    handleSectionChange('admin');
-                  }}
-                >
-                  📝 Vérifier & Valider dans le Centre des Rapports →
-                </button>
-              </div>
-            </div>
+              onOpenIntv={(i) => {
+                setIsCreatingIntv(false);
+                setSelectedIntv(i);
+              }}
+              onNewIntv={openNewIntvDrawer}
+              onConvertDevis={(d) => handleTriggerConvertDevis(d)}
+              onGoAdminRapports={() => {
+                setAdminSubTab('rapports');
+                handleSectionChange('admin');
+              }}
+              onFilterInterventions={(trade) => {
+                setIntvSearch(trade);
+                handleSectionChange('interventions');
+              }}
+            />
           )}
 
-          {/* Live Technician Roster & Capacity Strip */}
-          <div className="pro-table-container" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div>
-                <h2 style={{ fontSize: '13.5px', fontWeight: 700 }}>
-                  Capacité & Affectation Équipes Terrain (Temps Réel)
-                </h2>
-                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                  Cliquez sur un technicien pour ouvrir directement sa piste sur la Timeline Gantt
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => handleSectionChange('planning')}
-              >
-                Ouvrir Console Dispatch & Gantt →
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '10px' }}>
-              {techniciensList.map((tech) => {
-                const techIntvs = interventionsList.filter(
-                  (i) => i.entreprise === tech && i.statutOperationnel !== 'Clôturée'
-                );
-                const techVisites = devisList.filter(
-                  (d) => d.visiteTechnicien === tech && d.statutCommercial !== 'Refusé'
-                );
-                const totalMissions = techIntvs.length + techVisites.length;
-
-                return (
-                  <div
-                    key={tech}
-                    onClick={() => handleSectionChange('planning')}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '9px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-subtle)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, fontSize: '12.5px' }}>{tech}</span>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          color: totalMissions > 0 ? '#60a5fa' : 'var(--text-muted)',
-                        }}
-                      >
-                        {totalMissions} mission(s)
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      <span style={{ color: '#d8b4fe' }}>{techVisites.length} visite(s)</span>
-                      <span>•</span>
-                      <span style={{ color: '#93c5fd' }}>{techIntvs.length} travaux</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 4 Action Queues Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
-            <ActionQueueCard
-              title="Devis acceptés à convertir en Intervention"
-              badge={queues.devisAcceptesSansIntv.length}
-              accent="#10b981"
-              emptyText="Tous les devis acceptés ont une intervention liée."
-            >
-              {queues.devisAcceptesSansIntv.slice(0, 6).map((d) => (
-                <div
-                  key={d.id}
-                  style={{
-                    padding: '9px 11px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <div
-                    style={{ cursor: 'pointer', minWidth: 0 }}
-                    onClick={() => {
-                      setIsCreatingDevis(false);
-                      setSelectedDevis(d);
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: '12.5px' }}>
-                      <span className="font-mono" style={{ color: '#10b981' }}>{d.reference || `DEV-${d.id}`}</span> — {d.client}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {d.objet || d.site || 'Prestation TCE'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleTriggerConvertDevis(d)}
-                  >
-                    Créer Intervention
-                  </button>
-                </div>
-              ))}
-            </ActionQueueCard>
-
-            <ActionQueueCard
-              title="Visites Devis & Travaux à planifier"
-              badge={queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length}
-              accent="#a855f7"
-              emptyText="Aucune visite ou intervention en attente de créneau."
-            >
-              {queues.visitesDevisAPlanifier.slice(0, 3).map((d) => (
-                <div
-                  key={`v-${d.id}`}
-                  style={{
-                    padding: '9px 11px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-elevated)',
-                    borderLeft: '3px solid #a855f7',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
-                      <span className="font-mono" style={{ color: '#d8b4fe' }}>[VISITE DEVIS] {d.reference || `DEV-${d.id}`}</span> • {d.client}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.site || d.objet}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleSectionChange('planning')}
-                  >
-                    Dispatcher →
-                  </button>
-                </div>
-              ))}
-              {queues.intvAPlanifier.slice(0, 3).map((i) => (
-                <div
-                  key={`i-${i.id}`}
-                  style={{
-                    padding: '9px 11px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-elevated)',
-                    borderLeft: '3px solid #3b82f6',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
-                      <span className="font-mono" style={{ color: '#93c5fd' }}>[TRAVAUX] {i.reference || `INT-${i.id}`}</span> • {i.client}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{i.objet || i.chantier}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleSectionChange('planning')}
-                  >
-                    Dispatcher →
-                  </button>
-                </div>
-              ))}
-            </ActionQueueCard>
-
-            <ActionQueueCard
-              title="Devis à relancer aujourd'hui"
-              badge={queues.devisARelancer.length}
-              accent="#f59e0b"
-              emptyText="Aucune relance commerciale en attente."
-            >
-              {queues.devisARelancer.slice(0, 5).map((d) => (
-                <div
-                  key={d.id}
-                  style={{
-                    padding: '9px 11px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setIsCreatingDevis(false);
-                      setSelectedDevis(d);
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
-                      <span className="font-mono" style={{ color: '#fbbf24' }}>{d.reference || `DEV-${d.id}`}</span> — {d.client}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Relance prévue : {formatDateFR(d.dateRelance)} • Resp: {d.responsable || '—'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() =>
-                      updateDevisMut.mutate({
-                        id: d.id,
-                        data: {
-                          dateRelance: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
-                          prochaineAction: 'Relancer le client',
-                        },
-                      })
-                    }
-                  >
-                    Relancé (J+3)
-                  </button>
-                </div>
-              ))}
-            </ActionQueueCard>
-
-            <ActionQueueCard
-              title="Interventions terminées à facturer"
-              badge={queues.intvAFacturer.length}
-              accent="#3b82f6"
-              emptyText="Aucune intervention en attente de facturation."
-            >
-              {queues.intvAFacturer.slice(0, 5).map((i) => (
-                <div
-                  key={i.id}
-                  style={{
-                    padding: '9px 11px',
-                    borderRadius: '8px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      setIsCreatingIntv(false);
-                      setSelectedIntv(i);
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: '12px' }}>
-                      <span className="font-mono" style={{ color: '#60a5fa' }}>{i.reference || `INT-${i.id}`}</span> — {i.client}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      Tech: {i.entreprise || '—'} • Résultat: {i.resultatTechnique || 'Non renseigné'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() =>
-                      updateIntvMut.mutate({
-                        id: i.id,
-                        data: { statutFacture: 'Facturée' },
-                      })
-                    }
-                  >
-                    Marquer Facturée
-                  </button>
-                </div>
-              ))}
-            </ActionQueueCard>
-          </div>
-
-          {queues.anomaliesQualite.length > 0 && (
-            <div
-              style={{
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-default)',
-                borderLeft: '4px solid #64748b',
-                borderRadius: '10px',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px',
+          {dashboardTab === 'operations' && (
+            <DashboardOperations
+              devisList={devisList}
+              interventionsList={interventionsList}
+              techniciensList={techniciensList}
+              queues={queues}
+              activeTab={dashboardTab}
+              onTabChange={setDashboardTab}
+              onNavigateSection={handleSectionChange}
+              onOpenDevis={(d) => {
+                setIsCreatingDevis(false);
+                setSelectedDevis(d);
               }}
-            >
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Contrôle Qualité des Données (Séparé des urgences métier) • {queues.anomaliesQualite.length} fiche(s) à compléter
-                </div>
-                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Exemples : {queues.anomaliesQualite.slice(0, 3).map((a) => `${a.ref} (${a.message})`).join(' • ')}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  const first = queues.anomaliesQualite[0];
-                  if (first.type === 'DEVIS') {
-                    setIsCreatingDevis(false);
-                    setSelectedDevis(first.item);
-                  } else {
-                    setIsCreatingIntv(false);
-                    setSelectedIntv(first.item);
-                  }
-                }}
-              >
-                Compléter la 1ère fiche
-              </button>
-            </div>
+              onOpenIntv={(i) => {
+                setIsCreatingIntv(false);
+                setSelectedIntv(i);
+              }}
+              onNewIntv={openNewIntvDrawer}
+              onConvertDevis={(d) => handleTriggerConvertDevis(d)}
+              onRelanceDevis={(id) => {
+                updateDevisMut.mutate({
+                  id,
+                  data: {
+                    dateRelance: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+                    prochaineAction: 'Relancer le client',
+                  },
+                });
+              }}
+              onFactureIntv={(id) => {
+                updateIntvMut.mutate({
+                  id,
+                  data: { statutFacture: 'Facturée' },
+                });
+              }}
+              onGoAdminRapports={() => {
+                setAdminSubTab('rapports');
+                handleSectionChange('admin');
+              }}
+            />
           )}
-        </div>
+
+          {dashboardTab === 'analyse' && (
+            <DashboardAnalyse
+              devisList={devisList}
+              interventionsList={interventionsList}
+              techniciensList={techniciensList}
+              queues={queues}
+              activeTab={dashboardTab}
+              onTabChange={setDashboardTab}
+              onNavigateSection={handleSectionChange}
+              onNewIntv={openNewIntvDrawer}
+              onFilterInterventions={(trade) => {
+                setIntvSearch(trade);
+                handleSectionChange('interventions');
+              }}
+              onGoAdminRapports={() => {
+                setAdminSubTab('rapports');
+                handleSectionChange('admin');
+              }}
+            />
+          )}
+        </>
       )}
 
       {/* =====================================================================
@@ -3776,7 +3067,7 @@ export function DashboardPage() {
   );
 }
 
-function ActionQueueCard({
+export function ActionQueueCard({
   title,
   badge,
   accent,

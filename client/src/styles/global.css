@@ -1073,11 +1073,11 @@ html, body, #root {
 }
 
 .mobile-only-flex {
-  display: none;
+  display: none !important;
 }
 
 .mobile-only-block {
-  display: none;
+  display: none !important;
 }
 
 .desktop-only-flex {
