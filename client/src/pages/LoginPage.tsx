@@ -78,66 +78,40 @@ export function LoginPage() {
   const [googleAcceptTerms, setGoogleAcceptTerms] = useState(false);
   const [googleOnboardingError, setGoogleOnboardingError] = useState<string | null>(null);
 
-  // Initialisation Google Identity Services (GIS & OAuth 2.0)
+  // Traitement du retour Google OAuth 2.0 (Hash fragment avec id_token ou access_token)
   useEffect(() => {
-    const initGis = (id: string) => {
-      const g = (window as any).google;
-      if (!g?.accounts) return;
+    if (window.location.hash) {
+      const hash = window.location.hash.replace(/^#/, '');
+      const params = new URLSearchParams(hash);
+      const idToken = params.get('id_token');
+      const accessToken = params.get('access_token');
+      const token = idToken || accessToken;
+      const state = params.get('state');
 
-      try {
-        if (g.accounts.id) {
-          g.accounts.id.initialize({
-            client_id: id,
-            callback: (response: { credential: string }) => {
-              handleGoogleCredential(response.credential);
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
+      if (token) {
+        // Nettoyer l'URL pour la propreté de l'interface
+        window.history.replaceState(null, '', window.location.pathname);
 
-          // Rendu du bouton officiel Google pour une compatibilité navigateur sans faille
-          const loginBtn = document.getElementById('google-login-btn-container');
-          if (loginBtn) {
-            loginBtn.innerHTML = '';
-            g.accounts.id.renderButton(loginBtn, {
-              type: 'standard',
-              theme: 'outline',
-              size: 'large',
-              text: 'continue_with',
-              shape: 'rectangular',
-              width: 380,
-              locale: 'fr',
-            });
-          }
-
-          const registerBtn = document.getElementById('google-register-btn-container');
-          if (registerBtn) {
-            registerBtn.innerHTML = '';
-            g.accounts.id.renderButton(registerBtn, {
-              type: 'standard',
-              theme: 'outline',
-              size: 'large',
-              text: 'signup_with',
-              shape: 'rectangular',
-              width: 380,
-              locale: 'fr',
-            });
-          }
+        if (state === 'register') {
+          setActiveTab('register');
         }
-      } catch (e) {
-        console.warn('Erreur initialisation Google GIS :', e);
+
+        const pendingName = sessionStorage.getItem('pending_google_company_name') || '';
+        const pendingSiret = sessionStorage.getItem('pending_google_siret') || '';
+        const pendingTerms = sessionStorage.getItem('pending_google_terms') === 'true';
+
+        sessionStorage.removeItem('pending_google_company_name');
+        sessionStorage.removeItem('pending_google_siret');
+        sessionStorage.removeItem('pending_google_terms');
+
+        handleGoogleCredential(token, {
+          companyName: pendingName,
+          siretOrSiren: pendingSiret,
+          acceptTerms: pendingTerms,
+        });
       }
-    };
-
-    initGis(googleClientId);
-    const timer1 = setTimeout(() => initGis(googleClientId), 600);
-    const timer2 = setTimeout(() => initGis(googleClientId), 1600);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-    };
-  }, [googleClientId, activeTab]);
+    }
+  }, []);
 
   const handleGoogleCredential = async (
     credential: string,
@@ -147,11 +121,15 @@ export function LoginPage() {
     setGoogleOnboardingError(null);
     try {
       const regValues = registerForm.getValues();
+      const compName = extraCompanyInfo?.companyName || (activeTab === 'register' ? regValues.companyName : '');
+      const siretVal = extraCompanyInfo?.siretOrSiren || (activeTab === 'register' ? regValues.siretOrSiren : '');
+      const termsVal = extraCompanyInfo?.acceptTerms ?? (activeTab === 'register' ? regValues.acceptTerms : false);
+
       const payload = {
         credential,
-        companyName: extraCompanyInfo?.companyName || (activeTab === 'register' ? regValues.companyName : undefined),
-        siretOrSiren: extraCompanyInfo?.siretOrSiren || (activeTab === 'register' ? regValues.siretOrSiren : undefined),
-        acceptTerms: extraCompanyInfo?.acceptTerms ?? (activeTab === 'register' ? regValues.acceptTerms : undefined),
+        companyName: compName || undefined,
+        siretOrSiren: siretVal || undefined,
+        acceptTerms: termsVal,
       };
 
       const res = await loginWithGoogle(payload);
@@ -159,9 +137,9 @@ export function LoginPage() {
       if (res.requiresCompanyInfo) {
         setPendingGoogleCredential(credential);
         setPendingGoogleProfile(res.googleProfile);
-        setGoogleCompanyName(regValues.companyName || '');
-        setGoogleSiretOrSiren(regValues.siretOrSiren || '');
-        setGoogleAcceptTerms(regValues.acceptTerms || false);
+        setGoogleCompanyName(compName || regValues.companyName || '');
+        setGoogleSiretOrSiren(siretVal || regValues.siretOrSiren || '');
+        setGoogleAcceptTerms(termsVal);
         setShowGoogleOnboardingModal(true);
         toast('Veuillez renseigner les informations de votre entreprise pour finaliser', { icon: '🏢' });
       } else {
@@ -178,35 +156,26 @@ export function LoginPage() {
     }
   };
 
-  const triggerGoogleAuth = (_tab: 'login' | 'register') => {
-    const g = (window as any).google;
-    // 1. Déclenchement popup OAuth 2.0 direct (ouvre instantanément la fenêtre Google officielle)
-    if (googleClientId && g?.accounts?.oauth2) {
-      try {
-        const client = g.accounts.oauth2.initTokenClient({
-          client_id: googleClientId,
-          scope: 'openid email profile',
-          callback: (tokenResponse: any) => {
-            if (tokenResponse?.access_token) {
-              handleGoogleCredential(tokenResponse.access_token);
-            }
-          },
-        });
-        client.requestAccessToken();
-        return;
-      } catch (err) {
-        console.warn('OAuth2 direct error:', err);
-      }
+  const triggerGoogleAuth = (tab: 'login' | 'register') => {
+    setIsGoogleLoading(true);
+
+    // Sauvegarde des champs saisis en session temporaire
+    if (tab === 'register') {
+      const regValues = registerForm.getValues();
+      if (regValues.companyName) sessionStorage.setItem('pending_google_company_name', regValues.companyName);
+      if (regValues.siretOrSiren) sessionStorage.setItem('pending_google_siret', regValues.siretOrSiren);
+      if (regValues.acceptTerms) sessionStorage.setItem('pending_google_terms', 'true');
     }
 
-    // 2. Repli One Tap Google Identity
-    if (googleClientId && g?.accounts?.id) {
-      try {
-        g.accounts.id.prompt();
-      } catch (err) {
-        console.warn('Google prompt error:', err);
-      }
-    }
+    const redirectUri = window.location.origin + '/login';
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+      googleClientId
+    )}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=${Date.now()}&prompt=select_account&state=${tab}`;
+
+    // Redirection immédiate et garantie vers le sélecteur de compte officiel Google
+    window.location.href = authUrl;
   };
 
   const handleCompleteGoogleOnboarding = async (e: React.FormEvent) => {
@@ -499,8 +468,7 @@ export function LoginPage() {
             noValidate
           >
             {/* BOUTON GOOGLE DIRECT */}
-            <div id="google-login-btn-container" style={{ display: 'flex', justifyContent: 'center', minHeight: '44px' }}>
-              <button
+            <button
                 type="button"
                 onClick={() => triggerGoogleAuth('login')}
                 disabled={isGoogleLoading}
@@ -530,7 +498,6 @@ export function LoginPage() {
                 </svg>
                 <span>{isGoogleLoading ? 'Connexion Google...' : 'Continuer avec Google'}</span>
               </button>
-            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -4px 0' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
@@ -621,8 +588,7 @@ export function LoginPage() {
             noValidate
           >
             {/* BOUTON GOOGLE DIRECT INSCRIPTION RAPIDE */}
-            <div id="google-register-btn-container" style={{ display: 'flex', justifyContent: 'center', minHeight: '44px' }}>
-              <button
+            <button
                 type="button"
                 onClick={() => triggerGoogleAuth('register')}
                 disabled={isGoogleLoading}
@@ -652,7 +618,6 @@ export function LoginPage() {
                 </svg>
                 <span>{isGoogleLoading ? 'Connexion Google...' : 'Inscription directe avec Google'}</span>
               </button>
-            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -2px 0' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
