@@ -336,27 +336,6 @@ export function LoginPage() {
             style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
             noValidate
           >
-            {/* Encadré d'assurance sur le cloisonnement */}
-            <div
-              style={{
-                padding: '10px 12px',
-                borderRadius: '10px',
-                background: 'rgba(0, 191, 99, 0.08)',
-                border: '1px solid rgba(0, 191, 99, 0.25)',
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'flex-start',
-                fontSize: '11.5px',
-                color: 'var(--text-secondary)',
-                lineHeight: 1.45,
-              }}
-            >
-              <span style={{ color: '#00bf63', fontSize: '13px' }}>🔒</span>
-              <span>
-                <strong>Cloisonnement strict garanti :</strong> votre entreprise dispose d'un espace hermétiquement isolé. Vos devis, chantiers, plannings et techniciens ne sont jamais partagés avec d'autres sociétés.
-              </span>
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label
