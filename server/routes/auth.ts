@@ -82,7 +82,7 @@ export function formatPublicUser(u: {
     active: u.active !== false,
     companyId,
     companyName,
-    companySiret: u.company?.siret || (companyId === 1 ? '889 423 371 00015' : null),
+    companySiret: u.company?.siret || (companyId === 1 ? '933 108 607 00021' : null),
     company: u.company ? { id: u.company.id, name: u.company.name, siret: u.company.siret, siren: u.company.siren } : { id: companyId, name: companyName },
     createdAt: u.createdAt,
   };

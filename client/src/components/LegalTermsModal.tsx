@@ -253,11 +253,14 @@ export function LegalTermsModal({
               </h3>
               <p>
                 <strong>Société éditrice :</strong> ANELEC GROUPE<br />
-                <strong>Forme juridique :</strong> Société par Actions Simplifiée (SAS)<br />
-                <strong>Numéro SIREN :</strong> 889 423 371<br />
-                <strong>Numéro SIRET (Siège) :</strong> 889 423 371 00015<br />
-                <strong>Activité :</strong> Travaux d'installation électrique et Tous Corps d'État (TCE)<br />
-                <strong>Siège social :</strong> France<br />
+                <strong>Forme juridique :</strong> Société par actions simplifiée (SAS)<br />
+                <strong>Numéro SIREN :</strong> 933 108 607<br />
+                <strong>Numéro SIRET (Siège social) :</strong> 933 108 607 00021<br />
+                <strong>Numéro de TVA intracommunautaire :</strong> FR20933108607<br />
+                <strong>Date de création :</strong> 8 novembre 2024<br />
+                <strong>Activité principale (Code NAF / APE) :</strong> 4120B — Construction d'autres bâtiments<br />
+                <strong>Siège social :</strong> 9 RUE DES COLONNES, 75002 PARIS<br />
+                <strong>Dirigeante :</strong> Najoua Boughrara<br />
                 <strong>Contact électronique :</strong> contact@anelecgroupe.com
               </p>
 
