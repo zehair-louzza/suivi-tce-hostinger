@@ -452,9 +452,9 @@ export function Layout({
             </div>
           </div>
 
-          {/* Center Global Command Bar Trigger (Ctrl+K) - Masqué en mode Mobile Tech */}
+          {/* Center Global Command Bar Trigger (Ctrl+K) - Masqué sur smartphone pour libérer le titre */}
           {!isMobileTechOnly && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 1, minWidth: '140px', flex: 1, maxWidth: '380px' }}>
+            <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '8px', flexShrink: 1, minWidth: '140px', flex: 1, maxWidth: '380px' }}>
               <button
                 type="button"
                 onClick={onOpenCommandPalette}
@@ -476,6 +476,21 @@ export function Layout({
 
           {/* Right Quick Actions, Theme & Mobile Logout */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            {/* Loupe compacte mobile pour ouvrir le Ctrl+K */}
+            {!isMobileTechOnly && onOpenCommandPalette && (
+              <button
+                type="button"
+                onClick={onOpenCommandPalette}
+                className="btn btn-secondary btn-sm mobile-only-flex"
+                style={{ padding: '6px 8px' }}
+                title="Rechercher (Ctrl+K)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </button>
+            )}
             {parisTime && (
               <div
                 className="font-mono desktop-only-el"

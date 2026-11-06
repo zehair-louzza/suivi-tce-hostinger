@@ -1076,6 +1076,18 @@ html, body, #root {
   display: none;
 }
 
+.mobile-only-block {
+  display: none;
+}
+
+.desktop-only-flex {
+  display: flex;
+}
+
+.desktop-only-block {
+  display: block;
+}
+
 /* ============================================================================
    ADAPTATION UNIVERSELLE MOBILE & SMARTPHONES (320px iPhone SE -> 430px+ Pro Max)
    ============================================================================ */
@@ -1108,6 +1120,15 @@ html, body, #root {
   }
   .mobile-only-flex {
     display: flex !important;
+  }
+  .mobile-only-block {
+    display: block !important;
+  }
+  .desktop-only-flex {
+    display: none !important;
+  }
+  .desktop-only-block {
+    display: none !important;
   }
 }
 
@@ -1269,6 +1290,69 @@ html, body, #root {
   .pro-table-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 10px;
+  }
+
+  .desktop-only-block {
+    display: none !important;
+  }
+
+  .mobile-only-block {
+    display: block !important;
+  }
+
+  .mobile-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .mobile-record-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 13px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    cursor: pointer;
+    box-sizing: border-box;
+    width: 100%;
+    transition: transform 0.1s ease, border-color 0.15s ease;
+  }
+
+  .mobile-record-card:active {
+    background: var(--bg-hover);
+    border-color: #00bf63;
+  }
+
+  .drawer-subtabs-strip {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    padding: 10px 14px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .drawer-subtabs-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .drawer-subtabs-strip .segmented-btn {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 7px 12px !important;
+    font-size: 12px !important;
   }
 }
 
@@ -1283,15 +1367,33 @@ html, body, #root {
   }
 
   .segmented-control {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    display: inline-flex;
+  }
+
+  .segmented-control::-webkit-scrollbar {
+    display: none;
+  }
+
+  .segmented-control.segmented-control-fluid {
     width: 100%;
     display: flex;
   }
 
-  .segmented-btn {
+  .segmented-control.segmented-control-fluid .segmented-btn {
     flex: 1;
     text-align: center;
-    padding: 6px 6px;
-    font-size: 11px;
+  }
+
+  .segmented-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 11.5px;
   }
 }
 
@@ -1307,6 +1409,8 @@ html, body, #root {
 
 :root,
 [data-theme="light"] {
+  --accent-primary: #00bf63;
+  --accent-primary-hover: #00994f;
   --bg-app: #f4f6f9;
   --bg-sidebar: #0a0f1d;
   --bg-surface: #ffffff;
@@ -1353,6 +1457,8 @@ html, body, #root {
 }
 
 [data-theme="dark"] {
+  --accent-primary: #00bf63;
+  --accent-primary-hover: #00994f;
   --bg-app: #07090e;
   --bg-sidebar: #0a0f1d;
   --bg-surface: #0f1422;

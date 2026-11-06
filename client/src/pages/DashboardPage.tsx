@@ -1361,40 +1361,42 @@ export function DashboardPage() {
       {activeSection === 'devis' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="fsm-toolbar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <div className="segmented-control">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
+              <div className="segmented-control segmented-control-fluid">
                 <button
                   type="button"
                   className={`segmented-btn ${devisViewStyle === 'table' ? 'active' : ''}`}
                   onClick={() => setDevisViewStyle('table')}
                 >
-                  Tableau Synthétique (8 col)
+                  <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
+                  <span className="mobile-only-flex">📋 Liste</span>
                 </button>
                 <button
                   type="button"
                   className={`segmented-btn ${devisViewStyle === 'kanban' ? 'active' : ''}`}
                   onClick={() => setDevisViewStyle('kanban')}
                 >
-                  Pipeline Kanban (Drag & Drop)
+                  <span className="desktop-only-el">Pipeline Kanban (Drag & Drop)</span>
+                  <span className="mobile-only-flex">📊 Kanban</span>
                 </button>
               </div>
 
               <input
                 type="text"
                 className="input"
-                style={{ width: '240px' }}
-                placeholder="Rechercher réf, client, site, objet..."
+                style={{ flex: '1 1 180px', minWidth: '140px' }}
+                placeholder="Rechercher réf, client, site..."
                 value={devisSearch}
                 onChange={(e) => setDevisSearch(e.target.value)}
               />
 
               <select
                 className="select"
-                style={{ width: '185px' }}
+                style={{ flex: '1 1 130px', minWidth: '110px' }}
                 value={devisStatutFilter}
                 onChange={(e) => setDevisStatutFilter(e.target.value)}
               >
-                <option value="ALL">Tous statuts commerciaux</option>
+                <option value="ALL">Tous statuts</option>
                 {STATUTS_COMMERCIAUX_DEVIS.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -1404,7 +1406,7 @@ export function DashboardPage() {
 
               <select
                 className="select"
-                style={{ width: '165px' }}
+                style={{ flex: '1 1 130px', minWidth: '110px' }}
                 value={devisResponsableFilter}
                 onChange={(e) => setDevisResponsableFilter(e.target.value)}
               >
@@ -1423,7 +1425,7 @@ export function DashboardPage() {
           </div>
 
           {devisViewStyle === 'table' ? (
-            <div className="pro-table-container">
+            <><div className="desktop-only-block pro-table-container">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -1567,6 +1569,64 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Cartes Mobile Devis */}
+            <div className="mobile-only-block mobile-card-grid">
+              {filteredDevis.map((d) => (
+                <div
+                  key={d.id}
+                  className="mobile-record-card"
+                  onClick={() => {
+                    setIsCreatingDevis(false);
+                    setSelectedDevis(d);
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
+                        {d.reference || `DEV-${d.id}`}
+                      </span>
+                      {(d.interventionsCount || 0) > 0 && (
+                        <span style={{ padding: '1px 5px', fontSize: '10px', borderRadius: '4px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700 }}>
+                          INT liée
+                        </span>
+                      )}
+                    </div>
+                    <StatusPill statut={d.statutCommercial || 'À préparer'} />
+                  </div>
+
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      {d.client || 'Client non précisé'}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      📍 {d.site || 'Site non précisé'} • 🏷️ {d.corpsEtat || 'Tous corps d’état'}
+                    </div>
+                    {d.objet && (
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {d.objet}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)', fontSize: '11.5px' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)' }}>Resp : </span>
+                      <strong>{d.responsable || '—'}</strong>
+                    </div>
+                    <div className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#00bf63' }}>
+                      {formatCurrency(d.amount)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filteredDevis.length === 0 && (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  Aucun devis ne correspond aux critères.
+                </div>
+              )}
+            </div>
+            </>
           ) : (
             <div className="kanban-grid">
               {['À préparer', 'En préparation', 'À valider en interne', 'Envoyé au client', 'En négociation', 'Accepté'].map(
@@ -1635,36 +1695,38 @@ export function DashboardPage() {
       {activeSection === 'interventions' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="fsm-toolbar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <div className="segmented-control">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
+              <div className="segmented-control segmented-control-fluid">
                 <button
                   type="button"
                   className={`segmented-btn ${intvViewStyle === 'table' ? 'active' : ''}`}
                   onClick={() => setIntvViewStyle('table')}
                 >
-                  Tableau Synthétique (8 col)
+                  <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
+                  <span className="mobile-only-flex">📋 Liste</span>
                 </button>
                 <button
                   type="button"
                   className={`segmented-btn ${intvViewStyle === 'kanban' ? 'active' : ''}`}
                   onClick={() => setIntvViewStyle('kanban')}
                 >
-                  Kanban Opérationnel
+                  <span className="desktop-only-el">Kanban Opérationnel</span>
+                  <span className="mobile-only-flex">📊 Kanban</span>
                 </button>
               </div>
 
               <input
                 type="text"
                 className="input"
-                style={{ width: '240px' }}
-                placeholder="Rechercher réf, client, site, technicien..."
+                style={{ flex: '1 1 180px', minWidth: '140px' }}
+                placeholder="Rechercher réf, client, site..."
                 value={intvSearch}
                 onChange={(e) => setIntvSearch(e.target.value)}
               />
 
               <select
                 className="select"
-                style={{ width: '175px' }}
+                style={{ flex: '1 1 130px', minWidth: '110px' }}
                 value={intvStatutFilter}
                 onChange={(e) => setIntvStatutFilter(e.target.value)}
               >
@@ -1678,7 +1740,7 @@ export function DashboardPage() {
 
               <select
                 className="select"
-                style={{ width: '165px' }}
+                style={{ flex: '1 1 130px', minWidth: '110px' }}
                 value={intvTechFilter}
                 onChange={(e) => setIntvTechFilter(e.target.value)}
               >
@@ -1697,7 +1759,7 @@ export function DashboardPage() {
           </div>
 
           {intvViewStyle === 'table' ? (
-            <div className="pro-table-container">
+            <><div className="desktop-only-block pro-table-container">
               <table className="pro-table">
                 <thead>
                   <tr>
@@ -1859,6 +1921,57 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Cartes Mobile Interventions */}
+            <div className="mobile-only-block mobile-card-grid">
+              {filteredInterventions.map((i) => (
+                <div
+                  key={i.id}
+                  className="mobile-record-card"
+                  onClick={() => {
+                    setIsCreatingIntv(false);
+                    setSelectedIntv(i);
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      {i.reference || `INT-${i.id}`}
+                    </span>
+                    <StatusPill statut={i.statutOperationnel || 'À planifier'} />
+                  </div>
+
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      {i.client || 'Client non précisé'}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      📍 {i.chantier || 'Chantier non précisé'} • 🏷️ {i.corpsEtat || i.typeIntervention || 'Tous corps d’état'}
+                    </div>
+                    {i.objet && (
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {i.objet}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)', fontSize: '11.5px' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-secondary)' }}>Tech : </span>
+                      <strong>👷 {i.entreprise || 'Non assigné'}</strong>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      📅 {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'À planifier'} {i.heureDebut ? `(${i.heureDebut})` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filteredInterventions.length === 0 && (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  Aucune intervention trouvée.
+                </div>
+              )}
+            </div>
+            </>
           ) : (
             <div className="kanban-grid">
               {['À planifier', 'Planifiée', 'En cours', 'Suspendue', 'Terminée - à valider', 'Clôturée'].map(
@@ -2320,11 +2433,9 @@ export function DashboardPage() {
             )}
 
             <div
+              className="drawer-subtabs-strip"
               style={{
-                padding: '10px 20px',
                 borderBottom: '1px solid var(--border-subtle)',
-                display: 'flex',
-                gap: '6px',
               }}
             >
               {[
@@ -2718,11 +2829,9 @@ export function DashboardPage() {
             </div>
 
             <div
+              className="drawer-subtabs-strip"
               style={{
-                padding: '10px 20px',
                 borderBottom: '1px solid var(--border-subtle)',
-                display: 'flex',
-                gap: '6px',
               }}
             >
               {[

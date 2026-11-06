@@ -660,7 +660,7 @@ export function TechnicianMobileView({
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '6px',
+            gap: '4px',
             background: 'var(--bg-surface)',
             padding: '4px',
             borderRadius: '10px',
@@ -677,16 +677,17 @@ export function TechnicianMobileView({
               fontSize: '12px',
               fontWeight: 800,
               cursor: 'pointer',
-              background: activeTab === 'pointage' ? 'var(--accent-primary)' : 'transparent',
+              background: activeTab === 'pointage' ? '#00bf63' : 'transparent',
               color: activeTab === 'pointage' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '4px',
+              minWidth: 0,
             }}
           >
             <span>⏱️</span>
-            <span>Pointage</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Pointage</span>
           </button>
 
           <button
@@ -699,16 +700,17 @@ export function TechnicianMobileView({
               fontSize: '12px',
               fontWeight: 800,
               cursor: 'pointer',
-              background: activeTab === 'missions' ? 'var(--accent-primary)' : 'transparent',
+              background: activeTab === 'missions' ? '#00bf63' : 'transparent',
               color: activeTab === 'missions' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '4px',
+              minWidth: 0,
             }}
           >
             <span>📋</span>
-            <span>Missions ({techMissions.length})</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Missions ({techMissions.length})</span>
           </button>
 
           <button
@@ -721,16 +723,17 @@ export function TechnicianMobileView({
               fontSize: '12px',
               fontWeight: 800,
               cursor: 'pointer',
-              background: activeTab === 'compte_rendu' ? 'var(--accent-primary)' : 'transparent',
+              background: activeTab === 'compte_rendu' ? '#00bf63' : 'transparent',
               color: activeTab === 'compte_rendu' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '4px',
+              minWidth: 0,
             }}
           >
             <span>📝</span>
-            <span>Rapport & 📷</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport & 📷</span>
           </button>
         </div>
       </div>
@@ -769,7 +772,12 @@ export function TechnicianMobileView({
               borderColor: '#00994f',
               fontWeight: 800,
               minHeight: '44px',
-              fontSize: '13.5px',
+              fontSize: '13px',
+              whiteSpace: 'normal',
+              height: 'auto',
+              padding: '10px 12px',
+              lineHeight: 1.35,
+              textAlign: 'center',
               boxShadow: '0 2px 8px rgba(0, 191, 99, 0.28)',
             }}
             disabled={clockInMut.isPending}
@@ -780,7 +788,7 @@ export function TechnicianMobileView({
               });
             }}
           >
-            {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau maintenant (${liveParisTime || getNowHHMM()})`}
+            {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau (${liveParisTime || getNowHHMM()})`}
           </button>
         </div>
       )}

@@ -345,7 +345,7 @@ export function AdminWorkstation({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div className="segmented-control">
+          <div className="segmented-control drawer-subtabs-strip" style={{ maxWidth: '100%' }}>
             <button
               type="button"
               className={`segmented-btn ${subTab === 'users' ? 'active' : ''}`}
