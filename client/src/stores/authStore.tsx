@@ -21,6 +21,12 @@ interface AuthState {
     companyName?: string,
     siretOrSiren?: string
   ) => Promise<void>;
+  loginWithGoogle: (payload: {
+    credential: string;
+    companyName?: string;
+    siretOrSiren?: string;
+    acceptTerms?: boolean;
+  }) => Promise<{ requiresCompanyInfo?: boolean; googleProfile?: any; message?: string }>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   fetchMe: () => Promise<void>;
@@ -86,6 +92,34 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (err: any) {
           const message = err.response?.data?.error || "Erreur d'inscription";
+          set({ error: message, isLoading: false, isAuthenticated: false });
+          throw err;
+        }
+      },
+
+      loginWithGoogle: async (payload: {
+        credential: string;
+        companyName?: string;
+        siretOrSiren?: string;
+        acceptTerms?: boolean;
+      }) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await api.post('/auth/google', payload);
+          const { user, accessToken, requiresCompanyInfo, googleProfile, message } = response.data;
+          if (requiresCompanyInfo) {
+            set({ isLoading: false });
+            return { requiresCompanyInfo: true, googleProfile, message };
+          }
+          set({
+            user,
+            accessToken,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return { requiresCompanyInfo: false, googleProfile, message };
+        } catch (err: any) {
+          const message = err.response?.data?.error || 'Erreur lors de la connexion Google';
           set({ error: message, isLoading: false, isAuthenticated: false });
           throw err;
         }

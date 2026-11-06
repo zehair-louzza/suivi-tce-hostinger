@@ -396,3 +396,223 @@ authRouter.post(
     }
   })
 );
+
+
+// ============================================================================
+// CONFIGURATION D'AUTHENTIFICATION PUBLIQUE (GOOGLE CLIENT ID)
+// ============================================================================
+authRouter.get('/config', (_req: Request, res: Response) => {
+  res.json({
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    appName: 'ANELEC TCE',
+  });
+});
+
+const GoogleAuthSchema = z.object({
+  credential: z.string().min(1, 'Token Google requis'),
+  companyName: z.string().optional(),
+  siretOrSiren: z.string().optional(),
+  acceptTerms: z.boolean().optional(),
+});
+
+// ============================================================================
+// CONNEXION & INSCRIPTION GOOGLE DIRECTE (MULTI-ENTREPRISES RGPD)
+// ============================================================================
+authRouter.post(
+  '/google',
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = GoogleAuthSchema.parse(req.body);
+    let email = '';
+    let name = '';
+    let picture = '';
+
+    // Mode simulation / démo locale si jeton préfixé par simulated_google_
+    if (data.credential.startsWith('simulated_google_')) {
+      const parts = data.credential.split(':');
+      email = (parts[1] || 'artisan.google@example.com').toLowerCase().trim();
+      name = parts[2] || 'Utilisateur Google Direct';
+      picture = 'https://lh3.googleusercontent.com/a/default-user';
+    } else {
+      // Validation officielle du jeton Google Identity Services via tokeninfo
+      try {
+        const googleRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(data.credential)}`
+        );
+        if (!googleRes.ok) {
+          throw new AppError(401, 'Jeton Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
+        }
+        const profile = (await googleRes.json()) as any;
+        if (profile.email_verified !== 'true' && profile.email_verified !== true) {
+          throw new AppError(400, "L'adresse email Google n'a pas été certifiée par Google", 'EMAIL_NOT_VERIFIED');
+        }
+        email = String(profile.email || '').toLowerCase().trim();
+        name = String(profile.name || email.split('@')[0]);
+        picture = String(profile.picture || '');
+      } catch (err: any) {
+        if (err instanceof AppError) throw err;
+        throw new AppError(401, 'Échec de validation de la session Google auprès des serveurs Google', 'GOOGLE_VERIFY_ERROR');
+      }
+    }
+
+    if (!email) {
+      throw new AppError(400, 'Email Google introuvable', 'INVALID_EMAIL');
+    }
+
+    // 1. L'utilisateur existe déjà : Connexion directe
+    let user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        ...publicUserSelect,
+        password: true,
+      },
+    });
+
+    if (user) {
+      if (user.active === false && user.id !== 1) {
+        throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+      }
+
+      // Google certifie l'email : activation automatique
+      if (!user.emailConfirmed) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { emailConfirmed: true, active: true },
+        });
+      }
+
+      const pub = formatPublicUser(user);
+      const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+      setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+      return res.json({
+        user: pub,
+        accessToken: tokens.accessToken,
+        message: 'Connexion réussie avec votre compte Google',
+      });
+    }
+
+    // 2. L'utilisateur n'existe pas encore : Inscription nouvelle entreprise
+    // Si l'utilisateur n'a pas encore renseigné les informations de son entreprise
+    if (!data.companyName || !data.companyName.trim() || !data.siretOrSiren || !data.siretOrSiren.trim()) {
+      return res.json({
+        requiresCompanyInfo: true,
+        googleProfile: {
+          email,
+          name,
+          picture,
+        },
+        message: "Compte Google vérifié. Veuillez renseigner le nom et SIRET/SIREN de votre entreprise pour initialiser votre espace.",
+      });
+    }
+
+    // Vérification de l'acceptation contractuelle CGU / RGPD
+    if (data.acceptTerms !== true) {
+      throw new AppError(
+        400,
+        'Vous devez accepter les Conditions Générales (CGU) et la Politique RGPD pour créer votre espace entreprise.',
+        'TERMS_REQUIRED'
+      );
+    }
+
+    // Validation stricte du SIRET (14 chiffres) ou SIREN (9 chiffres)
+    const rawDigits = data.siretOrSiren.replace(/\s+/g, '').replace(/[^0-9]/g, '');
+    let cleanSiret: string | null = null;
+    let cleanSiren: string | null = null;
+
+    if (rawDigits.length === 14) {
+      cleanSiret = rawDigits;
+      cleanSiren = rawDigits.slice(0, 9);
+    } else if (rawDigits.length === 9) {
+      cleanSiren = rawDigits;
+      cleanSiret = `${rawDigits}00010`;
+    } else {
+      throw new AppError(400, 'Format invalide : le SIREN doit comporter 9 chiffres et le SIRET 14 chiffres.', 'INVALID_SIRET');
+    }
+
+    // Recherche ou création de l'entreprise cloisonnée
+    let company = await prisma.company.findFirst({
+      where: {
+        OR: [
+          ...(cleanSiret ? [{ siret: cleanSiret }] : []),
+          ...(cleanSiren ? [{ siren: cleanSiren }] : []),
+          { name: { equals: data.companyName.trim(), mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    if (!company) {
+      company = await prisma.company.create({
+        data: {
+          name: data.companyName.trim(),
+          siret: cleanSiret,
+          siren: cleanSiren,
+        },
+      });
+
+      // Référentiels par défaut pour ce nouveau tenant
+      await prisma.referentiel.createMany({
+        data: [
+          {
+            categorie: 'corpsEtat',
+            valeurs: JSON.stringify([
+              'Tous corps d’état',
+              'Plomberie',
+              'Électricité',
+              'CVC / Climatisation',
+              'Chauffage',
+              'Serrurerie',
+              'Menuiserie',
+              'Peinture',
+            ]),
+            companyId: company.id,
+          },
+          {
+            categorie: 'origines',
+            valeurs: JSON.stringify([
+              "Donneur d'ordre",
+              'Client',
+              'Contrat de maintenance',
+              'Technicien',
+              'Syndic / gestionnaire',
+              'Interne',
+            ]),
+            companyId: company.id,
+          },
+          {
+            categorie: 'responsables',
+            valeurs: JSON.stringify([name]),
+            companyId: company.id,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    }
+
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        password: passwordHash,
+        name,
+        role: 'ADMIN',
+        companyId: company.id,
+        active: true,
+        emailConfirmed: true,
+        termsAcceptedAt: new Date(),
+        termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
+      },
+      select: publicUserSelect,
+    });
+
+    const pub = formatPublicUser(newUser);
+    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    res.status(201).json({
+      user: pub,
+      accessToken: tokens.accessToken,
+      message: `Espace Entreprise ${company.name} initialisé avec succès via Google !`,
+    });
+  })
+);

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../stores/authStore';
+import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
@@ -59,13 +60,141 @@ const registerCompanySchema = z
 type RegisterCompanyForm = z.infer<typeof registerCompanySchema>;
 
 export function LoginPage() {
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [emailConfirmationSentTo, setEmailConfirmationSentTo] = useState<string | null>(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
+
+  // Google OAuth State
+  const [googleClientId, setGoogleClientId] = useState<string>('');
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showGoogleOnboardingModal, setShowGoogleOnboardingModal] = useState(false);
+  const [showGoogleConfigModal, setShowGoogleConfigModal] = useState(false);
+  const [pendingGoogleCredential, setPendingGoogleCredential] = useState<string | null>(null);
+  const [pendingGoogleProfile, setPendingGoogleProfile] = useState<{ email: string; name: string; picture?: string } | null>(null);
+  const [googleCompanyName, setGoogleCompanyName] = useState('');
+  const [googleSiretOrSiren, setGoogleSiretOrSiren] = useState('');
+  const [googleAcceptTerms, setGoogleAcceptTerms] = useState(false);
+  const [googleOnboardingError, setGoogleOnboardingError] = useState<string | null>(null);
+
+  // Initialisation Google Identity Services (GIS)
+  useEffect(() => {
+    api
+      .get<{ googleClientId: string }>('/auth/config')
+      .then((res) => {
+        const id = res.data?.googleClientId;
+        if (id) {
+          setGoogleClientId(id);
+          const g = (window as any).google;
+          if (g?.accounts?.id) {
+            try {
+              g.accounts.id.initialize({
+                client_id: id,
+                callback: (response: { credential: string }) => {
+                  handleGoogleCredential(response.credential);
+                },
+                auto_select: false,
+                cancel_on_tap_outside: true,
+              });
+            } catch (e) {
+              console.warn('Erreur initialisation Google GIS :', e);
+            }
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleGoogleCredential = async (
+    credential: string,
+    extraCompanyInfo?: { companyName: string; siretOrSiren: string; acceptTerms: boolean }
+  ) => {
+    setIsGoogleLoading(true);
+    setGoogleOnboardingError(null);
+    try {
+      const regValues = registerForm.getValues();
+      const payload = {
+        credential,
+        companyName: extraCompanyInfo?.companyName || (activeTab === 'register' ? regValues.companyName : undefined),
+        siretOrSiren: extraCompanyInfo?.siretOrSiren || (activeTab === 'register' ? regValues.siretOrSiren : undefined),
+        acceptTerms: extraCompanyInfo?.acceptTerms ?? (activeTab === 'register' ? regValues.acceptTerms : undefined),
+      };
+
+      const res = await loginWithGoogle(payload);
+
+      if (res.requiresCompanyInfo) {
+        setPendingGoogleCredential(credential);
+        setPendingGoogleProfile(res.googleProfile);
+        setGoogleCompanyName(regValues.companyName || '');
+        setGoogleSiretOrSiren(regValues.siretOrSiren || '');
+        setGoogleAcceptTerms(regValues.acceptTerms || false);
+        setShowGoogleOnboardingModal(true);
+        toast('Veuillez renseigner les informations de votre entreprise pour finaliser', { icon: '🏢' });
+      } else {
+        setShowGoogleOnboardingModal(false);
+        toast.success(res.message || 'Connexion Google réussie');
+        navigate(from, { replace: true });
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Erreur lors de l’authentification Google';
+      setGoogleOnboardingError(msg);
+      toast.error(msg);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const triggerGoogleAuth = (_tab: 'login' | 'register') => {
+    const g = (window as any).google;
+    if (googleClientId && g?.accounts?.id) {
+      try {
+        g.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            setShowGoogleConfigModal(true);
+          }
+        });
+      } catch {
+        setShowGoogleConfigModal(true);
+      }
+    } else {
+      setShowGoogleConfigModal(true);
+    }
+  };
+
+  const handleCompleteGoogleOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGoogleOnboardingError(null);
+
+    if (!googleCompanyName.trim()) {
+      setGoogleOnboardingError('Le nom de votre entreprise est obligatoire');
+      return;
+    }
+
+    const cleanedDigits = googleSiretOrSiren.replace(/\s+/g, '').replace(/[^0-9]/g, '');
+    if (cleanedDigits.length !== 9 && cleanedDigits.length !== 14) {
+      setGoogleOnboardingError('Format invalide : saisissez un SIREN (9 chiffres) ou un SIRET (14 chiffres)');
+      return;
+    }
+
+    if (!googleAcceptTerms) {
+      setGoogleOnboardingError('Vous devez accepter les CGU et la Politique RGPD');
+      return;
+    }
+
+    if (!pendingGoogleCredential) {
+      setGoogleOnboardingError('Session Google expirée, veuillez recommencer');
+      return;
+    }
+
+    await handleGoogleCredential(pendingGoogleCredential, {
+      companyName: googleCompanyName.trim(),
+      siretOrSiren: cleanedDigits,
+      acceptTerms: true,
+    });
+  };
 
   const from = (location.state as any)?.from?.pathname || '/';
   const isJustActivated = new URLSearchParams(location.search).get('activated') === '1';
@@ -324,6 +453,43 @@ export function LoginPage() {
             style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
             noValidate
           >
+            {/* BOUTON GOOGLE DIRECT */}
+            <button
+              type="button"
+              onClick={() => triggerGoogleAuth('login')}
+              disabled={isGoogleLoading}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-default, #cbd5e1)',
+                background: 'var(--bg-elevated, #ffffff)',
+                color: 'var(--text-primary, #0f172a)',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>{isGoogleLoading ? 'Connexion Google...' : 'Continuer avec Google'}</span>
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -4px 0' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>ou par identifiant classique</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
+            </div>
             <div>
               <label
                 style={{
@@ -407,6 +573,43 @@ export function LoginPage() {
             style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
             noValidate
           >
+            {/* BOUTON GOOGLE DIRECT INSCRIPTION RAPIDE */}
+            <button
+              type="button"
+              onClick={() => triggerGoogleAuth('register')}
+              disabled={isGoogleLoading}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-default, #cbd5e1)',
+                background: 'var(--bg-elevated, #ffffff)',
+                color: 'var(--text-primary, #0f172a)',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>{isGoogleLoading ? 'Connexion Google...' : 'Inscription directe avec Google'}</span>
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -2px 0' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>ou formulaire complet d'entreprise</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label
@@ -728,6 +931,238 @@ export function LoginPage() {
           <InstallAppButton variant="banner" />
         </div>
       </div>
+
+      
+      {/* MODALE ONBOARDING GOOGLE : COMPLÉTER LES INFORMATIONS DE L'ENTREPRISE (SIRET/SIREN & CGU) */}
+      {showGoogleOnboardingModal && pendingGoogleProfile && (
+        <div className="inspector-backdrop" onClick={() => !isGoogleLoading && setShowGoogleOnboardingModal(false)}>
+          <div
+            className="pro-table-container"
+            style={{
+              maxWidth: '520px',
+              width: '92%',
+              padding: '24px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  background: '#f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {pendingGoogleProfile.picture ? (
+                  <img src={pendingGoogleProfile.picture} alt="Google Avatar" style={{ width: '100%', height: '100%' }} />
+                ) : (
+                  <span style={{ fontSize: '20px' }}>🏢</span>
+                )}
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>
+                  Finaliser votre Espace Entreprise
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Compte Google certifié : <strong>{pendingGoogleProfile.name}</strong> ({pendingGoogleProfile.email})
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCompleteGoogleOnboarding} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                  Nom de l'entreprise *
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Ex: ANELEC GROUPE"
+                  value={googleCompanyName}
+                  onChange={(e) => setGoogleCompanyName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                  N° SIRET (14 chiffres) ou SIREN (9 chiffres) *
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="14 ou 9 chiffres"
+                  value={googleSiretOrSiren}
+                  onChange={(e) => setGoogleSiretOrSiren(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Acceptation des CGU & RGPD */}
+              <div style={{ marginTop: '4px' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                    fontSize: '11.5px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={googleAcceptTerms}
+                    onChange={(e) => setGoogleAcceptTerms(e.target.checked)}
+                    style={{ marginTop: '2px', accentColor: '#00bf63', width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <span>
+                    J'ai lu et j'accepte expressément les{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openLegal('cgu');
+                      }}
+                      style={{ background: 'none', border: 'none', padding: 0, color: '#00bf63', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontSize: '11.5px' }}
+                    >
+                      Conditions Générales (CGU)
+                    </button>{' '}
+                    et la{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openLegal('rgpd');
+                      }}
+                      style={{ background: 'none', border: 'none', padding: 0, color: '#00bf63', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontSize: '11.5px' }}
+                    >
+                      Politique RGPD
+                    </button>
+                    . Nos données restent la propriété exclusive de notre entreprise et sont hébergées sur Supabase (France).
+                  </span>
+                </label>
+              </div>
+
+              {googleOnboardingError && (
+                <p style={{ color: '#dc2626', fontSize: '12px', margin: '2px 0 0 0' }}>
+                  {googleOnboardingError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowGoogleOnboardingModal(false)}
+                  disabled={isGoogleLoading}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isGoogleLoading}
+                  style={{ fontWeight: 700 }}
+                >
+                  {isGoogleLoading ? 'Création en cours...' : 'Créer et Accéder à mon Espace'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE D'ASSISTANCE / MODE TEST GOOGLE OAUTH */}
+      {showGoogleConfigModal && (
+        <div className="inspector-backdrop" onClick={() => setShowGoogleConfigModal(false)}>
+          <div
+            className="pro-table-container"
+            style={{
+              maxWidth: '520px',
+              width: '92%',
+              padding: '24px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-default)',
+              boxShadow: '0 20px 45px rgba(0,0,0,0.3)',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '24px' }}>🔐</span>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>
+                Connexion Google Direct (OAuth 2.0)
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '14px' }}>
+              Le connecteur Google Identity Services est complètement intégré au code backend et frontend de votre application.
+            </p>
+
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: '10px',
+                background: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                fontSize: '12px',
+                color: 'var(--text-primary)',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+              }}
+            >
+              ℹ️ <strong>Pour activer la fenêtre officielle Google en production :</strong>
+              <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                Renseignez simplement la variable <code>GOOGLE_CLIENT_ID</code> dans votre fichier <code>.env</code> (créée gratuitement depuis <em>Google Cloud Console &gt; Identifiants OAuth 2.0 Web</em>).
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowGoogleConfigModal(false);
+                  const demoEmail = 'artisan.' + Math.floor(1000 + Math.random() * 9000) + '@gmail.com';
+                  handleGoogleCredential(`simulated_google_:${demoEmail}:Artisan Partenaire`);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                }}
+              >
+                <span>🚀</span>
+                <span>Tester l'Inscription Google Immédiate (Simulation en direct)</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowGoogleConfigModal(false)}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODALE CGU & RGPD */}
       <LegalTermsModal

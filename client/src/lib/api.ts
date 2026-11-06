@@ -221,6 +221,20 @@ export const authApi = {
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
+  googleAuth: (payload: {
+    credential: string;
+    companyName?: string;
+    siretOrSiren?: string;
+    acceptTerms?: boolean;
+  }) =>
+    api.post<{
+      user?: User;
+      accessToken?: string;
+      requiresCompanyInfo?: boolean;
+      googleProfile?: { email: string; name: string; picture?: string };
+      message: string;
+    }>('/auth/google', payload),
+  getAuthConfig: () => api.get<{ googleClientId: string }>('/auth/config'),
 };
 
 export const adminApi = {
