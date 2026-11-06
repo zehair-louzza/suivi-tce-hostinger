@@ -403,7 +403,7 @@ authRouter.post(
 // ============================================================================
 authRouter.get('/config', (_req: Request, res: Response) => {
   res.json({
-    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com',
     appName: 'ANELEC TCE',
   });
 });

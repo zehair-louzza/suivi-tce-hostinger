@@ -69,7 +69,7 @@ export function LoginPage() {
   const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
 
   // Google OAuth State
-  const [googleClientId, setGoogleClientId] = useState<string>('');
+  const [googleClientId, setGoogleClientId] = useState<string>('116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showGoogleOnboardingModal, setShowGoogleOnboardingModal] = useState(false);
   const [showGoogleConfigModal, setShowGoogleConfigModal] = useState(false);
@@ -82,31 +82,37 @@ export function LoginPage() {
 
   // Initialisation Google Identity Services (GIS)
   useEffect(() => {
+    const initGis = (id: string) => {
+      const g = (window as any).google;
+      if (g?.accounts?.id) {
+        try {
+          g.accounts.id.initialize({
+            client_id: id,
+            callback: (response: { credential: string }) => {
+              handleGoogleCredential(response.credential);
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+        } catch (e) {
+          console.warn('Erreur initialisation Google GIS :', e);
+        }
+      }
+    };
+
+    initGis(googleClientId);
+
     api
       .get<{ googleClientId: string }>('/auth/config')
       .then((res) => {
-        const id = res.data?.googleClientId;
+        const id = res.data?.googleClientId || googleClientId;
         if (id) {
           setGoogleClientId(id);
-          const g = (window as any).google;
-          if (g?.accounts?.id) {
-            try {
-              g.accounts.id.initialize({
-                client_id: id,
-                callback: (response: { credential: string }) => {
-                  handleGoogleCredential(response.credential);
-                },
-                auto_select: false,
-                cancel_on_tap_outside: true,
-              });
-            } catch (e) {
-              console.warn('Erreur initialisation Google GIS :', e);
-            }
-          }
+          initGis(id);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [googleClientId]);
 
   const handleGoogleCredential = async (
     credential: string,
