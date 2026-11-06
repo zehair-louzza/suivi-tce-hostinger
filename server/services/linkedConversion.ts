@@ -32,7 +32,7 @@ export async function convertKeepingQuote(actorId: number, quoteId: number, body
      entreprise:input.entreprise ?? null, datePlanifiee:new Date(input.datePlanifiee + 'T00:00:00.000Z'),
      amount:quote.amount, notes:input.notes ?? quote.notes, statutOperationnel:'PLANIFIEE', traitement:'A_TRAITER', status:'A_TRAITER',
      origineDevisId:quote.id, origineDevisClient:quote.client, origineDevisDate:quote.dateCreated, devisId:quote.id, userId:quote.userId,
-     companyId: quote.companyId ?? 1,
+     companyId: quote.companyId ?? null,
     }});
     const response = {id:item.id,chantier:item.chantier,entreprise:item.entreprise,amount:item.amount,datePlanifiee:item.datePlanifiee.toISOString().slice(0,10),dateReelle:null,status:'a-traiter',notes:item.notes,origineDevisId:item.origineDevisId,origineDevisClient:item.origineDevisClient,origineDevisDate:quote.dateCreated.toISOString().slice(0,10),createdAt:item.createdAt.getTime(),updatedAt:item.updatedAt.getTime(),devisId:quote.id};
     await tx.conversionRequest.create({data:{actorId,key,requestHash,interventionId:item.id,response}});
