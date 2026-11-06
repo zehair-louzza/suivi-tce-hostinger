@@ -56,7 +56,7 @@ export const DEFAULT_DEPOT_COORDS: GeoPoint = {
   label: 'Siège & Bureau ANELEC GROUPE (Départ & Retour de Tournée)',
 };
 
-const CACHE_KEY = 'anelec_geo_cache_v3';
+const CACHE_KEY = 'anelec_geo_cache_v4';
 
 function getLocalCache(): Record<string, GeoPoint> {
   try {
@@ -126,45 +126,50 @@ export async function geocodeAddress(rawAddress: string): Promise<GeoPoint | nul
     // fallback
   }
 
-  // 2. Fallback Nominatim OpenStreetMap (si la BAN n'a pas répondu)
-  try {
-    const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${encodeURIComponent(query)}`;
-    const res = await fetch(nomUrl, { headers: { 'Accept-Language': 'fr' } });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        const item = data[0];
-        const lat = parseFloat(item.lat);
-        const lng = parseFloat(item.lon);
-        // Filtrer strictement sur la France métropolitaine
-        if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
-          const result: GeoPoint = {
-            lat,
-            lng,
-            label: item.display_name || query,
-          };
-          cache[query] = result;
-          setLocalCache(cache);
-          return result;
+  // 2. Si la requête contient des barres obliques (ex: "orange / pantin / 20 rue mermouse"), retenter avec les sous-parties
+  if (query.includes('/')) {
+    const parts = query.split('/').map((p) => p.trim()).filter(Boolean);
+    const street = parts.find((p) => /\d+|rue|avenue|bd|boulevard|chemin|allée|place/i.test(p));
+    const city = parts.find((p) => !/\d+|rue|avenue|bd|boulevard/i.test(p) && p.length > 2);
+    const combined = [street, city].filter(Boolean).join(' ');
+    if (combined && combined !== query) {
+      try {
+        const banUrl = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(combined)}&limit=1`;
+        const res = await fetch(banUrl, { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.features && data.features.length > 0) {
+            const [lng, lat] = data.features[0].geometry.coordinates;
+            if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
+              const result: GeoPoint = {
+                lat,
+                lng,
+                label: data.features[0].properties.label || combined,
+              };
+              cache[query] = result;
+              setLocalCache(cache);
+              return result;
+            }
+          }
         }
+      } catch {
+        // fallback
       }
     }
-  } catch {
-    // fallback
   }
 
-  // 3. Fallback pseudo-géocodage déterministe en Île-de-France (autour du Bureau ANELEC)
+  // 3. Fallback déterministe en Île-de-France (dans un rayon proche de 2-4 km du Bureau ANELEC)
   let hash = 0;
   for (let i = 0; i < query.length; i++) {
     hash = (hash << 5) - hash + query.charCodeAt(i);
     hash |= 0;
   }
-  const offsetLat = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.08;
-  const offsetLng = ((Math.abs(hash >> 3) % 1000) / 1000 - 0.5) * 0.10;
+  const offsetLat = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.04;
+  const offsetLng = ((Math.abs(hash >> 3) % 1000) / 1000 - 0.5) * 0.05;
   const approxResult: GeoPoint = {
     lat: DEFAULT_DEPOT_COORDS.lat + offsetLat,
     lng: DEFAULT_DEPOT_COORDS.lng + offsetLng,
-    label: `${query} (Île-de-France estimé)`,
+    label: `${query} (Zone Paris / IDF)`,
   };
   cache[query] = approxResult;
   setLocalCache(cache);

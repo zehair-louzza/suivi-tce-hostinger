@@ -253,10 +253,21 @@ export function TourneeMapOptimizer({
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Moteur cartographique mondial ESRI & OSM France : aucun blocage 403, aucun filigrane, gratuit et ultra net
+      const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap • ANELEC Tournées',
+        attribution: '© Esri & OSM • ANELEC GROUPE',
       }).addTo(map);
+
+      const osmFrLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap France • ANELEC GROUPE',
+      });
+
+      L.control.layers({
+        '🗺️ Plan Rues (ESRI)': esriLayer,
+        '🇫🇷 OSM France': osmFrLayer,
+      }, undefined, { position: 'topright' }).addTo(map);
 
       markersLayerRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
