@@ -21,7 +21,7 @@ interface TechnicianMobileViewProps {
   devisList: Devis[];
 }
 
-type MobileStepTab = 'missions' | 'pointage' | 'compte_rendu' | 'tout';
+type MobileStepTab = 'missions' | 'pointage' | 'compte_rendu' | 'trajet' | 'tout';
 
 function getNowHHMM(): string {
   try {
@@ -38,6 +38,7 @@ function getNowHHMM(): string {
 }
 
 import { compressAndOptimizeImage, MAX_PHOTOS_PER_MISSION } from '../lib/imageOptimizer';
+import { TourneeMapOptimizer } from './TourneeMapOptimizer';
 
 export function TechnicianMobileView({
   techniciens,
@@ -659,7 +660,7 @@ export function TechnicianMobileView({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '4px',
             background: 'var(--bg-surface)',
             padding: '4px',
@@ -671,18 +672,19 @@ export function TechnicianMobileView({
             type="button"
             onClick={() => setActiveTab('pointage')}
             style={{
-              padding: '8px 4px',
+              padding: '8px 2px',
               borderRadius: '7px',
               border: 'none',
-              fontSize: '12px',
+              fontSize: '11px',
               fontWeight: 800,
               cursor: 'pointer',
               background: activeTab === 'pointage' ? '#00bf63' : 'transparent',
               color: activeTab === 'pointage' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px',
+              gap: '2px',
               minWidth: 0,
             }}
           >
@@ -694,18 +696,19 @@ export function TechnicianMobileView({
             type="button"
             onClick={() => setActiveTab('missions')}
             style={{
-              padding: '8px 4px',
+              padding: '8px 2px',
               borderRadius: '7px',
               border: 'none',
-              fontSize: '12px',
+              fontSize: '11px',
               fontWeight: 800,
               cursor: 'pointer',
               background: activeTab === 'missions' ? '#00bf63' : 'transparent',
               color: activeTab === 'missions' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px',
+              gap: '2px',
               minWidth: 0,
             }}
           >
@@ -715,25 +718,50 @@ export function TechnicianMobileView({
 
           <button
             type="button"
-            onClick={() => setActiveTab('compte_rendu')}
+            onClick={() => setActiveTab('trajet')}
             style={{
-              padding: '8px 4px',
+              padding: '8px 2px',
               borderRadius: '7px',
               border: 'none',
-              fontSize: '12px',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeTab === 'trajet' ? '#00bf63' : 'transparent',
+              color: activeTab === 'trajet' ? '#ffffff' : 'var(--text-secondary)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '2px',
+              minWidth: 0,
+            }}
+          >
+            <span>🗺️</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Trajet & GPS</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('compte_rendu')}
+            style={{
+              padding: '8px 2px',
+              borderRadius: '7px',
+              border: 'none',
+              fontSize: '11px',
               fontWeight: 800,
               cursor: 'pointer',
               background: activeTab === 'compte_rendu' ? '#00bf63' : 'transparent',
               color: activeTab === 'compte_rendu' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px',
+              gap: '2px',
               minWidth: 0,
             }}
           >
             <span>📝</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport & 📷</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport 📷</span>
           </button>
         </div>
       </div>
@@ -1038,6 +1066,27 @@ export function TechnicianMobileView({
             </button>
           )}
         </div>
+      )}
+
+      {/* =====================================================================
+          ONGLET TRAJET & OPTIMISATION DE TOURNÉE AUTOMATIQUE (GPS)
+         ===================================================================== */}
+      {activeTab === 'trajet' && (
+        <TourneeMapOptimizer
+          interventions={interventionsList}
+          devis={devisList}
+          selectedDate={selectedDate}
+          currentTechnicien={currentTechnicien}
+          techniciensList={techniciens}
+          onSelectTechnicien={onSelectTechnicien}
+          onOpenIntervention={(i) => {
+            setActiveMissionId(i.id);
+            setActiveTab('missions');
+          }}
+          onOpenDevis={() => {
+            setActiveTab('missions');
+          }}
+        />
       )}
 
       {/* =====================================================================

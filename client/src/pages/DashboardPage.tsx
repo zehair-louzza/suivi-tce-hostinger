@@ -27,6 +27,7 @@ import { FacturationStudio } from '../components/FacturationStudio';
 import { RentabiliteKpiView } from '../components/RentabiliteKpiView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
+import { TourneeMapOptimizer } from '../components/TourneeMapOptimizer';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
@@ -47,6 +48,7 @@ export function DashboardPage() {
     if (pathname.startsWith('/planning')) return 'planning';
     if (pathname.startsWith('/devis')) return 'devis';
     if (pathname.startsWith('/interventions')) return 'interventions';
+    if (pathname.startsWith('/carte')) return 'carte';
     if (pathname.startsWith('/facturation')) return 'facturation';
     if (pathname.startsWith('/rentabilite')) return 'rentabilite';
     if (pathname.startsWith('/referentiels')) return 'referentiels';
@@ -79,6 +81,7 @@ export function DashboardPage() {
       planning: '/planning',
       devis: '/devis',
       interventions: '/interventions',
+      carte: '/carte',
       facturation: '/facturation',
       rentabilite: '/rentabilite',
       referentiels: '/referentiels',
@@ -2030,6 +2033,28 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* =====================================================================
+          SECTION 4B-MAP : CARTE INTERACTIVE & CALCUL AUTOMATIQUE DE TRAJET
+         ===================================================================== */}
+      {activeSection === 'carte' && (
+        <TourneeMapOptimizer
+          interventions={interventionsList}
+          devis={devisList}
+          selectedDate={new Date().toISOString().slice(0, 10)}
+          currentTechnicien={selectedMobileTech}
+          techniciensList={techniciensList}
+          onSelectTechnicien={setSelectedMobileTech}
+          onOpenIntervention={(i) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(i);
+          }}
+          onOpenDevis={(d) => {
+            setIsCreatingDevis(false);
+            setSelectedDevis(d);
+          }}
+        />
       )}
 
       {/* =====================================================================
