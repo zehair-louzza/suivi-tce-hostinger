@@ -289,7 +289,25 @@ export function PlanningBoard({
   const allItems = useMemo<PlanningSlotItem[]>(() => {
     const list: PlanningSlotItem[] = [];
 
+    // Identification des devis dont la visite est déjà représentée par une intervention terrain
+    const devisIdsWithVisitIntervention = new Set<number>();
+    for (const intv of interventionsList) {
+      if (intv.statutOperationnel === 'Annulée') continue;
+      const isVisite = Boolean(intv.isVisiteDevis) || intv.typeIntervention === 'Visite technique devis';
+      if (isVisite) {
+        if (intv.devisId) devisIdsWithVisitIntervention.add(intv.devisId);
+        if (intv.origineDevisId) devisIdsWithVisitIntervention.add(intv.origineDevisId);
+      }
+    }
+
     for (const d of devisList) {
+      // RÈGLE ANTI-DOUBLON ANELEC : Si une intervention de visite existe déjà pour ce devis,
+      // on ne crée pas de 2e bloc devis sur le planning. La boucle intervention ci-dessous
+      // générera le bloc d'activité unique unifié (VIS • DEV).
+      if (devisIdsWithVisitIntervention.has(d.id)) {
+        continue;
+      }
+
       const needsVisit =
         d.visiteNecessaire ||
         d.traitement === 'En attente technicien' ||
@@ -324,7 +342,7 @@ export function PlanningBoard({
           date: dateVal,
           heureDebut: hDebut,
           heureFin: hFin,
-          durationHours: computeDurationHours(hDebut, hFin) ?? 2,
+          durationHours: computeDurationHours(hDebut, hFin) ?? 1.5,
           rawDevis: d,
         });
       }
@@ -346,24 +364,37 @@ export function PlanningBoard({
         intv.typeIntervention === 'Urgente';
       const isVisite = Boolean(intv.isVisiteDevis) || intv.typeIntervention === 'Visite technique devis';
 
+      // Recherche du devis lié pour fusion d'activité
+      const linkedDevis = isVisite
+        ? devisList.find((d) => d.id === (intv.devisId || intv.origineDevisId)) ||
+          devisList.find((d) => Boolean(d.visiteNecessaire) && d.client === intv.client)
+        : undefined;
+
+      const refLabel = linkedDevis
+        ? `${intv.reference || `VIS-${intv.id}`} • ${linkedDevis.reference || `DEV-${linkedDevis.id}`}`
+        : (intv.reference || `INT-${intv.id}`);
+
       list.push({
         id: slotId,
         kind: isUrgent ? 'URGENCE' : isVisite ? 'VISITE_DEVIS' : 'INTERVENTION',
         sourceType: 'INTERVENTION',
         sourceId: intv.id,
-        reference: intv.reference || `INT-${intv.id}`,
-        title: intv.objet || 'Intervention technique',
-        client: intv.client || 'Client',
-        site: intv.chantier || 'Site',
-        typePrestation: intv.corpsEtat || intv.typeIntervention || 'Intervention',
-        priorite: intv.priorite || 'Normale',
+        reference: refLabel,
+        title: isVisite
+          ? `[Visite Devis] ${intv.objet || linkedDevis?.objet || 'Visite technique'}`
+          : (intv.objet || 'Intervention technique'),
+        client: intv.client || linkedDevis?.client || 'Client',
+        site: intv.chantier || linkedDevis?.site || 'Site',
+        typePrestation: intv.corpsEtat || linkedDevis?.corpsEtat || intv.typeIntervention || 'Intervention',
+        priorite: intv.priorite || linkedDevis?.priorite || 'Normale',
         statut: statutVal,
         technicien: tech,
         date: dateVal,
         heureDebut: hDebut,
         heureFin: hFin,
-        durationHours: computeDurationHours(hDebut, hFin) ?? 4,
+        durationHours: computeDurationHours(hDebut, hFin) ?? (isVisite ? 1.5 : 4),
         rawIntervention: intv,
+        rawDevis: linkedDevis,
       });
     }
 
@@ -438,6 +469,16 @@ export function PlanningBoard({
             visiteHeureFin: nextFin,
             visiteStatut: nextDate && nextTech ? 'Planifiée' : 'À planifier',
           });
+          if (item.rawIntervention) {
+            await onUpdateInterventionPlanning(item.rawIntervention.id, {
+              entreprise: nextTech,
+              datePlanifiee: nextDate || null,
+              heureDebut: nextDebut,
+              heureFin: nextFin,
+              statutOperationnel: nextStatut,
+              modePlanification: nextDate && nextTech ? 'Planifiée' : 'Non planifiée',
+            });
+          }
         } else {
           await onUpdateInterventionPlanning(item.sourceId, {
             entreprise: nextTech,
@@ -447,6 +488,16 @@ export function PlanningBoard({
             statutOperationnel: nextStatut,
             modePlanification: nextDate && nextTech ? 'Planifiée' : 'Non planifiée',
           });
+          if (item.rawDevis) {
+            await onUpdateDevisPlanning(item.rawDevis.id, {
+              visiteNecessaire: true,
+              visiteTechnicien: nextTech,
+              visiteDate: nextDate || null,
+              visiteHeureDebut: nextDebut,
+              visiteHeureFin: nextFin,
+              visiteStatut: nextDate && nextTech ? 'Planifiée' : 'À planifier',
+            });
+          }
         }
         toast.success(`${item.reference} → ${nextTech || 'File'} (${nextDebut}–${nextFin})`, {
           duration: 1800,

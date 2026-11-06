@@ -58,7 +58,7 @@ test('Reconnexion : devis et interventions sont resynchronisés', () => {
  const a = subscribeToRealtimeInvalidation(socket.on, client, 'devis');
  const b = subscribeToRealtimeInvalidation(socket.on, client, 'interventions');
  socket.emit('connect');
- assert.deepEqual(calls, [['devis','list'],['devis','stats'],['interventions','list'],['interventions','stats']]);
+ assert.deepEqual(calls, [['devis'],['devis','list'],['devis','stats'],['interventions'],['interventions','list'],['interventions','stats']]);
  a(); b();
 });
 test('Nettoyage : aucun rappel conservé après désabonnement', () => {
