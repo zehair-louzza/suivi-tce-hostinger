@@ -380,7 +380,7 @@ export function Layout({
                     {user.name}
                   </div>
                   <div style={{ fontSize: '10px', color: '#64748b' }}>
-                    {isMobileTechOnly ? 'Technicien Terrain' : 'Dispatcher ANELEC'}
+                    {isMobileTechOnly ? 'Technicien Terrain' : (user?.companyName || 'ANELEC GROUPE')}
                   </div>
                 </div>
               </div>
@@ -434,7 +434,7 @@ export function Layout({
                   className="desktop-only-el"
                   style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}
                 >
-                  ANELEC TCE /
+                  {(user?.companyName ? user.companyName.toUpperCase() : 'ANELEC TCE')} /
                 </span>
                 <h1
                   style={{

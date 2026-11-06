@@ -255,8 +255,9 @@ interventionRouter.get(
 
 interventionRouter.get(
   '/stats',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const items = await prisma.intervention.findMany();
+  asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user?.companyId || 1;
+    const items = await prisma.intervention.findMany({ where: { companyId } });
     const transformed = items.map(transformIntervention);
 
     const result: Record<string, number> = {
@@ -302,8 +303,9 @@ interventionRouter.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
+    const companyId = req.user?.companyId || 1;
     const intervention = await prisma.intervention.findFirst({
-      where: { id },
+      where: { id, companyId },
       include: { devis: true },
     });
 
@@ -319,6 +321,7 @@ interventionRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -394,6 +397,7 @@ interventionRouter.post(
         devisId: b.devisId ? Number(b.devisId) : b.origineDevisId ? Number(b.origineDevisId) : null,
         historiqueJson,
         userId,
+        companyId,
       },
     });
 
@@ -425,10 +429,11 @@ interventionRouter.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
-    const existing = await prisma.intervention.findFirst({ where: { id } });
+    const existing = await prisma.intervention.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
     }
@@ -600,8 +605,9 @@ interventionRouter.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
 
-    const existing = await prisma.intervention.findFirst({ where: { id } });
+    const existing = await prisma.intervention.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
     }

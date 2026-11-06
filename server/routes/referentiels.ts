@@ -11,8 +11,9 @@ import {
 export const referentielsRouter = Router();
 
 // GET /api/referentiels - Retourne toutes les listes de choix métier ANELEC + compétences + équipes journalières
-referentielsRouter.get('/', async (_req: Request, res: Response) => {
-  const rows = await prisma.referentiel.findMany();
+referentielsRouter.get('/', async (req: Request, res: Response) => {
+  const companyId = req.user?.companyId || 1;
+  const rows = await prisma.referentiel.findMany({ where: { companyId } });
   const result: ReferentielsMap = {
     clients: [...DEFAULT_REFERENTIELS.clients],
     corps_etat: [...DEFAULT_REFERENTIELS.corps_etat],
@@ -75,6 +76,7 @@ referentielsRouter.get('/', async (_req: Request, res: Response) => {
 // PUT /api/referentiels/:categorie - Met à jour une liste de choix, la matrice technicien_competences ou equipes_journalieres
 referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
   const categorie = req.params.categorie as keyof ReferentielsMap;
+  const companyId = req.user?.companyId || 1;
 
   if (categorie === 'technicien_competences') {
     const rawMap = req.body?.competences || req.body?.valeurs || {};
@@ -90,10 +92,11 @@ referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
     }
 
     await prisma.referentiel.upsert({
-      where: { categorie: 'technicien_competences' },
+      where: { categorie_companyId: { categorie: 'technicien_competences', companyId } },
       create: {
         categorie: 'technicien_competences',
         valeurs: JSON.stringify(cleanedMap),
+        companyId,
       },
       update: {
         valeurs: JSON.stringify(cleanedMap),
@@ -132,10 +135,11 @@ referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
       });
 
     await prisma.referentiel.upsert({
-      where: { categorie: 'equipes_journalieres' },
+      where: { categorie_companyId: { categorie: 'equipes_journalieres', companyId } },
       create: {
         categorie: 'equipes_journalieres',
         valeurs: JSON.stringify(cleanedEquipes),
+        companyId,
       },
       update: {
         valeurs: JSON.stringify(cleanedEquipes),
@@ -154,10 +158,11 @@ referentielsRouter.put('/:categorie', async (req: Request, res: Response) => {
     : [];
 
   await prisma.referentiel.upsert({
-    where: { categorie },
+    where: { categorie_companyId: { categorie, companyId } },
     create: {
       categorie,
       valeurs: JSON.stringify(valeurs),
+      companyId,
     },
     update: {
       valeurs: JSON.stringify(valeurs),

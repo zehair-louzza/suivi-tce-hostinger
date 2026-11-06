@@ -14,7 +14,13 @@ interface AuthState {
   
   // Actions
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    companyName?: string,
+    siretOrSiren?: string
+  ) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   fetchMe: () => Promise<void>;
@@ -54,10 +60,22 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (name: string, email: string, password: string) => {
+      register: async (
+        name: string,
+        email: string,
+        password: string,
+        companyName?: string,
+        siretOrSiren?: string
+      ) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.post('/auth/register', { name, email, password });
+          const response = await api.post('/auth/register', {
+            name,
+            email,
+            password,
+            companyName,
+            siretOrSiren,
+          });
           const { user, accessToken } = response.data;
           
           set({
@@ -67,7 +85,7 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
         } catch (err: any) {
-          const message = err.response?.data?.error || 'Erreur d\'inscription';
+          const message = err.response?.data?.error || "Erreur d'inscription";
           set({ error: message, isLoading: false, isAuthenticated: false });
           throw err;
         }

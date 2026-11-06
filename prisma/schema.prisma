@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Company {
+  id                   Int                  @id @default(autoincrement())
+  name                 String
+  siret                String?
+  siren                String?
+  active               Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  users                User[]
+  devis                Devis[]
+  interventions        Intervention[]
+  pointagesTechniciens PointageTechnicien[]
+  referentiels         Referentiel[]
+
+  @@map("companies")
+}
+
 model User {
   id                 Int                 @id @default(autoincrement())
   email              String              @unique
@@ -16,12 +33,15 @@ model User {
   technicienNom      String?
   permissionsJson    String?
   active             Boolean             @default(true)
+  companyId          Int?
+  company            Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   devis              Devis[]
   interventions      Intervention[]
   conversionRequests ConversionRequest[]
 
+  @@index([companyId], map: "users_companyid_idx")
   @@map("users")
 }
 
@@ -37,6 +57,8 @@ model Devis {
   updatedAt            DateTime       @updatedAt
   userId               Int
   user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId            Int?
+  company              Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   interventions        Intervention[]
   referenceMetier      String?
   siteAdresse          String?
@@ -68,6 +90,7 @@ model Devis {
   historiqueJson       String?
 
   @@index([userId])
+  @@index([companyId], map: "devis_companyid_idx")
   @@index([status])
   @@index([dateCreated])
   @@index([userId, traitement], map: "devis_userid_traitement_idx")
@@ -92,6 +115,8 @@ model Intervention {
   updatedAt          DateTime            @updatedAt
   userId             Int
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId          Int?
+  company            Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   devisId            Int?
   devis              Devis?              @relation(fields: [devisId], references: [id], onDelete: SetNull)
   referenceMetier    String?
@@ -135,6 +160,7 @@ model Intervention {
   statutRapport        String?
 
   @@index([userId])
+  @@index([companyId], map: "interventions_companyid_idx")
   @@index([status])
   @@index([datePlanifiee])
   @@index([devisId])
@@ -162,10 +188,13 @@ model ConversionRequest {
 
 model Referentiel {
   id        Int      @id @default(autoincrement())
-  categorie String   @unique
+  categorie String
   valeurs   String
+  companyId Int?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   updatedAt DateTime @updatedAt
 
+  @@unique([categorie, companyId], map: "referentiels_categorie_companyid_key")
   @@map("referentiels")
 }
 
@@ -173,6 +202,8 @@ model PointageTechnicien {
   id                      Int       @id @default(autoincrement())
   technicien              String
   userId                  Int?
+  companyId               Int?
+  company                 Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   dateJour                String
   heureArriveeBureau      String?
   timestampArrivee        DateTime?
@@ -184,6 +215,7 @@ model PointageTechnicien {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  @@unique([technicien, dateJour], map: "pointages_techniciens_technicien_datejour_key")
+  @@unique([technicien, dateJour, companyId], map: "pointages_techniciens_technicien_datejour_company_key")
+  @@index([companyId], map: "pointages_techniciens_companyid_idx")
   @@map("pointages_techniciens")
 }

@@ -1,4 +1,4 @@
-// Socket.io handlers for real-time updates
+// Socket.io handlers for real-time updates with multi-tenant company isolation
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
@@ -6,7 +6,8 @@ import { config } from '../config.js';
 interface TokenPayload {
   userId: number;
   email: string;
-  role: 'ADMIN' | 'USER' | 'VIEWER';
+  role: string;
+  companyId?: number;
   iat: number;
   exp: number;
 }
@@ -44,6 +45,7 @@ export function setupSocketHandlers(io: Server) {
       const decoded = jwt.verify(token, config.jwtSecret) as TokenPayload;
       socket.user = decoded;
       socket.join(`user:${decoded.userId}`);
+      socket.join(`company:${decoded.companyId || 1}`);
       next();
     } catch (err) {
       next(new Error('Invalid token'));
@@ -51,7 +53,7 @@ export function setupSocketHandlers(io: Server) {
   });
 
   io.on('connection', (socket: AuthenticatedSocket) => {
-    console.log(`Socket connected: ${socket.id} (user: ${socket.user?.userId})`);
+    console.log(`Socket connected: ${socket.id} (user: ${socket.user?.userId}, company: ${socket.user?.companyId || 1})`);
 
     socket.on('join:room', (room: string) => {
       socket.join(room);
@@ -65,6 +67,7 @@ export function setupSocketHandlers(io: Server) {
     socket.on('subscribe:user', () => {
       if (socket.user) {
         socket.join(`user:${socket.user.userId}`);
+        socket.join(`company:${socket.user.companyId || 1}`);
       }
     });
 
@@ -82,28 +85,49 @@ export function setupSocketHandlers(io: Server) {
 export const socketEvents = {
   // Devis events
   devisCreated: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('devis:created', data);
+    getIO().to(`company:${compId}`).emit('devis:created', data);
   },
   devisUpdated: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('devis:updated', data);
+    getIO().to(`company:${compId}`).emit('devis:updated', data);
   },
   devisDeleted: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('devis:deleted', data);
+    getIO().to(`company:${compId}`).emit('devis:deleted', data);
   },
 
   // Intervention events
   interventionCreated: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('intervention:created', data);
+    getIO().to(`company:${compId}`).emit('intervention:created', data);
   },
   interventionUpdated: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('intervention:updated', data);
+    getIO().to(`company:${compId}`).emit('intervention:updated', data);
   },
   interventionDeleted: (userId: number, data: any) => {
+    const compId = data?.companyId || 1;
     getIO().to(`user:${userId}`).emit('intervention:deleted', data);
+    getIO().to(`company:${compId}`).emit('intervention:deleted', data);
   },
 
-  // Broadcast to all
-  broadcast: (event: string, data: any) => {
-    getIO().emit(event, data);
+  // Broadcast to company
+  broadcastCompany: (companyId: number, event: string, data: any) => {
+    getIO().to(`company:${companyId || 1}`).emit(event, data);
+  },
+
+  // Broadcast
+  broadcast: (event: string, data: any, companyId?: number) => {
+    if (companyId) {
+      getIO().to(`company:${companyId}`).emit(event, data);
+    } else {
+      getIO().emit(event, data);
+    }
   },
 };

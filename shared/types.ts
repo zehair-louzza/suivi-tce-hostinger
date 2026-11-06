@@ -661,6 +661,13 @@ export interface UserPermissions {
   mobileOnly: boolean;
 }
 
+export interface CompanyInfo {
+  id: number;
+  name: string;
+  siret?: string | null;
+  siren?: string | null;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -669,6 +676,10 @@ export interface User {
   technicienNom?: string | null;
   permissions?: UserPermissions;
   active?: boolean;
+  companyId?: number | null;
+  companyName?: string | null;
+  companySiret?: string | null;
+  company?: CompanyInfo | null;
   createdAt?: number | string;
 }
 

@@ -16,6 +16,15 @@ const publicUserSelect = {
   technicienNom: true,
   permissionsJson: true,
   active: true,
+  companyId: true,
+  company: {
+    select: {
+      id: true,
+      name: true,
+      siret: true,
+      siren: true,
+    },
+  },
   createdAt: true,
 } as const;
 
@@ -52,7 +61,7 @@ async function getCallerUser(req: Request) {
   }
   const u = await prisma.user.findUnique({
     where: { id: req.user.userId },
-    select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, active: true },
+    select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, active: true, companyId: true },
   });
   if (!u || u.active === false) {
     throw new AppError(403, 'Compte désactivé ou inexistant', 'FORBIDDEN');
@@ -74,7 +83,9 @@ adminRouter.get(
       throw new AppError(403, 'Accès réservé exclusivement au Super-Administrateur', 'FORBIDDEN');
     }
 
+    const where: any = caller.companyId ? { companyId: caller.companyId } : {};
     const users = await prisma.user.findMany({
+      where,
       select: publicUserSelect,
       orderBy: [{ id: 'asc' }],
     });
@@ -112,6 +123,7 @@ adminRouter.post(
         role: role || 'CONDUCTEUR_TRAVAUX',
         technicienNom: technicienNom ? String(technicienNom).trim() : null,
         permissionsJson: permissions ? JSON.stringify(permissions) : null,
+        companyId: caller.companyId || 1,
         active: true,
       },
       select: publicUserSelect,
@@ -203,7 +215,9 @@ adminRouter.get(
       technicien = (caller.technicienNom || caller.name || '').trim();
     }
 
+    const companyId = caller.companyId || 1;
     const where: any = {
+      companyId,
       ...(dateJour ? { dateJour } : {}),
       ...(technicien ? { technicien } : {}),
     };
@@ -238,6 +252,7 @@ adminRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     const { parisDateISO, parisHHMM, now } = getParisNow();
+    const companyId = caller.companyId || 1;
 
     let technicien = String(req.body?.technicien || '').trim();
     let dateJour = String(req.body?.dateJour || '').trim();
@@ -263,9 +278,10 @@ adminRouter.post(
     if (!caller.isAdmin) {
       const existing = await prisma.pointageTechnicien.findUnique({
         where: {
-          technicien_dateJour: {
+          technicien_dateJour_companyId: {
             technicien,
             dateJour,
+            companyId,
           },
         },
       });
@@ -282,9 +298,10 @@ adminRouter.post(
 
     const upserted = await prisma.pointageTechnicien.upsert({
       where: {
-        technicien_dateJour: {
+        technicien_dateJour_companyId: {
           technicien,
           dateJour,
+          companyId,
         },
       },
       update: {
@@ -296,6 +313,7 @@ adminRouter.post(
       create: {
         technicien,
         userId: caller.id,
+        companyId,
         dateJour,
         heureArriveeBureau,
         timestampArrivee: now,
@@ -319,6 +337,7 @@ adminRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     const { parisDateISO, parisHHMM, now } = getParisNow();
+    const companyId = caller.companyId || 1;
 
     let technicien = String(req.body?.technicien || '').trim();
     let dateJour = String(req.body?.dateJour || '').trim();
@@ -345,9 +364,10 @@ adminRouter.post(
     if (!caller.isAdmin) {
       const existing = await prisma.pointageTechnicien.findUnique({
         where: {
-          technicien_dateJour: {
+          technicien_dateJour_companyId: {
             technicien,
             dateJour,
+            companyId,
           },
         },
       });
@@ -364,9 +384,10 @@ adminRouter.post(
 
     const upserted = await prisma.pointageTechnicien.upsert({
       where: {
-        technicien_dateJour: {
+        technicien_dateJour_companyId: {
           technicien,
           dateJour,
+          companyId,
         },
       },
       update: {
@@ -379,6 +400,7 @@ adminRouter.post(
       create: {
         technicien,
         userId: caller.id,
+        companyId,
         dateJour,
         heureArriveeBureau: '08:00',
         heureFinJournee,

@@ -245,6 +245,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         origineDevisDate: devis.dateCreated,
         devisId: devis.id,
         userId,
+        companyId: devis.companyId || 1,
         historiqueJson: addHistoriqueEvent(
           null,
           auteur,
@@ -263,8 +264,10 @@ devisRouter.get(
     const status = (req.query.status as string) || '';
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 200;
+    const companyId = req.user?.companyId || 1;
 
     const where: any = {
+      companyId,
       ...(search
         ? {
             OR: [
@@ -325,8 +328,9 @@ devisRouter.get(
 
 devisRouter.get(
   '/stats',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const items = await prisma.devis.findMany();
+  asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user?.companyId || 1;
+    const items = await prisma.devis.findMany({ where: { companyId } });
     const transformed = items.map(transformDevis);
 
     const result: Record<string, number> = {
@@ -365,8 +369,9 @@ devisRouter.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
+    const companyId = req.user?.companyId || 1;
     const devis = await prisma.devis.findFirst({
-      where: { id },
+      where: { id, companyId },
       include: { interventions: true },
     });
 
@@ -382,6 +387,7 @@ devisRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -438,6 +444,7 @@ devisRouter.post(
         visiteStatut: b.visiteDate ? 'Planifiée' : 'À planifier',
         historiqueJson,
         userId,
+        companyId,
       },
       include: { interventions: true },
     });
@@ -468,10 +475,11 @@ devisRouter.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
-    const existing = await prisma.devis.findFirst({ where: { id } });
+    const existing = await prisma.devis.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
     }
@@ -572,8 +580,9 @@ devisRouter.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
 
-    const existing = await prisma.devis.findFirst({ where: { id } });
+    const existing = await prisma.devis.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
     }
@@ -590,6 +599,7 @@ devisRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const devisId = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -608,7 +618,7 @@ devisRouter.post(
     }
 
     const devis = await prisma.devis.findFirst({
-      where: { id: devisId },
+      where: { id: devisId, companyId },
       include: { interventions: true },
     });
 
@@ -655,6 +665,7 @@ devisRouter.post(
         origineDevisDate: devis.dateCreated,
         devisId: devis.id,
         userId,
+        companyId: devis.companyId || companyId,
         historiqueJson: addHistoriqueEvent(
           null,
           auteur,
