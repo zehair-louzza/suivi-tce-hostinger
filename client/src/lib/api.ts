@@ -176,6 +176,7 @@ export const devisApi = {
       typeIntervention?: string;
       priorite?: string;
       notes?: string;
+      objet?: string;
     }
   ) => api.post<{ data: Intervention; devis: Devis; message: string }>(`/devis/${id}/convert`, data || {}),
 };

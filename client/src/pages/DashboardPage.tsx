@@ -117,6 +117,11 @@ export function DashboardPage() {
   const [lightboxPhotos, setLightboxPhotos] = useState<PhotoItem[] | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
+  // Modal de Reconversion d'un Devis déjà transformé (SAV, Reprise, Avenant, Phase 2)
+  const [reconversionModalDevis, setReconversionModalDevis] = useState<Devis | null>(null);
+  const [reconversionMotif, setReconversionMotif] = useState<'SAV' | 'REPRISE' | 'AVENANT' | 'PHASE2'>('SAV');
+  const [reconversionNotes, setReconversionNotes] = useState('');
+
   // Synchronisation temps réel via WebSockets
   useDevisRealtime();
   useInterventionRealtime();
@@ -206,17 +211,72 @@ export function DashboardPage() {
   });
 
   const convertDevisMut = useMutation({
-    mutationFn: (id: number) => devisApi.convert(id, { mode: 'travaux' }),
+    mutationFn: ({ id, data }: { id: number; data?: any }) => devisApi.convert(id, data || { mode: 'travaux' }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['devis'] });
       queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      toast.success(res.data.message || `Intervention créée — Devis conservé !`);
+      toast.success(res.data.message || `Intervention créée avec succès !`);
       if (selectedDevis && res.data.devis) {
         setSelectedDevis(res.data.devis);
       }
+      setReconversionModalDevis(null);
+      setReconversionNotes('');
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur lors de la conversion'),
   });
+
+  const handleTriggerConvertDevis = (d: Devis) => {
+    const linkedIntvs = interventionsList.filter(
+      (i) => (i.devisId === d.id || i.origineDevisId === d.id) && i.statutOperationnel !== 'Annulée'
+    );
+    if ((d.interventionsCount && d.interventionsCount > 0) || linkedIntvs.length > 0) {
+      setReconversionModalDevis(d);
+      setReconversionMotif('SAV');
+      setReconversionNotes('');
+    } else {
+      convertDevisMut.mutate({ id: d.id, data: { mode: 'travaux' } });
+    }
+  };
+
+  const handleConfirmReconversion = () => {
+    if (!reconversionModalDevis) return;
+    const motifLabels: Record<string, { prefix: string; type: string; title: string }> = {
+      SAV: {
+        prefix: '[SAV] ',
+        type: 'SAV',
+        title: 'Service Après-Vente / Garantie',
+      },
+      REPRISE: {
+        prefix: '[REPRISE] ',
+        type: 'Reprise de travaux',
+        title: 'Reprise de travaux / Refaire',
+      },
+      AVENANT: {
+        prefix: '[AVENANT] ',
+        type: 'Travaux supplémentaires',
+        title: 'Travaux supplémentaires / Avenant',
+      },
+      PHASE2: {
+        prefix: '[PHASE 2] ',
+        type: '2ème Phase',
+        title: 'Deuxième tranche / Phase 2',
+      },
+    };
+
+    const cfg = motifLabels[reconversionMotif] || motifLabels.SAV;
+    const baseObjet = reconversionModalDevis.objet || `Chantier ${reconversionModalDevis.reference || 'DEV-' + reconversionModalDevis.id}`;
+    const newObjet = `${cfg.prefix}${baseObjet}`;
+
+    convertDevisMut.mutate({
+      id: reconversionModalDevis.id,
+      data: {
+        mode: 'travaux',
+        typeIntervention: cfg.type,
+        objet: newObjet,
+        notes: reconversionNotes.trim() ? `[MOTIF: ${cfg.title}] ${reconversionNotes.trim()}` : `[MOTIF: ${cfg.title}]`,
+      },
+    });
+  };
 
   const createIntvMut = useMutation({
     mutationFn: (payload: Partial<Intervention>) => interventionApi.create(payload),
@@ -440,488 +500,437 @@ export function DashboardPage() {
          ===================================================================== */}
       {activeSection === 'aujourdhui' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div className="kpi-strip">
-            {[
+          {/* =================================================================
+              1. BAROMÈTRE ÉCONOMIQUE & FINANCIER ANELEC (4 CARTES HAUT IMPACT)
+             ================================================================= */}
+          {(() => {
+            const totalCAClotureHT = interventionsList
+              .filter((i) => ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel))
+              .reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+
+            const totalDevisPipelineHT = devisList
+              .filter((d) => ['Envoyé au client', 'En négociation', 'À préparer', 'En préparation'].includes(d.statutCommercial))
+              .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+
+            const totalAFacturerHT = interventionsList
+              .filter(
+                (i) =>
+                  ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel) &&
+                  i.statutFacture !== 'Facturée'
+              )
+              .reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+
+            const devisAcceptes = devisList.filter((d) => d.statutCommercial === 'Accepté');
+            const tauxTransformation =
+              devisList.length > 0 ? Math.round((devisAcceptes.length / devisList.length) * 100) : 0;
+
+            const intvClotureesCount = interventionsList.filter((i) =>
+              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
+            ).length;
+
+            const intvAFacturerCount = interventionsList.filter(
+              (i) =>
+                ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel) &&
+                i.statutFacture !== 'Facturée'
+            ).length;
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
+                {/* Carte 1 : CA Réalisé */}
+                <div
+                  className="kpi-card"
+                  onClick={() => handleSectionChange('interventions')}
+                  style={{
+                    borderTop: '4px solid #00bf63',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
+                      💰 CA Travaux Réalisés
+                    </span>
+                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '10px', fontWeight: 700, border: '1px solid #a7f3d0' }}>
+                      Exécuté HT
+                    </span>
+                  </div>
+                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
+                    {formatCurrency(totalCAClotureHT)}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {intvClotureesCount} chantier(s) terminé(s) ou clôturé(s)
+                  </div>
+                </div>
+
+                {/* Carte 2 : Pipeline Devis */}
+                <div
+                  className="kpi-card"
+                  onClick={() => handleSectionChange('devis')}
+                  style={{
+                    borderTop: '4px solid #ffcc00',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>
+                      📈 Pipeline Devis en Cours
+                    </span>
+                    <span className="badge" style={{ background: '#fffbeb', color: '#b45309', fontSize: '10px', fontWeight: 700, border: '1px solid #fde68a' }}>
+                      Potentiel HT
+                    </span>
+                  </div>
+                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>
+                    {formatCurrency(totalDevisPipelineHT)}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {devisList.filter((d) => ['Envoyé au client', 'En négociation'].includes(d.statutCommercial)).length} devis en négociation active
+                  </div>
+                </div>
+
+                {/* Carte 3 : Encours Prêt à Facturer */}
+                <div
+                  className="kpi-card"
+                  onClick={() => handleSectionChange('facturation')}
+                  style={{
+                    borderTop: '4px solid #0a0f1d',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0a0f1d' }}>
+                      🧾 En-cours Prêt à Facturer
+                    </span>
+                    <span className="badge" style={{ background: '#f1f5f9', color: '#0f172a', fontSize: '10px', fontWeight: 700, border: '1px solid #cbd5e1' }}>
+                      Trésorerie HT
+                    </span>
+                  </div>
+                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0a0f1d', margin: '4px 0' }}>
+                    {formatCurrency(totalAFacturerHT)}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {intvAFacturerCount} intervention(s) à facturer immédiatement
+                  </div>
+                </div>
+
+                {/* Carte 4 : Taux de Transformation */}
+                <div
+                  className="kpi-card"
+                  onClick={() => handleSectionChange('devis')}
+                  style={{
+                    borderTop: '4px solid #00bf63',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
+                      🎯 Taux de Transformation
+                    </span>
+                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '10px', fontWeight: 700, border: '1px solid #a7f3d0' }}>
+                      Signés
+                    </span>
+                  </div>
+                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#00bf63', margin: '4px 0' }}>
+                    {tauxTransformation}%
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>
+                    {devisAcceptes.length} devis accepté(s) sur {devisList.length} total
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* =================================================================
+              2. ENTONNOIR OPÉRATIONNEL D'AVANCEMENT DES TRAVAUX (FUNNEL TCE)
+             ================================================================= */}
+          {(() => {
+            const devisEnCours = devisList.filter(
+              (d) => !['Refusé', 'Annulé'].includes(d.statutCommercial || '')
+            );
+            const devisVisites = devisList.filter((d) => Boolean(d.visiteNecessaire));
+            const missionsAPlanifier =
+              queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length;
+            const missionsPlanifiees = interventionsList.filter(
+              (i) => i.statutOperationnel === 'Planifiée'
+            ).length;
+            const interventionsEnCours = interventionsList.filter(
+              (i) => i.statutOperationnel === 'En cours'
+            );
+            const rapportsAValider = queues.rapportsEnAttente.length;
+            const clotureesCount = interventionsList.filter((i) =>
+              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
+            ).length;
+            const factureesCount = interventionsList.filter(
+              (i) => i.statutFacture === 'Facturée'
+            ).length;
+
+            const funnelSteps = [
               {
-                title: 'Devis à relancer',
-                count: queues.devisARelancer.length,
-                subtitle: 'Relance prévue ou dépassée',
-                accent: '#f59e0b',
-                onClick: () => {
-                  setDevisStatutFilter('ALL');
-                  handleSectionChange('devis');
-                },
+                step: '1',
+                title: 'Devis & Chiffrages',
+                count: devisEnCours.length,
+                sub: `${devisVisites.length} visite(s) requise(s)`,
+                color: '#ffcc00',
+                textColor: '#b45309',
+                bgColor: '#fffbeb',
+                action: () => handleSectionChange('devis'),
               },
               {
-                title: 'Échéances / Réponses en retard',
-                count: queues.devisProchesEcheance.length,
-                subtitle: 'Suivi date limite client',
-                accent: '#ef4444',
-                onClick: () => handleSectionChange('devis'),
+                step: '2',
+                title: 'Ordonnancement Gantt',
+                count: missionsPlanifiees,
+                sub: `${missionsAPlanifier} en attente de créneau`,
+                color: '#0a0f1d',
+                textColor: '#0f172a',
+                bgColor: '#f1f5f9',
+                action: () => handleSectionChange('planning'),
               },
               {
-                title: 'Devis acceptés à convertir',
-                count: queues.devisAcceptesSansIntv.length,
-                subtitle: 'Sans intervention liée',
-                accent: '#10b981',
-                onClick: () => {
-                  setDevisStatutFilter('Accepté');
-                  handleSectionChange('devis');
-                },
+                step: '3',
+                title: 'Sur le Terrain Aujourd’hui',
+                count: interventionsEnCours.length,
+                sub: `${interventionsEnCours.map((i) => i.entreprise).filter(Boolean).join(', ') || 'Aucun en cours'}`,
+                color: '#ffcc00',
+                textColor: '#b45309',
+                bgColor: '#fffbeb',
+                action: () => handleSectionChange('interventions'),
               },
               {
-                title: 'Missions à planifier',
-                count: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
-                subtitle: `${queues.visitesDevisAPlanifier.length} visite(s) • ${queues.intvAPlanifier.length} travaux`,
-                accent: '#a855f7',
-                onClick: () => handleSectionChange('planning'),
-              },
-              {
-                title: 'Interventions en retard',
-                count: queues.intvEnRetard.length,
-                subtitle: 'Échéance dépassée',
-                accent: '#ef4444',
-                onClick: () => handleSectionChange('interventions'),
-              },
-              {
-                title: 'Rapports & Photos reçus',
-                count: queues.rapportsEnAttente.length,
-                subtitle: `${queues.rapportsEnAttente.length} déclaration(s) à valider`,
-                accent: '#06b6d4',
-                onClick: () => {
+                step: '4',
+                title: 'Rapports & Photos Reçus',
+                count: rapportsAValider,
+                sub: 'À vérifier avant facturation',
+                color: '#dc2626',
+                textColor: '#b91c1c',
+                bgColor: '#fef2f2',
+                action: () => {
                   setAdminSubTab('rapports');
                   handleSectionChange('admin');
                 },
               },
               {
-                title: 'Terminées à facturer',
-                count: queues.intvAFacturer.length,
-                subtitle: 'Espace Facturation B2B / B2C',
-                accent: '#3b82f6',
-                onClick: () => {
-                  handleSectionChange('facturation');
-                },
+                step: '5',
+                title: 'Clôturées & Facturées',
+                count: clotureesCount,
+                sub: `${factureesCount} facturées (${clotureesCount > 0 ? Math.round((factureesCount / clotureesCount) * 100) : 100}%)`,
+                color: '#00bf63',
+                textColor: '#047857',
+                bgColor: '#ecfdf5',
+                action: () => handleSectionChange('facturation'),
               },
-            ].map((kpi) => (
-              <div
-                key={kpi.title}
-                className="kpi-card"
-                onClick={kpi.onClick}
-                style={{ borderTop: `3px solid ${kpi.accent}` }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    {kpi.title}
+            ];
+
+            return (
+              <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>🚀</span> Entonnoir d'Avancement des Travaux (Cycle Complet ANELEC)
+                    </h2>
+                    <p style={{ fontSize: '11.5px', color: '#64748b', margin: '3px 0 0 0' }}>
+                      Suivi séquentiel en temps réel : de la qualification commerciale à la facturation finale
+                    </p>
+                  </div>
+                  <span className="badge" style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700, fontSize: '11px' }}>
+                    ● Synchronisation 100% Temps Réel
                   </span>
-                  <span
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: kpi.accent,
-                      boxShadow: `0 0 8px ${kpi.accent}`,
-                    }}
-                  />
                 </div>
-                <div className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  {kpi.count}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                  {funnelSteps.map((f, idx) => (
+                    <div
+                      key={f.step}
+                      onClick={f.action}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        background: f.bgColor,
+                        border: `1.5px solid ${f.color}50`,
+                        borderTop: `4px solid ${f.color}`,
+                        cursor: 'pointer',
+                        transition: 'transform 0.12s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: f.textColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Étape {f.step}
+                          </span>
+                          {idx < funnelSteps.length - 1 && (
+                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>➔</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>
+                          {f.title}
+                        </div>
+                      </div>
+                      <div style={{ marginTop: '10px' }}>
+                        <div className="font-mono" style={{ fontSize: '26px', fontWeight: 900, color: f.textColor }}>
+                          {f.count}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {f.sub}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{kpi.subtitle}</div>
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* =================================================================
-              SLEEK GLASSMORPHISM ANALYTICS & SMOOTH CHARTS (BLUE & WHITE)
+              3. MATRICE D'ACTIVITÉ & RENTABILITÉ PAR CORPS D'ÉTAT (TABLEAU PRO)
              ================================================================= */}
           {(() => {
-            const totalDevisHT = devisList.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
-            const acceptedDevisHT = devisList
-              .filter((d) => d.statutCommercial === 'Accepté')
-              .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
-            const conversionRate =
-              devisList.length > 0
-                ? Math.round(
-                    (devisList.filter((d) => d.statutCommercial === 'Accepté').length /
-                      devisList.length) *
-                      100
-                  )
-                : 0;
+            const corpsEtatDefs = [
+              { trade: 'Électricité', label: '⚡ Électricité Tertiaire & CFO/CFA', icon: '⚡' },
+              { trade: 'Plomberie', label: '🔧 Plomberie, Chauffage & CVC', icon: '🔧' },
+              { trade: 'Serrurerie', label: '🔑 Serrurerie, Accès & Dépannage', icon: '🔑' },
+              { trade: 'Peinture', label: '🎨 Peinture, Ravalement & Finition', icon: '🎨' },
+              { trade: 'Menuiserie', label: '🪟 Menuiserie, Faux Plafond & Agencement', icon: '🪟' },
+              { trade: 'Tous corps', label: '🏗️ Rénovation Complète & Multi-TCE', icon: '🏗️' },
+            ];
 
-            const plannedOrDoneIntvs = interventionsList.filter((i) =>
-              ['Planifiée', 'En cours', 'Terminée - à valider', 'Clôturée'].includes(
-                i.statutOperationnel
-              )
-            ).length;
-            const executionRate =
-              interventionsList.length > 0
-                ? Math.round((plannedOrDoneIntvs / interventionsList.length) * 100)
-                : 0;
-
-            const closedIntvs = interventionsList.filter((i) =>
-              ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
-            );
-            const billedIntvs = closedIntvs.filter((i) => i.statutFacture === 'Facturée').length;
-            const billingRate =
-              closedIntvs.length > 0 ? Math.round((billedIntvs / closedIntvs.length) * 100) : 100;
-
-            // Group activity across top 6 trades for smooth spline curves & bar analytics
-            const topTrades = ['Électricité', 'Plomberie', 'Serrurerie', 'Peinture', 'CVC / Clim', 'Menuiserie'];
-            const tradeSeries = topTrades.map((trade) => {
-              const key = trade.split(' ')[0].toLowerCase();
-              const intvCount = interventionsList.filter((i) =>
+            const tradeRows = corpsEtatDefs.map((def) => {
+              const key = def.trade.toLowerCase();
+              const intvs = interventionsList.filter((i) =>
                 (i.corpsEtat || '').toLowerCase().includes(key)
-              ).length;
-              const devCount = devisList.filter((d) =>
+              );
+              const devis = devisList.filter((d) =>
                 (d.corpsEtat || '').toLowerCase().includes(key)
-              ).length;
+              );
+              const activeIntvs = intvs.filter((i) =>
+                ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel)
+              );
+              const closedIntvs = intvs.filter((i) =>
+                ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel)
+              );
+              const caTrade = closedIntvs.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+              const progressPct = intvs.length > 0 ? Math.round((closedIntvs.length / intvs.length) * 100) : 0;
+
               return {
-                label: trade.split(' ')[0],
-                intv: intvCount,
-                devis: devCount,
-                total: intvCount + devCount,
+                ...def,
+                totalIntvs: intvs.length,
+                activeIntvs: activeIntvs.length,
+                closedIntvs: closedIntvs.length,
+                devisCount: devis.length,
+                caTrade,
+                progressPct,
               };
             });
 
-            const maxVal = Math.max(6, ...tradeSeries.map((t) => Math.max(t.intv, t.devis, 1)));
-            const chartW = 520;
-            const chartH = 148;
-            const padX = 28;
-            const padY = 18;
-            const usableW = chartW - padX * 2;
-            const usableH = chartH - padY * 2;
-
-            const buildSmoothPath = (values: number[]) => {
-              const pts = values.map((v, idx) => ({
-                x: padX + (idx / Math.max(1, values.length - 1)) * usableW,
-                y: padY + usableH - (v / maxVal) * usableH,
-              }));
-              if (pts.length === 0) return { line: '', area: '', pts: [] };
-              let d = `M ${pts[0].x} ${pts[0].y}`;
-              for (let i = 0; i < pts.length - 1; i++) {
-                const p0 = pts[i];
-                const p1 = pts[i + 1];
-                const cx = (p0.x + p1.x) / 2;
-                d += ` C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`;
-              }
-              const area = `${d} L ${pts[pts.length - 1].x} ${padY + usableH} L ${pts[0].x} ${
-                padY + usableH
-              } Z`;
-              return { line: d, area, pts };
-            };
-
-            const intvCurve = buildSmoothPath(tradeSeries.map((t) => t.intv));
-            const devisCurve = buildSmoothPath(tradeSeries.map((t) => t.devis));
-
-            const circumference = 2 * Math.PI * 44;
-            const execDash = (executionRate / 100) * circumference;
-
             return (
-              <div className="analytics-glass-grid">
-                {/* CARD 1 : Smooth Spline Area Chart (Activité & Pipeline Financier) */}
-                <div className="glass-analytics-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            fontSize: '10px',
-                            fontWeight: 800,
-                            background: 'rgba(37, 99, 235, 0.12)',
-                            color: '#2563eb',
-                            letterSpacing: '0.04em',
-                          }}
-                        >
-                          MODERN ANALYTICS
-                        </span>
-                        <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                          Dynamique des Interventions & Pipeline Devis
-                        </h3>
-                      </div>
-                      <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        Courbe analytique par pôle métier • Suivi temps réel ANELEC
-                      </p>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                          Pipeline Devis HT
-                        </div>
-                        <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: '#2563eb' }}>
-                          {formatCurrency(totalDevisHT)}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', paddingLeft: '12px', borderLeft: '1px solid var(--border-default)' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                          Signés / Acceptés
-                        </div>
-                        <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: '#0ea5e9' }}>
-                          {formatCurrency(acceptedDevisHT)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <svg viewBox={`0 0 ${chartW} ${chartH}`} className="smooth-chart-svg">
-                    <defs>
-                      <linearGradient id="blueAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2563eb" stopOpacity="0.32" />
-                        <stop offset="100%" stopColor="#2563eb" stopOpacity="0.01" />
-                      </linearGradient>
-                      <linearGradient id="cyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.24" />
-                        <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.01" />
-                      </linearGradient>
-                    </defs>
-
-                    {[0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                      const y = padY + usableH * ratio;
-                      return (
-                        <line
-                          key={idx}
-                          x1={padX}
-                          y1={y}
-                          x2={chartW - padX}
-                          y2={y}
-                          stroke="rgba(37, 99, 235, 0.08)"
-                          strokeDasharray="4 4"
-                        />
-                      );
-                    })}
-
-                    <path d={devisCurve.area} fill="url(#cyanAreaGrad)" />
-                    <path d={intvCurve.area} fill="url(#blueAreaGrad)" />
-
-                    <path
-                      d={devisCurve.line}
-                      className="smooth-chart-line"
-                      stroke="#0ea5e9"
-                      strokeWidth="2.5"
-                    />
-                    <path
-                      d={intvCurve.line}
-                      className="smooth-chart-line"
-                      stroke="#2563eb"
-                      strokeWidth="3"
-                    />
-
-                    {intvCurve.pts.map((pt, i) => (
-                      <g key={i}>
-                        <circle
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="4.5"
-                          fill="#ffffff"
-                          stroke="#2563eb"
-                          strokeWidth="2.5"
-                        />
-                        <text
-                          x={pt.x}
-                          y={chartH - 2}
-                          textAnchor="middle"
-                          fontSize="10"
-                          fontWeight="600"
-                          fill="#475569"
-                        >
-                          {tradeSeries[i].label}
-                        </text>
-                      </g>
-                    ))}
-                  </svg>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    <div style={{ display: 'flex', gap: '14px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, color: '#2563eb' }}>
-                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2563eb' }} />
-                        Interventions ({interventionsList.length})
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, color: '#0ea5e9' }}>
-                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0ea5e9' }} />
-                        Devis ({devisList.length})
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '2px 10px', fontSize: '11px' }}
-                      onClick={() => handleSectionChange('planning')}
-                    >
-                      Fluidifier le Planning →
-                    </button>
-                  </div>
-                </div>
-
-                {/* CARD 2 : Smooth Radial / Donut Performance Gauge */}
-                <div className="glass-analytics-card">
+              <div className="pro-table-container" style={{ background: '#ffffff', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-default)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <span
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '999px',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        background: 'rgba(14, 165, 233, 0.12)',
-                        color: '#0284c7',
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      PERFORMANCE TCE
-                    </span>
-                    <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
-                      Indice de Planification & Transformation
+                    <h3 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      🏗️ Tableau de Bord d'Avancement par Pôle Métier (Corps d'État)
                     </h3>
+                    <p style={{ fontSize: '11.5px', color: '#64748b', margin: '2px 0 0 0' }}>
+                      Répartition analytique des volumes, de l'état d'avancement et du CA réalisé par spécialité
+                    </p>
                   </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', margin: '4px 0' }}>
-                    <div style={{ position: 'relative', width: '112px', height: '112px', flexShrink: 0 }}>
-                      <svg width="112" height="112" viewBox="0 0 112 112">
-                        <defs>
-                          <linearGradient id="ringBlueGrad" x1="0" y1="0" x2="1" y2="1">
-                            <stop offset="0%" stopColor="#1d4ed8" />
-                            <stop offset="55%" stopColor="#3b82f6" />
-                            <stop offset="100%" stopColor="#0ea5e9" />
-                          </linearGradient>
-                        </defs>
-                        <circle
-                          cx="56"
-                          cy="56"
-                          r="44"
-                          fill="none"
-                          stroke="rgba(37, 99, 235, 0.1)"
-                          strokeWidth="10"
-                        />
-                        <circle
-                          cx="56"
-                          cy="56"
-                          r="44"
-                          fill="none"
-                          stroke="url(#ringBlueGrad)"
-                          strokeWidth="10"
-                          strokeLinecap="round"
-                          strokeDasharray={`${execDash} ${circumference}`}
-                          transform="rotate(-90 56 56)"
-                        />
-                      </svg>
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <span className="font-mono" style={{ fontSize: '21px', fontWeight: 800, color: '#1e40af' }}>
-                          {executionRate}%
-                        </span>
-                        <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
-                          PLANIFIÉ
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Transformation Devis</span>
-                          <span className="font-mono" style={{ color: '#2563eb' }}>{conversionRate}%</span>
-                        </div>
-                        <div className="smooth-bar-track">
-                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, conversionRate)}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Exécution Terrain</span>
-                          <span className="font-mono" style={{ color: '#0284c7' }}>{executionRate}%</span>
-                        </div>
-                        <div className="smooth-bar-track">
-                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, executionRate)}%` }} />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Facturation Clôturées</span>
-                          <span className="font-mono" style={{ color: '#0ea5e9' }}>{billingRate}%</span>
-                        </div>
-                        <div className="smooth-bar-track">
-                          <div className="smooth-bar-fill" style={{ width: `${Math.max(8, billingRate)}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{plannedOrDoneIntvs} / {interventionsList.length} missions actives</span>
-                    <span className="font-mono" style={{ color: '#2563eb', fontWeight: 700 }}>Temps réel ●</span>
-                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleSectionChange('interventions')}
+                  >
+                    Voir toutes les interventions →
+                  </button>
                 </div>
 
-                {/* CARD 3 : Smooth Trade & Capacity Breakdown */}
-                <div className="glass-analytics-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          fontSize: '10px',
-                          fontWeight: 800,
-                          background: 'rgba(37, 99, 235, 0.12)',
-                          color: '#2563eb',
-                          letterSpacing: '0.04em',
+                <table className="pro-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '28%' }}>Pôle Métier / Corps d'État</th>
+                      <th style={{ width: '16%' }}>En Cours / Planifiées</th>
+                      <th style={{ width: '14%' }}>Clôturées</th>
+                      <th style={{ width: '12%' }}>Devis Associés</th>
+                      <th style={{ width: '15%' }}>CA Réalisé HT</th>
+                      <th style={{ width: '15%', textAlign: 'right' }}>Complétion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tradeRows.map((row) => (
+                      <tr
+                        key={row.trade}
+                        onClick={() => {
+                          setIntvSearch(row.trade);
+                          handleSectionChange('interventions');
                         }}
                       >
-                        CORPS D'ÉTAT
-                      </span>
-                      <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
-                        Volume par Métier TCE
-                      </h3>
-                    </div>
-                    <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb' }}>
-                      {interventionsList.length + devisList.length} dossiers
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {tradeSeries.slice(0, 5).map((tr) => {
-                      const pct = Math.min(100, Math.round((tr.total / Math.max(1, maxVal * 1.4)) * 100));
-                      return (
-                        <div key={tr.label} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px' }}>
-                            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{tr.label}</span>
-                            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              <strong>{tr.intv}</strong> intv • <strong>{tr.devis}</strong> devis
+                        <td>
+                          <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#0f172a' }}>
+                            {row.label}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              color: row.activeIntvs > 0 ? '#b45309' : '#64748b',
+                            }}
+                          >
+                            {row.activeIntvs} active(s)
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '12px',
+                              color: row.closedIntvs > 0 ? '#047857' : '#64748b',
+                            }}
+                          >
+                            {row.closedIntvs} terminée(s)
+                          </span>
+                        </td>
+                        <td>
+                          <span className="font-mono" style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                            {row.devisCount} devis
+                          </span>
+                        </td>
+                        <td>
+                          <span className="font-mono" style={{ fontWeight: 800, fontSize: '12.5px', color: '#0f172a' }}>
+                            {formatCurrency(row.caTrade)}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '70px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${row.progressPct}%`,
+                                  background: row.progressPct >= 75 ? '#00bf63' : row.progressPct >= 40 ? '#ffcc00' : '#0a0f1d',
+                                  height: '100%',
+                                }}
+                              />
+                            </div>
+                            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#0f172a', minWidth: '32px' }}>
+                              {row.progressPct}%
                             </span>
                           </div>
-                          <div className="smooth-bar-track">
-                            <div
-                              className="smooth-bar-fill"
-                              style={{ width: `${Math.max(10, pct)}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '2px 10px', fontSize: '11px' }}
-                      onClick={() => handleSectionChange('interventions')}
-                    >
-                      Voir toutes les missions →
-                    </button>
-                  </div>
-                </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           })()}
@@ -1080,7 +1089,7 @@ export function DashboardPage() {
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => convertDevisMut.mutate(d.id)}
+                    onClick={() => handleTriggerConvertDevis(d)}
                   >
                     Créer Intervention
                   </button>
@@ -1530,14 +1539,25 @@ export function DashboardPage() {
                           >
                             Visite
                           </button>
-                          {(!d.interventionsCount || d.interventionsCount === 0) && (
+                          {(!d.interventionsCount || d.interventionsCount === 0) ? (
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
                               style={{ padding: '2px 7px', fontSize: '10.5px' }}
-                              onClick={() => convertDevisMut.mutate(d.id)}
+                              onClick={() => handleTriggerConvertDevis(d)}
+                              title="Convertir ce devis en intervention travaux"
                             >
                               → INT
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 7px', fontSize: '10.5px', color: '#b45309', border: '1px solid #fde68a', background: '#fffbeb', fontWeight: 700 }}
+                              onClick={() => handleTriggerConvertDevis(d)}
+                              title="Devis déjà converti — Cliquer pour ajouter un SAV, une reprise ou une phase 2"
+                            >
+                              + SAV/Suite
                             </button>
                           )}
                         </div>
@@ -2246,10 +2266,11 @@ export function DashboardPage() {
                 {!isCreatingDevis && selectedDevis.id && (
                   <button
                     type="button"
-                    className="btn btn-ai-dispatch btn-sm"
-                    onClick={() => convertDevisMut.mutate(selectedDevis.id!)}
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleTriggerConvertDevis(selectedDevis as Devis)}
+                    title={(selectedDevis.interventionsCount || 0) > 0 ? "Ajouter une intervention SAV, reprise ou phase 2" : "Créer une intervention travaux"}
                   >
-                    Convertir → Intervention
+                    {(selectedDevis.interventionsCount || 0) > 0 ? '+ Intervention (SAV / Suite)' : 'Convertir → Intervention'}
                   </button>
                 )}
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDevis(null)}>
@@ -2257,6 +2278,46 @@ export function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* Alerte si le devis possède déjà des interventions liées */}
+            {!isCreatingDevis && selectedDevis.id && (selectedDevis.interventionsCount || 0) > 0 && (
+              <div
+                style={{
+                  padding: '9px 20px',
+                  background: '#fffbeb',
+                  borderBottom: '1px solid #fde68a',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: '12px',
+                }}
+              >
+                <span style={{ color: '#b45309', fontWeight: 600 }}>
+                  ⚠️ Ce devis a déjà <strong>{selectedDevis.interventionsCount}</strong> intervention(s) liée(s) créée(s).
+                </span>
+                {(() => {
+                  const linked = interventionsList.find(
+                    (i) => (i.devisId === selectedDevis.id || i.origineDevisId === selectedDevis.id) && i.statutOperationnel !== 'Annulée'
+                  );
+                  if (!linked) return null;
+                  return (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '11px', background: '#ffffff', borderColor: '#cbd5e1' }}
+                      onClick={() => {
+                        setSelectedDevis(null);
+                        setIsCreatingIntv(false);
+                        setSelectedIntv(linked);
+                        setIntvTab('terrain');
+                      }}
+                    >
+                      Voir intervention {linked.reference || `INT-${linked.id}`} →
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
 
             <div
               style={{
@@ -3345,6 +3406,237 @@ export function DashboardPage() {
           initialIndex={lightboxIndex}
           onClose={() => setLightboxPhotos(null)}
         />
+      )}
+
+      {/* =====================================================================
+          MODAL DE SÉLECTION DU MOTIF DE RECONVERSION EN INTERVENTION (SAV / REPRISE)
+         ===================================================================== */}
+      {reconversionModalDevis && (
+        <div
+          className="cmd-palette-backdrop"
+          style={{ zIndex: 9999, background: 'rgba(10, 15, 29, 0.72)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setReconversionModalDevis(null)}
+        >
+          <div
+            className="pro-table-container"
+            style={{
+              maxWidth: '620px',
+              width: '92%',
+              background: '#ffffff',
+              borderRadius: '14px',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.35)',
+              border: '1.5px solid var(--border-default)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '16px 20px',
+                background: '#0a0f1d',
+                color: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '3px solid #ffcc00',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>⚠️</span>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', margin: 0 }}>
+                    Ce devis a déjà été transformé en intervention
+                  </h3>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginTop: '3px' }}>
+                  Devis {reconversionModalDevis.reference || `DEV-${reconversionModalDevis.id}`} • {reconversionModalDevis.client}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ color: '#ffffff', fontSize: '16px', padding: '4px 8px' }}
+                onClick={() => setReconversionModalDevis(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div
+                style={{
+                  padding: '10px 14px',
+                  background: '#fffbeb',
+                  borderRadius: '8px',
+                  border: '1px solid #fde68a',
+                  fontSize: '12px',
+                  color: '#92400e',
+                  lineHeight: 1.5,
+                }}
+              >
+                Une intervention travaux a déjà été générée pour ce devis. Pour garantir une traçabilité rigoureuse et éviter les interventions fantômes, veuillez indiquer la <strong>raison opérationnelle</strong> de cette nouvelle intervention :
+              </div>
+
+              {/* Grille des 4 motifs */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '10px' }}>
+                {[
+                  {
+                    id: 'SAV',
+                    title: '🛠️ Service Après-Vente (SAV / Garantie)',
+                    badge: 'Garantie / Réserve',
+                    color: '#dc2626',
+                    bg: '#fef2f2',
+                    desc: 'Réglage, retouche de finition, réserve de réception ou problème couvert par la garantie.',
+                  },
+                  {
+                    id: 'REPRISE',
+                    title: '🔁 Reprise de Travaux / Refaire',
+                    badge: 'Malfaçon ou Inachevé',
+                    color: '#b45309',
+                    bg: '#fffbeb',
+                    desc: 'Le travail précédent doit être refait ou complété suite à un problème survenu sur site.',
+                  },
+                  {
+                    id: 'AVENANT',
+                    title: '➕ Travaux Supplémentaires / Avenant',
+                    badge: 'Prestation en plus',
+                    color: '#047857',
+                    bg: '#ecfdf5',
+                    desc: 'Demande additionnelle validée par le client sur le même chantier (facturable en sus).',
+                  },
+                  {
+                    id: 'PHASE2',
+                    title: '📅 2ème Phase / Tranche de Chantier',
+                    badge: 'Étape 2 prévue',
+                    color: '#0f172a',
+                    bg: '#f1f5f9',
+                    desc: 'Chantier planifié en plusieurs temps (ex: pose après séchage, raccordement final).',
+                  },
+                ].map((opt) => {
+                  const isSelected = reconversionMotif === opt.id;
+                  return (
+                    <div
+                      key={opt.id}
+                      onClick={() => setReconversionMotif(opt.id as any)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '10px',
+                        border: isSelected ? `2px solid ${opt.color}` : '1px solid var(--border-default)',
+                        background: isSelected ? opt.bg : '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: isSelected ? '0 4px 12px rgba(0,0,0,0.08)' : 'none',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '12.5px', color: isSelected ? opt.color : 'var(--text-primary)' }}>
+                          {opt.title}
+                        </span>
+                        <input
+                          type="radio"
+                          name="reconversionMotif"
+                          checked={isSelected}
+                          onChange={() => setReconversionMotif(opt.id as any)}
+                          style={{ accentColor: opt.color }}
+                        />
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {opt.desc}
+                      </div>
+                      <span
+                        className="badge"
+                        style={{
+                          alignSelf: 'flex-start',
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          background: opt.bg,
+                          color: opt.color,
+                          border: `1px solid ${opt.color}40`,
+                        }}
+                      >
+                        {opt.badge}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Précisions / Notes */}
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+                  Précisions sur cette nouvelle intervention (optionnel) :
+                </label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Ex : Problème de fuite persistante sous l'évier, client demande reprise urgente..."
+                  value={reconversionNotes}
+                  onChange={(e) => setReconversionNotes(e.target.value)}
+                  style={{ width: '100%', fontSize: '12px', padding: '8px 10px', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Footer Actions */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--border-subtle)',
+                }}
+              >
+                {(() => {
+                  const linked = interventionsList.find(
+                    (i) => (i.devisId === reconversionModalDevis.id || i.origineDevisId === reconversionModalDevis.id) && i.statutOperationnel !== 'Annulée'
+                  );
+                  if (!linked) return <div />;
+                  return (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11.5px' }}
+                      onClick={() => {
+                        setReconversionModalDevis(null);
+                        setSelectedDevis(null);
+                        setIsCreatingIntv(false);
+                        setSelectedIntv(linked);
+                        setIntvTab('terrain');
+                      }}
+                    >
+                      Voir intervention existante ({linked.reference || `INT-${linked.id}`}) →
+                    </button>
+                  );
+                })()}
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setReconversionModalDevis(null)}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ background: '#00bf63', borderColor: '#00994f', fontWeight: 800 }}
+                    onClick={handleConfirmReconversion}
+                    disabled={convertDevisMut.isPending}
+                  >
+                    {convertDevisMut.isPending ? 'Création...' : 'Valider & Créer l’intervention'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );
