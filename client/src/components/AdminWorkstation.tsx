@@ -429,7 +429,7 @@ export function AdminWorkstation({
          ===================================================================== */}
       {subTab === 'users' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div className="pro-table-container">
+          <div className="desktop-only-block pro-table-container">
             <table className="pro-table">
               <thead>
                 <tr>
@@ -545,6 +545,77 @@ export function AdminWorkstation({
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Cartes Mobile Utilisateurs Admin */}
+          <div className="mobile-only-block mobile-card-grid">
+            {users.map((u) => {
+              const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.ADMIN;
+              const perms = u.permissions || getEffectivePermissions(u.role, null);
+              const activePermCount = Object.entries(perms).filter(
+                ([k, v]) => k !== 'mobileOnly' && Boolean(v)
+              ).length;
+              return (
+                <div key={u.id} className="mobile-record-card">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      {u.name} {u.id === 1 && '👑'}
+                    </div>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '999px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: `${roleDef?.badgeColor || '#2563eb'}18`,
+                        color: roleDef?.badgeColor || '#2563eb',
+                        border: `1px solid ${roleDef?.badgeColor || '#2563eb'}40`,
+                      }}
+                    >
+                      {roleDef?.label || u.role}
+                    </span>
+                  </div>
+
+                  <div className="font-mono" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    {u.email}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    <span>{activePermCount} droit(s) actif(s)</span>
+                    {u.technicienNom && (
+                      <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
+                        📱 {u.technicienNom}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ flex: 1, padding: '6px 10px', fontSize: '11.5px' }}
+                      onClick={() => openEditUserModal(u)}
+                    >
+                      ✏️ Modifier Droits
+                    </button>
+                    {u.id !== 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '6px 10px', fontSize: '11.5px' }}
+                        onClick={() => {
+                          if (window.confirm(`Supprimer le compte de ${u.name} ?`)) {
+                            deleteUserMut.mutate(u.id);
+                          }
+                        }}
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -814,7 +885,7 @@ export function AdminWorkstation({
             </div>
           </div>
 
-          <div className="pro-table-container">
+          <div className="desktop-only-block pro-table-container">
             <table className="pro-table">
               <thead>
                 <tr>
