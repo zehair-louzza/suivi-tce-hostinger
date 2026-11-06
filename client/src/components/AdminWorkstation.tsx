@@ -83,6 +83,18 @@ const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: stri
   },
 ];
 
+const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: string; color: string }[] = [
+  { key: 'canManageUsers', label: 'Workstation Admin', short: 'Admin', color: '#ef4444' },
+  { key: 'canEditDevis', label: 'Devis', short: 'Devis', color: '#0284c7' },
+  { key: 'canViewFinancials', label: 'Chiffrage HT', short: 'Chiffrage', color: '#0284c7' },
+  { key: 'canEditPlanning', label: 'Planning Gantt', short: 'Planning', color: '#8b5cf6' },
+  { key: 'canEditInterventions', label: 'Interventions', short: 'Interv.', color: '#10b981' },
+  { key: 'canWriteReports', label: 'Rapports', short: 'Rapports', color: '#10b981' },
+  { key: 'canManageBilling', label: 'Facturation', short: 'Facturation', color: '#f59e0b' },
+  { key: 'canManageReferentiels', label: 'Référentiels', short: 'Référentiels', color: '#6366f1' },
+  { key: 'mobileOnly', label: 'App Mobile', short: '📱 Mobile', color: '#64748b' },
+];
+
 export function AdminWorkstation({
   techniciens,
   interventionsList,
@@ -250,6 +262,25 @@ export function AdminWorkstation({
   const handleSelectRoleForCreate = (rCode: string) => {
     setNewRole(rCode);
     setNewPerms(getEffectivePermissions(rCode, null));
+  };
+
+  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
+
+  const handleToggleSinglePermission = async (u: User, permKey: keyof UserPermissions, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const current = u.permissions || getEffectivePermissions(u.role, null);
+    const updated = { ...current, [permKey]: !current[permKey] };
+    try {
+      await updateUserMut.mutateAsync({
+        id: u.id,
+        payload: {
+          permissions: updated,
+        },
+      });
+      toast.success(`Droit « ${permKey} » mis à jour pour ${u.name}`);
+    } catch {
+      toast.error('Erreur mise à jour droit');
+    }
   };
 
   const openEditUserModal = (u: User) => {
@@ -436,15 +467,15 @@ export function AdminWorkstation({
           SOUS-ONGLET 1 : UTILISATEURS & ATTRIBUTION DES DROITS DE MODIFICATION
          ===================================================================== */}
       {subTab === 'users' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div className="desktop-only-block pro-table-container">
-            <table className="pro-table">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', maxWidth: '100%' }}>
+          <div className="desktop-only-block pro-table-container pro-table-scroll" style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
+            <table className="pro-table" style={{ width: '100%', minWidth: '860px' }}>
               <thead>
                 <tr>
                   <th style={{ width: '150px' }}>Utilisateur</th>
                   <th style={{ width: '140px' }}>Rôle Métier</th>
                   <th style={{ width: '130px' }}>App Mobile</th>
-                  <th>Droits de Modification</th>
+                  <th>Droits de Modification (Cliquer pour activer/désactiver)</th>
                   <th style={{ width: '70px' }}>Statut</th>
                   <th style={{ textAlign: 'right', width: '130px' }}>Actions Admin</th>
                 </tr>
@@ -453,9 +484,6 @@ export function AdminWorkstation({
                 {users.map((u) => {
                   const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.ADMIN;
                   const perms = u.permissions || getEffectivePermissions(u.role, null);
-                  const activePermCount = Object.entries(perms).filter(
-                    ([k, v]) => k !== 'mobileOnly' && Boolean(v)
-                  ).length;
 
                   return (
                     <tr key={u.id}>
@@ -502,23 +530,36 @@ export function AdminWorkstation({
                           </span>
                         )}
                       </td>
-                      <td
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => openEditUserModal(u)}
-                        title="Cliquer pour modifier les permissions et droits"
-                      >
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', maxWidth: '380px' }}>
-                          {perms.canManageUsers && <span className="badge badge-danger" style={{ fontSize: '10px' }}>Admin</span>}
-                          {perms.canEditDevis && <span className="badge badge-info" style={{ fontSize: '10px' }}>Devis</span>}
-                          {perms.canViewFinancials && <span className="badge badge-info" style={{ fontSize: '10px' }}>Chiffrage</span>}
-                          {perms.canEditPlanning && <span className="badge badge-purple" style={{ fontSize: '10px' }}>Planning</span>}
-                          {perms.canEditInterventions && <span className="badge badge-success" style={{ fontSize: '10px' }}>Interventions</span>}
-                          {perms.canWriteReports && <span className="badge badge-success" style={{ fontSize: '10px' }}>Rapports</span>}
-                          {perms.canManageBilling && <span className="badge badge-warning" style={{ fontSize: '10px' }}>Facturation</span>}
-                          {perms.mobileOnly && <span className="badge badge-warning" style={{ fontSize: '10px' }}>📱 Mobile</span>}
-                          <span className="font-mono" style={{ fontSize: '10px', color: '#2563eb', fontWeight: 600 }}>
-                            ✏️ ({activePermCount} droits)
-                          </span>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '420px' }}>
+                          {INTERACTIVE_PERMS.map((p) => {
+                            const isGranted = Boolean(perms[p.key]);
+                            return (
+                              <button
+                                key={p.key}
+                                type="button"
+                                onClick={(e) => handleToggleSinglePermission(u, p.key, e)}
+                                title={`Cliquer pour ${isGranted ? 'retirer' : 'attribuer'} le droit : ${p.label}`}
+                                style={{
+                                  border: isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
+                                  background: isGranted ? `${p.color}15` : '#f8fafc',
+                                  color: isGranted ? p.color : '#94a3b8',
+                                  borderRadius: '6px',
+                                  padding: '2px 6px',
+                                  fontSize: '10.5px',
+                                  fontWeight: isGranted ? 700 : 500,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <span>{isGranted ? '✓' : '+'}</span>
+                                <span>{p.short}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </td>
                       <td>
@@ -527,28 +568,50 @@ export function AdminWorkstation({
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '4px' }}>
+                        <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
                             style={{ padding: '2px 7px', fontSize: '10.5px' }}
                             onClick={() => openEditUserModal(u)}
+                            title="Modifier les informations complètes ou réinitialiser le mot de passe"
                           >
-                            Droits
+                            Éditer
                           </button>
                           {u.id !== 1 && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ color: '#dc2626', padding: '2px 7px', fontSize: '10.5px' }}
-                              onClick={() => {
-                                if (window.confirm(`Supprimer le compte de ${u.name} ?`)) {
-                                  deleteUserMut.mutate(u.id);
-                                }
-                              }}
-                            >
-                              ✕
-                            </button>
+                            confirmDeleteUserId === u.id ? (
+                              <div style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  style={{ background: '#dc2626', color: '#ffffff', padding: '2px 6px', fontSize: '10px', border: 'none', borderRadius: '4px', fontWeight: 700 }}
+                                  onClick={() => {
+                                    deleteUserMut.mutate(u.id);
+                                    setConfirmDeleteUserId(null);
+                                  }}
+                                >
+                                  Oui
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 6px', fontSize: '10px' }}
+                                  onClick={() => setConfirmDeleteUserId(null)}
+                                >
+                                  Non
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ color: '#dc2626', padding: '2px 7px', fontSize: '10.5px' }}
+                                onClick={() => setConfirmDeleteUserId(u.id)}
+                                title="Supprimer ce compte"
+                              >
+                                ✕
+                              </button>
+                            )
                           )}
                         </div>
                       </td>
@@ -560,7 +623,7 @@ export function AdminWorkstation({
           </div>
 
           {/* Cartes Mobile Utilisateurs Admin */}
-          <div className="mobile-only-block mobile-card-grid">
+          <div className="mobile-only-block mobile-card-grid" style={{ width: '100%', maxWidth: '100%' }}>
             {users.map((u) => {
               const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.ADMIN;
               const perms = u.permissions || getEffectivePermissions(u.role, null);
@@ -568,7 +631,7 @@ export function AdminWorkstation({
                 ([k, v]) => k !== 'mobileOnly' && Boolean(v)
               ).length;
               return (
-                <div key={u.id} className="mobile-record-card">
+                <div key={u.id} className="mobile-record-card" style={{ width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                     <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
                       {u.name} {u.id === 1 && '👑'}
@@ -601,28 +664,79 @@ export function AdminWorkstation({
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'flex-end' }}>
+                  {/* Boutons d'activation directe des droits sur mobile */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
+                    {INTERACTIVE_PERMS.map((p) => {
+                      const isGranted = Boolean(perms[p.key]);
+                      return (
+                        <button
+                          key={p.key}
+                          type="button"
+                          onClick={(e) => handleToggleSinglePermission(u, p.key, e)}
+                          title={`Cliquer pour ${isGranted ? 'désactiver' : 'activer'} ${p.label}`}
+                          style={{
+                            border: isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
+                            background: isGranted ? `${p.color}15` : '#f8fafc',
+                            color: isGranted ? p.color : '#94a3b8',
+                            borderRadius: '6px',
+                            padding: '3px 7px',
+                            fontSize: '10.5px',
+                            fontWeight: isGranted ? 700 : 500,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}
+                        >
+                          <span>{isGranted ? '✓' : '+'}</span>
+                          <span>{p.short}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'flex-end', alignItems: 'center' }}>
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
                       style={{ flex: 1, padding: '6px 10px', fontSize: '11.5px' }}
                       onClick={() => openEditUserModal(u)}
                     >
-                      ✏️ Modifier Droits
+                      ✏️ Paramètres Complets
                     </button>
                     {u.id !== 1 && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '6px 10px', fontSize: '11.5px' }}
-                        onClick={() => {
-                          if (window.confirm(`Supprimer le compte de ${u.name} ?`)) {
-                            deleteUserMut.mutate(u.id);
-                          }
-                        }}
-                      >
-                        🗑️ Supprimer
-                      </button>
+                      confirmDeleteUserId === u.id ? (
+                        <div style={{ display: 'inline-flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ background: '#dc2626', color: '#ffffff', padding: '6px 10px', fontSize: '11.5px', border: 'none', borderRadius: '6px', fontWeight: 700 }}
+                            onClick={() => {
+                              deleteUserMut.mutate(u.id);
+                              setConfirmDeleteUserId(null);
+                            }}
+                          >
+                            Confirmer
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '6px 10px', fontSize: '11.5px' }}
+                            onClick={() => setConfirmDeleteUserId(null)}
+                          >
+                            Non
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '6px 10px', fontSize: '11.5px' }}
+                          onClick={() => setConfirmDeleteUserId(u.id)}
+                        >
+                          🗑️ Supprimer
+                        </button>
+                      )
                     )}
                   </div>
                 </div>

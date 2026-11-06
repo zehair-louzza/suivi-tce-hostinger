@@ -197,8 +197,10 @@ export function DashboardPage() {
   const clientsList = refs.clients?.length ? refs.clients : DEFAULT_REFERENTIELS.clients;
 
   // Actions dynamiques sur les référentiels
-  const handleDeleteRefValue = async (category: string, valueToRemove: string) => {
-    if (!window.confirm(`Supprimer « ${valueToRemove} » de la catégorie ${category} ?`)) return;
+  const [editingRef, setEditingRef] = useState<{ category: string; oldValue: string; currentVal: string } | null>(null);
+  const [confirmDeleteRef, setConfirmDeleteRef] = useState<{ category: string; value: string } | null>(null);
+
+  const handleExecuteDeleteRef = async (category: string, valueToRemove: string) => {
     const rawVals = (refs as any)[category] || [];
     const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
     const nextVals = currentVals.filter((v) => v !== valueToRemove);
@@ -208,6 +210,8 @@ export function DashboardPage() {
       toast.success(`« ${valueToRemove} » supprimé du référentiel`);
     } catch {
       toast.error('Erreur lors de la suppression');
+    } finally {
+      setConfirmDeleteRef(null);
     }
   };
 
@@ -229,10 +233,12 @@ export function DashboardPage() {
     }
   };
 
-  const handleEditRefValue = async (category: string, oldValue: string) => {
-    const updated = window.prompt(`Modifier la valeur :`, oldValue);
-    if (!updated || updated.trim() === oldValue.trim()) return;
-    const trimmed = updated.trim();
+  const handleSaveInlineEditRef = async (category: string, oldValue: string, nextValue: string) => {
+    const trimmed = nextValue.trim();
+    if (!trimmed || trimmed === oldValue.trim()) {
+      setEditingRef(null);
+      return;
+    }
     const rawVals = (refs as any)[category] || [];
     const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
     const nextVals = currentVals.map((v) => (v === oldValue ? trimmed : v));
@@ -242,6 +248,8 @@ export function DashboardPage() {
       toast.success(`Valeur mise à jour : « ${trimmed} »`);
     } catch {
       toast.error('Erreur lors de la modification');
+    } finally {
+      setEditingRef(null);
     }
   };
 
@@ -1836,59 +1844,158 @@ export function DashboardPage() {
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {group.items.map((val) => (
-                        <div
-                          key={val}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            background: '#f8fafc',
-                            border: '1px solid #cbd5e1',
-                            borderRadius: '7px',
-                            padding: '3px 8px',
-                            fontSize: '12px',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          <span
+                      {group.items.map((val) => {
+                        const isEditingThis = editingRef?.category === group.key && editingRef?.oldValue === val;
+                        const isConfirmingDelete = confirmDeleteRef?.category === group.key && confirmDeleteRef?.value === val;
+
+                        if (isEditingThis) {
+                          return (
+                            <form
+                              key={val}
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleSaveInlineEditRef(group.key, val, editingRef.currentVal);
+                              }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                            >
+                              <input
+                                type="text"
+                                autoFocus
+                                className="input"
+                                value={editingRef.currentVal}
+                                onChange={(e) => setEditingRef({ ...editingRef, currentVal: e.target.value })}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') setEditingRef(null);
+                                }}
+                                style={{ height: '24px', fontSize: '11px', padding: '1px 6px', width: '130px' }}
+                              />
+                              <button
+                                type="submit"
+                                className="btn btn-primary btn-sm"
+                                style={{ padding: '1px 6px', fontSize: '10px', height: '24px' }}
+                                title="Sauvegarder"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '1px 6px', fontSize: '10px', height: '24px' }}
+                                onClick={() => setEditingRef(null)}
+                                title="Annuler"
+                              >
+                                ✕
+                              </button>
+                            </form>
+                          );
+                        }
+
+                        if (isConfirmingDelete) {
+                          return (
+                            <div
+                              key={val}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: '#fee2e2',
+                                border: '1px solid #f87171',
+                                padding: '2px 6px',
+                                borderRadius: '6px',
+                              }}
+                            >
+                              <span style={{ fontSize: '10.5px', color: '#b91c1c', fontWeight: 700 }}>Supprimer ?</span>
+                              <button
+                                type="button"
+                                style={{
+                                  background: '#dc2626',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '1px 5px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                }}
+                                onClick={() => handleExecuteDeleteRef(group.key, val)}
+                              >
+                                Oui
+                              </button>
+                              <button
+                                type="button"
+                                style={{
+                                  background: '#f1f5f9',
+                                  color: '#475569',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '4px',
+                                  padding: '1px 5px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => setConfirmDeleteRef(null)}
+                              >
+                                Non
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={val}
                             style={{
-                              cursor: group.editable ? 'pointer' : 'default',
-                              fontWeight: 600,
-                              color: '#1e293b',
-                            }}
-                            title={group.editable ? 'Cliquer pour modifier ou renommer' : val}
-                            onClick={() => {
-                              if (group.editable) handleEditRefValue(group.key, val);
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '7px',
+                              padding: '3px 8px',
+                              fontSize: '12px',
+                              transition: 'all 0.15s ease',
                             }}
                           >
-                            {val}
-                          </span>
-
-                          {group.editable && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteRefValue(group.key, val);
-                              }}
+                            <span
                               style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#94a3b8',
-                                cursor: 'pointer',
-                                padding: '0 2px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                lineHeight: 1,
+                                cursor: group.editable ? 'pointer' : 'default',
+                                fontWeight: 600,
+                                color: '#1e293b',
                               }}
-                              title={`Supprimer « ${val} » du référentiel`}
+                              title={group.editable ? 'Cliquer pour modifier ou renommer directement' : val}
+                              onClick={() => {
+                                if (group.editable) {
+                                  setEditingRef({ category: group.key, oldValue: val, currentVal: val });
+                                }
+                              }}
                             >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                              {val}
+                            </span>
+
+                            {group.editable && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteRef({ category: group.key, value: val });
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  padding: '0 2px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  lineHeight: 1,
+                                }}
+                                title={`Supprimer « ${val} »`}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 

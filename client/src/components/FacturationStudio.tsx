@@ -130,9 +130,27 @@ function diffDaysISO(dateA: string, dateB: string): number {
   return Math.round((utc1 - utc2) / 86400000);
 }
 
-function extractDateParts(rawDate?: string | null): { year: string; month: string; day: string } | null {
+function extractDateParts(rawDate?: any): { year: string; month: string; day: string } | null {
   if (!rawDate) return null;
+  if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+    return {
+      year: String(rawDate.getFullYear()),
+      month: String(rawDate.getMonth() + 1).padStart(2, '0'),
+      day: String(rawDate.getDate()).padStart(2, '0'),
+    };
+  }
   const s = String(rawDate).trim();
+  if (!s) return null;
+  if (/^\d{12,}$/.test(s)) {
+    const d = new Date(Number(s));
+    if (!isNaN(d.getTime())) {
+      return {
+        year: String(d.getFullYear()),
+        month: String(d.getMonth() + 1).padStart(2, '0'),
+        day: String(d.getDate()).padStart(2, '0'),
+      };
+    }
+  }
   if (s.includes('-')) {
     const parts = s.slice(0, 10).split('-');
     if (parts.length >= 3) {
@@ -475,24 +493,45 @@ export function FacturationStudio({
     setTvaRateMap((prev) => ({ ...prev, [dossierId]: nextRate }));
   };
 
-  // Compteurs KPI Facturation
+  // Filtrage temporel de base (Jour / Mois / Année) appliqué à toute la vue Facturation
+  const dateFilteredDossiers = useMemo(() => {
+    if (filterYear === 'ALL' && filterMonth === 'ALL' && filterDay === 'ALL') {
+      return enrichedDossiers;
+    }
+    return enrichedDossiers.filter((d) => {
+      const parts = extractDateParts(
+        d.intervention.dateReelle ||
+        d.intervention.datePlanifiee ||
+        d.intervention.dateDebut ||
+        d.intervention.dateDemande ||
+        (d.intervention.createdAt ? String(d.intervention.createdAt).slice(0, 10) : '')
+      );
+      if (!parts) return false;
+      if (filterYear !== 'ALL' && parts.year !== filterYear) return false;
+      if (filterMonth !== 'ALL' && parts.month !== filterMonth) return false;
+      if (filterDay !== 'ALL' && parts.day !== filterDay.padStart(2, '0')) return false;
+      return true;
+    });
+  }, [enrichedDossiers, filterYear, filterMonth, filterDay]);
+
+  // Compteurs KPI Facturation synchronisés avec les filtres temporels
   const stats = useMemo(() => {
-    const aFacturer = enrichedDossiers.filter((d) => d.category === 'A_FACTURER');
-    const aVerifier = enrichedDossiers.filter((d) => d.category === 'A_VERIFIER');
-    const nePasFacturer = enrichedDossiers.filter((d) => d.category === 'NE_PAS_FACTURER');
-    const facturees = enrichedDossiers.filter((d) => d.category === 'FACTUREE');
-    const enRetardOuBloque = enrichedDossiers.filter(
+    const aFacturer = dateFilteredDossiers.filter((d) => d.category === 'A_FACTURER');
+    const aVerifier = dateFilteredDossiers.filter((d) => d.category === 'A_VERIFIER');
+    const nePasFacturer = dateFilteredDossiers.filter((d) => d.category === 'NE_PAS_FACTURER');
+    const facturees = dateFilteredDossiers.filter((d) => d.category === 'FACTUREE');
+    const enRetardOuBloque = dateFilteredDossiers.filter(
       (d) => d.isDelayed || Boolean(d.intervention.motifBlocage)
     );
 
-    const directeCount = enrichedDossiers.filter((d) => d.fluxType === 'DIRECTE').length;
-    const suiteDevisAvecVisiteCount = enrichedDossiers.filter(
+    const directeCount = dateFilteredDossiers.filter((d) => d.fluxType === 'DIRECTE').length;
+    const suiteDevisAvecVisiteCount = dateFilteredDossiers.filter(
       (d) => d.fluxType === 'SUITE_DEVIS_AVEC_VISITE'
     ).length;
-    const suiteDevisSansVisiteCount = enrichedDossiers.filter(
+    const suiteDevisSansVisiteCount = dateFilteredDossiers.filter(
       (d) => d.fluxType === 'SUITE_DEVIS_SANS_VISITE'
     ).length;
-    const visiteDevisCount = enrichedDossiers.filter((d) => d.fluxType === 'VISITE_DEVIS').length;
+    const visiteDevisCount = dateFilteredDossiers.filter((d) => d.fluxType === 'VISITE_DEVIS').length;
 
     const montantAFacturerHT = aFacturer.reduce((acc, d) => acc + d.suggestedAmountHT, 0);
     const montantAFacturerTTC = aFacturer.reduce((acc, d) => acc + d.suggestedAmountTTC, 0);
@@ -506,8 +545,8 @@ export function FacturationStudio({
     );
     const montantFactureTTC = facturees.reduce((acc, d) => acc + d.suggestedAmountTTC, 0);
 
-    const b2bCount = enrichedDossiers.filter((d) => d.segment === 'B2B').length;
-    const b2cCount = enrichedDossiers.filter((d) => d.segment === 'B2C').length;
+    const b2bCount = dateFilteredDossiers.filter((d) => d.segment === 'B2B').length;
+    const b2cCount = dateFilteredDossiers.filter((d) => d.segment === 'B2C').length;
 
     return {
       aFacturer,
@@ -528,7 +567,7 @@ export function FacturationStudio({
       b2bCount,
       b2cCount,
     };
-  }, [enrichedDossiers]);
+  }, [dateFilteredDossiers]);
 
   // Liste dynamique des années présentes
   const availableYears = useMemo(() => {
@@ -550,25 +589,10 @@ export function FacturationStudio({
   }, [enrichedDossiers]);
 
   const filteredDossiers = useMemo(() => {
-    return enrichedDossiers.filter((d) => {
+    return dateFilteredDossiers.filter((d) => {
       if (filterCategory !== 'ALL' && d.category !== filterCategory) return false;
       if (filterSegment !== 'ALL' && d.segment !== filterSegment) return false;
       if (filterFlux !== 'ALL' && d.fluxType !== filterFlux) return false;
-
-      // Filtrage par jour, mois, année
-      if (filterYear !== 'ALL' || filterMonth !== 'ALL' || filterDay !== 'ALL') {
-        const parts = extractDateParts(
-          d.intervention.dateReelle ||
-          d.intervention.datePlanifiee ||
-          d.intervention.dateDebut ||
-          d.intervention.dateDemande ||
-          (d.intervention.createdAt ? String(d.intervention.createdAt).slice(0, 10) : '')
-        );
-        if (!parts) return false;
-        if (filterYear !== 'ALL' && parts.year !== filterYear) return false;
-        if (filterMonth !== 'ALL' && parts.month !== filterMonth) return false;
-        if (filterDay !== 'ALL' && parts.day !== filterDay.padStart(2, '0')) return false;
-      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -578,13 +602,10 @@ export function FacturationStudio({
       return true;
     });
   }, [
-    enrichedDossiers,
+    dateFilteredDossiers,
     filterCategory,
     filterSegment,
     filterFlux,
-    filterYear,
-    filterMonth,
-    filterDay,
     searchQuery,
   ]);
 

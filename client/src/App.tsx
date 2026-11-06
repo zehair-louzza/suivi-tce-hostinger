@@ -11,12 +11,18 @@ function AppRoutes() {
 
   useEffect(() => {
     if (isLoading) {
-      const timer = setTimeout(() => setShowFallback(true), 3500);
-      return () => clearTimeout(timer);
+      const fallbackTimer = setTimeout(() => setShowFallback(true), 1500);
+      const autoUnlockTimer = setTimeout(() => {
+        setLoading(false);
+      }, 2800);
+      return () => {
+        clearTimeout(fallbackTimer);
+        clearTimeout(autoUnlockTimer);
+      };
     } else {
       setShowFallback(false);
     }
-  }, [isLoading]);
+  }, [isLoading, setLoading]);
 
   if (isLoading) {
     return (

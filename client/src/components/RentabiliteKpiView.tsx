@@ -16,6 +16,48 @@ interface RentabiliteKpiViewProps {
   onOpenInterventionDrawer?: (intervention: Intervention) => void;
 }
 
+function extractDateParts(rawDate?: any): { year: string; month: string; day: string } | null {
+  if (!rawDate) return null;
+  if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+    return {
+      year: String(rawDate.getFullYear()),
+      month: String(rawDate.getMonth() + 1).padStart(2, '0'),
+      day: String(rawDate.getDate()).padStart(2, '0'),
+    };
+  }
+  const s = String(rawDate).trim();
+  if (!s) return null;
+  if (/^\d{12,}$/.test(s)) {
+    const d = new Date(Number(s));
+    if (!isNaN(d.getTime())) {
+      return {
+        year: String(d.getFullYear()),
+        month: String(d.getMonth() + 1).padStart(2, '0'),
+        day: String(d.getDate()).padStart(2, '0'),
+      };
+    }
+  }
+  if (s.includes('-')) {
+    const parts = s.slice(0, 10).split('-');
+    if (parts.length >= 3) {
+      if (parts[0].length === 4) {
+        return { year: parts[0], month: parts[1].padStart(2, '0'), day: parts[2].padStart(2, '0') };
+      }
+      return { year: parts[2], month: parts[1].padStart(2, '0'), day: parts[0].padStart(2, '0') };
+    }
+  }
+  if (s.includes('/')) {
+    const parts = s.slice(0, 10).split('/');
+    if (parts.length >= 3) {
+      if (parts[2].length === 4) {
+        return { year: parts[2], month: parts[1].padStart(2, '0'), day: parts[0].padStart(2, '0') };
+      }
+      return { year: parts[0], month: parts[1].padStart(2, '0'), day: parts[2].padStart(2, '0') };
+    }
+  }
+  return null;
+}
+
 export interface TechPerformanceStats {
   technicien: string;
   totalInterventions: number;
@@ -84,16 +126,19 @@ export function RentabiliteKpiView({
     years.add(String(curYear));
     years.add(String(curYear - 1));
     interventionsList.forEach((intv) => {
-      const rawDate = intv.datePlanifiee || intv.dateReelle || intv.dateDemande || (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '');
-      if (rawDate) {
-        const y = rawDate.slice(0, 4);
-        if (y && !isNaN(Number(y))) years.add(y);
-      }
+      const parts = extractDateParts(
+        intv.datePlanifiee ||
+        intv.dateReelle ||
+        intv.dateDebut ||
+        intv.dateDemande ||
+        (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '')
+      );
+      if (parts?.year) years.add(parts.year);
     });
     return Array.from(years).sort().reverse();
   }, [interventionsList]);
 
-  // Filtrage des interventions par période
+  // Filtrage des interventions par période (Mois / Année / Statut)
   const periodFilteredInterventions = useMemo(() => {
     return interventionsList.filter((intv) => {
       if (filterStatut === 'CLOTUREE') {
@@ -102,20 +147,26 @@ export function RentabiliteKpiView({
       }
 
       if (filterYear !== 'ALL' || filterMonth !== 'ALL') {
-        const rawDate = intv.datePlanifiee || intv.dateReelle || intv.dateDemande || (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '');
-        if (!rawDate) return false;
-        const y = rawDate.slice(0, 4);
-        const m = rawDate.length >= 7 ? rawDate.slice(5, 7) : '';
-        if (filterYear !== 'ALL' && y !== filterYear) return false;
-        if (filterMonth !== 'ALL' && m !== filterMonth) return false;
+        const parts = extractDateParts(
+          intv.datePlanifiee ||
+          intv.dateReelle ||
+          intv.dateDebut ||
+          intv.dateDemande ||
+          (intv.createdAt ? String(intv.createdAt).slice(0, 10) : '')
+        );
+        if (!parts) return false;
+        if (filterYear !== 'ALL' && parts.year !== filterYear) return false;
+        if (filterMonth !== 'ALL' && parts.month !== filterMonth) return false;
       }
 
       if (selectedPeriod === 'MONTH') {
-        const dateStr = intv.datePlanifiee ? intv.datePlanifiee.slice(0, 7) : '';
-        if (dateStr !== currentMonthPrefix) return false;
+        const parts = extractDateParts(intv.datePlanifiee || intv.dateReelle);
+        if (!parts || `${parts.year}-${parts.month}` !== currentMonthPrefix) return false;
       } else if (selectedPeriod === 'WEEK') {
-        if (!intv.datePlanifiee) return false;
-        const d = new Date(intv.datePlanifiee);
+        const rawDate = intv.datePlanifiee || intv.dateReelle;
+        if (!rawDate) return false;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return false;
         const diffDays = Math.abs(today.getTime() - d.getTime()) / (1000 * 3600 * 24);
         if (diffDays > 7) return false;
       }
