@@ -79,13 +79,13 @@ const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60; // 720 min
 const HOURS_ARRAY = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 
 const TECH_SPECIALTIES: Record<string, { role: string; color: string }> = {
-  Anouar: { role: 'Chef Équipe CFO/CFA', color: '#3b82f6' },
-  Mohamed: { role: 'Technicien CVC / Plomberie', color: '#10b981' },
-  Haitam: { role: 'Électricien Tertiaire', color: '#8b5cf6' },
-  Jamal: { role: 'Multi-technique TCE', color: '#f59e0b' },
-  Manneh: { role: 'Installation & Tirage', color: '#06b6d4' },
-  Yankoubou: { role: 'Maintenance & Dépannage', color: '#ec4899' },
-  'Sous-traitant': { role: 'Renfort Externe TCE', color: '#64748b' },
+  Anouar: { role: 'Chef Équipe CFO/CFA', color: '#0a0f1d' },
+  Mohamed: { role: 'Technicien CVC / Plomberie', color: '#00bf63' },
+  Haitam: { role: 'Électricien Tertiaire', color: '#0f172a' },
+  Jamal: { role: 'Multi-technique TCE', color: '#b45309' },
+  Manneh: { role: 'Installation & Tirage', color: '#047857' },
+  Yankoubou: { role: 'Maintenance & Dépannage', color: '#1e293b' },
+  'Sous-traitant': { role: 'Renfort Externe TCE', color: '#475569' },
 };
 
 function toDateKey(d: Date | string | null | undefined): string {
@@ -1237,17 +1237,17 @@ export function PlanningBoard({
               {
                 id: 'VISITE_DEVIS',
                 label: `Visites Devis (${allItems.filter((i) => i.kind === 'VISITE_DEVIS').length})`,
-                dot: '#a855f7',
+                dot: '#ffcc00',
               },
               {
                 id: 'INTERVENTION',
                 label: `Travaux (${allItems.filter((i) => i.kind === 'INTERVENTION').length})`,
-                dot: '#3b82f6',
+                dot: '#00bf63',
               },
               {
                 id: 'URGENCE',
                 label: `Urgences (${allItems.filter((i) => i.kind === 'URGENCE').length})`,
-                dot: '#ef4444',
+                dot: '#ff0000',
               },
             ].map((tab) => (
               <button
@@ -1352,10 +1352,10 @@ export function PlanningBoard({
                     fontSize: '11.5px',
                     background:
                       selectedSlot.kind === 'VISITE_DEVIS'
-                        ? '#9333ea'
+                        ? '#b45309'
                         : selectedSlot.kind === 'URGENCE'
-                        ? '#dc2626'
-                        : '#2563eb',
+                        ? '#b91c1c'
+                        : '#047857',
                     color: '#ffffff',
                   }}
                 >
@@ -1371,12 +1371,12 @@ export function PlanningBoard({
                   className="font-mono"
                   style={{
                     fontSize: '12px',
-                    color: '#1d4ed8',
-                    background: 'rgba(37, 99, 235, 0.12)',
-                    border: '1px solid rgba(37, 99, 235, 0.28)',
-                    padding: '2px 9px',
-                    borderRadius: '999px',
-                    fontWeight: 800,
+                    color: '#0f172a',
+                    background: '#f1f5f9',
+                    border: '1px solid #cbd5e1',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    fontWeight: 700,
                   }}
                 >
                   🕒 {activeStartStr} → {activeEndStr} ({durHoursVal}h) • {selectedSlot.technicien || 'Non affecté'}
@@ -1713,10 +1713,10 @@ export function PlanningBoard({
                   const isSelected = selectedSlotId === item.id;
                   const accent =
                     item.kind === 'VISITE_DEVIS'
-                      ? '#a855f7'
+                      ? '#ffcc00'
                       : item.kind === 'URGENCE'
-                      ? '#ef4444'
-                      : '#3b82f6';
+                      ? '#ff0000'
+                      : '#00bf63';
                   return (
                     <div
                       key={item.id}
@@ -3316,10 +3316,10 @@ export function PlanningBoard({
                                   {sorted.map((slot) => {
                                     const accent =
                                       slot.kind === 'VISITE_DEVIS'
-                                        ? '#a855f7'
+                                        ? '#ffcc00'
                                         : slot.kind === 'URGENCE'
-                                        ? '#ef4444'
-                                        : '#3b82f6';
+                                        ? '#ff0000'
+                                        : '#00bf63';
                                     const isSelected = selectedSlotId === slot.id;
 
                                     return (

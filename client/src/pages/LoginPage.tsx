@@ -76,8 +76,7 @@ export function LoginPage() {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          background:
-            'radial-gradient(circle at 18% 20%, rgba(59, 130, 246, 0.22) 0%, transparent 45%), radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.18) 0%, transparent 50%), #080b11',
+          background: '#0a0f1d',
           borderRight: '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
@@ -97,9 +96,9 @@ export function LoginPage() {
               gap: '8px',
               padding: '5px 12px',
               borderRadius: '999px',
-              background: 'rgba(59, 130, 246, 0.14)',
-              border: '1px solid rgba(59, 130, 246, 0.35)',
-              color: '#93c5fd',
+              background: 'rgba(0, 191, 99, 0.14)',
+              border: '1px solid rgba(0, 191, 99, 0.4)',
+              color: '#00bf63',
               fontSize: '11.5px',
               fontWeight: 600,
               width: 'fit-content',
@@ -130,11 +129,11 @@ export function LoginPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#94a3b8' }}>
               <span style={{ fontWeight: 700, color: '#e2e8f0' }}>CONSOLE DISPATCH • TIMELINE GANTT</span>
-              <span className="font-mono" style={{ color: '#60a5fa' }}>07:00 ──────── 19:00</span>
+              <span className="font-mono" style={{ color: '#00bf63' }}>07:00 ──────── 19:00</span>
             </div>
             {[
-              { tech: 'Anouar', role: 'Élec / CFO-CFA', slot1: '08:00 - 11:30 • Visite Devis #2052', c1: '#a855f7', slot2: '13:30 - 17:00 • Travaux #INT-104', c2: '#3b82f6' },
-              { tech: 'Mohamed', role: 'CVC / Plomberie', slot1: '08:30 - 12:30 • Urgence Dépannage', c1: '#ef4444', slot2: '14:00 - 17:30 • Maintenance TCE', c2: '#3b82f6' },
+              { tech: 'Anouar', role: 'Élec / CFO-CFA', slot1: '08:00 - 11:30 • Visite Devis #2052', c1: '#ffcc00', slot2: '13:30 - 17:00 • Travaux #INT-104', c2: '#00bf63' },
+              { tech: 'Mohamed', role: 'CVC / Plomberie', slot1: '08:30 - 12:30 • Urgence Dépannage', c1: '#ff0000', slot2: '14:00 - 17:30 • Maintenance TCE', c2: '#00bf63' },
             ].map((row) => (
               <div
                 key={row.tech}

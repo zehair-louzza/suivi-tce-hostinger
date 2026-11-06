@@ -319,7 +319,7 @@ export function Layout({
                 className={`sidebar-item ${isActive ? 'active' : ''}`}
                 title={`${item.label} — ${item.subtitle}`}
               >
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isActive ? '#60a5fa' : 'inherit' }}>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isActive ? '#00bf63' : 'inherit' }}>
                   {item.icon}
                 </span>
                 {!collapsed && (
@@ -327,7 +327,7 @@ export function Layout({
                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {item.label}
                     </span>
-                    <span style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 400 }}>
+                    <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: 400 }}>
                       {item.subtitle}
                     </span>
                   </div>
@@ -342,15 +342,15 @@ export function Layout({
           })}
 
           {!collapsed && (
-            <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', background: 'rgba(59, 130, 246, 0.07)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <div style={{ marginTop: '16px', padding: '12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Moteur Planning
                 </span>
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00bf63', boxShadow: '0 0 6px #00bf63' }} />
               </div>
               <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.45 }}>
-                Synchronisation auto des <strong style={{ color: '#d8b4fe' }}>Visites Devis</strong> & <strong style={{ color: '#93c5fd' }}>Interventions</strong> active.
+                Synchronisation auto des <strong style={{ color: '#ffcc00' }}>Visites Devis</strong> & <strong style={{ color: '#00bf63' }}>Interventions</strong> active.
               </div>
             </div>
           )}
@@ -364,7 +364,7 @@ export function Layout({
                   width: '28px',
                   height: '28px',
                   borderRadius: '7px',
-                  background: 'linear-gradient(135deg, #3b82f6, #7c3aed)',
+                  background: '#00bf63',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -492,7 +492,7 @@ export function Layout({
                 }}
                 title="Fuseau horaire métier : Europe/Paris"
               >
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00bf63' }} />
                 {parisTime}
               </div>
             )}

@@ -177,29 +177,23 @@ export function RentabiliteKpiView({
         bg: 'rgba(59, 130, 246, 0.12)',
         color: '#2563eb',
       };
-      if (hourlyRevenueHT >= 110) {
+      if (hourlyRevenueHT >= 80) {
         performanceBadge = {
-          label: '🔥 Rentabilité Exceptionnelle (>110€/h)',
-          bg: 'rgba(16, 185, 129, 0.15)',
-          color: '#059669',
-        };
-      } else if (hourlyRevenueHT >= 80) {
-        performanceBadge = {
-          label: '⭐ Forte Rentabilité (80–110€/h)',
-          bg: 'rgba(124, 58, 237, 0.14)',
-          color: '#7c3aed',
+          label: '⭐ Forte Rentabilité (≥80€/h)',
+          bg: '#ecfdf5',
+          color: '#047857',
         };
       } else if (hourlyRevenueHT >= 50) {
         performanceBadge = {
           label: '✓ Conforme au budget (50–80€/h)',
-          bg: 'rgba(14, 165, 233, 0.14)',
-          color: '#0284c7',
+          bg: '#fffbeb',
+          color: '#b45309',
         };
       } else if (totalInterventions > 0) {
         performanceBadge = {
           label: '⚠️ Vigilance Rentabilité (<50€/h)',
-          bg: 'rgba(239, 68, 68, 0.14)',
-          color: '#dc2626',
+          bg: '#fef2f2',
+          color: '#b91c1c',
         };
       }
 
@@ -386,7 +380,7 @@ export function RentabiliteKpiView({
       {/* =====================================================================
           1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE
          ===================================================================== */}
-      <div className="glass-analytics-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
+      <div className="pro-table-container" style={{ padding: '16px 20px', borderLeft: '5px solid #00bf63', background: '#ffffff', border: '1px solid #cbd5e1' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -489,16 +483,16 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '3px solid #2563eb' }}>
+        <div className="kpi-card" style={{ borderTop: '4px solid #0a0f1d' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0a0f1d' }}>
               ⚡ Rentabilité Horaire
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#2563eb', fontWeight: 700 }}>
+            <span className="font-mono" style={{ fontSize: '11px', color: '#0a0f1d', fontWeight: 700 }}>
               Moyenne
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#1d4ed8' }}>
+          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0a0f1d' }}>
             {globalMetrics.globalHourlyRevenue} € / heure
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -506,16 +500,16 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '3px solid #7c3aed' }}>
+        <div className="kpi-card" style={{ borderTop: '4px solid #00bf63' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#7c3aed' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
               📈 Marge Brute Globale
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 800 }}>
+            <span className="font-mono" style={{ fontSize: '11px', color: '#047857', fontWeight: 800 }}>
               {globalMetrics.globalMarginRate}%
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#6d28d9' }}>
+          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#047857' }}>
             {formatCurrency(globalMetrics.globalMargin)}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -523,12 +517,12 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '3px solid #f59e0b' }}>
+        <div className="kpi-card" style={{ borderTop: '4px solid #ffcc00' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#d97706' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>
               ⏱️ Efficience / Délais
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#d97706', fontWeight: 700 }}>
+            <span className="font-mono" style={{ fontSize: '11px', color: '#b45309', fontWeight: 700 }}>
               Ratio
             </span>
           </div>
@@ -542,17 +536,17 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '3px solid #ec4899' }}>
+        <div className="kpi-card" style={{ borderTop: '4px solid #00bf63' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#db2777' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
               🏆 Top Rentabilité
             </span>
-            <span className="badge badge-primary" style={{ fontSize: '9px' }}>N°1</span>
+            <span className="badge badge-primary" style={{ fontSize: '9px', background: '#00bf63', color: '#ffffff' }}>N°1</span>
           </div>
           <div style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {globalMetrics.topPerformer?.technicien || 'Aucun'}
           </div>
-          <div className="font-mono" style={{ fontSize: '11.5px', color: '#db2777', fontWeight: 700 }}>
+          <div className="font-mono" style={{ fontSize: '11.5px', color: '#047857', fontWeight: 700 }}>
             {globalMetrics.topPerformer ? `${globalMetrics.topPerformer.hourlyRevenueHT} €/h (${formatCurrency(globalMetrics.topPerformer.totalMontantHT)})` : '—'}
           </div>
         </div>
@@ -562,15 +556,17 @@ export function RentabiliteKpiView({
           3. SIMULATEUR DE COÛT HORAIRE & BARRE DE TRI / VUE
          ===================================================================== */}
       <div
-        className="glass-analytics-card"
+        className="pro-table-container"
         style={{
           padding: '12px 18px',
+          display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          background: 'rgba(255, 255, 255, 0.92)',
+          background: '#ffffff',
+          border: '1px solid #cbd5e1',
         }}
       >
         {/* Commutateur de vue : Par Technicien vs Par Équipe / Métier */}
@@ -595,7 +591,7 @@ export function RentabiliteKpiView({
 
         {/* Simulateur / Réglage Coût Horaire Moyen Chargé */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-surface)', padding: '6px 12px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#1e40af' }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0a0f1d' }}>
             🧮 Coût Moyen Chargé :
           </span>
           <input
@@ -605,9 +601,9 @@ export function RentabiliteKpiView({
             step={1}
             value={hourlyCostParam}
             onChange={(e) => setHourlyCostParam(Number(e.target.value))}
-            style={{ width: '100px', cursor: 'pointer', accentColor: '#2563eb' }}
+            style={{ width: '100px', cursor: 'pointer', accentColor: '#00bf63' }}
           />
-          <span className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: '#1d4ed8', minWidth: '46px' }}>
+          <span className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: '#00bf63', minWidth: '46px' }}>
             {hourlyCostParam} €/h
           </span>
         </div>
@@ -847,7 +843,7 @@ export function RentabiliteKpiView({
                 equipesStats.map((eq) => (
                   <tr key={eq.corpsEtat}>
                     <td>
-                      <div style={{ fontWeight: 800, fontSize: '13px', color: '#1e40af' }}>
+                      <div style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
                         🔨 {eq.corpsEtat}
                       </div>
                     </td>
@@ -874,9 +870,9 @@ export function RentabiliteKpiView({
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#2563eb', height: '100%' }} />
+                          <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
                         </div>
-                        <span className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563eb' }}>
+                        <span className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#047857' }}>
                           {eq.partCA}%
                         </span>
                       </div>

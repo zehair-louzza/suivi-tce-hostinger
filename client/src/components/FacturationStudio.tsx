@@ -640,19 +640,17 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_FACTURER');
           }}
           style={{
-            borderTop: '3px solid #10b981',
-            background:
-              filterCategory === 'A_FACTURER'
-                ? 'linear-gradient(145deg, rgba(16, 185, 129, 0.14), rgba(255, 255, 255, 0.9))'
-                : undefined,
+            borderTop: '4px solid #00bf63',
+            background: '#ffffff',
+            boxShadow: filterCategory === 'A_FACTURER' ? '0 0 0 2px #00bf63, 0 4px 12px rgba(0, 191, 99, 0.2)' : '0 1px 3px rgba(15, 23, 42, 0.08)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               🟢 À facturer (Prêtes)
             </span>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#059669', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#047857', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAFacturerHT)} HT
               </div>
               <div className="font-mono" style={{ fontSize: '10px', color: '#047857', whiteSpace: 'nowrap' }}>
@@ -675,19 +673,17 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_VERIFIER');
           }}
           style={{
-            borderTop: '3px solid #f59e0b',
-            background:
-              filterCategory === 'A_VERIFIER'
-                ? 'linear-gradient(145deg, rgba(245, 158, 11, 0.14), rgba(255, 255, 255, 0.9))'
-                : undefined,
+            borderTop: '4px solid #ffcc00',
+            background: '#ffffff',
+            boxShadow: filterCategory === 'A_VERIFIER' ? '0 0 0 2px #ffcc00, 0 4px 12px rgba(255, 204, 0, 0.25)' : '0 1px 3px rgba(15, 23, 42, 0.08)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#d97706', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               🟡 À vérifier (En attente)
             </span>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#d97706', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#b45309', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAVerifierHT)} HT
               </div>
               <div className="font-mono" style={{ fontSize: '10px', color: '#b45309', whiteSpace: 'nowrap' }}>
@@ -710,18 +706,16 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('NE_PAS_FACTURER');
           }}
           style={{
-            borderTop: '3px solid #64748b',
-            background:
-              filterCategory === 'NE_PAS_FACTURER'
-                ? 'linear-gradient(145deg, rgba(100, 116, 139, 0.14), rgba(255, 255, 255, 0.9))'
-                : undefined,
+            borderTop: '4px solid #ff0000',
+            background: '#ffffff',
+            boxShadow: filterCategory === 'NE_PAS_FACTURER' ? '0 0 0 2px #ff0000, 0 4px 12px rgba(255, 0, 0, 0.2)' : '0 1px 3px rgba(15, 23, 42, 0.08)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#b91c1c', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               🔴 Ne pas facturer
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span className="font-mono" style={{ fontSize: '11px', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 700 }}>
               En cours / Visites
             </span>
           </div>
@@ -737,11 +731,9 @@ Service Client & Facturation — ANELEC GROUPE`;
           className="kpi-card"
           onClick={() => setActiveTab('retards_clients')}
           style={{
-            borderTop: '3px solid #ef4444',
-            background:
-              activeTab === 'retards_clients'
-                ? 'linear-gradient(145deg, rgba(239, 68, 68, 0.14), rgba(255, 255, 255, 0.9))'
-                : undefined,
+            borderTop: '4px solid #dc2626',
+            background: '#ffffff',
+            boxShadow: activeTab === 'retards_clients' ? '0 0 0 2px #dc2626, 0 4px 12px rgba(220, 38, 38, 0.2)' : '0 1px 3px rgba(15, 23, 42, 0.08)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -767,22 +759,20 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('FACTUREE');
           }}
           style={{
-            borderTop: '3px solid #2563eb',
-            background:
-              filterCategory === 'FACTUREE'
-                ? 'linear-gradient(145deg, rgba(37, 99, 235, 0.14), rgba(255, 255, 255, 0.9))'
-                : undefined,
+            borderTop: '4px solid #0f172a',
+            background: '#ffffff',
+            boxShadow: filterCategory === 'FACTUREE' ? '0 0 0 2px #0f172a, 0 4px 12px rgba(15, 23, 42, 0.25)' : '0 1px 3px rgba(15, 23, 42, 0.08)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               ✅ Facturées (B2B/B2C)
             </span>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#2563eb', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantFactureHT)} HT
               </div>
-              <div className="font-mono" style={{ fontSize: '10px', color: '#1e40af', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '10px', color: '#334155', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantFactureTTC)} TTC
               </div>
             </div>

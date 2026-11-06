@@ -920,25 +920,11 @@ html, body, #root {
   white-space: nowrap;
 }
 
-.pro-table th:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: var(--bg-elevated);
-}
-
 .pro-table td {
   padding: 7px 8px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 11.5px;
   vertical-align: middle;
-}
-
-.pro-table td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--bg-surface);
 }
 
 .pro-table tbody tr {
@@ -947,10 +933,6 @@ html, body, #root {
 }
 
 .pro-table tbody tr:hover {
-  background: var(--bg-hover);
-}
-
-.pro-table tbody tr:hover td:first-child {
   background: var(--bg-hover);
 }
 
@@ -1315,455 +1297,359 @@ html, body, #root {
 
 
 /* ============================================================================
-   THÈME « GLASS BUBBLES » — Texture papier + bulles animées + verre coloré
-   (couche visuelle appliquée par-dessus la structure existante)
+   CHARTE GRAPHIQUE OFFICIELLE ANELEC (3 COULEURS LOGO + COULEURS FONCÉES)
+   - Vert ANELEC   : #00bf63 (Validé, terminé, clôturé, succès, actions positives)
+   - Jaune ANELEC  : #ffcc00 (Visites devis, en cours, attente, vérification)
+   - Rouge ANELEC  : #ff0000 (Urgences, retards, non terminées, alertes, suppression)
+   - Foncés ANELEC : #0a0f1d / #0f172a (Sidebar, en-têtes de tableaux, typographie ultra-nette)
+   Surfaces solides, contrastes AAA, suppression intégrale des dégradés arc-en-ciel
    ============================================================================ */
+
 :root,
 [data-theme="light"] {
-  --paper-base: #f5f1e8;
-  --bg-app: #f5f1e8;
-  --bg-surface: rgba(255, 255, 255, 0.62);
-  --bg-elevated: rgba(255, 255, 255, 0.48);
-  --bg-hover: rgba(255, 255, 255, 0.7);
-  --bg-active: rgba(99, 102, 241, 0.12);
-  --bg-glass: rgba(255, 255, 255, 0.55);
-  --bg-input: rgba(255, 255, 255, 0.78);
+  --bg-app: #f4f6f9;
+  --bg-sidebar: #0a0f1d;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-glass: #ffffff;
+  --bg-input: #ffffff;
 
-  --border-subtle: rgba(255, 255, 255, 0.65);
-  --border-default: rgba(15, 23, 42, 0.12);
-  --border-strong: rgba(15, 23, 42, 0.22);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
 
-  --glass-border: rgba(255, 255, 255, 0.75);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --glass-blur: 18px;
-  --glass-strong: rgba(255, 255, 255, 0.86);
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
 
-  --shadow-sm: 0 2px 8px rgba(76, 61, 140, 0.07);
-  --shadow-md: 0 10px 30px rgba(76, 61, 140, 0.12);
-  --shadow-lg: 0 24px 60px rgba(46, 38, 99, 0.22);
+  --brand-primary: #0a0f1d;
+  --brand-primary-hover: #1e293b;
+  --brand-glow: rgba(0, 191, 99, 0.12);
 
-  --blob-1: #7c9cff;
-  --blob-2: #f9a8d4;
-  --blob-3: #5eead4;
-  --blob-4: #fcd34d;
-  --blob-5: #c4b5fd;
-  --paper-opacity: 0.5;
+  --visite-accent: #ffcc00;
+  --visite-bg: #fffbeb;
+  --visite-border: rgba(255, 204, 0, 0.6);
+
+  --travaux-accent: #00bf63;
+  --travaux-bg: #ecfdf5;
+  --travaux-border: rgba(0, 191, 99, 0.45);
+
+  --urgence-accent: #ff0000;
+  --urgence-bg: #fef2f2;
+  --urgence-border: rgba(255, 0, 0, 0.45);
+
+  --success-accent: #00bf63;
+  --success-bg: #ecfdf5;
+  --warning-accent: #d97706;
+  --warning-bg: #fffbeb;
+  --danger-accent: #dc2626;
+  --danger-bg: #fef2f2;
+
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 14px 34px rgba(15, 23, 42, 0.12);
 }
 
 [data-theme="dark"] {
-  --paper-base: #10131f;
-  --bg-app: #10131f;
-  --bg-surface: rgba(22, 27, 45, 0.6);
-  --bg-elevated: rgba(30, 36, 58, 0.5);
-  --bg-hover: rgba(45, 54, 86, 0.6);
-  --bg-active: rgba(99, 102, 241, 0.22);
-  --bg-glass: rgba(22, 27, 45, 0.55);
-  --bg-input: rgba(13, 16, 28, 0.7);
+  --bg-app: #07090e;
+  --bg-sidebar: #0a0f1d;
+  --bg-surface: #0f1422;
+  --bg-elevated: #151c30;
+  --bg-hover: #1e263d;
+  --bg-active: #283350;
+  --bg-glass: #0f1422;
+  --bg-input: #0a0f1d;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
 
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-default: rgba(255, 255, 255, 0.12);
-  --border-strong: rgba(255, 255, 255, 0.22);
+  --border-default: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.25);
 
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --glass-strong: rgba(22, 27, 45, 0.9);
+  --brand-primary: #00bf63;
+  --brand-primary-hover: #00994f;
+  --brand-glow: rgba(0, 191, 99, 0.2);
 
-  --blob-1: #3b5bdb;
-  --blob-2: #be4bdb;
-  --blob-3: #0ca678;
-  --blob-4: #f08c00;
-  --blob-5: #7048e8;
-  --paper-opacity: 0.22;
+  --visite-accent: #ffcc00;
+  --visite-bg: rgba(255, 204, 0, 0.16);
+  --visite-border: rgba(255, 204, 0, 0.45);
+
+  --travaux-accent: #00bf63;
+  --travaux-bg: rgba(0, 191, 99, 0.16);
+  --travaux-border: rgba(0, 191, 99, 0.45);
+
+  --urgence-accent: #ff0000;
+  --urgence-bg: rgba(255, 0, 0, 0.16);
+  --urgence-border: rgba(255, 0, 0, 0.45);
+
+  --success-accent: #00bf63;
+  --success-bg: rgba(0, 191, 99, 0.16);
+  --warning-accent: #ffcc00;
+  --warning-bg: rgba(255, 204, 0, 0.16);
+  --danger-accent: #ff0000;
+  --danger-bg: rgba(255, 0, 0, 0.16);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.7);
 }
 
-html,
-body,
-#root {
-  background-color: var(--paper-base);
-}
-
-/* ---------- Arrière-plan : bulles + texture papier ---------- */
-.bubble-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse at top left, rgba(255, 255, 255, 0.55), transparent 60%),
-    var(--paper-base);
-}
-
-.bubble-blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.55;
-  mix-blend-mode: multiply;
-  will-change: transform;
-  animation: blobFloat 26s ease-in-out infinite alternate;
-}
-
-[data-theme="dark"] .bubble-blob {
-  mix-blend-mode: screen;
-  opacity: 0.4;
-}
-
-.blob-1 { width: 46vmax; height: 46vmax; top: -14vmax; left: -10vmax; background: var(--blob-1); }
-.blob-2 { width: 38vmax; height: 38vmax; top: 8vmax; right: -12vmax; background: var(--blob-2); animation-duration: 32s; animation-delay: -6s; }
-.blob-3 { width: 34vmax; height: 34vmax; bottom: -12vmax; left: 18vmax; background: var(--blob-3); animation-duration: 29s; animation-delay: -12s; }
-.blob-4 { width: 24vmax; height: 24vmax; top: 30vmax; left: 34vmax; background: var(--blob-4); opacity: 0.35; animation-duration: 35s; animation-delay: -3s; }
-.blob-5 { width: 30vmax; height: 30vmax; bottom: -8vmax; right: 4vmax; background: var(--blob-5); animation-duration: 27s; animation-delay: -18s; }
-
-@keyframes blobFloat {
-  0%   { transform: translate(0, 0) scale(1); }
-  33%  { transform: translate(6vmax, 4vmax) scale(1.08); }
-  66%  { transform: translate(-4vmax, 7vmax) scale(0.94); }
-  100% { transform: translate(3vmax, -5vmax) scale(1.04); }
-}
-
-/* Petites bulles de verre qui montent */
-.bubble-rise {
-  position: absolute;
-  bottom: -60px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.95) 0 12%, rgba(255, 255, 255, 0.25) 26%, transparent 60%),
-    radial-gradient(circle at 70% 75%, rgba(124, 156, 255, 0.28), transparent 65%);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow:
-    inset -3px -4px 8px rgba(124, 58, 237, 0.12),
-    0 4px 14px rgba(76, 61, 140, 0.1);
-  opacity: 0.75;
-  animation: bubbleRise 24s linear infinite;
-  will-change: transform;
-}
-
-[data-theme="dark"] .bubble-rise {
-  border-color: rgba(255, 255, 255, 0.25);
-  opacity: 0.45;
-}
-
-@keyframes bubbleRise {
-  0%   { transform: translate(0, 0) scale(0.8); opacity: 0; }
-  8%   { opacity: 0.75; }
-  50%  { transform: translate(24px, -55vh) scale(1); }
-  92%  { opacity: 0.6; }
-  100% { transform: translate(-18px, -112vh) scale(1.1); opacity: 0; }
-}
-
-/* Grain papier (SVG fractal noise) + fibres légères */
-.paper-texture {
-  position: absolute;
-  inset: 0;
-  opacity: var(--paper-opacity);
-  mix-blend-mode: multiply;
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.38  0 0 0 0 0.28  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600'><filter id='f'><feTurbulence type='turbulence' baseFrequency='0.004 0.06' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.42  0 0 0 0 0.3  0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23f)'/></svg>");
-}
-
-[data-theme="dark"] .paper-texture {
-  mix-blend-mode: soft-light;
-}
-
-/* ---------- Structure : l'arrière-plan reste derrière tout le contenu ---------- */
-.enterprise-shell,
-.auth-split-layout {
-  position: relative;
-  isolation: isolate;
-  background: transparent !important;
-}
-
-.enterprise-shell > .bubble-backdrop,
-.auth-split-layout > .bubble-backdrop {
-  z-index: -1;
-}
-
-/* ---------- Surfaces simples en verre (sans descendants en position fixe) ---------- */
-.enterprise-topbar,
-.segmented-control,
-.cmd-trigger,
-.mobile-bottom-nav {
-  background: var(--bg-glass) !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  border: 1px solid var(--glass-border) !important;
-  box-shadow: var(--glass-highlight), var(--shadow-md);
-}
-
-/* ---------- Cartes conteneurs : le verre est porté par un pseudo-élément
-   afin de ne pas créer de bloc conteneur pour les modales imbriquées ---------- */
-.pro-table-container,
-.kpi-card,
-.kanban-column,
-.fsm-canvas-card,
-.fsm-dispatch-tray,
-.fsm-toolbar {
-  position: relative;
-  isolation: isolate;
-  background: transparent;
-  border: 1px solid var(--glass-border) !important;
-  box-shadow: var(--glass-highlight), var(--shadow-md);
-}
-
-.pro-table-container::before,
-.kpi-card::before,
-.kanban-column::before,
-.fsm-canvas-card::before,
-.fsm-dispatch-tray::before,
-.fsm-toolbar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--bg-glass);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  pointer-events: none;
+/* ---------- Surfaces Pro Opaques & Haute Lisibilité ---------- */
+.enterprise-shell {
+  background: var(--bg-app);
 }
 
 .enterprise-topbar {
-  border-width: 0 0 1px 0 !important;
-  border-radius: 0;
-  box-shadow: var(--glass-highlight), 0 4px 20px rgba(76, 61, 140, 0.06);
+  background: var(--bg-surface) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Formes « bulles » : grands arrondis */
-.pro-table-container,
-.fsm-canvas-card,
-.fsm-dispatch-tray,
-.kanban-column {
-  border-radius: 22px !important;
-}
-
-.kpi-card {
-  border-radius: 24px !important;
-  position: relative;
-  overflow: hidden;
-}
-
-/* Reflet coloré dans chaque bulle KPI */
-.kpi-card::after {
-  content: '';
-  position: absolute;
-  width: 120px;
-  height: 120px;
-  right: -40px;
-  top: -40px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(124, 156, 255, 0.35), transparent 70%);
-  pointer-events: none;
-}
-
-.kpi-strip > .kpi-card:nth-child(4n + 2)::after { background: radial-gradient(circle, rgba(249, 168, 212, 0.45), transparent 70%); }
-.kpi-strip > .kpi-card:nth-child(4n + 3)::after { background: radial-gradient(circle, rgba(94, 234, 212, 0.45), transparent 70%); }
-.kpi-strip > .kpi-card:nth-child(4n + 4)::after { background: radial-gradient(circle, rgba(252, 211, 77, 0.5), transparent 70%); }
-
-.kanban-card,
-.gantt-event-block {
-  border-radius: 14px !important;
-  box-shadow: var(--glass-highlight), var(--shadow-sm);
-}
-
-.segmented-control {
-  border-radius: 999px !important;
-  padding: 3px;
-}
-
-.segmented-btn {
-  border-radius: 999px !important;
-}
-
-.cmd-trigger {
-  border-radius: 999px !important;
-}
-
-/* ---------- Animations « bulle » : apparition + survol ---------- */
-@keyframes bubblePop {
-  0%   { opacity: 0; transform: translateY(14px) scale(0.96); }
-  60%  { opacity: 1; transform: translateY(-2px) scale(1.01); }
-  /* 'none' en fin d'animation : évite de piéger les modales position:fixed */
-  100% { opacity: 1; transform: none; }
-}
-
-.enterprise-content > *,
-.kpi-card,
-.kanban-card {
-  animation: bubblePop 0.55s cubic-bezier(0.22, 1.2, 0.36, 1) both;
-}
-
-.kpi-strip > .kpi-card:nth-child(2) { animation-delay: 0.05s; }
-.kpi-strip > .kpi-card:nth-child(3) { animation-delay: 0.1s; }
-.kpi-strip > .kpi-card:nth-child(4) { animation-delay: 0.15s; }
-.kpi-strip > .kpi-card:nth-child(5) { animation-delay: 0.2s; }
-.kpi-strip > .kpi-card:nth-child(6) { animation-delay: 0.25s; }
-
-.kpi-card,
-.kanban-card,
-.pro-table-container {
-  transition: transform 0.25s cubic-bezier(0.22, 1.2, 0.36, 1), box-shadow 0.25s ease;
-}
-
-.kpi-card:hover,
-.kanban-card:hover {
-  transform: translateY(-4px) scale(1.015);
-  box-shadow: var(--glass-highlight), var(--shadow-lg);
-}
-
-/* ---------- Boutons en pastilles de verre colorées ---------- */
-.btn {
-  border-radius: 999px !important;
-  transition: transform 0.18s cubic-bezier(0.22, 1.2, 0.36, 1), box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.btn:active {
-  transform: scale(0.95);
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #6366f1 0%, #3b82f6 55%, #06b6d4 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.45) !important;
-  color: #ffffff !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(79, 70, 229, 0.32);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 10px 26px rgba(79, 70, 229, 0.42);
-}
-
-.btn-secondary,
-.btn-ghost {
-  background: var(--bg-glass) !important;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border) !important;
-  box-shadow: var(--glass-highlight), var(--shadow-sm);
-}
-
-.btn-secondary:hover,
-.btn-ghost:hover {
-  background: var(--bg-hover) !important;
-  transform: translateY(-1px);
-}
-
-/* ---------- Champs de saisie : verre dépoli ---------- */
-.input,
-.select {
-  background: var(--bg-input) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: 12px !important;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-.input:focus,
-.select:focus {
-  border-color: #818cf8 !important;
-  box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.22) !important;
-  outline: none;
-}
-
-/* Badges en petites bulles */
-.badge,
-.status-pill {
-  border-radius: 999px !important;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-}
-
-/* ---------- Barre latérale : verre sombre teinté ---------- */
 .enterprise-sidebar {
-  background: linear-gradient(180deg, rgba(30, 27, 75, 0.82) 0%, rgba(15, 23, 42, 0.86) 100%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(170%);
-  backdrop-filter: blur(22px) saturate(170%);
-  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05), 8px 0 30px rgba(30, 27, 75, 0.18);
+  background: var(--bg-sidebar) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 .sidebar-item {
-  border-radius: 14px !important;
+  border-radius: 8px !important;
+  color: #94a3b8 !important;
+  font-weight: 500;
+}
+
+.sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
 }
 
 .sidebar-item.active {
-  background: linear-gradient(135deg, rgba(129, 140, 248, 0.38), rgba(56, 189, 248, 0.18)) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 16px rgba(79, 70, 229, 0.3);
+  background: #141c2e !important;
+  color: #ffffff !important;
+  border-left: 3px solid #00bf63 !important; /* Vert ANELEC */
+  font-weight: 700 !important;
 }
 
-.sidebar-item.active::before {
-  background: linear-gradient(180deg, #a5b4fc, #67e8f9) !important;
+.sidebar-item.active svg {
+  color: #00bf63 !important;
 }
 
-/* ---------- Modales, tiroirs, palette : verre plus opaque pour la lisibilité ---------- */
+.pro-table-container,
+.fsm-canvas-card,
+.fsm-dispatch-tray,
+.kanban-column,
+.fsm-toolbar {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.kpi-card {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* En-tête des tableaux pro : Fond foncé ANELEC + Texte blanc + Liseré Vert ANELEC */
+.pro-table thead th {
+  background: #0a0f1d !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 11.5px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 11px 13px !important;
+  border-bottom: 2px solid #00bf63 !important;
+}
+
+.pro-table tbody td {
+  color: var(--text-primary) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  padding: 10px 13px !important;
+}
+
+.pro-table tbody tr:hover td {
+  background: var(--bg-hover) !important;
+}
+
+/* ---------- Boutons d'Action ANELEC ---------- */
+.btn {
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background: #00bf63 !important; /* Vert ANELEC */
+  border: 1px solid #00994f !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 191, 99, 0.28) !important;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #00a354 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 191, 99, 0.38) !important;
+}
+
+.btn-secondary {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-ai-dispatch {
+  background: #0a0f1d !important; /* Couleur foncée ANELEC */
+  color: #ffffff !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+}
+
+.btn-ai-dispatch:hover:not(:disabled) {
+  background: #1e293b !important;
+  transform: translateY(-1px);
+}
+
+/* ---------- Badges Officiels ANELEC ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px !important;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.badge-success {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+.badge-warning {
+  background: #fffbeb !important;
+  color: #92400e !important;
+  border: 1px solid #fde68a !important;
+}
+
+.badge-danger, .badge-urgent {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fecaca !important;
+}
+
+.badge-dark, .badge-info, .badge-purple {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+.badge-neutral {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme="dark"] .badge-success {
+  background: rgba(0, 191, 99, 0.2) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(0, 191, 99, 0.45) !important;
+}
+
+[data-theme="dark"] .badge-warning {
+  background: rgba(255, 204, 0, 0.2) !important;
+  color: #fde047 !important;
+  border: 1px solid rgba(255, 204, 0, 0.45) !important;
+}
+
+[data-theme="dark"] .badge-danger, [data-theme="dark"] .badge-urgent {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+}
+
+[data-theme="dark"] .badge-dark, [data-theme="dark"] .badge-info, [data-theme="dark"] .badge-purple {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* ---------- Blocs Gantt Planning : 3 Couleurs Logo ANELEC ---------- */
+.gantt-event-block {
+  border-radius: 7px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* 1. VISITE DEVIS : Jaune/Or ANELEC */
+.gantt-event-block.type-visite {
+  background: #b45309 !important;
+  border: 1.5px solid #ffcc00 !important;
+  border-left: 5px solid #ffcc00 !important;
+  color: #ffffff !important;
+}
+
+/* 2. TRAVAUX / INTERVENTIONS : Vert ANELEC */
+.gantt-event-block.type-travaux {
+  background: #047857 !important;
+  border: 1.5px solid #00bf63 !important;
+  border-left: 5px solid #00bf63 !important;
+  color: #ffffff !important;
+}
+
+/* 3. URGENCE : Rouge ANELEC */
+.gantt-event-block.type-urgence {
+  background: #b91c1c !important;
+  border: 1.5px solid #ff0000 !important;
+  border-left: 5px solid #ff0000 !important;
+  color: #ffffff !important;
+}
+
+/* ---------- Modales & Tiroirs ---------- */
 .inspector-backdrop,
 .cmd-palette-backdrop,
 .mobile-sidebar-backdrop.open {
-  background: rgba(30, 27, 75, 0.28) !important;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 15, 29, 0.6) !important;
+  backdrop-filter: blur(4px);
 }
 
 .inspector-drawer,
 .cmd-palette-modal {
-  background: var(--glass-strong) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(170%);
-  backdrop-filter: blur(28px) saturate(170%);
-  border: 1px solid var(--glass-border) !important;
-  box-shadow: var(--glass-highlight), var(--shadow-lg);
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--text-primary) !important;
 }
 
 .cmd-palette-modal {
-  border-radius: 24px !important;
-  animation: bubblePop 0.4s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  border-radius: 14px !important;
 }
 
 .inspector-drawer {
-  border-radius: 24px 0 0 24px;
-}
-
-/* ---------- Tableaux ---------- */
-.pro-table thead th {
-  background: rgba(255, 255, 255, 0.35);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-}
-
-[data-theme="dark"] .pro-table thead th {
-  background: rgba(22, 27, 45, 0.55);
-}
-
-/* ---------- Page de connexion ---------- */
-.auth-showcase-pane {
-  background:
-    radial-gradient(circle at 18% 20%, rgba(129, 140, 248, 0.35) 0%, transparent 45%),
-    radial-gradient(circle at 80% 80%, rgba(244, 114, 182, 0.28) 0%, transparent 50%),
-    rgba(15, 23, 42, 0.78) !important;
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-  margin: 16px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  box-shadow: var(--shadow-lg);
-  color: #f8fafc;
-}
-
-.auth-form-pane {
-  background: transparent !important;
-}
-
-.auth-form-pane > div {
-  background: var(--bg-glass);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  backdrop-filter: blur(22px) saturate(160%);
-  border: 1px solid var(--glass-border);
-  border-radius: 28px;
-  padding: 28px 24px;
-  box-shadow: var(--glass-highlight), var(--shadow-lg);
-  animation: bubblePop 0.6s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  border-radius: 14px 0 0 14px;
 }
 
 /* ---------- Adaptation des logos selon le mode clair / sombre ---------- */
@@ -1780,153 +1666,30 @@ body,
   display: inline-block !important;
 }
 
-/* ---------- Mobile : moins de flou et de bulles pour préserver la batterie ---------- */
-@media (max-width: 768px) {
-  :root,
-  [data-theme="light"],
-  [data-theme="dark"] {
-    --glass-blur: 10px;
-  }
-  .bubble-blob {
-    filter: blur(40px);
-  }
-  .bubble-rise:nth-child(n + 11) {
-    display: none;
-  }
-  .pro-table-container,
-  .fsm-canvas-card,
-  .kanban-column {
-    border-radius: 18px !important;
-  }
-  .auth-form-pane > div {
-    padding: 22px 16px;
-    border-radius: 22px;
-  }
+/* ---------- Page de connexion : Épurée, Sombre et ANELEC ---------- */
+.auth-split-layout {
+  background: var(--bg-app);
 }
 
-/* Accessibilité : pas d'animation si l'utilisateur l'a demandé */
-@media (prefers-reduced-motion: reduce) {
-  .bubble-blob,
-  .bubble-rise,
-  .enterprise-content > *,
-  .kpi-card,
-  .kanban-card,
-  .cmd-palette-modal,
-  .auth-form-pane > div {
-    animation: none !important;
-  }
-  .bubble-rise {
-    display: none;
-  }
+.auth-showcase-pane {
+  background: #0a0f1d !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 20px !important;
+  margin: 16px;
+  color: #f8fafc !important;
+  box-shadow: var(--shadow-lg) !important;
 }
 
-/* ============================================================================
-   SLEEK BLUE-AND-WHITE GLASSMORPHISM & MODERN ANALYTICS SMOOTH CHARTS
-   "A sleek glassmorphism dashboard featuring elegant translucent cards,
-    modern analytics, smooth charts, and a clean blue-and-white design
-    for a premium user experience."
-   ============================================================================ */
-:root,
-[data-theme="light"] {
-  --bg-app: #f4f8ff;
-  --bg-surface: rgba(255, 255, 255, 0.78);
-  --bg-elevated: rgba(248, 251, 255, 0.88);
-  --bg-glass: rgba(255, 255, 255, 0.78);
-  --glass-strong: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(255, 255, 255, 0.94);
-  --border-default: rgba(37, 99, 235, 0.14);
-  --border-subtle: rgba(37, 99, 235, 0.08);
-  --shadow-sm: 0 4px 16px -4px rgba(30, 64, 175, 0.07), 0 2px 6px -1px rgba(37, 99, 235, 0.04);
-  --shadow-md: 0 14px 36px -8px rgba(30, 64, 175, 0.11), 0 4px 14px -2px rgba(14, 165, 233, 0.06);
-  --shadow-lg: 0 24px 56px -12px rgba(30, 64, 175, 0.16), 0 8px 24px -4px rgba(14, 165, 233, 0.09);
+.auth-form-pane > div {
+  background: #ffffff !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 20px !important;
+  padding: 32px 28px !important;
+  box-shadow: var(--shadow-md) !important;
 }
 
-.analytics-glass-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1.1fr);
-  gap: 14px;
-  width: 100%;
-  min-width: 0;
-}
-
-@media (max-width: 1200px) {
-  .analytics-glass-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.glass-analytics-card {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.84) 0%, rgba(240, 247, 255, 0.74) 100%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  backdrop-filter: blur(24px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  border-radius: 22px;
-  padding: 18px 20px;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.98),
-    0 12px 34px -8px rgba(37, 99, 235, 0.11),
-    0 2px 10px rgba(14, 165, 233, 0.05);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.24s ease;
-}
-
-.glass-analytics-card::before {
-  content: "";
-  position: absolute;
-  top: -50%;
-  right: -30%;
-  width: 240px;
-  height: 240px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-.glass-analytics-card:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 1),
-    0 18px 42px -8px rgba(37, 99, 235, 0.16),
-    0 4px 14px rgba(14, 165, 233, 0.09);
-}
-
-[data-theme="dark"] .glass-analytics-card {
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.78) 0%, rgba(30, 41, 59, 0.68) 100%);
-  border-color: rgba(148, 163, 184, 0.18);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 14px 36px rgba(0, 0, 0, 0.45);
-}
-
-.smooth-chart-svg {
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-
-.smooth-chart-line {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 6px 10px rgba(37, 99, 235, 0.25));
-}
-
-.smooth-bar-track {
-  height: 9px;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.09);
-  overflow: hidden;
-  position: relative;
-}
-
-.smooth-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 55%, #0ea5e9 100%);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
-  transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+[data-theme="dark"] .auth-form-pane > div {
+  background: #0f1422 !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
 }
 

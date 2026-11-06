@@ -528,9 +528,10 @@ export function TechnicianMobileView({
       <div
         className="pro-table-container"
         style={{
-          padding: '12px',
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(16, 185, 129, 0.08))',
-          borderLeft: '4px solid var(--accent-primary)',
+          padding: '14px',
+          background: '#ffffff',
+          border: '1px solid #cbd5e1',
+          borderLeft: '5px solid #00bf63',
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
@@ -540,10 +541,10 @@ export function TechnicianMobileView({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
             <div
               style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '9px',
-                background: 'var(--accent-primary)',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: '#0a0f1d',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
@@ -556,10 +557,10 @@ export function TechnicianMobileView({
               {(currentTechnicien || 'TE').slice(0, 2).toUpperCase()}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {currentTechnicien || 'Technicien'}
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                 App Mobile Terrain • {formatDateFR(selectedDate)}
               </div>
             </div>
@@ -764,11 +765,12 @@ export function TechnicianMobileView({
             className="btn btn-primary"
             style={{
               width: '100%',
-              background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-              borderColor: '#059669',
+              background: '#00bf63',
+              borderColor: '#00994f',
               fontWeight: 800,
               minHeight: '44px',
               fontSize: '13.5px',
+              boxShadow: '0 2px 8px rgba(0, 191, 99, 0.28)',
             }}
             disabled={clockInMut.isPending}
             onClick={() => {
@@ -889,11 +891,11 @@ export function TechnicianMobileView({
                     style={{
                       width: '100%',
                       minHeight: '48px',
-                      background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                      borderColor: '#059669',
+                      background: '#00bf63',
+                      borderColor: '#00994f',
                       fontWeight: 800,
                       fontSize: '13.5px',
-                      boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)',
+                      boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
                     }}
                     onClick={() => {
                       clockInMut.mutate({
@@ -910,10 +912,11 @@ export function TechnicianMobileView({
                   style={{
                     padding: '8px 10px',
                     borderRadius: '8px',
-                    background: 'rgba(16, 185, 129, 0.12)',
+                    background: '#ecfdf5',
                     fontSize: '12px',
-                    color: '#059669',
+                    color: '#047857',
                     fontWeight: 700,
+                    border: '1px solid #a7f3d0',
                   }}
                 >
                   🔒 Horodatage officiel certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
@@ -927,10 +930,10 @@ export function TechnicianMobileView({
                 padding: '16px',
                 borderRadius: '14px',
                 background: currentPointage?.heureFinJournee
-                  ? 'rgba(37, 99, 235, 0.08)'
+                  ? '#ecfdf5'
                   : 'var(--bg-elevated)',
                 border: currentPointage?.heureFinJournee
-                  ? '1.5px solid rgba(37, 99, 235, 0.5)'
+                  ? '1.5px solid #00bf63'
                   : '1.5px solid var(--border-default)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -938,15 +941,15 @@ export function TechnicianMobileView({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#2563eb' }}>
+                <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#0a0f1d' }}>
                   🌙 2. SOIR — Fin Dernière Intervention
                 </span>
                 {currentPointage?.heureFinJournee ? (
-                  <span className="badge badge-info font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
+                  <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
                     ✓ {currentPointage.heureFinJournee}
                   </span>
                 ) : currentPointage?.heureArriveeBureau ? (
-                  <span className="badge badge-info">En service</span>
+                  <span className="badge badge-info" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }}>En service</span>
                 ) : (
                   <span className="badge badge-neutral">En attente</span>
                 )}
@@ -963,16 +966,17 @@ export function TechnicianMobileView({
                   </div>
                   <button
                     type="button"
-                    className="btn btn-primary"
+                    className="btn btn-secondary"
                     disabled={clockOutMut.isPending}
                     style={{
                       width: '100%',
                       minHeight: '48px',
-                      background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
-                      borderColor: '#2563eb',
+                      background: '#0a0f1d',
+                      borderColor: '#1e293b',
+                      color: '#ffffff',
                       fontWeight: 800,
                       fontSize: '13.5px',
-                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.25)',
+                      boxShadow: '0 4px 14px rgba(10, 15, 29, 0.25)',
                     }}
                     onClick={() => {
                       // RÈGLE 2 : Vérification stricte qu'aucune intervention n'est encore en cours
@@ -1803,10 +1807,11 @@ export function TechnicianMobileView({
                 className="btn btn-primary"
                 style={{
                   minHeight: '48px',
-                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                  borderColor: '#059669',
+                  background: '#00bf63',
+                  borderColor: '#00994f',
                   fontWeight: 800,
                   fontSize: '13.5px',
+                  boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
                 }}
                 disabled={clockInMut.isPending}
                 onClick={async () => {

@@ -1437,17 +1437,18 @@ export function DashboardPage() {
                         setSelectedDevis(d);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#2563eb', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#0f172a', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {d.reference || `DEV-${d.id}`}
                         {(d.interventionsCount || 0) > 0 && (
                           <span
                             style={{
                               marginLeft: '4px',
-                              padding: '1px 4px',
+                              padding: '1px 5px',
                               fontSize: '9.5px',
                               borderRadius: '4px',
-                              background: 'rgba(16, 185, 129, 0.16)',
-                              color: '#059669',
+                              background: '#ecfdf5',
+                              color: '#047857',
+                              border: '1px solid #a7f3d0',
                               fontWeight: 700,
                             }}
                           >
@@ -1700,7 +1701,7 @@ export function DashboardPage() {
                         setSelectedIntv(i);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#2563eb', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: '#0f172a', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {i.reference || `INT-${i.id}`}
                       </td>
                       <td style={{ maxWidth: '145px' }}>
@@ -1732,9 +1733,9 @@ export function DashboardPage() {
                         {i.entreprise || 'À affecter'}
                       </td>
                       <td className="font-mono" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
-                        <div>{formatDateFR(i.datePlanifiee)}</div>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{formatDateFR(i.datePlanifiee)}</div>
                         {i.heureDebut && (
-                          <div style={{ color: '#2563eb', fontSize: '10px' }}>
+                          <div style={{ color: '#047857', fontSize: '10px', fontWeight: 700 }}>
                             {i.heureDebut}–{i.heureFin || '12:00'}
                           </div>
                         )}
@@ -1802,8 +1803,8 @@ export function DashboardPage() {
                           style={{
                             fontSize: '10.5px',
                             whiteSpace: 'nowrap',
-                            color: i.statutFacture === 'Facturée' ? '#10b981' : 'var(--text-secondary)',
-                            fontWeight: 600,
+                            color: i.statutFacture === 'Facturée' ? '#047857' : '#64748b',
+                            fontWeight: 700,
                           }}
                         >
                           {i.statutFacture || 'Non facturée'}
@@ -3396,25 +3397,41 @@ function ActionQueueCard({
 }
 
 function StatusPill({ statut }: { statut: string }) {
-  const colorMap: Record<string, { bg: string; fg: string }> = {
-    Accepté: { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
-    Clôturée: { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
-    'Terminée - à valider': { bg: 'rgba(16, 185, 129, 0.16)', fg: '#34d399' },
-    Planifiée: { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
-    Affectée: { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
-    'En cours': { bg: 'rgba(59, 130, 246, 0.16)', fg: '#60a5fa' },
-    'En attente technicien': { bg: 'rgba(168, 85, 247, 0.18)', fg: '#d8b4fe' },
-    'Envoyé au client': { bg: 'rgba(168, 85, 247, 0.18)', fg: '#d8b4fe' },
-    'En négociation': { bg: 'rgba(245, 158, 11, 0.18)', fg: '#fbbf24' },
-    'À planifier': { bg: 'rgba(245, 158, 11, 0.18)', fg: '#fbbf24' },
-    Suspendue: { bg: 'rgba(239, 68, 68, 0.18)', fg: '#f87171' },
-    Refusé: { bg: 'rgba(239, 68, 68, 0.15)', fg: '#f87171' },
+  // Charte stricte ANELEC : 3 couleurs logo (Vert #00bf63, Jaune #ffcc00, Rouge #ff0000) + Foncés #0a0f1d
+  // Texte en contraste élevé AAA (lisible sans effort sur fond blanc)
+  const colorMap: Record<string, { bg: string; fg: string; dot: string; border: string }> = {
+    Accepté: { bg: '#ecfdf5', fg: '#047857', dot: '#00bf63', border: '#a7f3d0' },
+    Clôturée: { bg: '#ecfdf5', fg: '#047857', dot: '#00bf63', border: '#a7f3d0' },
+    'Terminée - à valider': { bg: '#ecfdf5', fg: '#047857', dot: '#00bf63', border: '#a7f3d0' },
+    Planifiée: { bg: '#f8fafc', fg: '#0f172a', dot: '#0a0f1d', border: '#cbd5e1' },
+    Affectée: { bg: '#f8fafc', fg: '#0f172a', dot: '#0a0f1d', border: '#cbd5e1' },
+    'En cours': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
+    'En attente technicien': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
+    'Envoyé au client': { bg: '#f8fafc', fg: '#0f172a', dot: '#00bf63', border: '#cbd5e1' },
+    'En négociation': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
+    'À planifier': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
+    Suspendue: { bg: '#fef2f2', fg: '#b91c1c', dot: '#ff0000', border: '#fecaca' },
+    Refusé: { bg: '#fef2f2', fg: '#b91c1c', dot: '#ff0000', border: '#fecaca' },
   };
-  const st = colorMap[statut] || { bg: 'rgba(148, 163, 184, 0.15)', fg: '#94a3b8' };
+  const st = colorMap[statut] || { bg: '#f8fafc', fg: '#0f172a', dot: '#64748b', border: '#e2e8f0' };
 
   return (
-    <span className="status-pill" style={{ background: st.bg, color: st.fg }}>
-      <span className="status-dot" style={{ background: st.fg }} />
+    <span
+      className="status-pill"
+      style={{
+        background: st.bg,
+        color: st.fg,
+        border: `1px solid ${st.border}`,
+        fontWeight: 700,
+        fontSize: '11px',
+        padding: '2px 8px',
+        borderRadius: '6px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+      }}
+    >
+      <span className="status-dot" style={{ background: st.dot, width: '6px', height: '6px', borderRadius: '50%' }} />
       {statut}
     </span>
   );
