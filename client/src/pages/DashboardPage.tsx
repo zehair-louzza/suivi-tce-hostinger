@@ -200,6 +200,87 @@ export function DashboardPage() {
   const [editingRef, setEditingRef] = useState<{ category: string; oldValue: string; currentVal: string } | null>(null);
   const [confirmDeleteRef, setConfirmDeleteRef] = useState<{ category: string; value: string } | null>(null);
 
+  // État local réactif immédiat pour les compétences des techniciens (0ms)
+  const [competencesOverrides, setCompetencesOverrides] = useState<Record<string, string[]> | null>(null);
+
+  const activeCompMap: Record<string, string[]> = useMemo(() => {
+    return {
+      ...(refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES),
+      ...(competencesOverrides || {}),
+    };
+  }, [refs.technicien_competences, competencesOverrides]);
+
+  const handleToggleTechSkill = async (tech: string, skill: string) => {
+    const currentSkills = activeCompMap[tech] || [];
+    const exists = currentSkills.includes(skill);
+    const updatedSkills = exists
+      ? currentSkills.filter((s) => s !== skill)
+      : [...currentSkills, skill];
+    const nextMap = { ...activeCompMap, [tech]: updatedSkills };
+
+    // 1. Mise à jour visuelle instantanée (0ms)
+    setCompetencesOverrides(nextMap);
+
+    // 2. Mise à jour directe du cache React Query
+    queryClient.setQueryData(['referentiels'], (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        data: {
+          ...old.data,
+          technicien_competences: nextMap,
+        },
+      };
+    });
+
+    // 3. Persistance serveur en arrière-plan
+    try {
+      await referentielsApi.updateCompetences(nextMap);
+      toast.success(
+        exists
+          ? `« ${skill} » décochée pour ${tech}`
+          : `« ${skill} » cochée pour ${tech}`,
+        { duration: 2000 }
+      );
+    } catch (err: any) {
+      toast.error(`Erreur d'enregistrement : ${err?.response?.data?.error || err.message || 'Échec réseau'}`);
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+    }
+  };
+
+  const handleAddCustomTechSkill = async (tech: string, skillName: string) => {
+    const trimmed = skillName.trim();
+    if (!trimmed) return;
+    const currentSkills = activeCompMap[tech] || [];
+    if (currentSkills.includes(trimmed)) {
+      toast('Cette compétence est déjà attribuée à ce technicien', { icon: 'ℹ️' });
+      return;
+    }
+    const updatedSkills = [...currentSkills, trimmed];
+    const nextMap = { ...activeCompMap, [tech]: updatedSkills };
+
+    setCompetencesOverrides(nextMap);
+
+    queryClient.setQueryData(['referentiels'], (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        data: {
+          ...old.data,
+          technicien_competences: nextMap,
+        },
+      };
+    });
+
+    try {
+      await referentielsApi.updateCompetences(nextMap);
+      toast.success(`Compétence « ${trimmed} » ajoutée à ${tech}`);
+    } catch (err: any) {
+      toast.error(`Erreur : ${err?.response?.data?.error || err.message}`);
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+    }
+  };
+
   const handleExecuteDeleteRef = async (category: string, valueToRemove: string) => {
     const rawVals = (refs as any)[category] || [];
     const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
@@ -1676,20 +1757,8 @@ export function DashboardPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {techniciensList.map((tech) => {
-                  const currentCompMap = refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES;
-                  const techSkills = currentCompMap[tech] || [];
+                  const techSkills = activeCompMap[tech] || [];
                   const isSpecialist = techSkills.length === 1;
-
-                  const toggleSkill = async (skill: string) => {
-                    const exists = techSkills.includes(skill);
-                    const updatedSkills = exists
-                      ? techSkills.filter((s) => s !== skill)
-                      : [...techSkills, skill];
-                    const nextMap = { ...currentCompMap, [tech]: updatedSkills };
-                    await referentielsApi.updateCompetences(nextMap);
-                    queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-                    toast.success(`Compétences mises à jour pour ${tech}`);
-                  };
 
                   return (
                     <div
@@ -1734,18 +1803,14 @@ export function DashboardPage() {
                         </div>
 
                         <form
-                          onSubmit={async (e) => {
+                          onSubmit={(e) => {
                             e.preventDefault();
                             const input = e.currentTarget.elements.namedItem('customSkill') as HTMLInputElement;
                             const val = input?.value?.trim();
-                            if (!val) return;
-                            if (!techSkills.includes(val)) {
-                              const nextMap = { ...currentCompMap, [tech]: [...techSkills, val] };
-                              await referentielsApi.updateCompetences(nextMap);
-                              queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-                              toast.success(`Compétence « ${val} » ajoutée à ${tech}`);
+                            if (val) {
+                              handleAddCustomTechSkill(tech, val);
+                              input.value = '';
                             }
-                            input.value = '';
                           }}
                           style={{ display: 'flex', gap: '6px' }}
                         >
@@ -1769,24 +1834,27 @@ export function DashboardPage() {
                             <button
                               key={metier}
                               type="button"
-                              onClick={() => toggleSkill(metier)}
+                              onClick={() => handleToggleTechSkill(tech, metier)}
+                              title={checked ? `Cliquer pour décocher « ${metier} » pour ${tech}` : `Cliquer pour cocher « ${metier} » pour ${tech}`}
                               style={{
                                 padding: '4px 10px',
                                 borderRadius: '7px',
                                 fontSize: '11.5px',
-                                fontWeight: checked ? 600 : 500,
+                                fontWeight: checked ? 700 : 500,
                                 cursor: 'pointer',
                                 border: checked
-                                  ? '1px solid rgba(4, 120, 87, 0.35)'
-                                  : '1px solid #e2e8f0',
-                                background: checked ? 'rgba(4, 120, 87, 0.08)' : '#ffffff',
-                                color: checked ? '#047857' : '#475569',
+                                  ? '1px solid #10b981'
+                                  : '1px dashed #cbd5e1',
+                                background: checked ? 'rgba(16, 185, 129, 0.12)' : '#ffffff',
+                                color: checked ? '#065f46' : '#64748b',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '5px',
+                                transition: 'all 0.1s ease-in-out',
+                                userSelect: 'none',
                               }}
                             >
-                              <span>{checked ? '✓' : '+'}</span>
+                              <span style={{ fontWeight: 800 }}>{checked ? '✓' : '+'}</span>
                               <span>{metier}</span>
                             </button>
                           );
