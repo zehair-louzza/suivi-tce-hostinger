@@ -2043,7 +2043,7 @@ export function DashboardPage() {
           interventions={interventionsList}
           devis={devisList}
           selectedDate={new Date().toISOString().slice(0, 10)}
-          currentTechnicien={selectedMobileTech}
+          currentTechnicien="TOUS"
           techniciensList={techniciensList}
           onSelectTechnicien={setSelectedMobileTech}
           onOpenIntervention={(i) => {

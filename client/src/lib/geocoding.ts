@@ -56,7 +56,7 @@ export const DEFAULT_DEPOT_COORDS: GeoPoint = {
   label: 'Siège & Bureau ANELEC GROUPE (Départ & Retour de Tournée)',
 };
 
-const CACHE_KEY = 'anelec_geo_cache_v2';
+const CACHE_KEY = 'anelec_geo_cache_v3';
 
 function getLocalCache(): Record<string, GeoPoint> {
   try {
@@ -109,14 +109,17 @@ export async function geocodeAddress(rawAddress: string): Promise<GeoPoint | nul
       if (data.features && data.features.length > 0) {
         const feat = data.features[0];
         const [lng, lat] = feat.geometry.coordinates;
-        const result: GeoPoint = {
-          lat,
-          lng,
-          label: feat.properties.label || query,
-        };
-        cache[query] = result;
-        setLocalCache(cache);
-        return result;
+        // Valider que le point se situe bien en France métropolitaine (Île-de-France et région)
+        if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
+          const result: GeoPoint = {
+            lat,
+            lng,
+            label: feat.properties.label || query,
+          };
+          cache[query] = result;
+          setLocalCache(cache);
+          return result;
+        }
       }
     }
   } catch {
@@ -131,32 +134,37 @@ export async function geocodeAddress(rawAddress: string): Promise<GeoPoint | nul
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         const item = data[0];
-        const result: GeoPoint = {
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon),
-          label: item.display_name || query,
-        };
-        cache[query] = result;
-        setLocalCache(cache);
-        return result;
+        const lat = parseFloat(item.lat);
+        const lng = parseFloat(item.lon);
+        // Filtrer strictement sur la France métropolitaine
+        if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
+          const result: GeoPoint = {
+            lat,
+            lng,
+            label: item.display_name || query,
+          };
+          cache[query] = result;
+          setLocalCache(cache);
+          return result;
+        }
       }
     }
   } catch {
     // fallback
   }
 
-  // 3. Fallback pseudo-géocodage déterministe en région parisienne si aucune API n'a répondu
+  // 3. Fallback pseudo-géocodage déterministe en Île-de-France (autour du Bureau ANELEC)
   let hash = 0;
   for (let i = 0; i < query.length; i++) {
     hash = (hash << 5) - hash + query.charCodeAt(i);
     hash |= 0;
   }
-  const offsetLat = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.18;
-  const offsetLng = ((Math.abs(hash >> 3) % 1000) / 1000 - 0.5) * 0.28;
+  const offsetLat = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.08;
+  const offsetLng = ((Math.abs(hash >> 3) % 1000) / 1000 - 0.5) * 0.10;
   const approxResult: GeoPoint = {
-    lat: 48.8566 + offsetLat,
-    lng: 2.3522 + offsetLng,
-    label: `${query} (Coordonnées estimées)`,
+    lat: DEFAULT_DEPOT_COORDS.lat + offsetLat,
+    lng: DEFAULT_DEPOT_COORDS.lng + offsetLng,
+    label: `${query} (Île-de-France estimé)`,
   };
   cache[query] = approxResult;
   setLocalCache(cache);
