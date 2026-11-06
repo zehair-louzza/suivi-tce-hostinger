@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" width="100%" height="100%" style="background:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <defs>
+    <linearGradient id="gradDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0f1d"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="320" fill="#f8fafc" rx="12"/>
+  <rect x="15" y="15" width="970" height="290" fill="#ffffff" rx="8" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadow)"/>
+
+  <!-- Title -->
+  <text x="35" y="45" font-size="16" font-weight="800" fill="#0a0f1d">CYCLE COMPLET DES TRAVAUX TCE — ANELEC GROUPE</text>
+  <text x="35" y="65" font-size="11" fill="#64748b">Architecture intégrée de bout-en-bout : de l'estimation commerciale à la clôture et rentabilité financière</text>
+
+  <!-- Step 1: Demande & Devis -->
+  <g transform="translate(35, 90)">
+    <rect width="165" height="185" rx="8" fill="#f8fafc" stroke="#ffcc00" stroke-width="2"/>
+    <rect width="165" height="32" rx="8" fill="#ffcc00"/>
+    <text x="82" y="21" font-size="11" font-weight="800" fill="#0a0f1d" text-anchor="middle">1. PIPELINE DEVIS</text>
+    <text x="15" y="55" font-size="11" font-weight="700" fill="#0a0f1d">• Demande Client</text>
+    <text x="25" y="73" font-size="9.5" fill="#64748b">Syndic, Bailleur, B2B, B2C</text>
+    <text x="15" y="98" font-size="11" font-weight="700" fill="#0a0f1d">• Chiffrage Devis</text>
+    <text x="25" y="116" font-size="9.5" fill="#64748b">22 colonnes analytiques</text>
+    <rect x="12" y="130" width="141" height="36" rx="4" fill="#fef9c3" stroke="#ca8a04"/>
+    <text x="82" y="146" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Visite Prise de Cotes</text>
+    <text x="82" y="158" font-size="8.5" fill="#a16207" text-anchor="middle">(Créneau VIS • DEV)</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 205 180 L 230 180" stroke="#00bf63" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <polygon points="230,175 240,180 230,185" fill="#00bf63"/>
+
+  <!-- Step 2: Dispatch & Gantt -->
+  <g transform="translate(245, 90)">
+    <rect width="165" height="185" rx="8" fill="#f8fafc" stroke="#00bf63" stroke-width="2"/>
+    <rect width="165" height="32" rx="8" fill="#00bf63"/>
+    <text x="82" y="21" font-size="11" font-weight="800" fill="#ffffff" text-anchor="middle">2. DISPATCH & GANTT</text>
+    <text x="15" y="55" font-size="11" font-weight="700" fill="#0a0f1d">• Timeline 60 fps</text>
+    <text x="25" y="73" font-size="9.5" fill="#64748b">Glisser-déposer fluide</text>
+    <text x="15" y="98" font-size="11" font-weight="700" fill="#0a0f1d">• Auto-Planification</text>
+    <text x="25" y="116" font-size="9.5" fill="#64748b">Moindre compétence</text>
+    <rect x="12" y="130" width="141" height="36" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="82" y="146" font-size="9" font-weight="700" fill="#15803d" text-anchor="middle">Créneau Unifié</text>
+    <text x="82" y="158" font-size="8.5" fill="#166534" text-anchor="middle">0 doublon de planning</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <polygon points="415,175 425,180 415,185" fill="#00bf63"/>
+
+  <!-- Step 3: Application Mobile -->
+  <g transform="translate(430, 90)">
+    <rect width="165" height="185" rx="8" fill="#f8fafc" stroke="#0a0f1d" stroke-width="2"/>
+    <rect width="165" height="32" rx="8" fill="#0a0f1d"/>
+    <text x="82" y="21" font-size="11" font-weight="800" fill="#ffffff" text-anchor="middle">3. APP MOBILE TERRAIN</text>
+    <text x="15" y="55" font-size="11" font-weight="700" fill="#0a0f1d">• Pointage Certifié</text>
+    <text x="25" y="73" font-size="9.5" fill="#64748b">Matin obligatoire</text>
+    <text x="15" y="98" font-size="11" font-weight="700" fill="#0a0f1d">• Exécution & Photos</text>
+    <text x="25" y="116" font-size="9.5" fill="#64748b">Compression &lt; 75 Ko</text>
+    <rect x="12" y="130" width="141" height="36" rx="4" fill="#e2e8f0" stroke="#475569"/>
+    <text x="82" y="146" font-size="9" font-weight="700" fill="#0f172a" text-anchor="middle">Clôture Liée Auto</text>
+    <text x="82" y="158" font-size="8.5" fill="#334155" text-anchor="middle">Devis + Travaux</text>
+  </g>
+
+  <!-- Arrow 3 -> 4 -->
+  <polygon points="600,175 610,180 600,185" fill="#00bf63"/>
+
+  <!-- Step 4: Facturation -->
+  <g transform="translate(615, 90)">
+    <rect width="165" height="185" rx="8" fill="#f8fafc" stroke="#00bf63" stroke-width="2"/>
+    <rect width="165" height="32" rx="8" fill="#00bf63"/>
+    <text x="82" y="21" font-size="11" font-weight="800" fill="#ffffff" text-anchor="middle">4. FACTURATION TCE</text>
+    <text x="15" y="55" font-size="11" font-weight="700" fill="#0a0f1d">• Règle Fondamentale</text>
+    <text x="25" y="73" font-size="9.5" fill="#15803d">Interventions uniquement</text>
+    <text x="15" y="98" font-size="11" font-weight="700" fill="#0a0f1d">• 5 Bacs de Tri</text>
+    <text x="25" y="116" font-size="9.5" fill="#64748b">À facturer vs Attente</text>
+    <rect x="12" y="130" width="141" height="36" rx="4" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="82" y="146" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">Arbitrage Fiscal</text>
+    <text x="82" y="158" font-size="8.5" fill="#1e40af" text-anchor="middle">B2B (HT) / B2C (TTC)</text>
+  </g>
+
+  <!-- Arrow 4 -> 5 -->
+  <polygon points="785,175 795,180 785,185" fill="#00bf63"/>
+
+  <!-- Step 5: Rentabilité -->
+  <g transform="translate(800, 90)">
+    <rect width="165" height="185" rx="8" fill="#f8fafc" stroke="#ff0000" stroke-width="2"/>
+    <rect width="165" height="32" rx="8" fill="#ff0000"/>
+    <text x="82" y="21" font-size="11" font-weight="800" fill="#ffffff" text-anchor="middle">5. RENTABILITÉ</text>
+    <text x="15" y="55" font-size="11" font-weight="700" fill="#0a0f1d">• CA Réalisé HT</text>
+    <text x="25" y="73" font-size="9.5" fill="#64748b">Total chantiers clos</text>
+    <text x="15" y="98" font-size="11" font-weight="700" fill="#0a0f1d">• Rentabilité / h</text>
+    <text x="25" y="116" font-size="9.5" fill="#64748b">CA / heures pointées</text>
+    <rect x="12" y="130" width="141" height="36" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+    <text x="82" y="146" font-size="9" font-weight="700" fill="#b91c1c" text-anchor="middle">Marge Brute Équipes</text>
+    <text x="82" y="158" font-size="8.5" fill="#991b1b" text-anchor="middle">Coût horaire chargé</text>
+  </g>
+</svg>

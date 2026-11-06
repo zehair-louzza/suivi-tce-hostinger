@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" width="100%" height="100%" style="background:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <rect width="1000" height="320" fill="#f8fafc" rx="12"/>
+  <rect x="15" y="15" width="970" height="290" fill="#ffffff" rx="8" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <text x="35" y="45" font-size="16" font-weight="800" fill="#0a0f1d">FACTURATION INTELLIGENTE & ARBITRAGE FISCAL (B2B vs B2C)</text>
+  <text x="35" y="65" font-size="11" fill="#64748b">Règle standard ANELEC : on ne facture que les chantiers achevés, pas les devis</text>
+
+  <!-- 5 Bacs -->
+  <g transform="translate(35, 90)">
+    <rect x="0" y="0" width="175" height="85" rx="6" fill="#dcfce7" stroke="#00bf63" stroke-width="2"/>
+    <text x="12" y="24" font-size="11" font-weight="800" fill="#15803d">🟢 À facturer (Prêtes)</text>
+    <text x="12" y="42" font-size="9" fill="#166534">Travaux clôturés</text>
+    <text x="12" y="58" font-size="9" fill="#166534">Rapports &amp; photos OK</text>
+    <text x="12" y="74" font-size="8.5" font-weight="700" fill="#047857">&rarr; Émission immédiate</text>
+
+    <rect x="195" y="0" width="175" height="85" rx="6" fill="#fef9c3" stroke="#ca8a04" stroke-width="2"/>
+    <text x="207" y="24" font-size="11" font-weight="800" fill="#854d0e">🟡 À vérifier</text>
+    <text x="207" y="42" font-size="9" fill="#713f12">Travaux terminés</text>
+    <text x="207" y="58" font-size="9" fill="#713f12">En attente de validation</text>
+    <text x="207" y="74" font-size="8.5" font-weight="700" fill="#a16207">&rarr; Contrôle métré/heures</text>
+
+    <rect x="390" y="0" width="175" height="85" rx="6" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+    <text x="402" y="24" font-size="11" font-weight="800" fill="#991b1b">🔴 Ne pas facturer</text>
+    <text x="402" y="42" font-size="9" fill="#7f1d1d">Visites devis, SAV</text>
+    <text x="402" y="58" font-size="9" fill="#7f1d1d">Missions en cours</text>
+    <text x="402" y="74" font-size="8.5" font-weight="700" fill="#b91c1c">&rarr; Non éligible</text>
+
+    <rect x="585" y="0" width="175" height="85" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="2"/>
+    <text x="597" y="24" font-size="11" font-weight="800" fill="#991b1b">⚠️ Retards Clients</text>
+    <text x="597" y="42" font-size="9" fill="#7f1d1d">Échéance dépassée</text>
+    <text x="597" y="58" font-size="9" fill="#7f1d1d">J+30 ou J+45</text>
+    <text x="597" y="74" font-size="8.5" font-weight="700" fill="#991b1b">&rarr; Relance Niveau 1/2</text>
+
+    <rect x="780" y="0" width="150" height="85" rx="6" fill="#f1f5f9" stroke="#0a0f1d" stroke-width="2"/>
+    <text x="792" y="24" font-size="11" font-weight="800" fill="#0f172a">✅ Facturées</text>
+    <text x="792" y="42" font-size="9" fill="#334155">Factures transmises</text>
+    <text x="792" y="58" font-size="9" fill="#334155">Comptabilité &amp; payées</text>
+    <text x="792" y="74" font-size="8.5" font-weight="700" fill="#0a0f1d">&rarr; Archivage clos</text>
+  </g>
+
+  <!-- Arbitrage Section -->
+  <g transform="translate(35, 195)">
+    <rect width="450" height="85" rx="6" fill="#f8fafc" stroke="#00bf63" stroke-width="1.5"/>
+    <text x="15" y="24" font-size="12" font-weight="800" fill="#00bf63">🏢 Arbitrage Régime B2B (Professionnel / Syndic)</text>
+    <text x="15" y="45" font-size="9.5" fill="#1e293b">• Saisie prioritaire en Montant HT</text>
+    <text x="15" y="62" font-size="9.5" fill="#1e293b">• Autoliquidation 0% (Sous-traitance BTP) ou TVA 20%</text>
+    <text x="15" y="78" font-size="9.5" fill="#64748b">• Réf. Bon de Commande &amp; Échéance 30/45 jours</text>
+
+    <rect x="500" y="0" width="450" height="85" rx="6" fill="#f8fafc" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="515" y="24" font-size="12" font-weight="800" fill="#2563eb">🏠 Arbitrage Régime B2C (Particulier / Occupant)</text>
+    <text x="515" y="45" font-size="9.5" fill="#1e293b">• Saisie prioritaire en Montant TTC</text>
+    <text x="515" y="62" font-size="9.5" fill="#1e293b">• TVA réduite 10% (Rénovation &gt;2 ans) ou 5,5% (Énergétique)</text>
+    <text x="515" y="78" font-size="9.5" fill="#64748b">• Règlement direct au comptant à la clôture</text>
+  </g>
+</svg>
