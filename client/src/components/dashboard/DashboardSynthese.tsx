@@ -603,7 +603,7 @@ export function DashboardSynthese({
             Voir toutes les interventions →
           </button>
         </div>
-        <div className="table-scroll">
+        <div className="desktop-only-block table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -648,6 +648,53 @@ export function DashboardSynthese({
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Vue Mobile Tactile : Cartes Métiers & Progression */}
+        <div className="mobile-only-block mobile-card-grid" style={{ padding: '12px 14px' }}>
+          {tradeRows.map((row) => (
+            <div
+              key={row.trade}
+              className="mobile-touch-card"
+              onClick={() => {
+                onFilterInterventions(row.trade);
+                onNavigateSection('interventions');
+              }}
+              style={{
+                background: '#fff',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                padding: '12px 14px',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                  🔨 {row.label}
+                </span>
+                <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#047857' }}>
+                  {formatCurrency(row.caTrade)}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                <span>⚡ {row.activeIntvs} en cours • ✓ {row.closedIntvs} terminées</span>
+                <span>📋 {row.devisCount} devis</span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                <div style={{ flex: 1, background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(100, row.progressPct)}%`, background: '#00bf63', height: '100%' }} />
+                </div>
+                <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  {row.progressPct}%
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 

@@ -244,7 +244,10 @@ export function LoginPage() {
         cleanedSiret
       );
       setEmailConfirmationSentTo(data.email.trim());
+      loginForm.setValue('email', data.email.trim());
+      registerForm.reset();
       setActiveTab('login');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       toast.success("E-mail de confirmation expédié depuis zehair@anelecgroupe.com !");
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Erreur lors de la création de l'espace");

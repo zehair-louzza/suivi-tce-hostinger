@@ -286,13 +286,15 @@ authRouter.post(
       select: publicUserSelect,
     });
 
-    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com
+    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com (asynchrone sécurisé)
     const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
-    await sendConfirmationEmail({
+    sendConfirmationEmail({
       toEmail: data.email,
       recipientName: data.name,
       companyName: compName,
       confirmationToken,
+    }).catch((err) => {
+      console.error('[AUTH REGISTER] Erreur envoi email activation:', err);
     });
 
     res.status(201).json({

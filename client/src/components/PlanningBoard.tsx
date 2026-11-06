@@ -1168,7 +1168,8 @@ export function PlanningBoard({
                 <line x1="8" y1="12" x2="20" y2="12" />
                 <line x1="4" y1="18" x2="16" y2="18" />
               </svg>
-              Timeline Gantt Pro
+              <span className="desktop-only-el">Timeline Gantt Pro</span>
+              <span className="mobile-only-el">Gantt</span>
             </button>
             <button
               type="button"
@@ -1181,7 +1182,8 @@ export function PlanningBoard({
                 <line x1="9" y1="4" x2="9" y2="20" />
                 <line x1="15" y1="4" x2="15" y2="20" />
               </svg>
-              Matrice Semaine
+              <span className="desktop-only-el">Matrice Semaine</span>
+              <span className="mobile-only-el">Semaine</span>
             </button>
             <button
               type="button"
@@ -1193,7 +1195,8 @@ export function PlanningBoard({
                 <rect x="10" y="3" width="5" height="18" rx="1" />
                 <rect x="17" y="3" width="4" height="18" rx="1" />
               </svg>
-              Agenda Colonnes
+              <span className="desktop-only-el">Agenda Colonnes</span>
+              <span className="mobile-only-el">Agenda</span>
             </button>
           </div>
 
@@ -1233,7 +1236,7 @@ export function PlanningBoard({
             </button>
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          <div className="drawer-subtabs-strip" style={{ display: 'flex', gap: '4px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%', padding: '2px 0' }}>
             {weekDays.map((d) => {
               const active = selectedDayKey === d.key;
               const countForDay = scheduledItems.filter((s) => s.date === d.key).length;
@@ -1282,23 +1285,26 @@ export function PlanningBoard({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <div className="segmented-control">
+          <div className="segmented-control" style={{ overflowX: 'auto', maxWidth: '100%' }}>
             {[
-              { id: 'ALL', label: `Tout (${allItems.length})`, dot: null },
+              { id: 'ALL', label: `Tout (${allItems.length})`, shortLabel: `Tout (${allItems.length})`, dot: null },
               {
                 id: 'VISITE_DEVIS',
                 label: `Visites Devis (${allItems.filter((i) => i.kind === 'VISITE_DEVIS').length})`,
-                dot: '#ffcc00',
+                shortLabel: `Devis (${allItems.filter((i) => i.kind === 'VISITE_DEVIS').length})`,
+                dot: '#d97706',
               },
               {
                 id: 'INTERVENTION',
                 label: `Travaux (${allItems.filter((i) => i.kind === 'INTERVENTION').length})`,
-                dot: '#00bf63',
+                shortLabel: `Travaux (${allItems.filter((i) => i.kind === 'INTERVENTION').length})`,
+                dot: '#059669',
               },
               {
                 id: 'URGENCE',
                 label: `Urgences (${allItems.filter((i) => i.kind === 'URGENCE').length})`,
-                dot: '#ff0000',
+                shortLabel: `Urg. (${allItems.filter((i) => i.kind === 'URGENCE').length})`,
+                dot: '#e11d48',
               },
             ].map((tab) => (
               <button
@@ -1310,7 +1316,8 @@ export function PlanningBoard({
                 {tab.dot && (
                   <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: tab.dot }} />
                 )}
-                {tab.label}
+                <span className="desktop-only-el">{tab.label}</span>
+                <span className="mobile-only-el">{tab.shortLabel}</span>
               </button>
             ))}
           </div>
@@ -1936,7 +1943,7 @@ export function PlanningBoard({
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+            <div className="desktop-only-flex" style={{ alignItems: 'center', gap: '14px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
               <span>
                 <strong>Souris :</strong> Glisser-déposer • Étirer les bords • Tracer un créneau au clic-glisser
               </span>

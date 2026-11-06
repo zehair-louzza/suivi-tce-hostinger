@@ -319,28 +319,14 @@ export function AdminWorkstation({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Barre supérieure de la Workstation Admin */}
-      <div className="fsm-toolbar" style={{ borderLeft: '4px solid #dc2626' }}>
+      {/* Barre supérieure de la Workstation Admin (Harmonisé Volet 2) */}
+      <div className="fsm-toolbar" style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                padding: '2px 8px',
-                borderRadius: '6px',
-                background: 'rgba(220, 38, 38, 0.12)',
-                color: '#dc2626',
-                fontWeight: 800,
-                fontSize: '11px',
-              }}
-            >
-              SUPER-ADMIN WORKSTATION
-            </span>
-            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>
-              Poste de Commandement Administrateur, Droits Utilisateurs & Rapports Terrain
-            </h2>
-          </div>
-          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Gérez les comptes intervenants et leurs droits de modification, suivez les pointages matin/soir des techniciens et consolidez les rapports.
+          <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Poste de Commandement Administrateur, Droits & Rapports
+          </h2>
+          <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+            Gestion des accès et permissions, contrôle des pointages techniciens et validation des déclarations de chantiers.
           </p>
         </div>
 
@@ -351,21 +337,24 @@ export function AdminWorkstation({
               className={`segmented-btn ${subTab === 'users' ? 'active' : ''}`}
               onClick={() => setSubTab('users')}
             >
-              Utilisateurs & Droits ({users.length})
+              <span className="desktop-only-el">Utilisateurs & Droits ({users.length})</span>
+              <span className="mobile-only-el">Users ({users.length})</span>
             </button>
             <button
               type="button"
               className={`segmented-btn ${subTab === 'roles_guide' ? 'active' : ''}`}
               onClick={() => setSubTab('roles_guide')}
             >
-              Définition des Rôles & Droits
+              <span className="desktop-only-el">Définition des Rôles & Droits</span>
+              <span className="mobile-only-el">Rôles</span>
             </button>
             <button
               type="button"
               className={`segmented-btn ${subTab === 'pointages' ? 'active' : ''}`}
               onClick={() => setSubTab('pointages')}
             >
-              Pointages Matin / Soir Techniciens
+              <span className="desktop-only-el">Pointages Matin / Soir Techniciens</span>
+              <span className="mobile-only-el">Pointages</span>
             </button>
             <button
               type="button"
@@ -373,7 +362,8 @@ export function AdminWorkstation({
               onClick={() => setSubTab('rapports')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
-              Déclarations & Rédaction Rapports ({declarationsList.length})
+              <span className="desktop-only-el">Déclarations & Rédaction Rapports ({declarationsList.length})</span>
+              <span className="mobile-only-el">Rapports ({declarationsList.length})</span>
               {pendingDeclarationsCount > 0 && (
                 <span
                   style={{
@@ -395,7 +385,8 @@ export function AdminWorkstation({
               className={`segmented-btn ${subTab === 'billing_rules' ? 'active' : ''}`}
               onClick={() => setSubTab('billing_rules')}
             >
-              ⚙️ Règles Facturation
+              <span className="desktop-only-el">⚙️ Règles Facturation</span>
+              <span className="mobile-only-el">⚙️ Règles</span>
             </button>
             <button
               type="button"
@@ -407,7 +398,8 @@ export function AdminWorkstation({
                 borderColor: subTab === 'danger_zone' ? '#dc2626' : undefined,
               }}
             >
-              ⚠️ Zone Danger & Clôture
+              <span className="desktop-only-el">⚠️ Zone Danger & Clôture</span>
+              <span className="mobile-only-el">⚠️ Danger</span>
             </button>
           </div>
 
@@ -1068,6 +1060,130 @@ export function AdminWorkstation({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Vue Mobile : Cartes tactiles Déclarations Techniciens */}
+          <div className="mobile-only-block mobile-card-grid">
+            {declarationsList.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '24px',
+                  background: '#fff',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Aucune déclaration terrain enregistrée pour le moment.
+              </div>
+            ) : (
+              declarationsList.map((intv) => {
+                const parentDevis = intv.devisId
+                  ? devisList.find((d) => d.id === intv.devisId)
+                  : null;
+
+                return (
+                  <div
+                    key={intv.id}
+                    className="mobile-touch-card"
+                    style={{
+                      background: '#fff',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      padding: '12px 14px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="font-mono" style={{ fontWeight: 800, color: '#2563eb', fontSize: '12px' }}>
+                          {intv.reference || `INT-${intv.id}`}
+                        </span>
+                        <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
+                          {intv.isVisiteDevis ? '🔍 Visite' : '🔧 Travaux'}
+                        </span>
+                      </div>
+                      {intv.rapportFinal ? (
+                        <span className="badge badge-success" style={{ fontSize: '10px' }}>✓ Rédigé</span>
+                      ) : (
+                        <span className="badge badge-warning" style={{ fontSize: '10px' }}>À Rédiger</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
+                        {intv.client || '—'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        📍 {intv.chantier || 'Site client'} • 👷 {intv.entreprise || 'Non assigné'}
+                      </div>
+                    </div>
+
+                    {intv.compteRendu && (
+                      <div
+                        style={{
+                          fontSize: '11.5px',
+                          background: '#f8fafc',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          color: '#334155',
+                        }}
+                      >
+                        💬 {intv.compteRendu.slice(0, 120)}{intv.compteRendu.length > 120 ? '...' : ''}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span>📷 Preuves : <strong>{intv.photos?.length || 0} photo(s)</strong></span>
+                      <span className="font-mono">📅 {intv.datePlanifiee || 'Non fixée'}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ flex: 1, justifyContent: 'center', fontSize: '11.5px' }}
+                        onClick={() => {
+                          setSelectedReportIntv(intv);
+                          setDraftRapportFinal(
+                            intv.rapportFinal || buildAutoReportFromDeclaration(intv)
+                          );
+                          setDraftResultatTechnique(
+                            intv.resultatTechnique || 'Intervention réalisée sans réserve'
+                          );
+                          setDraftStatutRapport('Validé & Clôturé');
+                        }}
+                      >
+                        📝 {intv.rapportFinal ? 'Modifier' : 'Rédiger'}
+                      </button>
+                      {parentDevis && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '11.5px' }}
+                          onClick={() => onOpenDevisDrawer(parentDevis)}
+                        >
+                          Devis
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '11.5px' }}
+                        onClick={() => onOpenInterventionDrawer(intv)}
+                      >
+                        Fiche
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}

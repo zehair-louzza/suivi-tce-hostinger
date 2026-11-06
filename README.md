@@ -23,6 +23,7 @@
    * [Métier C : Conducteur de Travaux & Dispatcher](#procédure-c--conducteur-de-travaux--dispatcher-planning-gantt--tournées)
    * [Métier D : Technicien Terrain (Mobile PWA)](#procédure-d--technicien-terrain-application-mobile-pwa)
    * [Métier E : Responsable Facturation & Comptabilité](#procédure-e--responsable-facturation--comptabilité-tri--fiscalité)
+   * [Métier F : Inscription & Espace Entreprise](#procédure-f--inscription--activation-dun-nouvel-espace-entreprise-multi-tenant)
 6. [Génération du Guide Utilisateur PDF Officiel](#6-génération-du-guide-utilisateur-pdf-officiel)
 7. [Commandes Utiles & Stack Technique](#7-commandes-utiles--stack-technique)
 
@@ -284,6 +285,31 @@ Sur téléphone portable, chaque étape du circuit propose deux boutons d'action
      - Application du taux de TVA réduit à 10% (logement d'habitation > 2 ans) ou 5,5% (travaux d'amélioration énergétique).
 3. **Étape 3 ➔ Émission & Bascule Automatique :**
    - Cliquer sur **« Émettre la facture »** : le dossier bascule instantanément dans le Bac **✅ Facturées** et met à jour le baromètre financier en temps réel.
+
+---
+
+### Procédure F : Inscription & Activation d'un Nouvel Espace Entreprise (Multi-Tenant)
+
+**Acteurs :** Gérants d'entreprises partenaires, Artisans sous-traitants, Nouveaux utilisateurs.
+
+<p align="center">
+  <img src="docs/images/01-mobile-creation-espace-form.png" alt="Formulaire Inscription Mobile" width="48%" />
+  <img src="docs/images/02-mobile-creation-espace-succes.png" alt="Confirmation d'activation E-mail" width="48%" />
+</p>
+
+#### Étapes Opérationnelles Pas-à-Pas :
+1. **Étape 1 ➔ Saisie des Informations de l'Entreprise :**
+   - Depuis l'écran de connexion (sur mobile ou PC), cliquer sur l'onglet **« Créer un Espace Entreprise »**.
+   - Renseigner la raison sociale de l'entreprise et son **numéro SIRET (14 chiffres)** ou **SIREN (9 chiffres)**.
+   - Saisir le nom du responsable, l'adresse email professionnelle et un mot de passe sécurisé (8 caractères minimum).
+   - Consulter et accepter les **Conditions Générales d'Utilisation (CGU)** et la **Politique de Confidentialité RGPD**.
+2. **Étape 2 ➔ Soumission & Initialisation Automatique :**
+   - Cliquer sur **« Créer mon espace entreprise »**.
+   - Le système crée l'espace entreprise dédié avec étanchéité complète des données (Multi-Tenant PostgreSQL) et instancie automatiquement ses référentiels métier de base (corps d'état, origines, responsables).
+3. **Étape 3 ➔ Confirmation & Activation par E-mail :**
+   - Un e-mail d'activation sécurisé est expédié instantanément depuis **zehair@anelecgroupe.com** avec un lien chiffré unique.
+   - L'écran affiche la bannière verte de confirmation `📩 E-mail de confirmation envoyé à ...` et bascule sur l'onglet de connexion en pré-remplissant l'adresse email.
+   - En cliquant sur le lien reçu dans sa boîte mail, l'administrateur valide définitivement son compte et peut immédiatement se connecter à son espace de travail.
 
 ---
 

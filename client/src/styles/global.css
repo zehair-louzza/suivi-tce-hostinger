@@ -1625,14 +1625,14 @@ html, body, #root {
 }
 
 .btn-ai-dispatch {
-  background: #0a0f1d !important; /* Couleur foncée ANELEC */
+  background: #047857 !important; /* Vert ANELEC Officiel Harmonisé */
   color: #ffffff !important;
-  border: 1px solid #1e293b !important;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+  border: 1px solid #047857 !important;
+  box-shadow: 0 2px 8px rgba(4, 120, 87, 0.22) !important;
 }
 
 .btn-ai-dispatch:hover:not(:disabled) {
-  background: #1e293b !important;
+  background: #065f46 !important;
   transform: translateY(-1px);
 }
 

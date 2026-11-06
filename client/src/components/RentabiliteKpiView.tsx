@@ -378,31 +378,16 @@ export function RentabiliteKpiView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* =====================================================================
-          1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE
+          1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE (STYLE VOLET 2)
          ===================================================================== */}
-      <div className="pro-table-container" style={{ padding: '16px 20px', borderLeft: '5px solid #00bf63', background: '#ffffff', border: '1px solid #cbd5e1' }}>
+      <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: '999px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  color: '#059669',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                ANALYTICS & CONTRÔLE DE GESTION TCE
-              </span>
-              <h2 style={{ fontSize: '17px', fontWeight: 800 }}>
-                Rentabilité, Débits Horaires & Performance des Techniciens & Équipes
-              </h2>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-              Croisez en temps réel les montants des interventions, les heures réelles pointées, les durées planifiées et les marges brutes générées.
+            <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Rentabilité, Débits Horaires & Performance des Équipes
+            </h2>
+            <p style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              Suivi consolidé des montants d'intervention, heures pointées, rentabilité horaire et marges brutes.
             </p>
           </div>
 
@@ -452,98 +437,98 @@ export function RentabiliteKpiView({
 
             <button
               type="button"
-              className="btn btn-primary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
               onClick={handleCopyReport}
             >
-              📋 Copier Synthèse Direction
+              📋 Copier Synthèse
             </button>
           </div>
         </div>
       </div>
 
       {/* =====================================================================
-          2. BANDEAU DES KPIS STRATÉGIQUES DE RENTABILITÉ
+          2. BANDEAU DES KPIS STRATÉGIQUES DE RENTABILITÉ (STYLE VOLET 2)
          ===================================================================== */}
       <div className="kpi-strip">
-        <div className="kpi-card" style={{ borderTop: '3px solid #10b981' }}>
+        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669' }}>
-              💶 CA Total Produit
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+              CA Total Produit
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span className="font-mono" style={{ fontSize: '10.5px', color: '#94a3b8' }}>
               Interventions
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
             {formatCurrency(globalMetrics.totalCA)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
             {globalMetrics.totalCloturees} clôturée(s) sur {globalMetrics.totalInterventions}
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '4px solid #0a0f1d' }}>
+        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0a0f1d' }}>
-              ⚡ Rentabilité Horaire
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+              Rentabilité Horaire
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#0a0f1d', fontWeight: 700 }}>
+            <span className="font-mono" style={{ fontSize: '10.5px', color: '#047857', fontWeight: 700 }}>
               Moyenne
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#0a0f1d' }}>
+          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: '#047857', margin: '4px 0 2px' }}>
             {globalMetrics.globalHourlyRevenue} € / heure
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
             {globalMetrics.totalRealHours}h réelles pointées ({globalMetrics.totalPlannedHours}h prévues)
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '4px solid #00bf63' }}>
+        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
-              📈 Marge Brute Globale
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+              Marge Brute Estimée
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#047857', fontWeight: 800 }}>
+            <span className="font-mono" style={{ fontSize: '10.5px', color: '#047857', fontWeight: 700 }}>
               {globalMetrics.globalMarginRate}%
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: '#047857' }}>
+          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: '#047857', margin: '4px 0 2px' }}>
             {formatCurrency(globalMetrics.globalMargin)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Déduction base coût : {hourlyCostParam} €/h
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+            Base coût : {hourlyCostParam} €/h
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '4px solid #ffcc00' }}>
+        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#b45309' }}>
-              ⏱️ Efficience / Délais
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+              Efficience / Délais
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#b45309', fontWeight: 700 }}>
+            <span className="font-mono" style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 700 }}>
               Ratio
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
             {globalMetrics.globalProductivity}%
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
             {globalMetrics.globalProductivity >= 100
-              ? '✓ En avance sur créneaux prévus'
+              ? '✓ Respect des créneaux prévus'
               : 'Dépassement créneaux prévus'}
           </div>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '4px solid #00bf63' }}>
+        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#047857' }}>
-              🏆 Top Rentabilité
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+              Top Rentabilité
             </span>
-            <span className="badge badge-primary" style={{ fontSize: '9px', background: '#00bf63', color: '#ffffff' }}>N°1</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, background: 'rgba(4, 120, 87, 0.1)', color: '#047857', padding: '1px 6px', borderRadius: '4px' }}>N°1</span>
           </div>
-          <div style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: '4px 0 2px' }}>
             {globalMetrics.topPerformer?.technicien || 'Aucun'}
           </div>
           <div className="font-mono" style={{ fontSize: '11.5px', color: '#047857', fontWeight: 700 }}>
@@ -570,21 +555,23 @@ export function RentabiliteKpiView({
         }}
       >
         {/* Commutateur de vue : Par Technicien vs Par Équipe / Métier */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="segmented-control">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto' }}>
+          <div className="segmented-control segmented-control-fluid" style={{ width: '100%' }}>
             <button
               type="button"
               className={`segmented-btn ${activeViewTab === 'techniciens' ? 'active' : ''}`}
               onClick={() => setActiveViewTab('techniciens')}
             >
-              👷 Rentabilité par Technicien ({filteredAndSortedTechniciens.length})
+              <span className="desktop-only-el">👷 Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
+              <span className="mobile-only-flex">👷 Techniciens ({filteredAndSortedTechniciens.length})</span>
             </button>
             <button
               type="button"
               className={`segmented-btn ${activeViewTab === 'equipes' ? 'active' : ''}`}
               onClick={() => setActiveViewTab('equipes')}
             >
-              🏗️ Rentabilité par Équipe / Corps d'État ({equipesStats.length})
+              <span className="desktop-only-el">🏗️ Rentabilité par Équipe / Corps d'État ({equipesStats.length})</span>
+              <span className="mobile-only-flex">🏗️ Équipes ({equipesStats.length})</span>
             </button>
           </div>
         </div>
@@ -642,7 +629,8 @@ export function RentabiliteKpiView({
           4. VUE A : TABLEAU COMPARATIF DÉTAILLÉ PAR TECHNICIEN
          ===================================================================== */}
       {activeViewTab === 'techniciens' && (
-        <div className="pro-table-container">
+        <>
+          <div className="desktop-only-block pro-table-container">
           <table className="pro-table">
             <thead>
               <tr>
@@ -812,100 +800,366 @@ export function RentabiliteKpiView({
             </tbody>
           </table>
         </div>
-      )}
+
+        {/* Vue Mobile : Cartes tactiles Techniciens */}
+        <div className="mobile-only-block mobile-card-grid">
+          {filteredAndSortedTechniciens.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '28px',
+                background: '#fff',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-muted)',
+              }}
+            >
+              Aucun technicien ne correspond aux filtres.
+            </div>
+          ) : (
+            filteredAndSortedTechniciens.map((t, idx) => {
+              const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+              const rentabColor = t.hourlyRevenueHT >= 80 ? '#059669' : t.hourlyRevenueHT >= 50 ? '#0284c7' : '#dc2626';
+
+              return (
+                <div
+                  key={t.technicien}
+                  className="mobile-touch-card"
+                  style={{
+                    background: '#fff',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-color)',
+                    padding: '12px 14px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                  }}
+                >
+                  {/* En-tête de la carte */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 800 }}>{medal}</span>
+                      <div
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: '#e0e7ff',
+                          color: '#3730a3',
+                          fontWeight: 800,
+                          fontSize: '11px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {t.technicien.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>{t.technicien}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {t.specialites.length > 0 ? t.specialites.join(' • ') : 'Toutes spécialités'}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className="status-pill"
+                      style={{
+                        background: '#f1f5f9',
+                        color: '#475569',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t.totalInterventions} intv.
+                    </span>
+                  </div>
+
+                  {/* KPIs financiers & rentabilité */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '8px',
+                      background: '#f8fafc',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      border: '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>CA HT</div>
+                      <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {formatCurrency(t.totalMontantHT)}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Rentab.</div>
+                      <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: rentabColor }}>
+                        {t.hourlyRevenueHT} €/h
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Marge</div>
+                      <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: '#10b981' }}>
+                        {formatCurrency(t.estimatedMarginHT)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Détail heures & efficience */}
+                  <div style={{ fontSize: '11.5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Heures Réel / Prévu :</span>
+                      <span className="font-mono" style={{ fontWeight: 700 }}>
+                        {t.totalRealHours}h / {t.totalPlannedHours}h
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Efficience :</span>
+                      {t.savedHours > 0 ? (
+                        <span style={{ color: '#059669', fontWeight: 700 }}>+{t.savedHours}h ({t.productivityRate}%)</span>
+                      ) : t.savedHours < 0 ? (
+                        <span style={{ color: '#dc2626', fontWeight: 700 }}>{t.savedHours}h ({t.productivityRate}%)</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>0h (100%)</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Preuves & Rapports :</span>
+                      <span style={{ fontWeight: 700, color: t.photosCount > 0 ? '#059669' : '#d97706' }}>
+                        📷 {t.photosCount} photo(s) • 📝 {t.rapportsCount} rapport(s)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px', borderTop: '1px solid #f1f5f9' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11.5px', padding: '4px 12px', width: '100%', justifyContent: 'center' }}
+                      onClick={onNavigateToPlanning}
+                    >
+                      📅 Ouvrir dans le Planning
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </>
+    )}
 
       {/* =====================================================================
           5. VUE B : ANALYSE DE RENTABILITÉ PAR ÉQUIPE / CORPS D'ÉTAT
-         ===================================================================== */}
+          ===================================================================== */}
       {activeViewTab === 'equipes' && (
-        <div className="pro-table-container">
-          <table className="pro-table">
-            <thead>
-              <tr>
-                <th style={{ minWidth: '180px' }}>Équipe / Corps d'État (Métier)</th>
-                <th style={{ width: '110px' }}>Effectif Tech</th>
-                <th style={{ width: '130px' }}>Interventions</th>
-                <th style={{ width: '130px' }}>Heures Réelles</th>
-                <th style={{ width: '130px' }}>CA Total HT</th>
-                <th style={{ width: '120px' }}>Part CA Total</th>
-                <th style={{ width: '160px' }}>Rentabilité Horaire (€/h)</th>
-                <th style={{ textAlign: 'right', width: '140px' }}>Marge Équipe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {equipesStats.length === 0 ? (
+        <>
+          <div className="desktop-only-block pro-table-container">
+            <table className="pro-table">
+              <thead>
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '28px', color: 'var(--text-muted)' }}>
-                    Aucune donnée disponible pour cette période.
-                  </td>
+                  <th style={{ minWidth: '180px' }}>Équipe / Corps d'État (Métier)</th>
+                  <th style={{ width: '110px' }}>Effectif Tech</th>
+                  <th style={{ width: '130px' }}>Interventions</th>
+                  <th style={{ width: '130px' }}>Heures Réelles</th>
+                  <th style={{ width: '130px' }}>CA Total HT</th>
+                  <th style={{ width: '120px' }}>Part CA Total</th>
+                  <th style={{ width: '160px' }}>Rentabilité Horaire (€/h)</th>
+                  <th style={{ textAlign: 'right', width: '140px' }}>Marge Équipe</th>
                 </tr>
-              ) : (
-                equipesStats.map((eq) => (
-                  <tr key={eq.corpsEtat}>
-                    <td>
-                      <div style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
-                        🔨 {eq.corpsEtat}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="font-mono" style={{ fontWeight: 700, fontSize: '12px' }}>
-                        {eq.techniciensCount} technicien(s)
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 700, fontSize: '12px' }}>
-                        {eq.clotureesCount} / {eq.interventionsCount} clôturée(s)
-                      </div>
-                    </td>
-                    <td>
-                      <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700 }}>
-                        {eq.totalRealHours}h
-                      </div>
-                    </td>
-                    <td>
-                      <div className="font-mono" style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                        {formatCurrency(eq.totalMontantHT)}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
-                        </div>
-                        <span className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#047857' }}>
-                          {eq.partCA}%
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <div
-                        className="font-mono"
-                        style={{
-                          fontSize: '14.5px',
-                          fontWeight: 800,
-                          color: eq.hourlyRevenueHT >= 80 ? '#059669' : eq.hourlyRevenueHT >= 50 ? '#0284c7' : '#dc2626',
-                        }}
-                      >
-                        {eq.hourlyRevenueHT} € / h
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        Débit moyen équipe
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div className="font-mono" style={{ fontSize: '13px', fontWeight: 800, color: '#10b981' }}>
-                        {formatCurrency(eq.estimatedMarginHT)}
-                      </div>
-                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                        Marge : {eq.marginRate}%
-                      </div>
+              </thead>
+              <tbody>
+                {equipesStats.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '28px', color: 'var(--text-muted)' }}>
+                      Aucune donnée disponible pour cette période.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  equipesStats.map((eq) => (
+                    <tr key={eq.corpsEtat}>
+                      <td>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
+                          🔨 {eq.corpsEtat}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="font-mono" style={{ fontWeight: 700, fontSize: '12px' }}>
+                          {eq.techniciensCount} technicien(s)
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                          {eq.clotureesCount} / {eq.interventionsCount} clôturée(s)
+                        </div>
+                      </td>
+                      <td>
+                        <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700 }}>
+                          {eq.totalRealHours}h
+                        </div>
+                      </td>
+                      <td>
+                        <div className="font-mono" style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {formatCurrency(eq.totalMontantHT)}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
+                          </div>
+                          <span className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#047857' }}>
+                            {eq.partCA}%
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div
+                          className="font-mono"
+                          style={{
+                            fontSize: '14.5px',
+                            fontWeight: 800,
+                            color: eq.hourlyRevenueHT >= 80 ? '#059669' : eq.hourlyRevenueHT >= 50 ? '#0284c7' : '#dc2626',
+                          }}
+                        >
+                          {eq.hourlyRevenueHT} € / h
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          Débit moyen équipe
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div className="font-mono" style={{ fontSize: '13px', fontWeight: 800, color: '#10b981' }}>
+                          {formatCurrency(eq.estimatedMarginHT)}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          Marge : {eq.marginRate}%
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Vue Mobile : Cartes tactiles Équipes / Métiers */}
+          <div className="mobile-only-block mobile-card-grid">
+            {equipesStats.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '28px',
+                  background: '#fff',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Aucune donnée disponible pour cette période.
+              </div>
+            ) : (
+              equipesStats.map((eq) => {
+                const rentabColor = eq.hourlyRevenueHT >= 80 ? '#059669' : eq.hourlyRevenueHT >= 50 ? '#0284c7' : '#dc2626';
+
+                return (
+                  <div
+                    key={eq.corpsEtat}
+                    className="mobile-touch-card"
+                    style={{
+                      background: '#fff',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      padding: '12px 14px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0a0f1d' }}>
+                        🔨 {eq.corpsEtat}
+                      </div>
+                      <span
+                        className="status-pill"
+                        style={{
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {eq.techniciensCount} tech.
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gap: '8px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>CA HT</div>
+                        <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          {formatCurrency(eq.totalMontantHT)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Rentab.</div>
+                        <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: rentabColor }}>
+                          {eq.hourlyRevenueHT} €/h
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Marge</div>
+                        <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: '#10b981' }}>
+                          {formatCurrency(eq.estimatedMarginHT)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11.5px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Interventions :</span>
+                        <span style={{ fontWeight: 700 }}>
+                          {eq.clotureesCount} / {eq.interventionsCount} clôturée(s)
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Heures Réelles :</span>
+                        <span className="font-mono" style={{ fontWeight: 700 }}>
+                          {eq.totalRealHours}h
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Part CA Global :</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
+                          </div>
+                          <span className="font-mono" style={{ fontWeight: 700, color: '#047857' }}>{eq.partCA}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
     </div>
   );

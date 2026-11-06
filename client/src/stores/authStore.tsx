@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
       clearError: () => set({ error: null }),
 
       login: async (email: string, password: string) => {
-        set({ isLoading: true, error: null });
+        set({ error: null });
         try {
           const response = await api.post('/auth/login', { email, password });
           const { user, accessToken } = response.data;
@@ -73,7 +73,7 @@ export const useAuthStore = create<AuthState>()(
         companyName?: string,
         siretOrSiren?: string
       ) => {
-        set({ isLoading: true, error: null });
+        set({ error: null });
         try {
           const response = await api.post('/auth/register', {
             name,
@@ -82,14 +82,27 @@ export const useAuthStore = create<AuthState>()(
             companyName,
             siretOrSiren,
           });
-          const { user, accessToken } = response.data;
-          
+          const { user, accessToken, requiresConfirmation } = response.data;
+
+          if (requiresConfirmation || !accessToken || !user) {
+            // L'espace entreprise a été créé mais nécessite l'activation par e-mail
+            set({
+              user: null,
+              accessToken: null,
+              isAuthenticated: false,
+              isLoading: false,
+              error: null,
+            });
+            return response.data;
+          }
+
           set({
             user,
             accessToken,
             isAuthenticated: true,
             isLoading: false,
           });
+          return response.data;
         } catch (err: any) {
           const message = err.response?.data?.error || "Erreur d'inscription";
           set({ error: message, isLoading: false, isAuthenticated: false });
@@ -146,8 +159,9 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.post('/auth/refresh');
           const { accessToken } = response.data;
           set({ accessToken });
-        } catch {
+        } catch (err) {
           get().logout();
+          throw err;
         }
       },
 
@@ -185,19 +199,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { fetchMe, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
+    // Sécurité globale anti-blocage (ex: réseau lent, transition d'état)
+    const safetyTimer = setTimeout(() => {
+      if (useAuthStore.getState().isLoading) {
+        console.warn('[AuthProvider] Sécurité anti-blocage : déverrouillage automatique du chargement');
+        useAuthStore.setState({ isLoading: false });
+      }
+    }, 3500);
+
     if (isAuthenticated) {
-      fetchMe();
+      fetchMe().finally(() => clearTimeout(safetyTimer));
     } else {
       // Check if we have a stored token and try to refresh
       const stored = useAuthStore.getState();
       if (stored.accessToken) {
-        fetchMe().catch(() => {
-          // If fetchMe fails, the user will be logged out
-        });
+        fetchMe()
+          .finally(() => clearTimeout(safetyTimer))
+          .catch(() => {
+            // If fetchMe fails, the user will be logged out
+          });
       } else {
+        clearTimeout(safetyTimer);
         useAuthStore.setState({ isLoading: false });
       }
     }
+
+    return () => clearTimeout(safetyTimer);
   }, [isAuthenticated, fetchMe]);
 
   return <Fragment>{children}</Fragment>;

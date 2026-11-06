@@ -438,6 +438,24 @@ export function DashboardPage() {
     });
   }, [interventionsList, intvStatutFilter, intvTechFilter, intvSearch]);
 
+  const devisKpis = useMemo(() => {
+    const totalCount = filteredDevis.length;
+    const totalMontantHT = filteredDevis.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const acceptesCount = filteredDevis.filter((d) => ['Accepté'].includes(d.statutCommercial)).length;
+    const visitesCount = filteredDevis.filter((d) => d.visiteNecessaire || d.visiteTechnicien).length;
+    const tauxSignature = totalCount > 0 ? Math.round((acceptesCount / totalCount) * 100) : 0;
+    return { totalCount, totalMontantHT, acceptesCount, visitesCount, tauxSignature };
+  }, [filteredDevis]);
+
+  const intvKpis = useMemo(() => {
+    const totalCount = filteredInterventions.length;
+    const enCoursCount = filteredInterventions.filter((i) => i.statutOperationnel === 'En cours').length;
+    const planifieesCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Planifiée').length;
+    const aValiderCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Terminée - à valider').length;
+    const clotureesCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Clôturée').length;
+    return { totalCount, enCoursCount, planifieesCount, aValiderCount, clotureesCount };
+  }, [filteredInterventions]);
+
   const openNewDevisDrawer = () => {
     setIsCreatingDevis(true);
     setDevisTab('qualif');
@@ -607,56 +625,107 @@ export function DashboardPage() {
           SECTION 2 : CONSOLE DISPATCH & PLANNING TECHNICIENS
          ===================================================================== */}
       {activeSection === 'planning' && (
-        <PlanningBoard
-          devisList={devisList}
-          interventionsList={interventionsList}
-          techniciens={techniciensList}
-          technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
-          corpsEtatList={corpsEtatList}
-          onUpdateCompetences={async (nextMap) => {
-            await referentielsApi.updateCompetences(nextMap);
-            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-          }}
-          equipesJournalieres={refs.equipes_journalieres || []}
-          onUpdateEquipes={async (nextEquipes) => {
-            await referentielsApi.updateEquipes(nextEquipes);
-            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-          }}
-          onUpdateDevisPlanning={async (devisId, payload) => {
-            await updateDevisMut.mutateAsync({ id: devisId, data: payload });
-          }}
-          onUpdateInterventionPlanning={async (intvId, payload) => {
-            await updateIntvMut.mutateAsync({ id: intvId, data: payload });
-          }}
-          onOpenDevisDrawer={(d) => {
-            setIsCreatingDevis(false);
-            setSelectedDevis(d);
-          }}
-          onOpenInterventionDrawer={(i) => {
-            setIsCreatingIntv(false);
-            setSelectedIntv(i);
-          }}
-          onCreateQuickIntervention={async (payload) => {
-            await createIntvMut.mutateAsync(payload);
-          }}
-          onDeleteDevis={async (id) => {
-            await deleteDevisMut.mutateAsync(id);
-          }}
-          onDeleteIntervention={async (id) => {
-            await deleteIntvMut.mutateAsync(id);
-          }}
-          onNavigateToRentabilite={() => handleSectionChange('rentabilite')}
-        />
+        <div className="dashboard-container" style={{ maxWidth: '100%' }}>
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Console Dispatch & Planning</h1>
+              <p className="dashboard-subtitle">
+                Ordonnancement Gantt temps réel, affectation des techniciens et bourse de dispatching.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="font-mono topbar-date-pill">Moteur Gantt 60 fps</span>
+            </div>
+          </div>
+          <PlanningBoard
+            devisList={devisList}
+            interventionsList={interventionsList}
+            techniciens={techniciensList}
+            technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
+            corpsEtatList={corpsEtatList}
+            onUpdateCompetences={async (nextMap) => {
+              await referentielsApi.updateCompetences(nextMap);
+              queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+            }}
+            equipesJournalieres={refs.equipes_journalieres || []}
+            onUpdateEquipes={async (nextEquipes) => {
+              await referentielsApi.updateEquipes(nextEquipes);
+              queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+            }}
+            onUpdateDevisPlanning={async (devisId, payload) => {
+              await updateDevisMut.mutateAsync({ id: devisId, data: payload });
+            }}
+            onUpdateInterventionPlanning={async (intvId, payload) => {
+              await updateIntvMut.mutateAsync({ id: intvId, data: payload });
+            }}
+            onOpenDevisDrawer={(d) => {
+              setIsCreatingDevis(false);
+              setSelectedDevis(d);
+            }}
+            onOpenInterventionDrawer={(i) => {
+              setIsCreatingIntv(false);
+              setSelectedIntv(i);
+            }}
+            onCreateQuickIntervention={async (payload) => {
+              await createIntvMut.mutateAsync(payload);
+            }}
+            onDeleteDevis={async (id) => {
+              await deleteDevisMut.mutateAsync(id);
+            }}
+            onDeleteIntervention={async (id) => {
+              await deleteIntvMut.mutateAsync(id);
+            }}
+            onNavigateToRentabilite={() => handleSectionChange('rentabilite')}
+          />
+        </div>
       )}
 
       {/* =====================================================================
           SECTION 3 : PIPELINE DEVIS (TABLEAU 8 COLONNES + KANBAN + DRAWER 22 COL)
          ===================================================================== */}
       {activeSection === 'devis' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Pipeline Devis & Chiffrages</h1>
+              <p className="dashboard-subtitle">
+                Gestion commerciale, chiffrage des chantiers et conversion en interventions Tout Corps d'État.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <button type="button" className="btn btn--primary" onClick={openNewDevisDrawer}>
+                + Nouveau Devis
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Cartes KPI Devis */}
+          <div className="kpi-grid" style={{ marginBottom: '20px' }}>
+            <div className="kpi-card">
+              <span className="kpi-card__label">Total devis en portefeuille</span>
+              <span className="kpi-card__value numeric">{devisKpis.totalCount}</span>
+              <span className="kpi-card__sub">{devisList.length} devis au total</span>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-card__label">Volume chiffré HT</span>
+              <span className="kpi-card__value numeric">{formatCurrency(devisKpis.totalMontantHT)}</span>
+              <span className="kpi-card__sub">Potentiel commercial brut</span>
+            </div>
+            <div className="kpi-card kpi-card--success">
+              <span className="kpi-card__label">Devis signés / acceptés</span>
+              <span className="kpi-card__value numeric">{devisKpis.acceptesCount}</span>
+              <span className="kpi-card__sub">{devisKpis.tauxSignature}% taux de concrétisation</span>
+            </div>
+            <div className="kpi-card kpi-card--warning">
+              <span className="kpi-card__label">Visites de devis requises</span>
+              <span className="kpi-card__value numeric">{devisKpis.visitesCount}</span>
+              <span className="kpi-card__sub">Prises de cotes sur place</span>
+            </div>
+          </div>
+
           <div className="fsm-toolbar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
-              <div className="segmented-control segmented-control-fluid">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+              <div className="segmented-control">
                 <button
                   type="button"
                   className={`segmented-btn ${devisViewStyle === 'table' ? 'active' : ''}`}
@@ -670,7 +739,7 @@ export function DashboardPage() {
                   className={`segmented-btn ${devisViewStyle === 'kanban' ? 'active' : ''}`}
                   onClick={() => setDevisViewStyle('kanban')}
                 >
-                  <span className="desktop-only-el">Pipeline Kanban (Drag & Drop)</span>
+                  <span className="desktop-only-el">Pipeline Kanban</span>
                   <span className="mobile-only-flex">📊 Kanban</span>
                 </button>
               </div>
@@ -678,7 +747,7 @@ export function DashboardPage() {
               <input
                 type="text"
                 className="input"
-                style={{ flex: '1 1 180px', minWidth: '140px' }}
+                style={{ flex: '1 1 200px', minWidth: '150px' }}
                 placeholder="Rechercher réf, client, site..."
                 value={devisSearch}
                 onChange={(e) => setDevisSearch(e.target.value)}
@@ -686,11 +755,11 @@ export function DashboardPage() {
 
               <select
                 className="select"
-                style={{ flex: '1 1 130px', minWidth: '110px' }}
+                style={{ flex: '0 1 160px' }}
                 value={devisStatutFilter}
                 onChange={(e) => setDevisStatutFilter(e.target.value)}
               >
-                <option value="ALL">Tous statuts</option>
+                <option value="ALL">Tous les statuts</option>
                 {STATUTS_COMMERCIAUX_DEVIS.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -700,11 +769,11 @@ export function DashboardPage() {
 
               <select
                 className="select"
-                style={{ flex: '1 1 130px', minWidth: '110px' }}
+                style={{ flex: '0 1 160px' }}
                 value={devisResponsableFilter}
                 onChange={(e) => setDevisResponsableFilter(e.target.value)}
               >
-                <option value="ALL">Tous responsables</option>
+                <option value="ALL">Tous les responsables</option>
                 {responsablesList.map((r) => (
                   <option key={r} value={r}>
                     Resp: {r}
@@ -713,7 +782,7 @@ export function DashboardPage() {
               </select>
             </div>
 
-            <button type="button" className="btn btn-primary" onClick={openNewDevisDrawer}>
+            <button type="button" className="btn btn--primary" onClick={openNewDevisDrawer}>
               + Nouveau Devis
             </button>
           </div>
@@ -987,7 +1056,45 @@ export function DashboardPage() {
           SECTION 4 : INTERVENTIONS TCE (TABLEAU 8 COL + KANBAN + DRAWER 23 COL)
          ===================================================================== */}
       {activeSection === 'interventions' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Suivi Opérationnel des Interventions TCE</h1>
+              <p className="dashboard-subtitle">
+                Pilotage en direct des chantiers Tout Corps d'État, affectations techniciens, comptes rendus et avancement.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <button type="button" className="btn btn--primary" onClick={openNewIntvDrawer}>
+                + Nouvelle Intervention
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Cartes KPI Interventions */}
+          <div className="kpi-grid" style={{ marginBottom: '20px' }}>
+            <div className="kpi-card">
+              <span className="kpi-card__label">Interventions totales</span>
+              <span className="kpi-card__value numeric">{intvKpis.totalCount}</span>
+              <span className="kpi-card__sub">{interventionsList.length} dossiers enregistrés</span>
+            </div>
+            <div className="kpi-card kpi-card--primary">
+              <span className="kpi-card__label">En cours sur site</span>
+              <span className="kpi-card__value numeric">{intvKpis.enCoursCount}</span>
+              <span className="kpi-card__sub">Techniciens en intervention</span>
+            </div>
+            <div className="kpi-card kpi-card--warning">
+              <span className="kpi-card__label">À valider / rapport</span>
+              <span className="kpi-card__value numeric">{intvKpis.aValiderCount}</span>
+              <span className="kpi-card__sub">Rapports finaux à certifier</span>
+            </div>
+            <div className="kpi-card kpi-card--success">
+              <span className="kpi-card__label">Chantiers clôturés</span>
+              <span className="kpi-card__value numeric">{intvKpis.clotureesCount}</span>
+              <span className="kpi-card__sub">{intvKpis.planifieesCount} planifiées à venir</span>
+            </div>
+          </div>
+
           <div className="fsm-toolbar">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
               <div className="segmented-control segmented-control-fluid">
@@ -1046,10 +1153,6 @@ export function DashboardPage() {
                 ))}
               </select>
             </div>
-
-            <button type="button" className="btn btn-primary" onClick={openNewIntvDrawer}>
-              + Nouvelle Intervention
-            </button>
           </div>
 
           {intvViewStyle === 'table' ? (
@@ -1330,292 +1433,346 @@ export function DashboardPage() {
           SECTION 4B-MAP : CARTE INTERACTIVE & CALCUL AUTOMATIQUE DE TRAJET
          ===================================================================== */}
       {activeSection === 'carte' && (
-        <TourneeMapOptimizer
-          interventions={interventionsList}
-          devis={devisList}
-          selectedDate={new Date().toISOString().slice(0, 10)}
-          currentTechnicien="TOUS"
-          techniciensList={techniciensList}
-          onSelectTechnicien={setSelectedMobileTech}
-          onOpenIntervention={(i) => {
-            setIsCreatingIntv(false);
-            setSelectedIntv(i);
-          }}
-          onOpenDevis={(d) => {
-            setIsCreatingDevis(false);
-            setSelectedDevis(d);
-          }}
-        />
+        <div className="dashboard-container" style={{ maxWidth: '100%' }}>
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Carte Interactive & Tournées TCE</h1>
+              <p className="dashboard-subtitle">
+                Visualisation cartographique des chantiers et calcul automatique d'itinéraire optimisé (TSP 2-Opt) au départ du siège ANELEC.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--primary">Optimiseur Routier</span>
+            </div>
+          </div>
+          <TourneeMapOptimizer
+            interventions={interventionsList}
+            devis={devisList}
+            selectedDate={new Date().toISOString().slice(0, 10)}
+            currentTechnicien="TOUS"
+            techniciensList={techniciensList}
+            onSelectTechnicien={setSelectedMobileTech}
+            onOpenIntervention={(i) => {
+              setIsCreatingIntv(false);
+              setSelectedIntv(i);
+            }}
+            onOpenDevis={(d) => {
+              setIsCreatingDevis(false);
+              setSelectedDevis(d);
+            }}
+          />
+        </div>
       )}
 
       {/* =====================================================================
           SECTION 4B : ESPACE FACTURATION & RELATION CLIENT (B2B & B2C)
          ===================================================================== */}
       {activeSection === 'facturation' && (
-        <FacturationStudio
-          devisList={devisList}
-          interventionsList={interventionsList}
-          onUpdateIntervention={async (id, data) => {
-            await updateIntvMut.mutateAsync({ id, data });
-          }}
-          onUpdateDevis={async (id, data) => {
-            await updateDevisMut.mutateAsync({ id, data });
-          }}
-          onOpenInterventionDrawer={(intv) => {
-            setIsCreatingIntv(false);
-            setSelectedIntv(intv);
-          }}
-          onOpenDevisDrawer={(d) => {
-            setIsCreatingDevis(false);
-            setSelectedDevis(d);
-          }}
-          onNavigateToPlanning={() => handleSectionChange('planning')}
-          onOpenPhotoLightbox={(photos, idx) => {
-            setLightboxPhotos(photos);
-            setLightboxIndex(idx);
-          }}
-        />
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Espace Facturation & Relation Client</h1>
+              <p className="dashboard-subtitle">
+                Arbitrage B2B / B2C, calcul automatique HT/TTC, génération de bordereaux et modèles de communication client.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--primary">Hub Financier TCE</span>
+            </div>
+          </div>
+          <FacturationStudio
+            devisList={devisList}
+            interventionsList={interventionsList}
+            onUpdateIntervention={async (id, data) => {
+              await updateIntvMut.mutateAsync({ id, data });
+            }}
+            onUpdateDevis={async (id, data) => {
+              await updateDevisMut.mutateAsync({ id, data });
+            }}
+            onOpenInterventionDrawer={(intv) => {
+              setIsCreatingIntv(false);
+              setSelectedIntv(intv);
+            }}
+            onOpenDevisDrawer={(d) => {
+              setIsCreatingDevis(false);
+              setSelectedDevis(d);
+            }}
+            onNavigateToPlanning={() => handleSectionChange('planning')}
+            onOpenPhotoLightbox={(photos, idx) => {
+              setLightboxPhotos(photos);
+              setLightboxIndex(idx);
+            }}
+          />
+        </div>
       )}
 
       {/* =====================================================================
           SECTION 4C : ANALYSE DE RENTABILITÉ TECHNICIENS & ÉQUIPES TCE
          ===================================================================== */}
       {activeSection === 'rentabilite' && (
-        <RentabiliteKpiView
-          interventionsList={interventionsList}
-          devisList={devisList}
-          techniciens={techniciensList}
-          onNavigateToPlanning={() => handleSectionChange('planning')}
-          onOpenInterventionDrawer={(intv) => {
-            setIsCreatingIntv(false);
-            setSelectedIntv(intv);
-          }}
-        />
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Analyse de Rentabilité Techniciens & Équipes</h1>
+              <p className="dashboard-subtitle">
+                Performance horaire (€ HT / h), marges brutes par corps d'état et productivité des équipes terrain.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--success">Contrôle de Gestion</span>
+            </div>
+          </div>
+          <RentabiliteKpiView
+            interventionsList={interventionsList}
+            devisList={devisList}
+            techniciens={techniciensList}
+            onNavigateToPlanning={() => handleSectionChange('planning')}
+            onOpenInterventionDrawer={(intv) => {
+              setIsCreatingIntv(false);
+              setSelectedIntv(intv);
+            }}
+          />
+        </div>
       )}
 
       {/* =====================================================================
           SECTION 5 : RÉFÉRENTIELS MÉTIER ANELEC
          ===================================================================== */}
       {activeSection === 'referentiels' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="fsm-toolbar">
+        <div className="dashboard-container">
+          <div className="dashboard-header">
             <div>
-              <h2 style={{ fontSize: '14px', fontWeight: 700 }}>Administration des Référentiels ANELEC</h2>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                Ajoutez des techniciens, responsables, clients et corps d'état sans redéploiement.
+              <h1 className="dashboard-title">Administration des Référentiels Métier ANELEC</h1>
+              <p className="dashboard-subtitle">
+                Paramétrage dynamique des techniciens, responsables, clients récurrents, corps d'état et matrice de compétences.
               </p>
             </div>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!newRefValue.trim()) return;
-                const rawVals = refs[newRefCategory];
-                const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
-                if (!currentVals.includes(newRefValue.trim())) {
-                  await referentielsApi.updateCategory(newRefCategory, [
-                    ...currentVals,
-                    newRefValue.trim(),
-                  ]);
-                  queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-                  toast.success('Entrée ajoutée au référentiel');
-                }
-                setNewRefValue('');
-              }}
-              style={{ display: 'flex', gap: '8px' }}
-            >
-              <select
-                className="select"
-                style={{ width: '190px' }}
-                value={newRefCategory}
-                onChange={(e) => setNewRefCategory(e.target.value as keyof ReferentielsMap)}
-              >
-                <option value="techniciens">Techniciens terrain</option>
-                <option value="responsables">Responsables internes</option>
-                <option value="corps_etat">Corps d'état TCE</option>
-                <option value="clients">Clients récurrents</option>
-                <option value="origines">Origines / Provenances</option>
-              </select>
-              <input
-                type="text"
-                className="input"
-                style={{ width: '210px' }}
-                placeholder="Nouvelle valeur..."
-                value={newRefValue}
-                onChange={(e) => setNewRefValue(e.target.value)}
-              />
-              <button type="submit" className="btn btn-primary">
-                Ajouter
-              </button>
-            </form>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--primary">Configuration Système</span>
+            </div>
           </div>
 
-          <div className="pro-table-container" style={{ padding: '16px 18px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="fsm-toolbar">
               <div>
-                <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                  Matrice des Compétences Techniciens par Métier (Auto-Planification au Moindre de Compétences)
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Cochez les corps d'état maîtrisés par chaque technicien. L'auto-planification affecte en priorité le technicien qualifié ayant le <strong>moindre nombre total de compétences</strong> afin de préserver vos techniciens polyvalents pour les autres métiers.
+                <h2 style={{ fontSize: '14px', fontWeight: 700 }}>Ajout Rapide au Référentiel</h2>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Ajoutez des techniciens, responsables, clients et corps d'état sans redéploiement.
                 </p>
               </div>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newRefValue.trim()) return;
+                  const rawVals = refs[newRefCategory];
+                  const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
+                  if (!currentVals.includes(newRefValue.trim())) {
+                    await referentielsApi.updateCategory(newRefCategory, [
+                      ...currentVals,
+                      newRefValue.trim(),
+                    ]);
+                    queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                    toast.success('Entrée ajoutée au référentiel');
+                  }
+                  setNewRefValue('');
+                }}
+                style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}
+              >
+                <select
+                  className="select"
+                  style={{ width: '190px' }}
+                  value={newRefCategory}
+                  onChange={(e) => setNewRefCategory(e.target.value as keyof ReferentielsMap)}
+                >
+                  <option value="techniciens">Techniciens terrain</option>
+                  <option value="responsables">Responsables internes</option>
+                  <option value="corps_etat">Corps d'état TCE</option>
+                  <option value="clients">Clients récurrents</option>
+                  <option value="origines">Origines / Provenances</option>
+                </select>
+                <input
+                  type="text"
+                  className="input"
+                  style={{ width: '210px' }}
+                  placeholder="Nouvelle valeur..."
+                  value={newRefValue}
+                  onChange={(e) => setNewRefValue(e.target.value)}
+                />
+                <button type="submit" className="btn btn--primary">
+                  Ajouter
+                </button>
+              </form>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {techniciensList.map((tech) => {
-                const currentCompMap = refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES;
-                const techSkills = currentCompMap[tech] || [];
-                const isSpecialist = techSkills.length === 1;
-
-                const toggleSkill = async (skill: string) => {
-                  const exists = techSkills.includes(skill);
-                  const updatedSkills = exists
-                    ? techSkills.filter((s) => s !== skill)
-                    : [...techSkills, skill];
-                  const nextMap = { ...currentCompMap, [tech]: updatedSkills };
-                  await referentielsApi.updateCompetences(nextMap);
-                  queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-                  toast.success(`Compétences mises à jour pour ${tech}`);
-                };
-
-                return (
-                  <div
-                    key={tech}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: '10px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-default)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                          {tech}
-                        </span>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: '11px',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
-                            fontWeight: 700,
-                            background: isSpecialist ? 'rgba(16, 185, 129, 0.14)' : 'rgba(37, 99, 235, 0.12)',
-                            color: isSpecialist ? '#059669' : 'var(--accent-primary)',
-                            border: isSpecialist
-                              ? '1px solid rgba(16, 185, 129, 0.35)'
-                              : '1px solid rgba(37, 99, 235, 0.25)',
-                          }}
-                        >
-                          {techSkills.length} compétence{techSkills.length > 1 ? 's' : ''}{' '}
-                          {isSpecialist
-                            ? '• Spécialiste Exclusif (Priorité #1)'
-                            : techSkills.length > 1
-                            ? `• Polyvalent (Rang #${techSkills.length})`
-                            : '• Aucune compétence'}
-                        </span>
-                      </div>
-
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          const input = e.currentTarget.elements.namedItem('customSkill') as HTMLInputElement;
-                          const val = input?.value?.trim();
-                          if (!val) return;
-                          if (!techSkills.includes(val)) {
-                            const nextMap = { ...currentCompMap, [tech]: [...techSkills, val] };
-                            await referentielsApi.updateCompetences(nextMap);
-                            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-                            toast.success(`Compétence « ${val} » ajoutée à ${tech}`);
-                          }
-                          input.value = '';
-                        }}
-                        style={{ display: 'flex', gap: '6px' }}
-                      >
-                        <input
-                          name="customSkill"
-                          type="text"
-                          className="input"
-                          placeholder="+ Ajouter une compétence métier..."
-                          style={{ width: '215px', height: '28px', fontSize: '11.5px', padding: '2px 8px' }}
-                        />
-                        <button type="submit" className="btn btn-secondary btn-sm" style={{ padding: '2px 10px' }}>
-                          Ajouter
-                        </button>
-                      </form>
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {Array.from(new Set([...corpsEtatList, ...techSkills])).map((metier) => {
-                        const checked = techSkills.includes(metier);
-                        return (
-                          <button
-                            key={metier}
-                            type="button"
-                            onClick={() => toggleSkill(metier)}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '7px',
-                              fontSize: '11.5px',
-                              fontWeight: checked ? 700 : 500,
-                              cursor: 'pointer',
-                              border: checked
-                                ? '1px solid var(--accent-primary)'
-                                : '1px solid var(--border-default)',
-                              background: checked ? 'var(--accent-glow)' : 'var(--bg-surface)',
-                              color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                            }}
-                          >
-                            <span>{checked ? '✓' : '+'}</span>
-                            <span>{metier}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-            {[
-              { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList },
-              { key: 'responsables', label: 'Responsables Internes', items: responsablesList },
-              { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList },
-              { key: 'origines', label: 'Origines de demande', items: originesList },
-              { key: 'statuts_devis', label: 'Statuts Commerciaux Devis', items: [...STATUTS_COMMERCIAUX_DEVIS] },
-              { key: 'statuts_intv', label: 'Statuts Opérationnels Interventions', items: [...STATUTS_OPERATIONNELS_INTERVENTION] },
-            ].map((group) => (
-              <div key={group.key} className="pro-table-container" style={{ padding: '14px' }}>
-                <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', color: '#60a5fa' }}>
-                  {group.label} ({group.items.length})
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {group.items.map((val) => (
-                    <span
-                      key={val}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border-default)',
-                        fontSize: '12px',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {val}
-                    </span>
-                  ))}
+            <div className="pro-table-container" style={{ padding: '16px 18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                    Matrice des Compétences Techniciens par Métier (Auto-Planification au Moindre de Compétences)
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Cochez les corps d'état maîtrisés par chaque technicien. L'auto-planification affecte en priorité le technicien qualifié ayant le <strong>moindre nombre total de compétences</strong> afin de préserver vos techniciens polyvalents pour les autres métiers.
+                  </p>
                 </div>
               </div>
-            ))}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {techniciensList.map((tech) => {
+                  const currentCompMap = refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES;
+                  const techSkills = currentCompMap[tech] || [];
+                  const isSpecialist = techSkills.length === 1;
+
+                  const toggleSkill = async (skill: string) => {
+                    const exists = techSkills.includes(skill);
+                    const updatedSkills = exists
+                      ? techSkills.filter((s) => s !== skill)
+                      : [...techSkills, skill];
+                    const nextMap = { ...currentCompMap, [tech]: updatedSkills };
+                    await referentielsApi.updateCompetences(nextMap);
+                    queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                    toast.success(`Compétences mises à jour pour ${tech}`);
+                  };
+
+                  return (
+                    <div
+                      key={tech}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                            {tech}
+                          </span>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontWeight: 600,
+                              background: isSpecialist ? 'rgba(4, 120, 87, 0.08)' : 'rgba(37, 99, 235, 0.08)',
+                              color: isSpecialist ? '#047857' : '#2563eb',
+                              border: isSpecialist
+                                ? '1px solid rgba(4, 120, 87, 0.2)'
+                                : '1px solid rgba(37, 99, 235, 0.2)',
+                            }}
+                          >
+                            {techSkills.length} compétence{techSkills.length > 1 ? 's' : ''}{' '}
+                            {isSpecialist
+                              ? '• Spécialiste Exclusif'
+                              : techSkills.length > 1
+                              ? `• Polyvalent (#${techSkills.length})`
+                              : '• Non qualifié'}
+                          </span>
+                        </div>
+
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const input = e.currentTarget.elements.namedItem('customSkill') as HTMLInputElement;
+                            const val = input?.value?.trim();
+                            if (!val) return;
+                            if (!techSkills.includes(val)) {
+                              const nextMap = { ...currentCompMap, [tech]: [...techSkills, val] };
+                              await referentielsApi.updateCompetences(nextMap);
+                              queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+                              toast.success(`Compétence « ${val} » ajoutée à ${tech}`);
+                            }
+                            input.value = '';
+                          }}
+                          style={{ display: 'flex', gap: '6px' }}
+                        >
+                          <input
+                            name="customSkill"
+                            type="text"
+                            className="input"
+                            placeholder="+ Ajouter compétence..."
+                            style={{ width: '180px', height: '28px', fontSize: '11.5px', padding: '2px 8px' }}
+                          />
+                          <button type="submit" className="btn btn-secondary btn-sm" style={{ padding: '2px 10px' }}>
+                            Ajouter
+                          </button>
+                        </form>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {Array.from(new Set([...corpsEtatList, ...techSkills])).map((metier) => {
+                          const checked = techSkills.includes(metier);
+                          return (
+                            <button
+                              key={metier}
+                              type="button"
+                              onClick={() => toggleSkill(metier)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '7px',
+                                fontSize: '11.5px',
+                                fontWeight: checked ? 600 : 500,
+                                cursor: 'pointer',
+                                border: checked
+                                  ? '1px solid rgba(4, 120, 87, 0.35)'
+                                  : '1px solid #e2e8f0',
+                                background: checked ? 'rgba(4, 120, 87, 0.08)' : '#ffffff',
+                                color: checked ? '#047857' : '#475569',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                              }}
+                            >
+                              <span>{checked ? '✓' : '+'}</span>
+                              <span>{metier}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+              {[
+                { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList },
+                { key: 'responsables', label: 'Responsables Internes', items: responsablesList },
+                { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList },
+                { key: 'origines', label: 'Origines de demande', items: originesList },
+                { key: 'statuts_devis', label: 'Statuts Commerciaux Devis', items: [...STATUTS_COMMERCIAUX_DEVIS] },
+                { key: 'statuts_intv', label: 'Statuts Opérationnels Interventions', items: [...STATUTS_OPERATIONNELS_INTERVENTION] },
+              ].map((group) => (
+                <div key={group.key} className="pro-table-container" style={{ padding: '14px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', color: '#60a5fa' }}>
+                    {group.label} ({group.items.length})
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {group.items.map((val) => (
+                      <span
+                        key={val}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-default)',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {val}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -1624,44 +1781,70 @@ export function DashboardPage() {
           SECTION 6 : WORKSTATION ADMIN (UTILISATEURS, DROITS, POINTAGES & RAPPORTS)
          ===================================================================== */}
       {activeSection === 'admin' && (
-        <AdminWorkstation
-          techniciens={techniciensList}
-          interventionsList={interventionsList}
-          devisList={devisList}
-          initialSubTab={adminSubTab}
-          onOpenInterventionDrawer={(intv) => {
-            setIsCreatingIntv(false);
-            setSelectedIntv(intv);
-          }}
-          onOpenDevisDrawer={(devis) => {
-            setIsCreatingDevis(false);
-            setSelectedDevis(devis);
-          }}
-          onSwitchToMobilePreview={(techName) => {
-            setSelectedMobileTech(techName);
-            handleSectionChange('mobile_tech');
-          }}
-        />
+        <div className="dashboard-container">
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">Workstation Super-Admin & Rapports</h1>
+              <p className="dashboard-subtitle">
+                Gestion des utilisateurs, affectation des permissions granulaires, contrôle des pointages matin/soir et validation des rapports.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--danger">Super-Admin</span>
+            </div>
+          </div>
+          <AdminWorkstation
+            techniciens={techniciensList}
+            interventionsList={interventionsList}
+            devisList={devisList}
+            initialSubTab={adminSubTab}
+            onOpenInterventionDrawer={(intv) => {
+              setIsCreatingIntv(false);
+              setSelectedIntv(intv);
+            }}
+            onOpenDevisDrawer={(devis) => {
+              setIsCreatingDevis(false);
+              setSelectedDevis(devis);
+            }}
+            onSwitchToMobilePreview={(techName) => {
+              setSelectedMobileTech(techName);
+              handleSectionChange('mobile_tech');
+            }}
+          />
+        </div>
       )}
 
       {/* =====================================================================
           SECTION 7 : APPLICATION MOBILE DÉDIÉE TECHNICIEN TERRAIN
          ===================================================================== */}
       {activeSection === 'mobile_tech' && (
-        <TechnicianMobileView
-          techniciens={isMobileTechUser ? [user?.technicienNom || user?.name || 'Technicien'] : techniciensList}
-          currentTechnicien={
-            isMobileTechUser
-              ? (user?.technicienNom || user?.name || 'Technicien')
-              : (selectedMobileTech || user?.technicienNom || techniciensList[0] || 'Anouar')
-          }
-          canSwitchTechnicien={!isMobileTechUser}
-          onSelectTechnicien={(t) => {
-            if (!isMobileTechUser) setSelectedMobileTech(t);
-          }}
-          interventionsList={interventionsList}
-          devisList={devisList}
-        />
+        <div className="dashboard-container" style={{ maxWidth: '640px', marginInline: 'auto' }}>
+          <div className="dashboard-header desktop-only-flex">
+            <div>
+              <h1 className="dashboard-title">Interface Mobile Technicien</h1>
+              <p className="dashboard-subtitle">
+                Vue smartphone pour pointages matin/soir, missions du jour, guidage GPS Waze/Maps et rapports photos.
+              </p>
+            </div>
+            <div className="dashboard-header__actions">
+              <span className="badge badge--primary">Terrain PWA</span>
+            </div>
+          </div>
+          <TechnicianMobileView
+            techniciens={isMobileTechUser ? [user?.technicienNom || user?.name || 'Technicien'] : techniciensList}
+            currentTechnicien={
+              isMobileTechUser
+                ? (user?.technicienNom || user?.name || 'Technicien')
+                : (selectedMobileTech || user?.technicienNom || techniciensList[0] || 'Anouar')
+            }
+            canSwitchTechnicien={!isMobileTechUser}
+            onSelectTechnicien={(t) => {
+              if (!isMobileTechUser) setSelectedMobileTech(t);
+            }}
+            interventionsList={interventionsList}
+            devisList={devisList}
+          />
+        </div>
       )}
 
       {/* =====================================================================
@@ -1682,71 +1865,19 @@ export function DashboardPage() {
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="font-mono" style={{ fontWeight: 800, fontSize: '14px', color: '#60a5fa' }}>
+                  <span className="font-mono" style={{ fontWeight: 800, fontSize: '14px', color: '#2563eb' }}>
                     {isCreatingDevis ? 'NOUVEAU DEVIS' : selectedDevis.reference || `DEV-${selectedDevis.id}`}
                   </span>
                   <StatusPill statut={selectedDevis.statutCommercial || 'À préparer'} />
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Fiche complète 22 colonnes ANELEC • Calculs automatiques Europe/Paris
+                  Fiche complète 22 colonnes ANELEC • Qualification & Chiffrage
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {!isCreatingDevis && selectedDevis.id && (
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleTriggerConvertDevis(selectedDevis as Devis)}
-                    title={(selectedDevis.interventionsCount || 0) > 0 ? "Ajouter une intervention SAV, reprise ou phase 2" : "Créer une intervention travaux"}
-                  >
-                    {(selectedDevis.interventionsCount || 0) > 0 ? '+ Intervention (SAV / Suite)' : 'Convertir → Intervention'}
-                  </button>
-                )}
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDevis(null)}>
-                  ✕
-                </button>
-              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDevis(null)}>
+                ✕
+              </button>
             </div>
-
-            {/* Alerte si le devis possède déjà des interventions liées */}
-            {!isCreatingDevis && selectedDevis.id && (selectedDevis.interventionsCount || 0) > 0 && (
-              <div
-                style={{
-                  padding: '9px 20px',
-                  background: '#fffbeb',
-                  borderBottom: '1px solid #fde68a',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '12px',
-                }}
-              >
-                <span style={{ color: '#b45309', fontWeight: 600 }}>
-                  ⚠️ Ce devis a déjà <strong>{selectedDevis.interventionsCount}</strong> intervention(s) liée(s) créée(s).
-                </span>
-                {(() => {
-                  const linked = interventionsList.find(
-                    (i) => (i.devisId === selectedDevis.id || i.origineDevisId === selectedDevis.id) && i.statutOperationnel !== 'Annulée'
-                  );
-                  if (!linked) return null;
-                  return (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '2px 8px', fontSize: '11px', background: '#ffffff', borderColor: '#cbd5e1' }}
-                      onClick={() => {
-                        setSelectedDevis(null);
-                        setIsCreatingIntv(false);
-                        setSelectedIntv(linked);
-                        setIntvTab('terrain');
-                      }}
-                    >
-                      Voir intervention {linked.reference || `INT-${linked.id}`} →
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
 
             <div
               className="drawer-subtabs-strip"
@@ -2055,6 +2186,47 @@ export function DashboardPage() {
                       onChange={(e) => setSelectedDevis({ ...selectedDevis, notes: e.target.value })}
                     />
                   </div>
+
+                  {Boolean(selectedDevis.id && (selectedDevis.interventionsCount || 0) > 0) && (
+                    <div
+                      style={{
+                        gridColumn: '1 / -1',
+                        padding: '10px 14px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '12px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        🔗 <strong>{selectedDevis.interventionsCount}</strong> intervention(s) liée(s) en cours ou planifiée(s).
+                      </span>
+                      {(() => {
+                        const linked = interventionsList.find(
+                          (i) => (i.devisId === selectedDevis.id || i.origineDevisId === selectedDevis.id) && i.statutOperationnel !== 'Annulée'
+                        );
+                        if (!linked) return null;
+                        return (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '3px 8px', fontSize: '11px', background: '#fff' }}
+                            onClick={() => {
+                              setSelectedDevis(null);
+                              setSelectedIntv(linked);
+                            }}
+                          >
+                            Ouvrir Fiche Intervention ({linked.reference || `INT-${linked.id}`}) →
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2081,32 +2253,50 @@ export function DashboardPage() {
             </div>
 
             <div
+              className="inspector-drawer__footer"
               style={{
                 padding: '14px 20px',
                 borderTop: '1px solid var(--border-default)',
                 background: 'var(--bg-elevated)',
                 display: 'flex',
-                justifyContent: 'flex-end',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 gap: '10px',
+                flexWrap: 'wrap',
               }}
             >
-              <button type="button" className="btn btn-secondary" onClick={() => setSelectedDevis(null)}>
-                Fermer
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  if (isCreatingDevis || !selectedDevis.id) {
-                    createDevisMut.mutate(selectedDevis);
-                  } else {
-                    updateDevisMut.mutate({ id: selectedDevis.id, data: selectedDevis });
-                    toast.success('Devis enregistré');
-                  }
-                }}
-              >
-                {isCreatingDevis ? 'Créer le Devis' : 'Enregistrer les modifications'}
-              </button>
+              <div>
+                {!isCreatingDevis && selectedDevis.id && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '11.5px', color: '#047857', borderColor: 'rgba(4, 120, 87, 0.4)', background: 'rgba(4, 120, 87, 0.04)' }}
+                    onClick={() => handleTriggerConvertDevis(selectedDevis as Devis)}
+                    title={(selectedDevis.interventionsCount || 0) > 0 ? "Ajouter une intervention SAV, suite ou reprise" : "Créer une intervention travaux rattachée"}
+                  >
+                    {(selectedDevis.interventionsCount || 0) > 0 ? '+ Intervention (Suite)' : '⚡ Convertir en Intervention'}
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setSelectedDevis(null)}>
+                  Fermer
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (isCreatingDevis || !selectedDevis.id) {
+                      createDevisMut.mutate(selectedDevis);
+                    } else {
+                      updateDevisMut.mutate({ id: selectedDevis.id, data: selectedDevis });
+                      toast.success('Devis enregistré');
+                    }
+                  }}
+                >
+                  {isCreatingDevis ? 'Créer le Devis' : 'Enregistrer les modifications'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2658,6 +2848,7 @@ export function DashboardPage() {
             </div>
 
             <div
+              className="inspector-drawer__footer"
               style={{
                 padding: '14px 20px',
                 borderTop: '1px solid var(--border-default)',
