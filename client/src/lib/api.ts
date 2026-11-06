@@ -21,6 +21,10 @@ import {
   TerrainPhoto,
   PointageTechnicienItem,
   EquipeJournaliere,
+  ClientProfile,
+  ClientProfileType,
+  DEFAULT_CLIENT_PROFILES,
+  SendReportEmailPayload,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -41,6 +45,9 @@ export type {
   TerrainPhoto,
   PointageTechnicienItem,
   EquipeJournaliere,
+  ClientProfile,
+  ClientProfileType,
+  SendReportEmailPayload,
 };
 export {
   formatCurrency,
@@ -48,6 +55,7 @@ export {
   parseTimeIntervalInput,
   computeDurationHours,
   DEFAULT_REFERENTIELS,
+  DEFAULT_CLIENT_PROFILES,
   DEFAULT_TECHNICIEN_COMPETENCES,
   rankTechniciansForTrade,
   ROLE_DEFINITIONS,
@@ -208,6 +216,12 @@ export const interventionApi = {
   update: (id: number, data: any) => api.patch<{ data: Intervention; message: string }>(`/interventions/${id}`, data),
 
   delete: (id: number) => api.delete<{ message: string }>(`/interventions/${id}`),
+
+  sendReportEmail: (id: number, payload: SendReportEmailPayload) =>
+    api.post<{ success: boolean; data: Intervention; message: string }>(
+      `/interventions/${id}/send-report-email`,
+      payload
+    ),
 };
 
 export const referentielsApi = {
@@ -225,6 +239,11 @@ export const referentielsApi = {
     api.put<{ data: { categorie: string; valeurs: EquipeJournaliere[] }; message: string }>(
       '/referentiels/equipes_journalieres',
       { equipes }
+    ),
+  updateClientsFiches: (fiches: ClientProfile[]) =>
+    api.put<{ data: { categorie: string; valeurs: ClientProfile[] }; message: string }>(
+      '/referentiels/clients_fiches',
+      { fiches }
     ),
 };
 

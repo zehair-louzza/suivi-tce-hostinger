@@ -23,6 +23,7 @@ interface AdminWorkstationProps {
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
   initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'danger_zone';
+  onOpenSendReportEmail?: (intv: Intervention) => void;
 }
 
 const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: string }[] = [
@@ -103,6 +104,7 @@ export function AdminWorkstation({
   onOpenDevisDrawer,
   onSwitchToMobilePreview,
   initialSubTab,
+  onOpenSendReportEmail,
 }: AdminWorkstationProps) {
   const queryClient = useQueryClient();
   const { user, logout } = useAuth();
@@ -1965,7 +1967,7 @@ export function AdminWorkstation({
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -1973,6 +1975,30 @@ export function AdminWorkstation({
                   >
                     Fermer
                   </button>
+                  {onOpenSendReportEmail && (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{
+                        background: '#00bf63',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                      onClick={() => {
+                        onOpenSendReportEmail({
+                          ...selectedReportIntv,
+                          rapportFinal: draftRapportFinal,
+                          statutRapport: draftStatutRapport,
+                        });
+                      }}
+                    >
+                      ✉️ Envoyer au Client par Email
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-primary"

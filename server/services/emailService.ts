@@ -134,3 +134,209 @@ export async function sendConfirmationEmail({
     return false;
   }
 }
+
+export interface SendInterventionReportEmailParams {
+  toEmail: string;
+  ccEmail?: string;
+  subject?: string;
+  customMessage?: string;
+  intervention: {
+    id: number;
+    referenceMetier?: string | null;
+    client?: string | null;
+    chantier: string;
+    entreprise?: string | null;
+    corpsEtat?: string | null;
+    typeIntervention?: string | null;
+    datePlanifiee: Date | string;
+    dateReelle?: Date | string | null;
+    actionsRealisees?: string[];
+    photos?: any[];
+    elementsChiffrage?: string | null;
+    rapportFinal?: string | null;
+    statutRapport?: string | null;
+  };
+  senderName: string;
+  senderEmail: string;
+  companyName: string;
+}
+
+/**
+ * Envoie le rapport officiel d'intervention par e-mail au donneur d'ordre ou client
+ * Règle stricte : réservé à l'équipe bureau / administration (les techniciens ne peuvent pas envoyer par email).
+ */
+export async function sendInterventionReportEmail({
+  toEmail,
+  ccEmail,
+  subject,
+  customMessage,
+  intervention,
+  senderName,
+  senderEmail,
+  companyName,
+}: SendInterventionReportEmailParams): Promise<boolean> {
+  const ref = intervention.referenceMetier || `INT-${intervention.id}`;
+  const clientName = intervention.client || 'Client';
+  const site = intervention.chantier || 'Site';
+  const mailSubject =
+    subject || `[RAPPORT INTERVENTION] ${ref} • ${clientName} • ${site} (${companyName})`;
+
+  const dateExecution = intervention.dateReelle
+    ? new Date(intervention.dateReelle).toLocaleDateString('fr-FR')
+    : new Date(intervention.datePlanifiee).toLocaleDateString('fr-FR');
+
+  const photosHtml =
+    intervention.photos && intervention.photos.length > 0
+      ? `
+    <div style="margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 18px;">
+      <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0;">
+        📸 Photos prises sur site (${intervention.photos.length})
+      </h3>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+        ${intervention.photos
+          .map(
+            (p, idx) => `
+          <div style="display: inline-block; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; text-align: center; margin: 4px;">
+            <a href="${p.url}" target="_blank" style="text-decoration: none;">
+              <img src="${p.url}" alt="Photo ${idx + 1}" style="max-width: 180px; max-height: 140px; border-radius: 6px; display: block; object-fit: cover;" />
+            </a>
+            <span style="font-size: 10px; color: #64748b; font-weight: 600; display: block; margin-top: 4px;">
+              ${p.category || 'CONSTAT'} • ${p.takenAt ? new Date(p.takenAt).toLocaleDateString('fr-FR') : ''}
+            </span>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    </div>
+  `
+      : '';
+
+  const actionsHtml =
+    intervention.actionsRealisees && intervention.actionsRealisees.length > 0
+      ? `
+    <div style="margin-top: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px;">
+      <strong style="color: #166534; font-size: 13px;">✓ Travaux & Opérations réalisés sur site :</strong>
+      <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 12.5px; color: #15803d; line-height: 1.6;">
+        ${intervention.actionsRealisees.map((a) => `<li>${a}</li>`).join('')}
+      </ul>
+    </div>
+  `
+      : '';
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 20px; }
+    .card { max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+    .header { border-bottom: 2px solid #00bf63; padding-bottom: 16px; margin-bottom: 20px; }
+    .title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 6px 0 0 0; }
+    .badge { display: inline-block; background: #0f172a; color: #ffffff; font-weight: 700; font-size: 11px; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+    .grid-cell { font-size: 12.5px; color: #475569; }
+    .grid-cell strong { color: #0f172a; display: block; font-size: 11.5px; text-transform: uppercase; margin-bottom: 2px; }
+    .report-box { background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #00bf63; border-radius: 8px; padding: 18px; margin: 20px 0; }
+    .report-text { font-size: 13.5px; line-height: 1.6; color: #1e293b; white-space: pre-wrap; margin: 0; }
+    .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 28px; border-top: 1px solid #f1f5f9; padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="badge">${companyName} • RAPPORT OFFICIEL</span>
+        <span style="font-weight: 800; color: #00bf63; font-size: 13px;">${ref}</span>
+      </div>
+      <h1 class="title">Rapport d'Intervention Technique</h1>
+    </div>
+
+    ${
+      customMessage
+        ? `
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
+        ${customMessage}
+      </div>
+    `
+        : `
+      <p style="font-size: 13.5px; color: #475569; line-height: 1.5; margin: 0 0 16px 0;">
+        Bonjour,<br /><br />
+        Veuillez trouver ci-dessous le rapport officiel d'intervention technique réalisé par les équipes de <strong>${companyName}</strong>.
+      </p>
+    `
+    }
+
+    <div class="grid">
+      <div class="grid-cell">
+        <strong>Donneur d'ordre / Client</strong>
+        ${clientName}
+      </div>
+      <div class="grid-cell">
+        <strong>Site / Chantier</strong>
+        ${site}
+      </div>
+      <div class="grid-cell">
+        <strong>Date de réalisation</strong>
+        ${dateExecution}
+      </div>
+      <div class="grid-cell">
+        <strong>Corps d'état</strong>
+        ${intervention.corpsEtat || 'Tous corps d’état'}
+      </div>
+      <div class="grid-cell">
+        <strong>Technicien intervenant</strong>
+        ${intervention.entreprise || 'Équipe terrain ANELEC'}
+      </div>
+      <div class="grid-cell">
+        <strong>Type d'intervention</strong>
+        ${intervention.typeIntervention || 'Corrective / Dépannage'}
+      </div>
+    </div>
+
+    <div class="report-box">
+      <div style="font-weight: 700; font-size: 12.5px; color: #0f172a; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
+        Synthèse technique & Compte rendu validé :
+      </div>
+      <p class="report-text">${intervention.rapportFinal || 'Travaux réalisés et vérifiés conformément aux normes de sécurité en vigueur.'}</p>
+    </div>
+
+    ${actionsHtml}
+    ${photosHtml}
+
+    <div class="footer">
+      <strong>${companyName}</strong> • Service Conduite d'Activité & Rapports Techniques<br />
+      Email expéditeur officiel : ${senderEmail} • Document officiel certifié conforme<br />
+      Tous droits réservés © ${new Date().getFullYear()}
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    if (!SMTP_PASS) {
+      console.warn(
+        `[EMAIL SIMULATION] SMTP_PASS non configuré. Rapport d'intervention ${ref} envoyé à : ${toEmail} (CC: ${ccEmail || 'aucun'}). Sujet: ${mailSubject}`
+      );
+      return true;
+    }
+
+    const t = getTransporter();
+    await t.sendMail({
+      from: `"${companyName}" <${SMTP_USER}>`,
+      to: toEmail,
+      cc: ccEmail ? ccEmail.split(',').map((e) => e.trim()).filter(Boolean) : undefined,
+      subject: mailSubject,
+      html: htmlContent,
+      text: `Rapport officiel d'intervention ${ref}\nClient : ${clientName}\nSite : ${site}\nDate : ${dateExecution}\n\nCompte rendu :\n${intervention.rapportFinal || 'Travaux réalisés avec succès.'}\n\nEnvoyé par ${senderName} (${companyName})`,
+    });
+
+    console.log(`[EMAIL ENVOYÉ] Rapport ${ref} envoyé avec succès à ${toEmail} depuis ${SMTP_USER}`);
+    return true;
+  } catch (error) {
+    console.error(`[EMAIL ERREUR] Échec d'envoi du rapport ${ref} à ${toEmail}:`, error);
+    return false;
+  }
+}

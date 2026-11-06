@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
+import { sendInterventionReportEmail } from '../services/emailService.js';
 import {
   computeInterventionCalculations,
   traitementToStatusCode,
@@ -620,5 +621,118 @@ interventionRouter.delete(
     }
 
     res.json({ message: 'Intervention supprimée' });
+  })
+);
+
+// POST /api/interventions/:id/send-report-email - Envoi direct du rapport officiel par e-mail
+// Règle stricte : réservé à l'équipe bureau / administration (les techniciens ne peuvent pas envoyer par email).
+interventionRouter.post(
+  '/:id/send-report-email',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const userId = req.user!.userId;
+    const companyId = req.user?.companyId || 1;
+    const userRole = (req.user?.role || 'USER').toUpperCase();
+    const isTech = userRole === 'TECHNICIEN';
+
+    // Règle de conformité demandée :
+    // "Les techniciens ne peuvent pas envoyer ces rapports par email, ils peuvent envoyer les rapports que pour l'équipe bureau sur l'application direct."
+    if (isTech) {
+      throw new AppError(
+        403,
+        "Les techniciens terrain ne sont pas autorisés à envoyer des rapports par e-mail aux donneurs d'ordre. Veuillez transmettre votre compte rendu à l'équipe bureau directement sur l'application.",
+        'FORBIDDEN'
+      );
+    }
+
+    const intv = await prisma.intervention.findFirst({
+      where: { id, companyId },
+      include: { company: true },
+    });
+    if (!intv) {
+      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+    }
+
+    const { toEmail, ccEmail, subject, customMessage, rapportFinal, includePhotos } = req.body || {};
+    if (!toEmail || typeof toEmail !== 'string' || !toEmail.includes('@')) {
+      throw new AppError(
+        400,
+        "Une adresse e-mail de destinataire valide est obligatoire pour l'envoi du rapport",
+        'VALIDATION_ERROR'
+      );
+    }
+
+    const transformed = transformIntervention(intv);
+    const finalReportText =
+      rapportFinal ||
+      transformed.rapportFinal ||
+      transformed.compteRendu ||
+      'Travaux terminés et vérifiés conformément aux exigences techniques.';
+
+    const senderEmail = req.user?.email || 'zehair@anelecgroupe.com';
+    const senderName = req.user?.email ? req.user.email.split('@')[0] : 'Direction Technique';
+    const companyName = intv.company?.name || 'ANELEC GROUPE';
+
+    // Envoi sécurisé via emailService (Zoho Mail ou simulation sécurisée)
+    const emailSent = await sendInterventionReportEmail({
+      toEmail: String(toEmail).trim().toLowerCase(),
+      ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
+      subject: subject || `[RAPPORT INTERVENTION] ${transformed.reference} • ${transformed.client} • ${transformed.chantier}`,
+      customMessage: customMessage || undefined,
+      intervention: {
+        id: transformed.id,
+        referenceMetier: transformed.reference,
+        client: transformed.client,
+        chantier: transformed.chantier,
+        entreprise: transformed.entreprise,
+        corpsEtat: transformed.corpsEtat,
+        typeIntervention: transformed.typeIntervention,
+        datePlanifiee: transformed.datePlanifiee || new Date().toISOString(),
+        dateReelle: transformed.dateReelle,
+        actionsRealisees: transformed.actionsRealisees,
+        photos: includePhotos !== false ? transformed.photos : [],
+        elementsChiffrage: transformed.elementsChiffrage,
+        rapportFinal: finalReportText,
+        statutRapport: 'Envoyé au client',
+      },
+      senderName,
+      senderEmail,
+      companyName,
+    });
+
+    if (!emailSent) {
+      throw new AppError(500, "Échec de l'envoi de l'e-mail du rapport", 'EMAIL_ERROR');
+    }
+
+    // Traçabilité & Historique ANELEC
+    const historyEntry = addHistoriqueEvent(
+      intv.historiqueJson,
+      senderName,
+      "Rapport officiel envoyé par e-mail au donneur d'ordre / client",
+      `Destinataire : ${toEmail}${ccEmail ? ` (CC: ${ccEmail})` : ''}`
+    );
+
+    const updated = await prisma.intervention.update({
+      where: { id },
+      data: {
+        statutRapport: 'Envoyé au client',
+        rapportFinal: finalReportText,
+        historiqueJson: historyEntry,
+      },
+    });
+
+    const result = transformIntervention(updated);
+    try {
+      socketEvents.interventionUpdated(userId, result);
+      socketEvents.broadcast('intervention:updated', result);
+    } catch {
+      // ignore socket notification error
+    }
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Rapport d'intervention envoyé avec succès par e-mail à ${toEmail}`,
+    });
   })
 );

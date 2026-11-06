@@ -9,7 +9,10 @@ import {
   Intervention,
   ReferentielsMap,
   DEFAULT_REFERENTIELS,
+  DEFAULT_CLIENT_PROFILES,
   DEFAULT_TECHNICIEN_COMPETENCES,
+  ClientProfile,
+  SendReportEmailPayload,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -29,6 +32,8 @@ import { AdminWorkstation } from '../components/AdminWorkstation';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
 import { TourneeMapOptimizer } from '../components/TourneeMapOptimizer';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
+import { SendReportEmailModal } from '../components/SendReportEmailModal';
+import { ClientsDirectoryView } from '../components/ClientsDirectoryView';
 import { DashboardSynthese } from '../components/dashboard/DashboardSynthese';
 import { DashboardOperations } from '../components/dashboard/DashboardOperations';
 import { DashboardAnalyse } from '../components/dashboard/DashboardAnalyse';
@@ -54,6 +59,7 @@ export function DashboardPage() {
     if (pathname.startsWith('/carte')) return 'carte';
     if (pathname.startsWith('/facturation')) return 'facturation';
     if (pathname.startsWith('/rentabilite')) return 'rentabilite';
+    if (pathname.startsWith('/clients')) return 'clients';
     if (pathname.startsWith('/referentiels')) return 'referentiels';
     if (pathname.startsWith('/admin')) return 'admin';
     if (pathname.startsWith('/mobile')) return 'mobile_tech';
@@ -87,6 +93,7 @@ export function DashboardPage() {
       carte: '/carte',
       facturation: '/facturation',
       rentabilite: '/rentabilite',
+      clients: '/clients',
       referentiels: '/referentiels',
       admin: '/admin',
       mobile_tech: '/mobile',
@@ -125,6 +132,9 @@ export function DashboardPage() {
   // Lightbox photos plein écran
   const [lightboxPhotos, setLightboxPhotos] = useState<PhotoItem[] | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Modale d'envoi du Rapport Officiel d'Intervention par e-mail
+  const [reportEmailIntv, setReportEmailIntv] = useState<Intervention | null>(null);
 
   // Modal de Reconversion d'un Devis déjà transformé (SAV, Reprise, Avenant, Phase 2)
   const [reconversionModalDevis, setReconversionModalDevis] = useState<Devis | null>(null);
@@ -195,6 +205,9 @@ export function DashboardPage() {
   const corpsEtatList = refs.corps_etat?.length ? refs.corps_etat : DEFAULT_REFERENTIELS.corps_etat;
   const originesList = refs.origines?.length ? refs.origines : DEFAULT_REFERENTIELS.origines;
   const clientsList = refs.clients?.length ? refs.clients : DEFAULT_REFERENTIELS.clients;
+  const clientProfiles: ClientProfile[] = refs.clients_fiches?.length
+    ? refs.clients_fiches
+    : DEFAULT_CLIENT_PROFILES;
 
   // Gestion des menus déroulants automatisés Donneurs d'ordre / Clients
   const [isCustomDevisClient, setIsCustomDevisClient] = useState(false);
@@ -491,6 +504,27 @@ export function DashboardPage() {
       if (selectedIntv) setSelectedIntv(null);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Erreur lors de la suppression de l\'intervention'),
+  });
+
+  const updateFichesMut = useMutation({
+    mutationFn: (fiches: ClientProfile[]) => referentielsApi.updateClientsFiches(fiches),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.error || 'Erreur lors de la mise à jour des fiches clients'),
+  });
+
+  const sendReportEmailMut = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: SendReportEmailPayload }) =>
+      interventionApi.sendReportEmail(id, payload),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      queryClient.invalidateQueries({ queryKey: ['devis'] });
+      if (selectedIntv && selectedIntv.id === res.data.data.id) {
+        setSelectedIntv(res.data.data);
+      }
+    },
   });
 
   // =========================================================================
@@ -1453,6 +1487,24 @@ export function DashboardPage() {
                       </td>
                       <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'inline-flex', gap: '4px', justifyContent: 'flex-end' }}>
+                          {!isMobileTechUser && (i.rapportFinal || i.compteRendu || (i.photos && i.photos.length > 0)) && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{
+                                background: '#e6f9f0',
+                                color: '#00bf63',
+                                border: '1px solid #bbf7d0',
+                                fontSize: '10.5px',
+                                padding: '2px 7px',
+                                fontWeight: 700,
+                              }}
+                              title="Envoyer le rapport officiel par email au donneur d'ordre"
+                              onClick={() => setReportEmailIntv(i)}
+                            >
+                              ✉️ Rapport
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-primary btn-sm"
@@ -1698,6 +1750,28 @@ export function DashboardPage() {
       )}
 
       {/* =====================================================================
+          SECTION 4D : PROFILS ENTREPRISES & DONNEURS D'ORDRE (FICHES TECHNIQUES)
+         ===================================================================== */}
+      {activeSection === 'clients' && (
+        <div className="dashboard-container">
+          <ClientsDirectoryView
+            clientProfiles={clientProfiles}
+            onUpdateProfiles={async (nextProfiles) => {
+              await updateFichesMut.mutateAsync(nextProfiles);
+            }}
+            onNewDevisForClient={(clientName) => {
+              openNewDevisDrawer();
+              setSelectedDevis((prev) => (prev ? { ...prev, client: clientName } : prev));
+            }}
+            onNewIntvForClient={(clientName) => {
+              openNewIntvDrawer();
+              setSelectedIntv((prev) => (prev ? { ...prev, client: clientName } : prev));
+            }}
+          />
+        </div>
+      )}
+
+      {/* =====================================================================
           SECTION 5 : RÉFÉRENTIELS MÉTIER ANELEC
          ===================================================================== */}
       {activeSection === 'referentiels' && (
@@ -1918,20 +1992,33 @@ export function DashboardPage() {
                       <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#1e293b' }}>
                         {group.label}
                       </span>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          background: '#f1f5f9',
-                          color: '#475569',
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        {group.items.length}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {group.key === 'clients' && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ fontSize: '10.5px', padding: '2px 8px', color: '#00bf63', borderColor: '#bbf7d0', background: '#f0fdf4' }}
+                            onClick={() => handleSectionChange('clients')}
+                            title="Ouvrir le répertoire complet des fiches techniques et emails"
+                          >
+                            🗂️ Fiches & Emails
+                          </button>
+                        )}
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          {group.items.length}
+                        </span>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -2159,6 +2246,7 @@ export function DashboardPage() {
               setSelectedMobileTech(techName);
               handleSectionChange('mobile_tech');
             }}
+            onOpenSendReportEmail={(intv) => setReportEmailIntv(intv)}
           />
         </div>
       )}
@@ -3212,7 +3300,7 @@ export function DashboardPage() {
                       onChange={(e) => setSelectedIntv({ ...selectedIntv, rapportFinal: e.target.value })}
                       placeholder="Texte officiel du rapport client..."
                     />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <label style={{ fontSize: '11.5px', fontWeight: 600 }}>Statut rapport :</label>
                         <select
@@ -3224,8 +3312,32 @@ export function DashboardPage() {
                           <option value="Déclaré par technicien">Déclaré par technicien</option>
                           <option value="Rapport rédigé">Rapport rédigé (en attente)</option>
                           <option value="Validé & Clôturé">Validé & Clôturé</option>
+                          <option value="Envoyé au client">Envoyé au client</option>
                         </select>
                       </div>
+
+                      {!isMobileTechUser && selectedIntv.id && (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{
+                            background: '#00bf63',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: '11.5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 14px',
+                            border: 'none',
+                          }}
+                          onClick={() => {
+                            setReportEmailIntv(selectedIntv as Intervention);
+                          }}
+                        >
+                          ✉️ Envoyer le Rapport par Email
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3448,6 +3560,19 @@ export function DashboardPage() {
           photos={lightboxPhotos}
           initialIndex={lightboxIndex}
           onClose={() => setLightboxPhotos(null)}
+        />
+      )}
+
+      {/* Modale d'envoi du Rapport Officiel d'Intervention par e-mail */}
+      {reportEmailIntv && (
+        <SendReportEmailModal
+          isOpen={Boolean(reportEmailIntv)}
+          onClose={() => setReportEmailIntv(null)}
+          intervention={reportEmailIntv}
+          clientProfiles={clientProfiles}
+          onSendEmail={async (payload) => {
+            await sendReportEmailMut.mutateAsync({ id: reportEmailIntv.id, payload });
+          }}
         />
       )}
 

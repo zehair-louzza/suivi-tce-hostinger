@@ -16,6 +16,176 @@ export const DEFAULT_CLIENTS = [
   'Particulier',
 ] as const;
 
+export type ClientProfileType = 'DONNEUR_ORDRE' | 'ENTREPRISE' | 'PARTICULIER' | 'SOUS_TRAITANT';
+
+export interface ClientProfile {
+  id: string;
+  nom: string;
+  type: ClientProfileType;
+  email: string;
+  telephone?: string;
+  contactNom?: string;
+  contactRole?: string;
+  adresse?: string;
+  ville?: string;
+  codePostal?: string;
+  siret?: string;
+  delaiPaiement?: string;
+  tauxHoraireNegocie?: number;
+  consignesParticulieres?: string;
+  notesInternes?: string;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_CLIENT_PROFILES: ClientProfile[] = [
+  {
+    id: 'presta-maintenance',
+    nom: 'Presta maintenance',
+    type: 'DONNEUR_ORDRE',
+    email: 'travaux@prestamaintenance.fr',
+    telephone: '01 42 68 55 00',
+    contactNom: 'Service Travaux & Maintenance Bâtiment',
+    contactRole: 'Responsable Opérations',
+    adresse: '15 Rue de Berri',
+    codePostal: '75008',
+    ville: 'Paris',
+    siret: '812 345 678 00012',
+    delaiPaiement: '45 jours fin de mois',
+    tauxHoraireNegocie: 58,
+    consignesParticulieres: 'Validation contradictoire obligatoire sur site. Rapport complet avec photos Avant/Après à transmettre sous 48h maximum.',
+    active: true,
+  },
+  {
+    id: 'presta-la-rochelle',
+    nom: 'Presta la rochelle',
+    type: 'DONNEUR_ORDRE',
+    email: 'agence.larochelle@presta.fr',
+    telephone: '05 46 00 12 34',
+    contactNom: 'Agence Technique 17',
+    contactRole: "Conducteur d'opérations régionales",
+    adresse: '4 Quai Duperré',
+    codePostal: '17000',
+    ville: 'La Rochelle',
+    siret: '812 345 678 00045',
+    delaiPaiement: '30 jours fin de mois',
+    tauxHoraireNegocie: 60,
+    consignesParticulieres: "Mentionner impérativement les heures réelles d'arrivée et départ du technicien sur le bon d'attachement.",
+    active: true,
+  },
+  {
+    id: 'c-multi-serv',
+    nom: 'C-Multi-Serv',
+    type: 'DONNEUR_ORDRE',
+    email: 'dispatch@c-multiserv.com',
+    telephone: '01 84 19 22 10',
+    contactNom: "Cellule Conduite d'Activité Multi-Sites",
+    contactRole: 'Superviseur National',
+    adresse: '28 Boulevard Haussmann',
+    codePostal: '75009',
+    ville: 'Paris',
+    siret: '794 567 890 00023',
+    delaiPaiement: '30 jours',
+    tauxHoraireNegocie: 55,
+    consignesParticulieres: 'Photos Avant et Après obligatoires sur chaque tâche réalisée. Rapport par email à adresser à dispatch@c-multiserv.com.',
+    active: true,
+  },
+  {
+    id: 'gms',
+    nom: 'GMS',
+    type: 'DONNEUR_ORDRE',
+    email: 'interventions@gms-services.fr',
+    telephone: '01 53 10 40 70',
+    contactNom: 'Pôle Grands Comptes Tertiaires',
+    contactRole: "Chargé d'Affaires BTP",
+    adresse: '12 Rue Vivienne',
+    codePostal: '75002',
+    ville: 'Paris',
+    siret: '488 912 345 00056',
+    delaiPaiement: '45 jours fin de mois',
+    tauxHoraireNegocie: 62,
+    consignesParticulieres: 'Rapport technique avec détail des pièces et fournitures posées.',
+    active: true,
+  },
+  {
+    id: 'emalec',
+    nom: 'EMALEC',
+    type: 'DONNEUR_ORDRE',
+    email: 'operations@emalec.com',
+    telephone: '04 72 26 80 00',
+    contactNom: 'Service Exploitation & Maintenance Multitechnique',
+    contactRole: 'Chef de Projet Facility Management',
+    adresse: "Parc d'Activités des Ronzières",
+    codePostal: '69340',
+    ville: 'Francheville',
+    siret: '423 789 012 00034',
+    delaiPaiement: '45 jours',
+    tauxHoraireNegocie: 59,
+    consignesParticulieres: "Envoi systématique du compte rendu technique dès signature du bon d'intervention.",
+    active: true,
+  },
+  {
+    id: 'ipc',
+    nom: 'IPC',
+    type: 'DONNEUR_ORDRE',
+    email: 'technique@ipc-groupe.fr',
+    telephone: '01 40 12 34 56',
+    contactNom: 'Direction Technique & Travaux',
+    contactRole: 'Directeur Travaux',
+    adresse: '8 Rue de la Victoire',
+    codePostal: '75009',
+    ville: 'Paris',
+    siret: '512 345 678 00099',
+    delaiPaiement: '30 jours',
+    tauxHoraireNegocie: 65,
+    consignesParticulieres: 'Devis complémentaire requis si dépassement de la commande initiale.',
+    active: true,
+  },
+  {
+    id: 'crea-maintenance',
+    nom: 'Crea-maintenance',
+    type: 'DONNEUR_ORDRE',
+    email: 'contact@crea-maintenance.fr',
+    telephone: '01 48 00 90 90',
+    contactNom: 'Service Dispatch & Dépannages Urgents',
+    contactRole: 'Coordinateur Logistique',
+    adresse: '55 Avenue des Champs-Élysées',
+    codePostal: '75008',
+    ville: 'Paris',
+    siret: '610 987 654 00018',
+    delaiPaiement: '30 jours',
+    tauxHoraireNegocie: 58,
+    consignesParticulieres: "Transmettre le rapport d'urgence le jour même par email.",
+    active: true,
+  },
+  {
+    id: 'particulier',
+    nom: 'Particulier',
+    type: 'PARTICULIER',
+    email: '',
+    telephone: '',
+    contactNom: 'Clients Particuliers & Copropriétés B2C',
+    contactRole: 'Propriétaire / Locataire',
+    adresse: '',
+    codePostal: '75000',
+    ville: 'Île-de-France',
+    delaiPaiement: 'Paiement immédiat à réception',
+    tauxHoraireNegocie: 65,
+    consignesParticulieres: 'Devis systématiquement signé avant démarrage des travaux. Facture avec attestation TVA le cas échéant.',
+    active: true,
+  },
+];
+
+export interface SendReportEmailPayload {
+  toEmail: string;
+  ccEmail?: string;
+  subject?: string;
+  customMessage?: string;
+  rapportFinal?: string;
+  includePhotos?: boolean;
+}
+
 export const DEFAULT_CORPS_ETAT = [
   'Tous corps d’état',
   'Plomberie',
@@ -232,6 +402,7 @@ export interface EquipeJournaliere {
 
 export interface ReferentielsMap {
   clients: string[];
+  clients_fiches?: ClientProfile[];
   corps_etat: string[];
   origines: string[];
   responsables: string[];
@@ -244,6 +415,7 @@ export interface ReferentielsMap {
 
 export const DEFAULT_REFERENTIELS: ReferentielsMap = {
   clients: [...DEFAULT_CLIENTS],
+  clients_fiches: [...DEFAULT_CLIENT_PROFILES],
   corps_etat: [...DEFAULT_CORPS_ETAT],
   origines: [...DEFAULT_ORIGINES],
   responsables: [...DEFAULT_RESPONSABLES],

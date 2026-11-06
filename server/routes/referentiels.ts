@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
+  ClientProfile,
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   EquipeJournaliere,
@@ -25,6 +26,7 @@ referentielsRouter.get(
 
     const result: ReferentielsMap = {
       clients: [...DEFAULT_REFERENTIELS.clients],
+      clients_fiches: [...(DEFAULT_REFERENTIELS.clients_fiches || [])],
       corps_etat: [...DEFAULT_REFERENTIELS.corps_etat],
       origines: [...DEFAULT_REFERENTIELS.origines],
       responsables: [...DEFAULT_REFERENTIELS.responsables],
@@ -59,6 +61,15 @@ referentielsRouter.get(
         } catch {
           // ignore invalid json
         }
+      } else if (key === 'clients_fiches') {
+        try {
+          const parsed = JSON.parse(r.valeurs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            result.clients_fiches = parsed;
+          }
+        } catch {
+          // ignore invalid json
+        }
       } else if (key in result) {
         try {
           const parsed = JSON.parse(r.valeurs);
@@ -70,6 +81,26 @@ referentielsRouter.get(
         }
       }
     }
+
+    // S'assurer que tout client présent dans result.clients a une fiche technique correspondante
+    const existingFiches = result.clients_fiches || [];
+    const ficheNames = new Set(existingFiches.map((f) => f.nom.toLowerCase()));
+    const updatedFiches = [...existingFiches];
+
+    for (const c of result.clients) {
+      if (!ficheNames.has(c.toLowerCase())) {
+        updatedFiches.push({
+          id: c.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          nom: c,
+          type: c.toLowerCase().includes('particulier') ? 'PARTICULIER' : 'DONNEUR_ORDRE',
+          email: '',
+          consignesParticulieres: 'Fiche créée automatiquement depuis les référentiels.',
+          active: true,
+        });
+        ficheNames.add(c.toLowerCase());
+      }
+    }
+    result.clients_fiches = updatedFiches;
 
     // S'assurer que tout technicien de la liste possède une entrée dans technicien_competences
     const compMap: Record<string, string[]> = { ...(result.technicien_competences || {}) };
@@ -187,6 +218,84 @@ referentielsRouter.put(
       res.json({
         data: { categorie: 'equipes_journalieres', valeurs: cleanedEquipes },
         message: 'Équipes journalières mises à jour avec succès',
+      });
+      return;
+    }
+
+    if (categorie === 'clients_fiches') {
+      const rawFiches: ClientProfile[] = Array.isArray(req.body?.fiches)
+        ? req.body.fiches
+        : Array.isArray(req.body?.valeurs)
+        ? req.body.valeurs
+        : [];
+
+      const cleanedFiches: ClientProfile[] = rawFiches
+        .filter((f) => f && f.nom)
+        .map((f) => ({
+          id: f.id || String(f.nom).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          nom: String(f.nom).trim(),
+          type: f.type || 'DONNEUR_ORDRE',
+          email: String(f.email || '').trim().toLowerCase(),
+          telephone: f.telephone ? String(f.telephone).trim() : undefined,
+          contactNom: f.contactNom ? String(f.contactNom).trim() : undefined,
+          contactRole: f.contactRole ? String(f.contactRole).trim() : undefined,
+          adresse: f.adresse ? String(f.adresse).trim() : undefined,
+          ville: f.ville ? String(f.ville).trim() : undefined,
+          codePostal: f.codePostal ? String(f.codePostal).trim() : undefined,
+          siret: f.siret ? String(f.siret).trim() : undefined,
+          delaiPaiement: f.delaiPaiement ? String(f.delaiPaiement).trim() : undefined,
+          tauxHoraireNegocie: typeof f.tauxHoraireNegocie === 'number' ? f.tauxHoraireNegocie : undefined,
+          consignesParticulieres: f.consignesParticulieres ? String(f.consignesParticulieres).trim() : undefined,
+          notesInternes: f.notesInternes ? String(f.notesInternes).trim() : undefined,
+          active: f.active !== false,
+          updatedAt: new Date().toISOString(),
+        }));
+
+      const existing = await prisma.referentiel.findFirst({
+        where: {
+          categorie: 'clients_fiches',
+          OR: [{ companyId }, { companyId: null }],
+        },
+      });
+
+      if (existing) {
+        await prisma.referentiel.update({
+          where: { id: existing.id },
+          data: {
+            valeurs: JSON.stringify(cleanedFiches),
+          },
+        });
+      } else {
+        await prisma.referentiel.create({
+          data: {
+            categorie: 'clients_fiches',
+            valeurs: JSON.stringify(cleanedFiches),
+            companyId,
+          },
+        });
+      }
+
+      // Synchroniser automatiquement les noms avec le référentiel 'clients'
+      const clientNames = cleanedFiches.filter((f) => f.active).map((f) => f.nom);
+      if (clientNames.length > 0) {
+        const existingClientsRow = await prisma.referentiel.findFirst({
+          where: { categorie: 'clients', OR: [{ companyId }, { companyId: null }] },
+        });
+        const currentList: string[] = existingClientsRow
+          ? JSON.parse(existingClientsRow.valeurs)
+          : [...DEFAULT_REFERENTIELS.clients];
+        const mergedList = Array.from(new Set([...currentList, ...clientNames]));
+        if (existingClientsRow) {
+          await prisma.referentiel.update({
+            where: { id: existingClientsRow.id },
+            data: { valeurs: JSON.stringify(mergedList) },
+          });
+        }
+      }
+
+      res.json({
+        data: { categorie: 'clients_fiches', valeurs: cleanedFiches },
+        message: "Fiches techniques des Donneurs d'ordre & Clients enregistrées avec succès",
       });
       return;
     }
