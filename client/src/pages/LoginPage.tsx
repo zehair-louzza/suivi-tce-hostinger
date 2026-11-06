@@ -523,7 +523,6 @@ export function LoginPage() {
             color: 'var(--text-muted)',
           }}
         >
-          <div>Plateforme Métier • Sécurisée par isolation de tenant</div>
           <InstallAppButton variant="banner" />
         </div>
       </div>
