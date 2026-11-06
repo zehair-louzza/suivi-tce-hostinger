@@ -1726,7 +1726,7 @@ export function DashboardPage() {
                   <option value="techniciens">Techniciens terrain</option>
                   <option value="responsables">Responsables internes</option>
                   <option value="corps_etat">Corps d'état TCE</option>
-                  <option value="clients">Clients récurrents</option>
+                  <option value="clients">Donneurs d'ordre & Clients</option>
                   <option value="origines">Origines / Provenances</option>
                 </select>
                 <input
@@ -1871,7 +1871,7 @@ export function DashboardPage() {
                 { key: 'techniciens', label: 'Techniciens Terrain', items: techniciensList, editable: true, itemSingular: 'technicien' },
                 { key: 'responsables', label: 'Responsables Internes', items: responsablesList, editable: true, itemSingular: 'responsable' },
                 { key: 'corps_etat', label: "Corps d'État TCE", items: corpsEtatList, editable: true, itemSingular: "corps d'état" },
-                { key: 'clients', label: 'Clients Récurrents', items: clientsList, editable: true, itemSingular: 'client' },
+                { key: 'clients', label: "Donneurs d'Ordre & Clients", items: clientsList, editable: true, itemSingular: "donneur d'ordre" },
                 { key: 'origines', label: 'Origines de demande', items: originesList, editable: true, itemSingular: 'origine' },
                 { key: 'statuts_devis', label: 'Statuts Commerciaux Devis (Fixes)', items: [...STATUTS_COMMERCIAUX_DEVIS], editable: false, itemSingular: '' },
                 { key: 'statuts_intv', label: 'Statuts Opérationnels (Fixes)', items: [...STATUTS_OPERATIONNELS_INTERVENTION], editable: false, itemSingular: '' },
