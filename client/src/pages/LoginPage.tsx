@@ -7,6 +7,7 @@ import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
+import { LegalTermsModal } from '../components/LegalTermsModal';
 
 const loginSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -44,6 +45,11 @@ const registerCompanySchema = z
       .string()
       .min(8, 'Le mot de passe doit comporter au moins 8 caractères'),
     confirmPassword: z.string(),
+    acceptTerms: z.literal(true, {
+      errorMap: () => ({
+        message: 'Vous devez accepter les CGU et la Politique RGPD pour initialiser votre espace',
+      }),
+    }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Les mots de passe ne correspondent pas',
@@ -57,6 +63,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
 
   const from = (location.state as any)?.from?.pathname || '/';
 
@@ -84,6 +92,7 @@ export function LoginPage() {
       email: '',
       password: '',
       confirmPassword: '',
+      acceptTerms: false as any,
     },
   });
 
@@ -102,6 +111,11 @@ export function LoginPage() {
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Erreur lors de la création de l'espace");
     }
+  };
+
+  const openLegal = (tabName: 'cgu' | 'rgpd' | 'mentions') => {
+    setLegalModalTab(tabName);
+    setShowLegalModal(true);
   };
 
   return (
@@ -490,6 +504,81 @@ export function LoginPage() {
               </div>
             </div>
 
+            {/* CASE À COCHER D'ACCEPTATION DES CGU & RGPD (PROTECTION JURIDIQUE) */}
+            <div style={{ marginTop: '4px' }}>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  fontSize: '11.5px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  lineHeight: 1.45,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  style={{
+                    marginTop: '2px',
+                    accentColor: 'var(--accent-primary, #00bf63)',
+                    width: '15px',
+                    height: '15px',
+                    cursor: 'pointer',
+                  }}
+                  {...registerForm.register('acceptTerms')}
+                />
+                <span>
+                  J'ai lu et j'accepte expressément les{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openLegal('cgu');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--accent-primary, #00bf63)',
+                      fontWeight: 700,
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                    }}
+                  >
+                    Conditions Générales (CGU)
+                  </button>{' '}
+                  et la{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openLegal('rgpd');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--accent-primary, #00bf63)',
+                      fontWeight: 700,
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                    }}
+                  >
+                    Politique RGPD
+                  </button>
+                  . Je reconnais que nos données restent la propriété exclusive de notre entreprise et ne sont pas exploitées par l'hébergeur.
+                </span>
+              </label>
+              {registerForm.formState.errors.acceptTerms && (
+                <p style={{ color: '#dc2626', fontSize: '11px', marginTop: '4px' }}>
+                  {registerForm.formState.errors.acceptTerms.message}
+                </p>
+              )}
+            </div>
+
             <button
               type="submit"
               className="btn btn-primary"
@@ -509,7 +598,7 @@ export function LoginPage() {
           </form>
         )}
 
-        {/* PIED DE CARTE ÉPURÉ */}
+        {/* PIED DE CARTE & LIENS JURIDIQUES TRANSPARENTS */}
         <div
           style={{
             marginTop: '24px',
@@ -523,9 +612,73 @@ export function LoginPage() {
             color: 'var(--text-muted)',
           }}
         >
+          <div
+            style={{
+              display: 'flex',
+              gap: '10px',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => openLegal('cgu')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '11px',
+              }}
+            >
+              CGU
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal('rgpd')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '11px',
+              }}
+            >
+              Politique RGPD
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openLegal('mentions')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '11px',
+              }}
+            >
+              Hébergeurs (Supabase & Hostinger)
+            </button>
+          </div>
+
           <InstallAppButton variant="banner" />
         </div>
       </div>
+
+      {/* MODALE CGU & RGPD */}
+      <LegalTermsModal
+        isOpen={showLegalModal}
+        onClose={() => setShowLegalModal(false)}
+        onAccept={() => registerForm.setValue('acceptTerms', true, { shouldValidate: true })}
+        defaultTab={legalModalTab}
+      />
     </div>
   );
 }

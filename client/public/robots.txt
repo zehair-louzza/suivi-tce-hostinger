@@ -1,0 +1,36 @@
+# Robots.txt — ANELEC TCE Platform (https://suivi.anelecgroupe.com)
+# Optimisation SEO, GEO, AEO, SAIO & SEA
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /socket.io/
+
+# Moteurs de Recherche IA & Génératifs (GEO / AEO / SAIO)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# Moteurs de Recherche Traditionnels (SEO & SEA)
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Déclaration officielle du Sitemap
+Sitemap: https://suivi.anelecgroupe.com/sitemap.xml
