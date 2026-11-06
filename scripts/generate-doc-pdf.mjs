@@ -4,9 +4,10 @@ import { execSync } from 'node:child_process';
 
 const ROOT_DIR = 'C:/Users/Zeh/suivi-tce-hostinger';
 const IMAGES_DIR = path.join(ROOT_DIR, 'docs/images');
-const HTML_OUTPUT = path.join(ROOT_DIR, 'docs/RAPPORT_COMPLET_TCE_ANELEC.html');
-const PDF_OUTPUT = path.join(ROOT_DIR, 'docs/RAPPORT_COMPLET_TCE_ANELEC.pdf');
-const ARTIFACT_PDF = 'C:/Users/Zeh/.gemini/antigravity/brain/d2fd77b6-f5a7-44a6-956a-412bdfedd8dd/RAPPORT_COMPLET_TCE_ANELEC.pdf';
+const HTML_OUTPUT = path.join(ROOT_DIR, 'docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.html');
+const PDF_OUTPUT = path.join(ROOT_DIR, 'docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf');
+const PDF_BACKUP = path.join(ROOT_DIR, 'docs/RAPPORT_COMPLET_TCE_ANELEC.pdf');
+const ARTIFACT_PDF = 'C:/Users/Zeh/.gemini/antigravity/brain/d2fd77b6-f5a7-44a6-956a-412bdfedd8dd/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf';
 
 function toBase64(file) {
   const filePath = path.join(IMAGES_DIR, file);
@@ -19,17 +20,21 @@ function toBase64(file) {
   return `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
 }
 
-const imgLogo = toBase64('01-logo-anelec-groupe.jpg');
-const imgLogin = toBase64('01-connexion-espace-securise.png');
-const imgPilotage = toBase64('02-centre-de-pilotage-kpi-barometre.png');
-const imgPlanning = toBase64('03-dispatch-planning-gantt-pro.png');
-const imgDevis = toBase64('04-pipeline-devis-commercial.png');
-const imgModal = toBase64('04b-grille-reconversion-modal.png');
-const imgInterv = toBase64('05-interventions-tce-synthese.png');
-const imgFacture = toBase64('06-facturation-bacs-tri-b2b-b2c.png');
-const imgRentabilite = toBase64('07-rentabilite-marges-equipes.png');
-const imgAdmin = toBase64('08-workstation-admin-pointages.png');
-const imgMobile = toBase64('09-application-mobile-technicien.png');
+// Images chargées
+const imgLogo = toBase64('01-logo-anelec-groupe.png');
+const imgSynthesePc = toBase64('02-dashboard-synthese-pc.png');
+const imgOperationsPc = toBase64('02b-dashboard-operations-pc.png');
+const imgAnalysePc = toBase64('02c-dashboard-analyse-pc.png');
+const imgCartePc = toBase64('03-carte-tournees-pc.png');
+const imgPlanningPc = toBase64('04-dispatch-planning-gantt-pc.png');
+const imgDevisPc = toBase64('05-pipeline-devis-pc.png');
+const imgModalReconv = toBase64('04b-grille-reconversion-modal.png');
+const imgIntervPc = toBase64('06-interventions-tce-pc.png');
+const imgFacturePc = toBase64('07-facturation-clients-pc.png');
+const imgRentabilitePc = toBase64('08-rentabilite-equipes-pc.png');
+const imgMobileSynthese = toBase64('09-mobile-dashboard-synthese.png');
+const imgMobileCarte = toBase64('10-mobile-carte-tournees.png');
+const imgMobileTech = toBase64('11-mobile-tech-app.png');
 
 const schema01 = toBase64('schema-01-cycle-tce.svg');
 const schema02 = toBase64('schema-02-workflow-technicien-mobile.svg');
@@ -40,11 +45,11 @@ const htmlContent = `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Livre Blanc & Manuel Opérationnel — Plateforme Suivi TCE ANELEC GROUPE</title>
+<title>Guide Utilisateur & Procédures Métier — ANELEC GROUPE TCE</title>
 <style>
   @page {
     size: A4;
-    margin: 12mm 12mm 14mm 12mm;
+    margin: 10mm 12mm 12mm 12mm;
     @bottom-right {
       content: counter(page);
     }
@@ -56,10 +61,10 @@ const htmlContent = `<!DOCTYPE html>
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #0f172a;
+    color: #1e293b;
     background-color: #ffffff;
-    line-height: 1.5;
-    font-size: 10pt;
+    line-height: 1.45;
+    font-size: 9.5pt;
     margin: 0;
     padding: 0;
   }
@@ -74,728 +79,914 @@ const htmlContent = `<!DOCTYPE html>
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 255mm;
-    padding: 20mm 12mm;
-    border: 3px solid #00bf63;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #0a0f1d 0%, #1e293b 100%);
+    min-height: 260mm;
+    padding: 16mm 14mm;
+    border: 3px solid #047857;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 60%, #064e3b 100%);
     color: #ffffff;
   }
 
-  .cover-logo-wrapper {
+  .cover-header {
     display: flex;
     align-items: center;
-    gap: 20px;
+    justify-content: space-between;
     background: #ffffff;
-    padding: 16px 24px;
-    border-radius: 12px;
-    width: fit-content;
+    padding: 14px 22px;
+    border-radius: 10px;
   }
 
   .cover-logo {
-    max-height: 65px;
+    max-height: 60px;
     object-fit: contain;
   }
 
-  .cover-badge {
+  .cover-meta {
+    text-align: right;
+    color: #0f172a;
+    font-size: 8.5pt;
+    font-weight: 600;
+  }
+
+  .cover-meta .pill {
+    background: #047857;
+    color: #ffffff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 8pt;
     display: inline-block;
-    background-color: #00bf63;
-    color: #0a0f1d;
-    font-weight: 800;
-    font-size: 9.5pt;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 6px 14px;
-    border-radius: 20px;
-    margin-top: 30px;
+    margin-bottom: 3px;
+  }
+
+  .cover-body {
+    margin: 30mm 0 20mm 0;
   }
 
   .cover-title {
     font-size: 26pt;
-    font-weight: 900;
+    font-weight: 800;
     line-height: 1.2;
-    margin: 15px 0 10px 0;
+    margin: 0 0 10px 0;
     color: #ffffff;
+    letter-spacing: -0.02em;
   }
 
   .cover-title span {
-    color: #ffcc00;
+    color: #10b981;
   }
 
   .cover-subtitle {
-    font-size: 13pt;
+    font-size: 13.5pt;
     color: #94a3b8;
-    max-width: 650px;
+    margin: 0 0 25px 0;
+    font-weight: 400;
     line-height: 1.4;
-    margin-bottom: 30px;
   }
 
-  .cover-meta-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    padding: 16px;
-    margin-top: 20px;
+  .cover-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .cover-meta-item strong {
-    display: block;
-    color: #ffcc00;
-    font-size: 8.5pt;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+  .cover-tag {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 9pt;
+    font-weight: 600;
   }
 
-  .cover-meta-item span {
-    font-size: 10.5pt;
-    color: #e2e8f0;
+  .cover-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    padding-top: 12px;
+    font-size: 8pt;
+    color: #cbd5e1;
   }
 
   /* Typography */
   h1 {
-    font-size: 17pt;
+    font-size: 15pt;
     font-weight: 800;
-    color: #0a0f1d;
-    border-bottom: 2.5px solid #00bf63;
+    color: #0f172a;
+    margin: 16px 0 10px 0;
     padding-bottom: 6px;
-    margin-top: 18px;
-    margin-bottom: 12px;
+    border-bottom: 2px solid #047857;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   h2 {
-    font-size: 13pt;
+    font-size: 11.5pt;
     font-weight: 700;
-    color: #0f172a;
-    border-left: 4px solid #ffcc00;
-    padding-left: 8px;
-    margin-top: 16px;
-    margin-bottom: 10px;
+    color: #065f46;
+    margin: 12px 0 6px 0;
+  }
+
+  h3 {
+    font-size: 10pt;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 8px 0 4px 0;
   }
 
   p {
-    margin-top: 0;
-    margin-bottom: 10px;
-    text-align: justify;
+    margin: 0 0 8px 0;
+    color: #334155;
   }
 
-  .doc-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #cbd5e1;
-    padding-bottom: 6px;
-    margin-bottom: 16px;
-    font-size: 8.5pt;
-    color: #64748b;
-  }
-
-  .doc-header-brand {
-    font-weight: 800;
-    color: #0a0f1d;
-  }
-
-  .figure-box {
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 8px;
-    margin: 12px 0;
-    page-break-inside: avoid;
-  }
-
-  .figure-img {
-    width: 100%;
-    max-height: 360px;
-    object-fit: contain;
-    border-radius: 4px;
-    background: #f8fafc;
-    display: block;
-    margin: 0 auto;
-  }
-
-  .figure-caption {
-    font-size: 8.5pt;
-    color: #475569;
-    text-align: center;
-    margin-top: 6px;
-    font-weight: 500;
-    border-top: 1px dashed #e2e8f0;
-    padding-top: 4px;
-  }
-
-  .figure-caption strong {
-    color: #0a0f1d;
-  }
-
+  /* Components */
   .grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 12px 0;
-    page-break-inside: avoid;
-  }
-
-  .grid-4 {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin: 10px 0;
-    page-break-inside: avoid;
+    gap: 14px;
+    margin-bottom: 12px;
   }
 
   .card {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 10px 14px;
     margin-bottom: 10px;
   }
 
-  .kpi-card {
+  .card-header {
+    font-weight: 700;
+    font-size: 9.5pt;
+    color: #0f172a;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Procedural Steps with Numbered Pins */
+  .step-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+  }
+
+  .step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 10px;
+    padding: 8px 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+
+  .step-pin {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #047857;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 9pt;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-content {
+    flex: 1;
+  }
+
+  .step-title {
+    font-weight: 700;
+    font-size: 9pt;
+    color: #0f172a;
+  }
+
+  .step-desc {
+    font-size: 8.5pt;
+    color: #475569;
+    margin-top: 2px;
+  }
+
+  /* Callout Badges */
+  .badge-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #dcfce7;
+    color: #166534;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    border: 1px solid #86efac;
+  }
+
+  .badge-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    border: 1px solid #fde68a;
+  }
+
+  .badge-device-pc {
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+  }
+
+  .badge-device-mob {
+    background: #fce7f3;
+    color: #9d174d;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+  }
+
+  /* Figures & Screenshots */
+  .figure-box {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 6px;
+    margin: 8px 0;
     text-align: center;
   }
-  .kpi-card-green { background-color: #00bf63; color: #0a0f1d; }
-  .kpi-card-yellow { background-color: #ffcc00; color: #0a0f1d; }
-  .kpi-card-dark { background-color: #0a0f1d; color: #ffffff; }
-  .kpi-card-blue { background-color: #2563eb; color: #ffffff; }
 
-  .kpi-val {
-    font-size: 15pt;
-    font-weight: 800;
-    margin: 3px 0;
-  }
-  .kpi-label {
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  table {
+  .figure-img {
     width: 100%;
-    border-collapse: collapse;
-    margin: 10px 0;
-    font-size: 9pt;
-    page-break-inside: avoid;
+    max-height: 260px;
+    object-fit: contain;
+    border-radius: 5px;
+    border: 1px solid #e2e8f0;
   }
 
-  th, td {
-    border: 1px solid #cbd5e1;
-    padding: 6px 8px;
+  .figure-caption {
+    font-size: 8pt;
+    color: #475569;
+    margin-top: 4px;
     text-align: left;
+    padding: 0 4px;
   }
 
-  th {
-    background-color: #0a0f1d;
-    color: #ffffff;
-    font-weight: 700;
+  .figure-caption strong {
+    color: #0f172a;
+  }
+
+  /* Arrow annotations */
+  .arrow-indicator {
+    color: #047857;
+    font-weight: 800;
+    margin: 0 4px;
+  }
+
+  /* Table of Contents */
+  .toc {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 14px 0;
+  }
+
+  .toc-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px dashed #cbd5e1;
     font-size: 8.5pt;
   }
 
-  tr:nth-child(even) td {
-    background-color: #f8fafc;
+  .toc-item:last-child {
+    border-bottom: none;
   }
 
-  .badge {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 10px;
-    font-size: 7.5pt;
-    font-weight: 700;
-    text-transform: uppercase;
+  .toc-title {
+    font-weight: 600;
+    color: #0f172a;
   }
-  .badge-green { background: #dcfce7; color: #166534; }
-  .badge-yellow { background: #fef9c3; color: #854d0e; }
-  .badge-dark { background: #0a0f1d; color: #ffffff; }
+
+  .toc-tag {
+    color: #047857;
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
 
-<!-- ================================= PAGE 1 : COUVERTURE ================================= -->
+<!-- PAGE 1 : COUVERTURE OFFICIELLE -->
 <div class="cover">
-  <div>
-    <div class="cover-logo-wrapper">
-      <img src="${imgLogo}" alt="ANELEC GROUPE" class="cover-logo" />
-      <div>
-        <div style="font-size: 13pt; font-weight: 900; color: #0a0f1d; letter-spacing: 1px;">ANELEC GROUPE</div>
-        <div style="font-size: 7.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Maintenance & Travaux Tous Corps d'État (TCE)</div>
-      </div>
-    </div>
-    <div class="cover-badge">LIVRE BLANC TECHNIQUE & OPÉRATIONNEL 2026</div>
-    <div class="cover-title">Plateforme de Suivi TCE,<br/><span>Dispatch & Facturation</span></div>
-    <div class="cover-subtitle">
-      Démonstration intégrale des réalisations fonctionnelles, architecture cloud, baromètre financier et manuel opérateur.
+  <div class="cover-header">
+    <img src="${imgLogo}" alt="Logo Officiel ANELEC GROUPE" class="cover-logo" />
+    <div class="cover-meta">
+      <span class="pill">PRODUCTION 2026</span><br>
+      Plateforme Suivi TCE & Dispatching<br>
+      <strong>suivi.anelecgroupe.com</strong>
     </div>
   </div>
 
-  <div>
-    <div class="cover-meta-grid">
-      <div class="cover-meta-item">
-        <strong>Environnement Production</strong>
-        <span>https://suivi.anelecgroupe.com</span>
-      </div>
-      <div class="cover-meta-item">
-        <strong>Hébergement Cloud</strong>
-        <span>Hostinger Cloud VPS + Supabase PostgreSQL</span>
-      </div>
-      <div class="cover-meta-item">
-        <strong>Auteurs & Direction</strong>
-        <span>Direction ANELEC & Antigravity Engineering</span>
-      </div>
-      <div class="cover-meta-item">
-        <strong>Version Officielle</strong>
-        <span>Production 2026 Enterprise Stable</span>
-      </div>
+  <div class="cover-body">
+    <div style="color: #10b981; font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">
+      Document de Référence & Guide Opérationnel
+    </div>
+    <h1 class="cover-title">
+      Guide Utilisateur &<br>Procédures Métier <span>Pas-à-Pas</span>
+    </h1>
+    <p class="cover-subtitle">
+      Manuel d'exploitation Tout Corps d'État (TCE) : De la prise de devis et du dispatching Gantt jusqu'à la tournée routière assistée, l'intervention mobile et la facturation certifiée.
+    </p>
+
+    <div class="cover-tags">
+      <span class="cover-tag">🖥️ Version PC Grand Écran & Laptop</span>
+      <span class="cover-tag">📱 Version Smartphone PWA Terrain</span>
+      <span class="cover-tag">🗺️ Optimiseur de Tournées GPS</span>
+      <span class="cover-tag">⚡ 5 Profils Métier Séparés</span>
+    </div>
+  </div>
+
+  <div class="cover-footer">
+    <div>
+      <strong>ANELEC GROUPE</strong> — 9 Rue des Colonnes, 75002 Paris<br>
+      Système d'Exploitation TCE Déployé sur Hostinger Cloud VPS
+    </div>
+    <div style="text-align: right;">
+      Validé conforme à la maquette 2026<br>
+      Édition Officielle · Novembre 2026
     </div>
   </div>
 </div>
 
 <div class="page-break"></div>
 
-<!-- ================================= PAGE 2 : SOMMAIRE & ARCHITECTURE ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>SOMMAIRE & ARCHITECTURE GÉNÉRALE DU CYCLE TCE</span>
+<!-- PAGE 2 : SOMMAIRE & MATRICE DES MÉTIERS -->
+<h1>📑 Sommaire Général & Matrice des Rôles</h1>
+
+<div class="toc">
+  <div class="toc-item">
+    <span class="toc-title">1. Architecture Globale : Écosystème PC vs Téléphone Portable</span>
+    <span class="toc-tag">Page 3</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">2. Le Nouveau Tableau de Bord (Synthèse, Opérations, Analyse)</span>
+    <span class="toc-tag">Page 4</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">3. Carte Interactive & Calcul Automatique d'Itinéraires (TSP 2-Opt)</span>
+    <span class="toc-tag">Page 5</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">4. Procédure Métier A : Direction & Gérance (Pilotage Financier & Rentabilité)</span>
+    <span class="toc-tag">Page 6</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">5. Procédure Métier B : Bureau d'Études & Chiffrage (Devis & Reconversion)</span>
+    <span class="toc-tag">Page 7</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">6. Procédure Métier C : Conducteur de Travaux & Dispatcher (Gantt & Tournées)</span>
+    <span class="toc-tag">Page 8</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">7. Procédure Métier D : Technicien Terrain (Mobile PWA, Photos & Clôture)</span>
+    <span class="toc-tag">Page 9</span>
+  </div>
+  <div class="toc-item">
+    <span class="toc-title">8. Procédure Métier E : Responsable Facturation (Tri 5 Bacs & Arbitrage Fiscal)</span>
+    <span class="toc-tag">Page 10</span>
+  </div>
 </div>
 
-<h1>1. Vue d'Ensemble & Architecture du Cycle Complet TCE</h1>
-
+<h2>👥 Répartition des Rôles & Accès Métier</h2>
 <p>
-  La plateforme <strong>Suivi TCE ANELEC</strong> digitalise l'intégralité du cycle de vie des chantiers Tous Corps d'État (TCE) : de la demande de devis à la facturation finale, en passant par le dispatching Gantt et l'exécution mobile par les techniciens.
+  L'application ANELEC intègre un contrôle d'accès basé sur les rôles (RBAC) garantissant que chaque collaborateur accède aux fonctionnalités précises de sa mission :
 </p>
-
-<div class="figure-box">
-  <img src="${schema01}" alt="Cycle Complet TCE ANELEC" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Schéma 1 :</strong> Architecture séquentielle du cycle complet des chantiers ANELEC GROUPE.
-  </div>
-</div>
-
-<h2>Table des Matières</h2>
-<table style="font-size: 9pt;">
-  <thead>
-    <tr>
-      <th style="width: 10%;">Section</th>
-      <th style="width: 75%;">Module Fonctionnel Réalisé & État de Service</th>
-      <th style="width: 15%; text-align: center;">Statut</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>01</strong></td>
-      <td><strong>Centre de Pilotage & Baromètre Économique HT</strong> (4 cartes financières, Funnel 5 étapes, 6 corps d'état)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>02</strong></td>
-      <td><strong>Dispatching & Planning Gantt Pro Multi-Ressources</strong> (Timeline continue, créneau unifié VIS • DEV)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>03</strong></td>
-      <td><strong>Pipeline Devis & Grille de Reconversion Sécurisée</strong> (22 colonnes, qualification SAV / Reprise / Avenant)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>04</strong></td>
-      <td><strong>Interventions TCE & Tableau Synthétique Responsive</strong> (Vue 8 colonnes sans scroll horizontal)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>05</strong></td>
-      <td><strong>Facturation Intelligente & Arbitrage B2B (HT) / B2C (TTC)</strong> (5 bacs de tri, règle "interventions uniquement")</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>06</strong></td>
-      <td><strong>Contrôle de Gestion : Rentabilité & Marges d'Équipes</strong> (CA/h produit, simulateur coût chargé)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>07</strong></td>
-      <td><strong>Workstation Super-Admin & Suivi des Pointages Flotte</strong> (Audit arrivée/départ, rédaction rapports)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-    <tr>
-      <td><strong>08</strong></td>
-      <td><strong>Application Mobile Technicien PWA & Rigueur Terrain</strong> (Pointage certifié matin/soir, photos &lt;75 Ko)</td>
-      <td style="text-align:center;"><span class="badge badge-green">Actif</span></td>
-    </tr>
-  </tbody>
-</table>
-
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 3 : CENTRE DE PILOTAGE ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>CENTRE DE PILOTAGE & BAROMÈTRE ÉCONOMIQUE HT</span>
-</div>
-
-<h1>2. Centre de Pilotage & Baromètre Économique HT</h1>
-
-<p>
-  Le <strong>Centre de Pilotage</strong> constitue la tour de contrôle opérationnelle et économique de l'entreprise. Il affiche en temps réel les volumes financiers engagés, l'état d'avancement des travaux et la performance par spécialité technique.
-</p>
-
-<div class="figure-box">
-  <img src="${imgPilotage}" alt="Centre de Pilotage Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 2.1 :</strong> Capture réelle du Centre de Pilotage sur <code>suivi.anelecgroupe.com</code> avec le Baromètre HT et le Funnel 5 étapes.
-  </div>
-</div>
-
-<div class="grid-4">
-  <div class="kpi-card kpi-card-green">
-    <div class="kpi-label">CA Travaux Réalisés</div>
-    <div class="kpi-val">46 331 € HT</div>
-    <div style="font-size: 7.5pt;">Chantiers clôturés</div>
-  </div>
-  <div class="kpi-card kpi-card-yellow">
-    <div class="kpi-label">Pipeline Devis en Cours</div>
-    <div class="kpi-val">0 € HT</div>
-    <div style="font-size: 7.5pt;">Volume en négociation</div>
-  </div>
-  <div class="kpi-card kpi-card-dark">
-    <div class="kpi-label">En-cours Prêt à Facturer</div>
-    <div class="kpi-val">0 € HT</div>
-    <div style="font-size: 7.5pt;">Trésorerie immédiate</div>
-  </div>
-  <div class="kpi-card kpi-card-blue">
-    <div class="kpi-label">Transformation Devis</div>
-    <div class="kpi-val">50 %</div>
-    <div style="font-size: 7.5pt;">1 devis accepté sur 2</div>
-  </div>
-</div>
-
-<h2>L'Entonnoir Opérationnel d'Avancement (Funnel TCE 5 Étapes)</h2>
-<p>
-  Le suivi suit un flux séquentiel strict garantissant qu'aucun chantier ne reste orphelin :
-</p>
-<ul>
-  <li><strong>Étape 1 : Devis & Chiffrages :</strong> Total des devis actifs et visites de prise de cotes à réaliser sur site.</li>
-  <li><strong>Étape 2 : Ordonnancement Gantt :</strong> Missions validées prêtes pour placement sur le calendrier des techniciens.</li>
-  <li><strong>Étape 3 : Sur le Terrain Aujourd'hui :</strong> Interventions en cours d'exécution avec pointage certifié actif.</li>
-  <li><strong>Étape 4 : Rapports & Photos Reçus :</strong> Dossiers clôturés par le technicien, photos et descriptifs à valider avant facturation.</li>
-  <li><strong>Étape 5 : Clôturées & Facturées :</strong> Chantiers facturés avec traçabilité comptable intégrale.</li>
-</ul>
-
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 4 : PLANNING GANTT PRO ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>DISPATCHING & PLANNING GANTT PRO MULTI-RESSOURCES</span>
-</div>
-
-<h1>3. Dispatching & Planning Gantt Pro Multi-Ressources</h1>
-
-<p>
-  Le planning Gantt ordonnance les journées de chaque technicien (Anouar, Mohamed, Haitam, etc.) à la minute près avec glisser-déposer fluide (Pointer Events 60 fps).
-</p>
-
-<div class="figure-box">
-  <img src="${imgPlanning}" alt="Planning Gantt Pro Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 3.1 :</strong> Capture réelle du Planning Gantt Pro sur <code>suivi.anelecgroupe.com</code> avec la Bourse de dispatch et la timeline journalière.
-  </div>
-</div>
-
-<h2>Fonctionnalités Clés du Moteur de Planification</h2>
-<div class="grid-2">
-  <div class="card" style="border-left: 4px solid #00bf63;">
-    <strong style="color: #166534;">Créneau Unifié Visite & Devis (VIS • DEV)</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      Un seul déplacement physique est représenté par un unique bloc doré <code>VIS • DEV</code>. Les heures réelles du technicien sont calculées sans doublon (exactitude 100%).
-    </p>
-  </div>
-  <div class="card" style="border-left: 4px solid #ffcc00;">
-    <strong style="color: #854d0e;">Auto-Planification & Bourse de Dispatch</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      L'algorithme analyse les compétences métiers requises et place les missions sans conflit selon la règle de <em>moindre compétence nécessaire</em>.
-    </p>
-  </div>
-</div>
 
 <div class="grid-2">
-  <div class="card" style="border-left: 4px solid #0a0f1d;">
-    <strong style="color: #0a0f1d;">Déplanification en 1 Clic</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      Le bouton <em>« Renvoyer en bourse »</em> retire le créneau du calendrier pour le replacer dans la liste d'attente à gauche.
+  <div class="card" style="border-left: 4px solid #047857;">
+    <div class="card-header">
+      <span class="badge-device-pc">PC Bureau</span>
+      <strong>Poste Administratif & Dispatching</strong>
+    </div>
+    <p style="font-size: 8.5pt; margin: 4px 0;">
+      Utilisé par la <strong>Direction</strong>, le <strong>Bureau d'Études</strong>, les <strong>Conducteurs de travaux</strong> et la <strong>Comptabilité</strong>. Affichage plein écran avec barre latérale hiérarchisée, topbar globale avec recherche Ctrl+K, ordonnancement Gantt 60 fps et cartographie grand angle.
     </p>
   </div>
-  <div class="card" style="border-left: 4px solid #ff0000;">
-    <strong style="color: #991b1b;">Suppression Sécurisée de Créneau</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      Bouton rouge avec confirmation modale pour annuler un rendez-vous erroné sans risque de fausse manipulation.
-    </p>
-  </div>
-</div>
 
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 5 : PIPELINE DEVIS & RECONVERSION ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>PIPELINE DEVIS & GRILLE DE RECONVERSION SÉCURISÉE</span>
-</div>
-
-<h1>4. Pipeline Devis & Grille de Reconversion Sécurisée</h1>
-
-<p>
-  Le pipeline commercial permet de piloter l'ensemble des devis de l'entreprise (22 colonnes analytiques) et de sécuriser leur transformation en chantier d'exécution.
-</p>
-
-<div class="figure-box">
-  <img src="${imgDevis}" alt="Pipeline Devis Commercial Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 4.1 :</strong> Capture réelle du Pipeline Devis avec le bouton d'action <code>+ SAV/Suite</code>.
-  </div>
-</div>
-
-<h2>La Grille de Reconversion Intelligente</h2>
-<p>
-  Lorsqu'un devis a déjà été transformé en intervention (badge vert <code>INT liée</code>), appuyer à nouveau sur conversion ouvre la grille de qualification ci-dessous :
-</p>
-
-<div class="figure-box">
-  <img src="${schema03}" alt="Schéma Grille de Reconversion" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Schéma 4.1 :</strong> Arbre de décision opérationnel de reconversion devis.
-  </div>
-</div>
-
-<div class="figure-box">
-  <img src="${imgModal}" alt="Modal Reconversion Devis Live" class="figure-img" style="max-height: 280px;" />
-  <div class="figure-caption">
-    <strong>Figure 4.2 :</strong> Capture réelle de la boîte de dialogue de qualification du motif d'intervention.
-  </div>
-</div>
-
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 6 : INTERVENTIONS TCE ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>INTERVENTIONS TCE & TABLEAU SYNTHÉTIQUE RESPONSIVE</span>
-</div>
-
-<h1>5. Interventions TCE & Tableau Synthétique</h1>
-
-<p>
-  Le tableau des interventions rassemble l'ensemble des chantiers tous corps d'état avec affichage plein écran direct (8 colonnes optimisées sans scroll horizontal) :
-</p>
-
-<div class="figure-box">
-  <img src="${imgInterv}" alt="Interventions TCE Synthèse Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 5.1 :</strong> Capture réelle du tableau synthétique des interventions sur <code>suivi.anelecgroupe.com</code>.
-  </div>
-</div>
-
-<table>
-  <thead>
-    <tr>
-      <th style="width: 12%;">RÉFÉRENCE</th>
-      <th style="width: 20%;">CLIENT & CHANTIER</th>
-      <th style="width: 20%;">CORPS D'ÉTAT & OBJET</th>
-      <th style="width: 15%;">TECHNICIEN</th>
-      <th style="width: 13%;">CRÉNEAU</th>
-      <th style="width: 10%;">STATUT</th>
-      <th style="width: 10%;">PHOTOS</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>VIS-001</strong></td>
-      <td>a • Site Paris</td>
-      <td>Tous corps d'état [Visite Devis]</td>
-      <td>Mohamed</td>
-      <td>05/11/2026</td>
-      <td><span class="badge badge-green">Clôturée</span></td>
-      <td>4 reçues</td>
-    </tr>
-    <tr>
-      <td><strong>INT-2026-008</strong></td>
-      <td>a • Intervention travaux</td>
-      <td>Tous corps d'état</td>
-      <td>Mohamed</td>
-      <td>05/11/2026</td>
-      <td><span class="badge badge-green">Clôturée</span></td>
-      <td>2 photos</td>
-    </tr>
-    <tr>
-      <td><strong>INT-2026-006</strong></td>
-      <td>azerty • Dépannage</td>
-      <td>Tous corps d'état</td>
-      <td>Haitam</td>
-      <td>05/11/2026</td>
-      <td><span class="badge badge-green">Clôturée</span></td>
-      <td>Rapport OK</td>
-    </tr>
-    <tr>
-      <td><strong>INT-2026-011</strong></td>
-      <td>Client Paris 16</td>
-      <td>Menuiserie • Remplacement</td>
-      <td>Yankoubou</td>
-      <td>06/11/2026</td>
-      <td><span class="badge badge-yellow">Planifiée</span></td>
-      <td>En attente</td>
-    </tr>
-  </tbody>
-</table>
-
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 7 : FACTURATION B2B / B2C ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>FACTURATION TCE & ARBITRAGE B2B (HT) / B2C (TTC)</span>
-</div>
-
-<h1>6. Facturation Intelligente & Arbitrage Fiscal (B2B vs B2C)</h1>
-
-<p>
-  La gestion de la facturation applique la règle d'or : <strong>« On ne facture que les chantiers achevés, pas les devis »</strong>.
-</p>
-
-<div class="figure-box">
-  <img src="${schema04}" alt="Schéma Facturation et Arbitrage" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Schéma 6.1 :</strong> Architecture des 5 bacs de tri et arbitrage fiscal B2B / B2C.
-  </div>
-</div>
-
-<div class="figure-box">
-  <img src="${imgFacture}" alt="Facturation et Bacs de Tri Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 6.1 :</strong> Capture réelle de l'espace Facturation & Clients sur <code>suivi.anelecgroupe.com</code>.
-  </div>
-</div>
-
-<div class="grid-2">
-  <div class="card" style="border-left: 4px solid #00bf63;">
-    <strong style="color: #166534;">🏢 Régime B2B (Professionnel & Syndic)</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      Saisie prioritaire en <strong>Montant HT</strong>. Gestion de l'autoliquidation de sous-traitance (TVA 0% art. 283-2 nonies) ou TVA normale 20%, mention du Bon de Commande et échéance à 30/45 jours.
-    </p>
-  </div>
   <div class="card" style="border-left: 4px solid #2563eb;">
-    <strong style="color: #1d4ed8;">🏠 Régime B2C (Particulier & Occupant)</strong>
-    <p style="font-size: 8.5pt; margin-top: 4px;">
-      Saisie prioritaire en <strong>Montant TTC</strong>. Application des taux de TVA réduits (10% pour locaux d'habitation de plus de 2 ans, 5,5% énergétique) avec encaissement direct au comptant.
+    <div class="card-header">
+      <span class="badge-device-mob">Téléphone Mobile</span>
+      <strong>Application Smartphone PWA</strong>
+    </div>
+    <p style="font-size: 8.5pt; margin: 4px 0;">
+      Utilisé sur le terrain par les <strong>Techniciens</strong> et en mobilité par les <strong>Gestionnaires</strong>. Navigation ergonomique au pouce en bas de l'écran, prise de photo automatique avec compression &lt; 75 Ko, guidage GPS Waze / Google Maps en 1 clic et pointage certifié.
     </p>
   </div>
 </div>
 
-<div class="page-break"></div>
-
-<!-- ================================= PAGE 8 : RENTABILITE & ADMIN ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>RENTABILITÉ DES ÉQUIPES & WORKSTATION ADMINISTRATEUR</span>
-</div>
-
-<h1>7. Contrôle de Gestion : Rentabilité & Marges d'Équipes</h1>
-
-<p>
-  Ce tableau de bord financier croise en temps réel les heures pointées, les durées planifiées et les montants d'interventions :
-</p>
-
 <div class="figure-box">
-  <img src="${imgRentabilite}" alt="Tableau de bord Rentabilité Live" class="figure-img" />
+  <img src="${schema01}" alt="Cycle Complet TCE ANELEC" style="max-height: 140px; width: 100%; object-fit: contain;" />
   <div class="figure-caption">
-    <strong>Figure 7.1 :</strong> Capture réelle du tableau de bord de Rentabilité & Marges sur <code>suivi.anelecgroupe.com</code>.
-  </div>
-</div>
-
-<h1>8. Workstation Super-Admin & Suivi des Pointages</h1>
-
-<p>
-  Console d'audit et de commandement dédiée au super-administrateur pour la gestion des droits utilisateurs et le contrôle des heures de la flotte :
-</p>
-
-<div class="figure-box">
-  <img src="${imgAdmin}" alt="Workstation Admin Live" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Figure 8.1 :</strong> Capture réelle du poste d'administration avec matrice des permissions et pointages journaliers.
+    <strong>Schéma 1 :</strong> Le cycle opérationnel intégré TCE : Demande $\to$ Devis & Visite $\to$ Dispatch Gantt $\to$ Mobile Terrain $\to$ Facturation $\to$ Rentabilité.
   </div>
 </div>
 
 <div class="page-break"></div>
 
-<!-- ================================= PAGE 9 : APPLICATION MOBILE TECHNICIEN ================================= -->
-<div class="doc-header">
-  <span class="doc-header-brand">ANELEC GROUPE — SUIVI TCE</span>
-  <span>APPLICATION MOBILE TECHNICIEN PWA & SÉCURITÉ DE CONNEXION</span>
-</div>
-
-<h1>9. Application Mobile Technicien PWA & Rigueur Terrain</h1>
+<!-- PAGE 3 : ARCHITECTURE & ERGONOMIE PC VS MOBILE -->
+<h1>1. Architecture & Ergonomie : Version PC vs Mobile</h1>
 
 <p>
-  L'application pour smartphone impose une rigueur opérationnelle stricte grâce à des verrous logiciels infalsifiables :
+  La plateforme a été entièrement adaptée pour offrir un confort d'usage optimal quel que soit l'appareil utilisé, avec <strong>zéro débordement horizontal</strong> et <strong>aucun texte masqué</strong>.
 </p>
 
-<div class="figure-box">
-  <img src="${schema02}" alt="Schéma Workflow Technicien Mobile" class="figure-img" />
-  <div class="figure-caption">
-    <strong>Schéma 9.1 :</strong> Workflow quotidien certifié du technicien sur le terrain.
+<div class="grid-2">
+  <div>
+    <h2>🖥️ Version PC & Ordinateur Portable</h2>
+    <div class="step-container">
+      <div class="step-row">
+        <div class="step-pin">1</div>
+        <div class="step-content">
+          <div class="step-title">Barre latérale hiérarchisée (Sidebar 254px)</div>
+          <div class="step-desc">Regroupement structuré en 3 blocs : <em>Espace de travail</em>, <em>Gestion</em>, et <em>Administration</em> avec pastilles de notifications urgentes.</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-pin">2</div>
+        <div class="step-content">
+          <div class="step-title">Barre supérieure universelle (Topbar)</div>
+          <div class="step-desc">Titre de page sans coupure, recherche rapide Ctrl+K, date et heure de Paris en direct, boutons d'action rapide (+ Devis, + Intervention).</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-pin">3</div>
+        <div class="step-content">
+          <div class="step-title">Grilles fluides adaptatives</div>
+          <div class="step-desc">Adaptation automatique sur les écrans Full HD (1920x1080), MacBook (1440x900) et PC portables compacts (1366x768 et 1280x800).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h2>📱 Version Téléphone Smartphone</h2>
+    <div class="step-container">
+      <div class="step-row">
+        <div class="step-pin">1</div>
+        <div class="step-content">
+          <div class="step-title">Barre de navigation inférieure au pouce</div>
+          <div class="step-desc">Accès immédiat d'une seule main aux sections clés : <em>Pilotage</em>, <em>Planning</em>, <em>Devis</em>, <em>Travaux</em>, <em>Carte</em>, <em>Factures</em>.</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-pin">2</div>
+        <div class="step-content">
+          <div class="step-title">Dégagement de sécurité (Padding 84px)</div>
+          <div class="step-desc">Le bas de page conserve une marge de sécurité de 30px au-dessus de la barre : aucun bouton ou texte ne peut être caché derrière.</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-pin">3</div>
+        <div class="step-content">
+          <div class="step-title">Tableaux tactiles défilants</div>
+          <div class="step-desc">Conteneurs <code>.table-scroll</code> avec glissement tactile fluide sans jamais élargir la page ni bloquer l'écran.</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="grid-2">
   <div class="figure-box">
-    <img src="${imgMobile}" alt="Application Mobile Live" class="figure-img" style="max-height: 290px;" />
+    <img src="${imgSynthesePc}" alt="Tableau de bord PC" class="figure-img" style="max-height: 180px;" />
     <div class="figure-caption">
-      <strong>Figure 9.1 :</strong> Capture réelle de l'interface mobile smartphone (pointage matin obligatoire).
+      <strong>Figure 1.1 :</strong> Interface PC (1440x900) — Affichage grand écran avec navigation latérale et cartes côte à côte.
+    </div>
+  </div>
+
+  <div class="figure-box">
+    <img src="${imgMobileSynthese}" alt="Tableau de bord Mobile" class="figure-img" style="max-height: 180px;" />
+    <div class="figure-caption">
+      <strong>Figure 1.2 :</strong> Interface Mobile (390x844) — Colonne unique épurée avec barre inférieure fixée pour usage au pouce.
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 4 : NOUVEAU TABLEAU DE BORD (3 VOLETS) -->
+<h1>2. Le Nouveau Tableau de Bord (3 Volets Métier)</h1>
+
+<p>
+  Le tableau de bord d'ANELEC GROUPE a été entièrement repensé autour de 3 sous-onglets spécialisés accessibles d'un seul clic :
+</p>
+
+<h2>① Volet Synthèse — Le Baromètre Visuel</h2>
+<div class="figure-box">
+  <img src="${imgSynthesePc}" alt="Volet Synthèse PC" class="figure-img" style="max-height: 190px;" />
+  <div class="figure-caption">
+    <strong>Figure 2.1 :</strong> Volet Synthèse — 4 Cartes KPI principales, bloc prioritaire et planning journalier.
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><span class="badge-action">4 KPIs Clés</span> Chiffres d'activité immédiats</div>
+    <ul style="margin: 4px 0; padding-left: 18px; font-size: 8.5pt;">
+      <li><strong>CA travaux réalisés :</strong> Montant HT des chantiers achevés dans le mois.</li>
+      <li><strong>Prêt à facturer :</strong> Volume financier des travaux finis en attente d'émission.</li>
+      <li><strong>Devis à suivre :</strong> Nombre de devis en cours et taux de concrétisation (%).</li>
+      <li><strong>Rapports à valider :</strong> Signalements avec photos terrain reçus.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="badge-rule">Priorités & Planning</span> Actions directes</div>
+    <ul style="margin: 4px 0; padding-left: 18px; font-size: 8.5pt;">
+      <li><strong>À traiter en priorité :</strong> Alertes cliquables vers les rapports photos et devis signés.</li>
+      <li><strong>Planning du jour :</strong> Chronologie des interventions planifiées avec statut coloré.</li>
+      <li><strong>Activité par corps d'état :</strong> Tableau ventilé par métier (Électricité, Plomberie, etc.).</li>
+    </ul>
+  </div>
+</div>
+
+<h2>② Volet Opérations — La Console de Dispatch & Capacité</h2>
+<div class="figure-box">
+  <img src="${imgOperationsPc}" alt="Volet Opérations PC" class="figure-img" style="max-height: 170px;" />
+  <div class="figure-caption">
+    <strong>Figure 2.2 :</strong> Volet Opérations — Les 4 files de traitement, disponibilité des équipes et alertes photos.
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 5 : CARTE INTERACTIVE & CALCUL AUTOMATIQUE TOURNEES -->
+<h1>3. Carte Interactive & Calcul Automatique d'Itinéraires</h1>
+
+<p>
+  Le module cartographique calcule automatiquement le parcours routier optimal (algorithme TSP 2-Opt) pour l'ensemble des interventions et visites de devis prévues.
+</p>
+
+<div class="card" style="border-left: 4px solid #047857; background: #ecfdf5;">
+  <strong style="color: #065f46;">📍 Règle Métier Absolue : Départ & Arrivée Fixes au Siège ANELEC</strong><br>
+  <span style="font-size: 8.5pt; color: #047857;">
+    Le calcul d'itinéraire commence et se termine <strong>strictement au bureau d'ANELEC GROUPE (9 Rue des Colonnes, 75002 Paris)</strong>. La localisation GPS personnelle du smartphone n'est jamais utilisée pour le calcul du trajet, assurant une parfaite neutralité et un respect strict de la vie privée.
+  </span>
+</div>
+
+<div class="grid-2">
+  <div class="figure-box">
+    <img src="${imgCartePc}" alt="Carte PC Grand Écran" class="figure-img" style="max-height: 200px;" />
+    <div class="figure-caption">
+      <strong>Figure 3.1 :</strong> Carte sur PC — Visualisation du circuit routier avec étiquettes de chantiers et fiche récapitulative.
+    </div>
+  </div>
+
+  <div class="figure-box">
+    <img src="${imgMobileCarte}" alt="Carte Mobile Smartphone" class="figure-img" style="max-height: 200px;" />
+    <div class="figure-caption">
+      <strong>Figure 3.2 :</strong> Carte sur Smartphone — Lancement du guidage GPS Waze ou Google Maps en 1 clic.
+    </div>
+  </div>
+</div>
+
+<h2>🗺️ Comment utiliser le calcul de tournée étape par étape :</h2>
+
+<div class="step-container">
+  <div class="step-row">
+    <div class="step-pin">①</div>
+    <div class="step-content">
+      <div class="step-title">Sélectionner les filtres (Technicien & Date)</div>
+      <div class="step-desc">
+        En haut à droite, choisissez un technicien spécifique ou <em>« Tous les techniciens »</em>, ainsi que la date voulue ou <em>« Toutes les dates »</em>.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">②</div>
+    <div class="step-content">
+      <div class="step-title">Calcul automatique instantané (Bannière TSP 2-Opt)</div>
+      <div class="step-desc">
+        L'algorithme réordonne instantanément les adresses des interventions et visites pour minimiser les kilomètres parcourus et le temps passé dans les bouchons.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">③</div>
+    <div class="step-content">
+      <div class="step-title">Lancer la navigation GPS en 1 clic (Waze & Google Maps)</div>
+      <div class="step-desc">
+        Sur smartphone, le technicien appuie sur le bouton <strong>Google Maps</strong> ou <strong>Waze</strong> en face de l'étape correspondante : l'application GPS s'ouvre avec l'adresse exacte déjà saisie.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 6 : PROCEDURE METIER 1 : DIRECTION & GERANCE -->
+<h1>4. Procédure Métier A : Direction & Gérance</h1>
+
+<p>
+  <strong>Profil utilisateur :</strong> Super-Administrateur, Gérant, Directeur Administratif et Financier.
+</p>
+
+<h2>Objectif : Surveiller la rentabilité horaire, les marges et valider les pointages</h2>
+
+<div class="figure-box">
+  <img src="${imgRentabilitePc}" alt="Module Rentabilité et Marges" class="figure-img" style="max-height: 200px;" />
+  <div class="figure-caption">
+    <strong>Figure 4.1 :</strong> Console Contrôle de Gestion — Rentabilité horaire réelle (€ HT/h), marge brute et simulateur de coût chargé.
+  </div>
+</div>
+
+<div class="step-container">
+  <div class="step-row">
+    <div class="step-pin">1</div>
+    <div class="step-content">
+      <div class="step-title">Consulter le Baromètre Économique (Tableau de bord > Analyse)</div>
+      <div class="step-desc">
+        Vérifiez le chiffre d'affaires cumulé HT et l'avancement dans l'entonnoir commercial à 5 étapes.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">2</div>
+    <div class="step-content">
+      <div class="step-title">Ajuster le simulateur de coût moyen horaire</div>
+      <div class="step-desc">
+        Dans la section <em>Rentabilité & Équipes</em>, faites glisser le curseur (ex: 35 €/h) pour évaluer la marge nette dégagée par chaque corps d'état.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">3</div>
+    <div class="step-content">
+      <div class="step-title">Vérifier les pointages journaliers de la flotte</div>
+      <div class="step-desc">
+        Dans <em>Utilisateurs & Accès</em>, auditez l'heure d'arrivée au bureau (☀️) et l'heure de départ le soir (🌙) pour chaque intervenant.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 7 : PROCEDURE METIER 2 : BUREAU D'ETUDES (DEVIS) -->
+<h1>5. Procédure Métier B : Bureau d'Études & Devis</h1>
+
+<p>
+  <strong>Profil utilisateur :</strong> Chargé d'Affaires, Métreur, Chiffreur TCE.
+</p>
+
+<h2>Objectif : Enregistrer les devis, programmer les visites et convertir en travaux sans doublon</h2>
+
+<div class="figure-box">
+  <img src="${imgDevisPc}" alt="Pipeline Devis Commercial" class="figure-img" style="max-height: 190px;" />
+  <div class="figure-caption">
+    <strong>Figure 5.1 :</strong> Pipeline Devis (22 colonnes) — Filtrage rapide, identification des visites et conversion.
+  </div>
+</div>
+
+<div class="step-container">
+  <div class="step-row">
+    <div class="step-pin">1</div>
+    <div class="step-content">
+      <div class="step-title">Créer un nouveau devis chiffrage</div>
+      <div class="step-desc">
+        Cliquez sur le bouton <strong>+ Devis</strong> en haut à droite. Saisissez le client, l'adresse du chantier, l'objet et le corps d'état.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">2</div>
+    <div class="step-content">
+      <div class="step-title">Prise de cotes nécessaire sur site ?</div>
+      <div class="step-desc">
+        Si un déplacement préalable est requis, cochez <em>« Visite nécessaire »</em>. Un créneau unifié <strong>VIS • DEV</strong> sera créé dans la bourse de planification pour le technicien.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">3</div>
+    <div class="step-content">
+      <div class="step-title">Conversion sécurisée du devis accepté</div>
+      <div class="step-desc">
+        Dès signature du client, cliquez sur <strong>Convertir en intervention</strong>. Si le devis possède déjà une intervention, la <em>Grille de Reconversion Intelligente</em> s'affiche pour choisir la qualification exacte :
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="figure-box">
+  <img src="${imgModalReconv}" alt="Grille de Reconversion" class="figure-img" style="max-height: 150px;" />
+  <div class="figure-caption">
+    <strong>Figure 5.2 :</strong> Grille de Reconversion Sécurisée — Empêche les interventions doublons en qualifiant le motif : SAV, Reprise, Avenant ou Phase 2.
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 8 : PROCEDURE METIER 3 : DISPATCHER & PLANNING -->
+<h1>6. Procédure Métier C : Dispatcher & Conducteur de Travaux</h1>
+
+<p>
+  <strong>Profil utilisateur :</strong> Dispatcher, Conducteur de Travaux, Ordonnanceur.
+</p>
+
+<h2>Objectif : Placer les missions sur le calendrier Gantt et optimiser le temps de route</h2>
+
+<div class="figure-box">
+  <img src="${imgPlanningPc}" alt="Planning Gantt Pro" class="figure-img" style="max-height: 200px;" />
+  <div class="figure-caption">
+    <strong>Figure 6.1 :</strong> Planning Gantt Pro Multi-Ressources — Glisser-déposer fluide, créneaux VIS-DEV et bourse de dispatch.
+  </div>
+</div>
+
+<div class="step-container">
+  <div class="step-row">
+    <div class="step-pin">1</div>
+    <div class="step-content">
+      <div class="step-title">Consulter la Bourse de Dispatch</div>
+      <div class="step-desc">
+        Dans le volet latéral gauche du planning, retrouvez toutes les interventions et visites non planifiées.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">2</div>
+    <div class="step-content">
+      <div class="step-title">Glisser-déposer sur la timeline du technicien</div>
+      <div class="step-desc">
+        Déposez la mission sur la ligne du technicien compétent à l'heure souhaitée (ex: 08h30). Étirez le bord inférieur du bloc pour ajuster sa durée.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">3</div>
+    <div class="step-content">
+      <div class="step-title">Vérifier la cohérence géographique (Carte & Tournées)</div>
+      <div class="step-desc">
+        Basculez sur l'onglet <strong>Carte & Tournées</strong> pour vous assurer que les chantiers de la journée suivent un circuit routier logique sans allers-retours inutiles.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- PAGE 9 : PROCEDURE METIER 4 : TECHNICIEN TERRAIN (MOBILE) -->
+<h1>7. Procédure Métier D : Technicien Terrain (Mobile PWA)</h1>
+
+<p>
+  <strong>Profil utilisateur :</strong> Technicien électricien, plombier, serrurier, peintre, menuisier, polyvalent TCE.
+</p>
+
+<h2>Objectif : Pointer son arrivée, naviguer sur le chantier, prendre les photos et clôturer</h2>
+
+<div class="grid-2">
+  <div class="figure-box">
+    <img src="${imgMobileTech}" alt="App Mobile Technicien" class="figure-img" style="max-height: 250px;" />
+    <div class="figure-caption">
+      <strong>Figure 7.1 :</strong> Application Mobile Technicien — Pointage arrivée au bureau et bouton de prise de mission.
     </div>
   </div>
 
   <div>
-    <div class="card" style="border-left: 4px solid #00bf63; margin-bottom: 8px;">
-      <strong style="color: #166534;">1. Pointage Matin Obligatoire</strong>
-      <p style="font-size: 8pt; margin: 2px 0;">
-        Impossible de démarrer une intervention sans avoir pointé son arrivée au bureau (horodatage serveur certifié).
-      </p>
-    </div>
-    <div class="card" style="border-left: 4px solid #ffcc00; margin-bottom: 8px;">
-      <strong style="color: #854d0e;">2. Photos Compressées (&lt; 75 Ko)</strong>
-      <p style="font-size: 8pt; margin: 2px 0;">
-        Réduction automatique du poids des photos de 95% sans perte de netteté pour envoi instantané en 3G/4G.
-      </p>
-    </div>
-    <div class="card" style="border-left: 4px solid #2563eb; margin-bottom: 8px;">
-      <strong style="color: #1d4ed8;">3. Clôture Liée Auto</strong>
-      <p style="font-size: 8pt; margin: 2px 0;">
-        La clôture du chantier finalise automatiquement le devis rattaché.
-      </p>
-    </div>
-    <div class="card" style="border-left: 4px solid #ff0000;">
-      <strong style="color: #991b1b;">4. Verrouillage du Soir & Non Finie</strong>
-      <p style="font-size: 8pt; margin: 2px 0;">
-        Impossible de pointer sa fin de journée si un chantier est en cours. Bouton <em>« Intervention non finie »</em> pour replanification.
-      </p>
+    <div class="step-container">
+      <div class="step-row">
+        <div class="step-pin">1</div>
+        <div class="step-content">
+          <div class="step-title">Pointage obligatoire le matin (07h30)</div>
+          <div class="step-desc">
+            À l'arrivée au siège, appuyez sur <strong>☀️ Pointer mon arrivée au bureau</strong>. Le démarrage des chantiers est bloqué tant que ce pointage n'est pas effectué.
+          </div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-pin">2</div>
+        <div class="step-content">
+          <div class="step-title">Guidage GPS vers le chantier</div>
+          <div class="step-desc">
+            Appuyez sur <strong>Waze</strong> ou <strong>Google Maps</strong> pour lancer le guidage routier en direct.
+          </div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-pin">3</div>
+        <div class="step-content">
+          <div class="step-title">Prise de photos & Actions réalisées</div>
+          <div class="step-desc">
+            Prenez les photos avant/après (compressées automatiquement à moins de 75 Ko) et cochez les tâches effectuées.
+          </div>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-pin">4</div>
+        <div class="step-content">
+          <div class="step-title">Clôture certifiée & Pointage soir</div>
+          <div class="step-desc">
+            Faites signer le client et appuyez sur <strong>Clôturer l'intervention</strong>. En fin de journée, appuyez sur <strong>🌙 Pointer ma fin de journée</strong>.
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<h1>10. Connexion Sécurisée & Contrôle d'Accès RBAC</h1>
+<div class="page-break"></div>
+
+<!-- PAGE 10 : PROCEDURE METIER 5 : FACTURATION & COMPTABILITE -->
+<h1>8. Procédure Métier E : Facturation & Comptabilité</h1>
+
+<p>
+  <strong>Profil utilisateur :</strong> Responsable Facturation, Comptable, Gestionnaire Administratif.
+</p>
+
+<h2>Objectif : Facturer les chantiers achevés dans les 5 bacs de tri et arbitrer B2B vs B2C</h2>
 
 <div class="figure-box">
-  <img src="${imgLogin}" alt="Connexion Espace Sécurisé Live" class="figure-img" style="max-height: 180px;" />
+  <img src="${imgFacturePc}" alt="Facturation et Bacs de Tri" class="figure-img" style="max-height: 200px;" />
   <div class="figure-caption">
-    <strong>Figure 10.1 :</strong> Capture réelle de l'écran d'authentification sur <code>suivi.anelecgroupe.com/login</code>.
+    <strong>Figure 8.1 :</strong> Studio Facturation — Les 5 bacs de tri de conformité et arbitrage fiscal direct HT / TTC.
   </div>
 </div>
 
-<div class="card" style="margin-top: 15px; background: #0a0f1d; color: #ffffff; text-align: center; padding: 16px;">
-  <div style="font-size: 11pt; font-weight: 800; color: #00bf63; margin-bottom: 4px;">ANELEC GROUPE — CERTIFICATION TECHNIQUE DU LIVRE BLANC 2026</div>
-  <div style="font-size: 8.5pt; color: #94a3b8; max-width: 650px; margin: 0 auto;">
-    L'ensemble des captures de ce document provient directement du système déployé en production. Chaque flux est vérifié, conforme aux règles d'entreprise et sécurisé.
+<div class="card" style="border-left: 4px solid #b45309; background: #fffbeb;">
+  <strong style="color: #92400e;">⚡ Règle d'Or Comptable ANELEC GROUPE :</strong><br>
+  <span style="font-size: 8.5pt; color: #78350f;">
+    <strong>« On ne facture que les chantiers achevés et vérifiés, jamais un devis »</strong>. Les visites de prise de cotes ne sont jamais facturées.
+  </span>
+</div>
+
+<div class="step-container">
+  <div class="step-row">
+    <div class="step-pin">1</div>
+    <div class="step-content">
+      <div class="step-title">Consulter le Bac 1 : 🟢 À facturer (Prêtes)</div>
+      <div class="step-desc">
+        Seuls les chantiers avec rapport validé et justificatifs complets y apparaissent.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">2</div>
+    <div class="step-content">
+      <div class="step-title">Choisir le régime fiscal adapté (B2B vs B2C)</div>
+      <div class="step-desc">
+        <strong>Clients B2B (Syndics, Professionnels) :</strong> Saisie en <strong>HT</strong>, autoliquidation TVA 0% (art. 283-2 nonies) ou TVA 20%, Bon de Commande obligatoire.<br>
+        <strong>Clients B2C (Particuliers) :</strong> Saisie en <strong>TTC</strong>, TVA réduite à 10% (rénovation &gt; 2 ans) ou 5,5% (énergétique).
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">3</div>
+    <div class="step-content">
+      <div class="step-title">Émettre la facture et transférer en comptabilité</div>
+      <div class="step-desc">
+        Validez la facture : le dossier bascule instantanément dans le Bac <strong>✅ Facturées</strong> et incrémente le chiffre d'affaires définitif.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BANNIÈRE DE CERTIFICATION OFFICIELLE -->
+<div class="card" style="margin-top: 20px; background: #0f172a; color: #ffffff; text-align: center; padding: 14px; border: 2px solid #047857;">
+  <div style="font-size: 10.5pt; font-weight: 800; color: #10b981; margin-bottom: 4px;">
+    ANELEC GROUPE — HOMOLOGATION OFFICIELLE DES PROCÉDURES TCE 2026
+  </div>
+  <div style="font-size: 8pt; color: #cbd5e1; max-width: 650px; margin: 0 auto;">
+    Ce document constitue le manuel d'exploitation officiel du progiciel ANELEC TCE. Toutes les procédures décrites sont protégées et synchronisées en temps réel avec la base de données de production.
   </div>
 </div>
 
@@ -804,17 +995,18 @@ const htmlContent = `<!DOCTYPE html>
 `;
 
 fs.writeFileSync(HTML_OUTPUT, htmlContent, 'utf-8');
-console.log('HTML généré avec succès :', HTML_OUTPUT);
+console.log('Fichier HTML généré avec succès :', HTML_OUTPUT);
 
 try {
   const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
   const cmd = `"${chromePath}" --headless=new --disable-gpu --run-all-compositor-stages-before-draw --print-to-pdf="${PDF_OUTPUT}" --no-pdf-header-footer "${HTML_OUTPUT}"`;
-  console.log('Compilation du PDF avec Chrome headless...');
+  console.log('Compilation du PDF officiel avec Chrome headless...');
   execSync(cmd, { stdio: 'inherit' });
-  console.log('PDF généré avec succès :', PDF_OUTPUT);
+  console.log('PDF officiel généré avec succès :', PDF_OUTPUT);
 
+  fs.copyFileSync(PDF_OUTPUT, PDF_BACKUP);
   fs.copyFileSync(PDF_OUTPUT, ARTIFACT_PDF);
-  console.log('PDF copié vers les artefacts :', ARTIFACT_PDF);
+  console.log('PDF dupliqué avec succès vers :', ARTIFACT_PDF);
 } catch (err) {
   console.error('Erreur lors de la génération du PDF :', err);
 }

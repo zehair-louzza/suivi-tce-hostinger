@@ -1,306 +1,344 @@
-# 🏢 ANELEC GROUPE — Plateforme de Suivi TCE, Dispatch & Facturation
+# 🏢 ANELEC GROUPE — Plateforme Intégrée TCE, Dispatching & Facturation
 
 > **Progiciel d'Entreprise Tout Corps d'État (TCE)**  
-> **Production :** [suivi.anelecgroupe.com](https://suivi.anelecgroupe.com)  
-> **Version :** Production 2026 Enterprise Stable  
-> **Documentation Complète & Livre Blanc PDF :** [`docs/RAPPORT_COMPLET_TCE_ANELEC.pdf`](docs/RAPPORT_COMPLET_TCE_ANELEC.pdf)
+> **Production Officielle :** [suivi.anelecgroupe.com](https://suivi.anelecgroupe.com)  
+> **Version :** Production 2026 Stable & Homologuée  
+> **📘 Manuel Opérationnel & Guide PDF Imprimable :** [`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`](docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf)
 
 <p align="center">
-  <img src="docs/images/01-logo-anelec-groupe.jpg" alt="Logo Officiel ANELEC GROUPE" width="550" />
+  <img src="docs/images/01-logo-anelec-groupe.png" alt="Logo Officiel ANELEC GROUPE" width="460" />
 </p>
 
 ---
 
 ## 📑 Sommaire Général
 
-1. [Vue d'Ensemble & Architecture Globale](#1-vue-densemble--architecture-globale)
-2. [Centre de Pilotage & Baromètre Économique HT](#2-centre-de-pilotage--baromètre-économique-ht)
-3. [Dispatching & Planning Gantt Pro Multi-Ressources](#3-dispatching--planning-gantt-pro-multi-ressources)
-4. [Pipeline Devis & Grille de Reconversion Sécurisée](#4-pipeline-devis--grille-de-reconversion-sécurisée)
-5. [Interventions TCE & Tableau Synthétique](#5-interventions-tce--tableau-synthétique)
-6. [Facturation Intelligente & Arbitrage Fiscal (B2B vs B2C)](#6-facturation-intelligente--arbitrage-fiscal-b2b-vs-b2c)
-7. [Contrôle de Gestion : Rentabilité & Marges d'Équipes](#7-contrôle-de-gestion--rentabilité--marges-déquipes)
-8. [Workstation Super-Admin & Suivi des Pointages Flotte](#8-workstation-super-admin--suivi-des-pointages-flotte)
-9. [Application Mobile Technicien PWA & Rigueur Terrain](#9-application-mobile-technicien-pwa--rigueur-terrain)
-10. [Connexion Sécurisée & Contrôle d'Accès RBAC](#10-connexion-sécurisée--contrôle-daccès-rbac)
-11. [Stack Technique & Déploiement Cloud](#11-stack-technique--déploiement-cloud)
-12. [Fiches Réflexes & Manuel Opérationnel](#12-fiches-réflexes--manuel-opérationnel)
+1. [Vue d'Ensemble & Architecture du Système](#1-vue-densemble--architecture-du-système)
+2. [Ergonomie & Responsive Design : Version PC vs Version Téléphone](#2-ergonomie--responsive-design--version-pc-vs-version-téléphone)
+3. [Le Nouveau Tableau de Bord (3 Volets Métier)](#3-le-nouveau-tableau-de-bord-3-volets-métier)
+4. [Carte Interactive & Calcul Automatique d'Itinéraires (TSP 2-Opt)](#4-carte-interactive--calcul-automatique-ditinéraires-tsp-2-opt)
+5. [Procédures Opérationnelles Pas-à-Pas Séparées par Métier](#5-procédures-opérationnelles-pas-à-pas-séparées-par-métier)
+   * [Métier A : Direction Générale & Super-Admin](#procédure-a--direction-générale--super-admin-pilotage-financier)
+   * [Métier B : Bureau d'Études & Chargé d'Affaires](#procédure-b--bureau-détudes--chiffrage-pipeline-devis)
+   * [Métier C : Conducteur de Travaux & Dispatcher](#procédure-c--conducteur-de-travaux--dispatcher-planning-gantt--tournées)
+   * [Métier D : Technicien Terrain (Mobile PWA)](#procédure-d--technicien-terrain-application-mobile-pwa)
+   * [Métier E : Responsable Facturation & Comptabilité](#procédure-e--responsable-facturation--comptabilité-tri--fiscalité)
+6. [Génération du Guide Utilisateur PDF Officiel](#6-génération-du-guide-utilisateur-pdf-officiel)
+7. [Commandes Utiles & Stack Technique](#7-commandes-utiles--stack-technique)
 
 ---
 
-## 1. Vue d'Ensemble & Architecture Globale
+## 1. Vue d'Ensemble & Architecture du Système
 
-La plateforme **Suivi TCE ANELEC** interconnecte l'ensemble de la chaîne de valeur opérationnelle d'ANELEC GROUPE, de la prise de contact initiale jusqu'à la facturation et l'analyse de rentabilité horaire.
+La plateforme **Suivi TCE ANELEC** fédère en temps réel l'ensemble de la chaîne opérationnelle d'ANELEC GROUPE : de la réception du besoin client (Syndics, Bailleurs, B2B, B2C), en passant par l'étude de prix, la visite de devis, l'ordonnancement des équipes, l'optimisation des trajets routiers, l'intervention sur smartphone, jusqu'à la facturation conforme et l'analyse de marge brute.
 
 <p align="center">
-  <img src="docs/images/schema-01-cycle-tce.svg" alt="Schéma Cycle Complet TCE ANELEC" width="100%" />
+  <img src="docs/images/schema-01-cycle-tce.svg" alt="Cycle Complet TCE ANELEC" width="100%" />
 </p>
 
 ```mermaid
 flowchart LR
-    A["📞 Demande Client<br/>(Syndic, Bailleur, B2B, B2C)"] --> B["📄 Pipeline Devis<br/>(22 colonnes)"]
-    B -->|Visite requise| C["🟡 Visite Prise de Cotes<br/>(Créneau VIS • DEV)"]
-    B -->|Chiffrage direct| D["🟢 Devis Accepté"]
+    A["📞 Demande Client<br/>(Syndic, Tertiaire, Particulier)"] --> B["📄 Pipeline Devis<br/>(Chiffrage & Visite VIS•DEV)"]
+    B -->|Visite nécessaire| C["🟡 Visite Prise de Cotes<br/>(Créneau unifié calendrier)"]
+    B -->|Accord client| D["🟢 Devis Accepté"]
     C --> D
-    D --> E["🎯 Moteur Planning Gantt<br/>(Dispatch Technicien)"]
-    E --> F["📱 App Mobile Technicien<br/>(Pointage, Actions, Photos)"]
-    F -->|Clôture terrain| G["🧾 Studio Facturation<br/>(Priorité Interventions)"]
-    G --> H["💰 Encaissement & Rentabilité<br/>(KPI Marges & Équipes)"]
+    D --> E["🎯 Moteur Planning Gantt<br/>(Dispatch Techniciens)"]
+    E --> F["🗺️ Carte & Tournées<br/>(Départ Siège 9 Rue des Colonnes)"]
+    F --> G["📱 App Mobile Technicien<br/>(Pointage ☀️, Waze/Maps, Photos)"]
+    G -->|Clôture terrain| H["🧾 Studio Facturation<br/>(5 Bacs de Tri & Arbitrage HT/TTC)"]
+    H --> I["💰 Direction & Rentabilité<br/>(KPI Marges & Coût Moyen /h)"]
 ```
 
-### Écosystème Technique
-- **Poste Bureau / Direction :** Centre de pilotage, ordonnancement Gantt 60 fps, arbitrage de facturation, analyse de marges.
-- **Application Smartphone PWA :** Pointage horodaté certifié serveur, déclarations terrain, compression photos < 75 Ko.
-- **Serveur d'API & Temps Réel :** Node.js Express 4, Socket.io, hébergé sur Hostinger Cloud VPS.
-- **Base de Données Cloud :** PostgreSQL 17 managé sur Supabase (Session Pooler SSL).
-
 ---
 
-## 2. Centre de Pilotage & Baromètre Économique HT
+## 2. Ergonomie & Responsive Design : Version PC vs Version Téléphone
 
-Le **Centre de Pilotage** offre une vue synthétique à 360° sur la performance opérationnelle et financière de l'entreprise :
+L'application a été auditée et optimisée à 100% sur **10 résolutions d'écrans représentatives de tous les ordinateurs et smartphones**, garantissant **0px de débordement horizontal** et **aucun texte ni bouton masqué**.
 
-![Centre de Pilotage ANELEC](docs/images/02-centre-de-pilotage-kpi-barometre.png)
-
-### Les 3 Niveaux d'Analyse
-
-#### 1. Le Baromètre Financier (4 Cartes HT)
-* **💰 CA Travaux Réalisés :** Cumul des chantiers achevés et clôturés (`#00bf63` Vert ANELEC).
-* **📈 Pipeline Devis en Cours :** Potentiel commercial des devis en cours d'étude (`#ffcc00` Jaune ANELEC).
-* **🧾 En-cours Prêt à Facturer :** Trésorerie immédiate à mobiliser (chantiers terminés prêts pour émission).
-* **🎯 Taux de Transformation Commerciale (%) :** Ratio réel entre devis soumis et devis signés/réalisés.
-
-#### 2. L'Entonnoir d'Avancement des Travaux (Cycle Complet ANELEC)
-Suivi séquentiel en temps réel en 5 étapes fluides :
-1. **Étape 1 : Devis & Chiffrages** (devis actifs + visites de prise de cotes).
-2. **Étape 2 : Ordonnancement Gantt** (missions en attente de créneau).
-3. **Étape 3 : Sur le Terrain Aujourd'hui** (chantiers actifs avec pointage en cours).
-4. **Étape 4 : Rapports & Photos Reçus** (justificatifs terrain à valider).
-5. **Étape 5 : Clôturées & Facturées** (taux de facturation effective des chantiers finis).
-
-#### 3. Tableau de Bord d'Avancement par Pôle Métier (Corps d'État)
-Répartition analytique des volumes, de l'état d'avancement et du CA réalisé pour chaque spécialité :
-* **⚡ Électricité Tertiaire & CFO/CFA**
-* **🔧 Plomberie, Chauffage & CVC**
-* **🔑 Serrurerie, Accès & Dépannage**
-* **🎨 Peinture, Ravalement & Finition**
-* **🪟 Menuiserie, Faux Plafond & Agencement**
-* **🏗️ Rénovation Complète & Multi-TCE**
-
----
-
-## 3. Dispatching & Planning Gantt Pro Multi-Ressources
-
-Le module de planification Gantt permet de gérer en temps réel les emplois du temps des techniciens et des équipes :
-
-![Planning Gantt Pro Multi-Ressources](docs/images/03-dispatch-planning-gantt-pro.png)
-
-### Caractéristiques Majeures
-* **Glisser-Déposer Haute Performance (Pointer Events 60 fps) :** Déplacement direct d'une mission d'une heure à une autre ou d'un intervenant à un autre.
-* **Redimensionnement à la Souris :** Ajustement direct de la durée de passage en étirant le bord inférieur du bloc.
-* **Créneau Unifié Visite & Devis (`VIS • DEV`) :**
-  - Un rendez-vous physique = un seul créneau sur le calendrier.
-  - Plus de blocs doublons empilés : les heures du technicien sont exactes à 100%.
-  - L'inspecteur latéral affiche simultanément la fiche devis et le compte-rendu technique.
-* **Bourse de Dispatch & Auto-Planification Assistée par IA :** Analyse des compétences requises et placement automatique sans conflit.
-* **Actions Rapides :** Possibilité de *Déplanifier* (renvoyer en bourse) ou *Supprimer* un créneau en 1 clic.
-
----
-
-## 4. Pipeline Devis & Grille de Reconversion Sécurisée
-
-Gestion des 22 colonnes analytiques des devis de la prise de contact jusqu'à la signature :
-
-![Pipeline Devis Commercial](docs/images/04-pipeline-devis-commercial.png)
-
-### La Grille de Reconversion Intelligente
-Pour garantir une traçabilité rigoureuse et éviter les interventions fantômes en doublon, la reconversion d'un devis déjà traité est interceptée :
+| Fonctionnalité | Version PC / Ordinateur Portable 🖥️ | Version Téléphone / Smartphone 📱 |
+| :--- | :--- | :--- |
+| **Navigation Principale** | Barre latérale gauche hiérarchisée (254px) en 3 blocs : *Espace de travail*, *Gestion*, *Administration*. | Barre inférieure fixée au bas de l'écran, conçue pour une utilisation facile au pouce. |
+| **Barre d'En-tête (Topbar)** | Titre de section complet, barre de commande globale rapide (**Ctrl+K**), heure de Paris en direct, boutons d'action rapide (`+ Devis`, `+ Intervention`). | Barre épurée avec menu tiroir (hamburger), recherche compacte, bouton d'installation PWA et bascule mode sombre. |
+| **Affichage des Données** | Grilles en double colonnes asymétriques (0.85fr / 1.15fr), visualisations graphiques larges. | Empilement fluide en colonne unique avec espacement de sécurité de **30px** au-dessus de la barre du bas. |
+| **Tableaux Analytiques** | Vue pleine largeur avec colonnes détaillées et chiffres tabulaires alignés à droite. | Conteneurs tactiles défilants (`.table-scroll`) avec inertie sans jamais forcer l'élargissement de la page. |
+| **Guidage Routier & Carte** | Vue grand angle du circuit routier complet, zoom interactif et fiches récapitulatives. | Lancement immédiat en 1 clic dans l'application GPS native du téléphone (**Waze** ou **Google Maps**). |
 
 <p align="center">
-  <img src="docs/images/schema-03-grille-reconversion-devis.svg" alt="Schéma Grille de Reconversion Devis" width="100%" />
+  <img src="docs/images/02-dashboard-synthese-pc.png" alt="Version PC 1440x900" width="49%" />
+  <img src="docs/images/09-mobile-dashboard-synthese.png" alt="Version Mobile 390x844" width="49%" />
 </p>
 
-![Grille de Reconversion Modal](docs/images/04b-grille-reconversion-modal.png)
-
-* **🛠️ Service Après-Vente (SAV / Garantie) :** Réglage, retouche de finition, réserve de réception. Intervention sous garantie, non refacturée (Préfixe `[SAV]`).
-* **🔁 Reprise de Travaux / Refaire :** Correction d'une malfaçon ou inachevé sur site (Préfixe `[REPRISE]`).
-* **➕ Travaux Supplémentaires / Avenant :** Prestation additionnelle commandée par le donneur d'ordre sur le chantier (Facturable en sus, préfixe `[AVENANT]`).
-* **📅 2ème Phase / Tranche de Chantier :** Étape différée pour séchage ou deuxième corps d'état (Préfixe `[PHASE 2]`).
-* **👁️ Consulter l'intervention existante :** Bouton direct permettant de consulter l'intervention en cours sans en créer une nouvelle.
-
 ---
 
-## 5. Interventions TCE & Tableau Synthétique
+## 3. Le Nouveau Tableau de Bord (3 Volets Métier)
 
-Le tableau des interventions offre une lisibilité instantanée sur grand écran comme sur PC portable sans débordement horizontal :
+Le tableau de bord se divise en 3 sous-onglets spécialisés pour répondre aux besoins opérationnels et managériaux :
 
-![Interventions TCE Synthèse](docs/images/05-interventions-tce-synthese.png)
-
-* **RÉF. :** Identifiant d'intervention (`INT-2026-XXX`) ou de visite (`VIS-XXX`).
-* **CLIENT & CHANTIER :** Donneur d'ordre, adresse et ville.
-* **CORPS D'ÉTAT & OBJET :** Spécialité et descriptif des travaux.
-* **TECHNICIEN & CRÉNEAU :** Affectation et plage horaire exacte.
-* **STATUT :** Badges colorés clairs (Planifiée, En cours, Clôturée).
-* **PHOTOS / RAP. :** Compteur de photos prises sur le chantier et état de validation du rapport.
-* **FACTURE :** État de transmission comptable.
-* **ACTIONS :** Raccourcis fiche détaillée et vue sur le Gantt.
-
----
-
-## 6. Facturation Intelligente & Arbitrage Fiscal (B2B vs B2C)
-
-La gestion de la facturation applique la règle standard d'ANELEC GROUPE : **« On ne facture que les chantiers achevés, pas les devis »**.
+### ① Volet Synthèse — Le Baromètre Visuel Immédiat
+* **4 Cartes KPI Principales :**
+  - **CA travaux réalisés (€ HT) :** Chiffre d'affaires produit par les chantiers achevés dans le mois.
+  - **Prêt à facturer (€ HT) :** Trésorerie mobilisable immédiatement (chantiers terminés en attente de facturation).
+  - **Devis à suivre :** Nombre de chiffrages en cours d'étude et taux de concrétisation commerciale (%).
+  - **Rapports à valider :** Signalements photos reçus du terrain nécessitant validation technique.
+* **Double Colonne Opérationnelle :**
+  - **À traiter en priorité :** Alertes cliquables vers les rapports photos reçus et devis signés à convertir.
+  - **Planning du jour :** Déroulé chronologique des interventions prévues aujourd'hui avec pastille d'état (En cours, Planifiée).
+* **Activité par corps d'état :** Tableau récapitulatif par spécialité (Électricité, Plomberie, Serrurerie, Peinture, Menuiserie, Tous corps d'état).
 
 <p align="center">
-  <img src="docs/images/schema-04-tri-facturation-arbitrage.svg" alt="Schéma Facturation et Arbitrage Fiscal" width="100%" />
+  <img src="docs/images/02-dashboard-synthese-pc.png" alt="Volet Synthèse" width="95%" />
 </p>
 
-![Facturation et Clients Bacs de Tri](docs/images/06-facturation-bacs-tri-b2b-b2c.png)
-
-### Les 5 Bacs de Tri Facturation
-1. **🟢 À facturer (Prêtes) :** Interventions de travaux terminées, rapport validé et photos conformes.
-2. **🟡 À vérifier (En attente) :** Travaux finis par le technicien en attente de validation du métré.
-3. **🔴 Ne pas facturer :** Visites de devis de chiffrage, interventions en cours, SAV sous garantie.
-4. **⚠️ Retards Clients :** Factures émises ayant dépassé l'échéance (J+30 ou J+45).
-5. **✅ Facturées :** Dossiers finalisés, transmis en comptabilité générale ou réglés.
-
-### Arbitrage Fiscal Libre (B2B vs B2C)
-* **🏢 Régime B2B (Syndics, Bailleurs, Professionnels) :** Saisie prioritaire en **HT**. Gestion de l'autoliquidation de sous-traitance (TVA 0% art. 283-2 nonies) ou TVA 20%, mention du Bon de Commande, paiement à 30 ou 45 jours.
-* **🏠 Régime B2C (Particuliers & Occupants) :** Saisie prioritaire en **TTC**. TVA réduite 10% (rénovation > 2 ans) ou 5,5% (énergétique), règlement au comptant.
-
 ---
 
-## 7. Contrôle de Gestion : Rentabilité & Marges d'Équipes
-
-Tableau de bord financier croisant en temps réel les heures pointées, les durées planifiées et les montants validés :
-
-![Rentabilité et Marges Équipes](docs/images/07-rentabilite-marges-equipes.png)
-
-* **CA Total Produit (€ HT) :** Chiffre d'affaires total généré par les chantiers terminés.
-* **Rentabilité Horaire (€ HT / heure) :** `CA Produit HT / Heures Réelles Pointées`.
-* **Marge Brute Globale (€ et %) :** CA HT déduit du coût horaire et des fournitures.
-* **Simulateur de Coût Moyen Chargé :** Curseur interactif permettant d'ajuster le coût de revient (ex: 35 €/h) pour recalculer la rentabilité nette de l'entreprise.
-* **Classement par Technicien :** Suivi individuel des heures réelles vs prévues, gains d'efficience et qualité des livrables.
-
----
-
-## 8. Workstation Super-Admin & Suivi des Pointages Flotte
-
-Console de commandement et d'audit pour la direction :
-
-![Workstation Admin et Pointages](docs/images/08-workstation-admin-pointages.png)
-
-* **Matrice RBAC Granulaire :** Gestion fine des droits d'accès (`SUPER_ADMIN`, `ADMIN`, `CHIFFRAGE_DEVIS`, `CONDUCTEUR_TRAVAUX`, `TECHNICIEN`, `VIEWER`).
-* **Tableau de Suivi des Pointages Journaliers :** Relevé chronologique des arrivées au bureau et départs le soir de l'ensemble de la flotte avec calcul automatique de l'amplitude travaillée.
-* **Centre de Rédaction des Rapports Officiels :** Fusion en 1 clic des actions déclarées, horaires et photos du technicien dans le rapport officiel ANELEC.
-
----
-
-## 9. Application Mobile Technicien PWA & Rigueur Terrain
-
-Conçue pour un usage intensif à une main sur smartphone (PWA installable sur iOS et Android) :
+### ② Volet Opérations — Les Files d'Action & Capacité des Équipes
+* **4 Files de Traitement Opérationnel :**
+  - **File 1 :** Devis acceptés à convertir en intervention.
+  - **File 2 :** Visites et travaux à planifier dans le calendrier.
+  - **File 3 :** Devis à relancer (échéance de relance atteinte).
+  - **File 4 :** Interventions terminées prêtes pour la facturation.
+* **Capacité & Affectation des Équipes :** Vue en temps réel de la charge de travail de chaque technicien (nombre de missions et chantiers assignés).
+* **Signalements Photos Terrain :** Cartouche d'alerte dès qu'un technicien téléverse des photos justificatives d'un chantier terminé.
 
 <p align="center">
-  <img src="docs/images/schema-02-workflow-technicien-mobile.svg" alt="Schéma Workflow Technicien Mobile" width="100%" />
+  <img src="docs/images/02b-dashboard-operations-pc.png" alt="Volet Opérations" width="95%" />
+</p>
+
+---
+
+### ③ Volet Analyse — Entonnoir de Production & Performance Financière
+* **L'Entonnoir d'Avancement des Travaux (5 Étapes Fluides) :**
+  - **Étape 1 · Amont :** Devis & Chiffrages (devis actifs et visites requises).
+  - **Étape 2 · Dispatch :** Ordonnancement Gantt (missions en attente de planification).
+  - **Étape 3 · Production :** Sur le terrain aujourd'hui (chantiers avec pointage actif).
+  - **Étape 4 · Contrôle :** Rapports & Photos reçus (vérification avant facturation).
+  - **Étape 5 · Clôture :** Clôturées & Facturées (pourcentage de facturation effective).
+* **Répartition Analytique par Pôle Métier :** Ventilation détaillée du CA réalisé, des chantiers actifs et du taux de complétion par corps d'état.
+
+<p align="center">
+  <img src="docs/images/02c-dashboard-analyse-pc.png" alt="Volet Analyse" width="95%" />
+</p>
+
+---
+
+## 4. Carte Interactive & Calcul Automatique d'Itinéraires (TSP 2-Opt)
+
+Le module **Carte & Tournées** calcule automatiquement le circuit routier le plus rapide pour minimiser les kilomètres et le temps de trajet des techniciens en Île-de-France.
+
+<p align="center">
+  <img src="docs/images/03-carte-tournees-pc.png" alt="Carte et Tournées PC" width="95%" />
+</p>
+
+### 📍 Règle Métier Absolue : Départ et Arrivée Fixes au Siège ANELEC
+> Le point de départ et d'arrivée de toutes les tournées est **strictement fixé au siège d'ANELEC GROUPE : 9 Rue des Colonnes, 75002 Paris**.  
+> **Aucune localisation GPS personnelle** du technicien n'est utilisée pour tracer le parcours routier.
+
+### 🛡️ Fiabilité Cartographique & Tuiles Haute Disponibilité
+* Afin de prévenir tout blocage HTTP 403 d'OpenStreetMap, l'application utilise les serveurs cartographiques **ESRI World Street Map** (CDN mondial haute performance) avec bascule automatique sur **OpenStreetMap France** (`osmfr`).
+* Affichage fluide des marqueurs géolocalisés via l'API nationale de géocodage (**Base Adresse Nationale - adresse.data.gouv.fr**).
+
+### 🚀 Guidage GPS 1 Clic sur Mobile
+Sur téléphone portable, chaque étape du circuit propose deux boutons d'action rapide :
+* **Bouton Google Maps :** Ouvre l'itinéraire avec prise en compte du trafic en temps réel.
+* **Bouton Waze :** Ouvre le guidage communautaire direct vers l'adresse exacte du chantier.
+
+<p align="center">
+  <img src="docs/images/10-mobile-carte-tournees.png" alt="Carte et Guidage Mobile" width="380" />
+</p>
+
+---
+
+## 5. Procédures Opérationnelles Pas-à-Pas Séparées par Métier
+
+---
+
+### Procédure A : Direction Générale & Super-Admin (Pilotage Financier)
+
+**Acteurs :** Direction, Gérant, Responsable Administratif et Financier.
+
+<p align="center">
+  <img src="docs/images/08-rentabilite-equipes-pc.png" alt="Rentabilité et Marges" width="95%" />
+</p>
+
+#### Étapes Opérationnelles :
+1. **Étape 1 ➔ Consulter le Tableau de Bord (Volet Synthèse & Analyse) :**
+   - Vérifier le volume de CA travaux réalisés dans le mois en cours.
+   - Contrôler le taux de transformation commerciale des devis émis.
+2. **Étape 2 ➔ Évaluer la Rentabilité Horaire Réelle (€ HT / heure) :**
+   - Accéder à la section **Rentabilité & Équipes**.
+   - Analyser le ratio `CA Produit HT / Heures Réelles Pointées`.
+3. **Étape 3 ➔ Utiliser le Simulateur de Coût Moyen Chargé :**
+   - Déplacer le curseur interactif du coût horaire de revient (ex: 35 €/h) pour observer immédiatement la marge nette dégagée par chaque technicien et chaque corps d'état.
+4. **Étape 4 ➔ Auditer les Pointages Flotte :**
+   - Dans **Utilisateurs & Accès**, consulter les relevés d'arrivée (☀️) et de départ (🌙) certifiés pour chaque salarié.
+
+---
+
+### Procédure B : Bureau d'Études & Chiffrage (Pipeline Devis)
+
+**Acteurs :** Métreur, Chiffreur TCE, Chargé d'Affaires.
+
+<p align="center">
+  <img src="docs/images/05-pipeline-devis-pc.png" alt="Pipeline Devis" width="95%" />
+</p>
+
+#### Étapes Opérationnelles :
+1. **Étape 1 ➔ Créer un Devis Chiffrage :**
+   - Cliquer sur le bouton **`+ Devis`** en haut à droite.
+   - Renseigner le donneur d'ordre (Syndic, Bailleur, Client), l'adresse complète du chantier, l'objet des travaux et le corps d'état.
+2. **Étape 2 ➔ Qualifier la Prise de Cotes :**
+   - Si une visite préalable est nécessaire sur site, cocher la case **« Visite nécessaire »**.
+   - Un créneau unifié **`VIS • DEV`** apparaît immédiatement dans la bourse du planning pour que le dispatcher attribue un technicien.
+3. **Étape 3 ➔ Convertir le Devis Signé :**
+   - Lorsque le devis est validé par le client, cliquer sur **« Convertir en intervention »**.
+   - **Sécurité Anti-Doublon :** Si le devis a déjà été converti, la **Grille de Reconversion Intelligente** s'affiche automatiquement pour qualifier le motif :
+     - 🛠️ **SAV / Garantie :** Intervention sous garantie non facturée (`[SAV]`).
+     - 🔁 **Reprise de Travaux :** Correction d'inachevé ou malfaçon (`[REPRISE]`).
+     - ➕ **Avenant / Travaux Sup :** Prestation supplémentaire commandée sur site (`[AVENANT]`).
+     - 📅 **2ème Phase / Tranche :** Étape différée pour séchage ou corps d'état suivant (`[PHASE 2]`).
+
+<p align="center">
+  <img src="docs/images/04b-grille-reconversion-modal.png" alt="Grille de Reconversion" width="600" />
+</p>
+
+---
+
+### Procédure C : Conducteur de Travaux & Dispatcher (Planning Gantt & Tournées)
+
+**Acteurs :** Dispatcher, Conducteur de Travaux, Planificateur d'Équipe.
+
+<p align="center">
+  <img src="docs/images/04-dispatch-planning-gantt-pc.png" alt="Planning Gantt Dispatch" width="95%" />
+</p>
+
+#### Étapes Opérationnelles :
+1. **Étape 1 ➔ Ouvrir la Bourse de Dispatch :**
+   - Dans le menu **Planning**, ouvrir le tiroir latéral gauche contenant les missions non planifiées.
+2. **Étape 2 ➔ Glisser-Déposer sur la Ligne du Technicien (Pointer Events 60 fps) :**
+   - Déplacer le bloc mission sur la timeline du technicien compétent à l'horaire convenu (ex: 09h00).
+   - Ajuster la durée de passage en étirant simplement le bord inférieur du bloc avec la souris.
+3. **Étape 3 ➔ Vérifier le Circuit Routier dans « Carte & Tournées » :**
+   - Basculer sur **Carte & Tournées**.
+   - Sélectionner le technicien concerné : le système trace le circuit routier automatique au départ du siège (9 Rue des Colonnes) et vérifie l'absence d'incohérence kilométrique.
+
+---
+
+### Procédure D : Technicien Terrain (Application Mobile PWA)
+
+**Acteurs :** Techniciens Électriciens, Plombiers, Serruriers, Peintres, Menuisiers et Polyvalents TCE.
+
+<p align="center">
+  <img src="docs/images/schema-02-workflow-technicien-mobile.svg" alt="Workflow Technicien Mobile" width="100%" />
 </p>
 
 <p align="center">
-  <img src="docs/images/09-application-mobile-technicien.png" alt="Application Mobile Technicien" width="340" />
+  <img src="docs/images/11-mobile-tech-app.png" alt="Interface Mobile Technicien" width="340" />
 </p>
 
-### Règles Opérationnelles Strictes
-1. **Verrouillage du Matin :** L'application empêche de démarrer une mission sans avoir au préalable appuyé sur *« ☀️ Pointer mon arrivée au bureau »*. L'horodatage serveur est certifié et infalsifiable.
-2. **Déclarations Terrain & Photos :** Cocher en 1 clic les actions techniques réalisées.
-3. **Optimiseur de Photos (< 75 Ko) :** Les photos haute résolution prises sur site sont automatiquement redimensionnées et compressées avant l'envoi, garantissant un téléversement instantané en 3G/4G et protégeant la base de données.
-4. **Clôture Synchronisée Devis & Intervention :** La clôture du chantier met automatiquement à jour le devis d'origine rattaché.
-5. **Verrouillage du Soir & Mission Non Finie :** Le pointage de fin de journée est bloqué si une mission est en cours. En cas d'intempérie ou de pièce manquante, le technicien appuie sur *« Intervention non finie »* pour transmission immédiate au dispatcher.
+#### Étapes Opérationnelles :
+1. **Étape 1 ➔ Pointage Obligatoire du Matin (07h30 au Siège) :**
+   - À l'arrivée au bureau, ouvrir l'application sur le téléphone et appuyer sur :  
+     **`☀️ Pointer mon arrivée au bureau`**
+   - 🔒 **Règle de sécurité :** Le démarrage des chantiers est verrouillé tant que ce pointage certifié n'a pas été enregistré.
+2. **Étape 2 ➔ Trajet & Guidage GPS :**
+   - Ouvrir la première mission de la journée.
+   - Appuyer sur le logo **Waze** ou **Google Maps** pour démarrer le guidage routier vers l'adresse exacte.
+3. **Étape 3 ➔ Démarrage & Déclarations Terrain :**
+   - Arrivé sur place, appuyer sur **« Démarrer l'intervention »**.
+   - Cocher les actions techniques réalisées au fur et à mesure.
+4. **Étape 4 ➔ Prise de Photos (Compression Automatique < 75 Ko) :**
+   - Prendre les photos avant/après avec l'appareil photo du smartphone.
+   - Le moteur de compression intégré réduit instantanément la photo sans perte de netteté pour un téléversement immédiat même en zone 3G/4G faible.
+5. **Étape 5 ➔ Clôture avec Signature & Pointage du Soir :**
+   - Recueillir la signature du client sur l'écran et appuyer sur **« Clôturer l'intervention »** (le devis lié est automatiquement synchronisé).
+   - En fin de journée, appuyer sur **`🌙 Pointer ma fin de journée`**.
 
 ---
 
-## 10. Connexion Sécurisée & Contrôle d'Accès RBAC
+### Procédure E : Responsable Facturation & Comptabilité (Tri & Fiscalité)
 
-L'accès à la plateforme est protégé par authentification JWT avec cookies sécurisés et étanchéité complète des profils :
+**Acteurs :** Agent de Facturation, Comptable, Gestionnaire Administratif.
 
-![Connexion Espace Sécurisé](docs/images/01-connexion-espace-securise.png)
+<p align="center">
+  <img src="docs/images/schema-04-tri-facturation-arbitrage.svg" alt="Schéma Facturation et Arbitrage" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/07-facturation-clients-pc.png" alt="Studio Facturation" width="95%" />
+</p>
+
+#### Règle d'Or Comptable d'ANELEC GROUPE :
+> **« On ne facture que les chantiers achevés avec justificatifs validés, jamais un devis »**.  
+> Les visites de devis de chiffrage (`VIS`) ne sont jamais envoyées en facturation.
+
+#### Étapes Opérationnelles :
+1. **Étape 1 ➔ Consulter le Bac 1 : 🟢 À facturer (Prêtes) :**
+   - Seuls les chantiers clôturés avec rapport et photos conformes y figurent.
+2. **Étape 2 ➔ Choisir le Régime Fiscal Approprié :**
+   - **🏢 Régime B2B (Syndics, Bailleurs, Sociétés) :**
+     - Saisie en **HT**.
+     - Application de l'autoliquidation de sous-traitance TVA 0% (art. 283-2 nonies du CGI) ou TVA 20%.
+     - Saisie obligatoire de la référence du Bon de Commande client.
+   - **🏠 Régime B2C (Particuliers & Occupants) :**
+     - Saisie en **TTC**.
+     - Application du taux de TVA réduit à 10% (logement d'habitation > 2 ans) ou 5,5% (travaux d'amélioration énergétique).
+3. **Étape 3 ➔ Émission & Bascule Automatique :**
+   - Cliquer sur **« Émettre la facture »** : le dossier bascule instantanément dans le Bac **✅ Facturées** et met à jour le baromètre financier en temps réel.
 
 ---
 
-## 11. Stack Technique & Déploiement Cloud
+## 6. Génération du Guide Utilisateur PDF Officiel
 
-| Couche | Technologie | Rôle et Caractéristiques |
-|:---|:---|:---|
-| **Frontend** | React 18, TypeScript, Vite, TanStack Query | Interface réactive 60 fps, mise en cache optimisée |
-| **Backend** | Node.js 20+, Express 4, Socket.io | API REST, gestion des websockets temps réel |
-| **Base de Données** | PostgreSQL 17 sur Supabase (AWS Paris) | SGBD relationnel sécurisé avec Session Pooler SSL |
-| **ORM** | Prisma ORM v6 | Schéma déclaratif, typage strict et migrations |
-| **Mobile PWA** | Web App Manifest, Service Worker | PWA certifiée installable sur iPhone et Android |
-| **Production** | Hostinger Cloud VPS, Domaine Officiel | Déploiement automatisé sur `suivi.anelecgroupe.com` |
-
-### Commandes Opérationnelles
+Un script automatisé basé sur Chromium headless permet de compiler l'intégralité du manuel opérationnel en un document PDF A4 prêt à l'impression :
 
 ```sh
-# Installation des dépendances
+# Générer le Guide Utilisateur & Procédures Métier au format PDF
+node scripts/generate-doc-pdf.mjs
+```
+
+Le fichier compilé est généré à l'emplacement suivant :  
+👉 **`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`**
+
+Ce document comprend :
+* La page de couverture officielle avec le logo ANELEC GROUPE.
+* Le sommaire détaillé avec numérotation des pages.
+* Les schémas opérationnels de flux.
+* Les captures d'écran réelles annotées avec pastilles de procédures (`①`, `②`, `③`), flèches directrices et explications visuelles.
+
+---
+
+## 7. Commandes Utiles & Stack Technique
+
+### Stack Technique de Production
+* **Frontend :** React 18, TypeScript, Vite, TanStack Query, Leaflet (Cartographie ESRI / OSM France).
+* **Backend :** Node.js 20+, Express 4, Socket.io (Temps Réel).
+* **Base de Données :** PostgreSQL 17 sur Supabase avec Session Pooler SSL.
+* **ORM :** Prisma ORM v6.
+* **Mobile :** PWA (Progressive Web App) installable avec Service Worker et Web App Manifest.
+* **Infrastructure :** Hostinger Cloud VPS, déploiement Git sous Node.js.
+
+### Commandes Opérationnelles de Développement
+
+```sh
+# 1. Installation des dépendances
 npm ci --include=dev
 
-# Lancement en développement (Vite + Serveur Express)
+# 2. Lancement en développement local (Vite + Serveur Express)
 npm run dev
 
-# Tests unitaires et non-régression temps réel
-npx tsx --test test/realtimeInvalidation.test.ts
+# 3. Compilation complète de production (Client Vite + Serveur TS)
+npm run build
 
-# Compilation complète de production
-npm run build:client && npm run build:server
-
-# Application des migrations Prisma en production
+# 4. Application des migrations de base de données PostgreSQL
 node scripts/migrate.mjs
 
-# Génération du Livre Blanc PDF officiel
+# 5. Compilation du Guide Utilisateur PDF Officiel
 node scripts/generate-doc-pdf.mjs
 ```
 
 ---
 
-## 12. Fiches Réflexes & Manuel Opérationnel
+## Propriété Intellectuelle & Mentions Légales
 
-### Fiche Réflexe A : Le Dispatcher (Planning Gantt)
-1. Ouvrir **Dispatch & Planning**.
-2. Glisser la mission depuis la *Bourse* vers la timeline du technicien à l'heure voulue.
-3. Pour ajuster la durée : étirer le bord inférieur du bloc.
-4. Les visites devis apparaissent sous un seul bloc `VIS • DEV` en Jaune ANELEC.
-5. Pour annuler : clic sur le créneau ➔ *« Supprimer le créneau »*.
-
-### Fiche Réflexe B : Le Bureau d'Études (Pipeline Devis)
-1. Ouvrir **Pipeline Devis**.
-2. Si une prise de cotes est requise sur place, cocher *« Visite nécessaire »*.
-3. Une fois signé par le client, cliquer sur *« Convertir en intervention »*.
-4. Si déjà converti : la **Grille de Reconversion** s'affiche pour qualifier la mission (SAV, Reprise, Avenant ou Phase 2).
-
-### Fiche Réflexe C : Le Technicien Terrain (Mobile PWA)
-1. À l'arrivée au bureau (07h30) : appuyer sur *« ☀️ Pointer mon arrivée au bureau »*.
-2. Sur le chantier : appuyer sur *« Démarrer l'intervention »*.
-3. Prendre les photos (compressées automatiquement < 75 Ko) et cocher les actions réalisées.
-4. À la fin : appuyer sur *« Clôturer l'intervention »* (le devis lié se clôture automatiquement).
-5. Si un problème survient : appuyer sur *« Intervention non finie »* et préciser le motif.
-6. En fin de journée : appuyer sur *« 🌙 Pointer ma fin de journée »*.
-
-### Fiche Réflexe D : L'Agent de Facturation
-1. Ouvrir **Facturation & Clients**.
-2. Consulter le bac **🟢 À facturer (Prêtes)** : seules les interventions de travaux achevées y sont présentes.
-3. Sélectionner le régime fiscal :
-   - **Régime B2B :** Saisie en HT, autoliquidation ou TVA 20%, mention du Bon de Commande.
-   - **Régime B2C :** Saisie en TTC, TVA réduite 10% ou 5,5%.
-4. Valider l'émission : le dossier bascule immédiatement dans **Facturées**.
-
----
-
-## 13. Documentation & Livre Blanc PDF
-
-Le rapport exécutif complet au format PDF regroupe l'intégralité des visuels réels et des schémas techniques dans un format imprimable :
-👉 **Télécharger le PDF :** [`docs/RAPPORT_COMPLET_TCE_ANELEC.pdf`](docs/RAPPORT_COMPLET_TCE_ANELEC.pdf)
-
----
-
-## Propriété Intellectuelle
-
-© **ANELEC GROUPE** — Tous droits réservés.  
-Plateforme logicielle propriétaire conçue pour la maintenance et les travaux Tout Corps d'État (TCE).
+© **ANELEC GROUPE** — 9 Rue des Colonnes, 75002 Paris.  
+Tous droits réservés. Plateforme logicielle propriétaire de gestion de chantiers et dispatching Tout Corps d'État (TCE).
