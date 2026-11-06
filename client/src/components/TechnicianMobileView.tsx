@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   adminApi,
   interventionApi,
+  devisApi,
   Intervention,
   Devis,
   TerrainPhoto,
@@ -61,6 +62,17 @@ export function TechnicianMobileView({
   const [customActionInput, setCustomActionInput] = useState<string>('');
   const [photoCategory, setPhotoCategory] = useState<'AVANT' | 'APRES' | 'RELEVE_CHIFFRAGE' | 'CONSTAT'>('AVANT');
   const [photoCaption, setPhotoCaption] = useState<string>('');
+
+  // Modale blocage matin (si pas d'arrivée au bureau)
+  const [showMorningBlockerModal, setShowMorningBlockerModal] = useState<{ mission: Intervention } | null>(null);
+
+  // Modale blocage soir (si intervention en cours)
+  const [showRunningBlockerModal, setShowRunningBlockerModal] = useState<Intervention | null>(null);
+
+  // Modale intervention non terminée / à replanifier
+  const [nonTermineeModalMission, setNonTermineeModalMission] = useState<Intervention | null>(null);
+  const [nonTermineeReason, setNonTermineeReason] = useState<string>('📦 Matériel / Pièces manquantes');
+  const [nonTermineeDetails, setNonTermineeDetails] = useState<string>('');
 
   // Horloge en direct au fuseau officiel Paris
   const [liveParisTime, setLiveParisTime] = useState<string>(() => {
@@ -147,7 +159,18 @@ export function TechnicianMobileView({
     },
   });
 
-  // Missions du technicien (individuelles + missions affectées à son équipe journalière)
+  const updateDevisMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Devis> }) => devisApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devis'] });
+      queryClient.invalidateQueries({ queryKey: ['interventions'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Erreur de mise à jour devis');
+    },
+  });
+
+  // Missions du technicien (interventions individuelles + interventions d'équipe + visites devis affectées)
   const techMissions = useMemo(() => {
     const targetLower = (currentTechnicien || '').trim().toLowerCase();
     const allForTech = interventionsList.filter((i) => {
@@ -162,10 +185,45 @@ export function TechnicianMobileView({
       }
       return false;
     });
+
+    // Intégration des Visites Devis planifiées pour ce technicien (s'il n'y a pas déjà une intervention liée)
+    const existingDevisIds = new Set(
+      allForTech.map((i) => i.devisId || i.origineDevisId).filter(Boolean)
+    );
+    const devisVisitsForTech: Intervention[] = devisList
+      .filter((d) => {
+        if (!d.visiteNecessaire) return false;
+        if (d.statutCommercial === 'Perdu' || d.statutCommercial === 'Sans suite') return false;
+        if (existingDevisIds.has(d.id)) return false;
+        const tech = (d.visiteTechnicien || '').trim().toLowerCase();
+        return tech === targetLower;
+      })
+      .map((d) => ({
+        id: -d.id, // ID négatif pour identifier la visite devis directe
+        reference: d.reference || `DEV-${d.id}`,
+        client: d.client,
+        chantier: d.site || d.client || 'Site à préciser',
+        objet: d.objet ? `[Visite Devis] ${d.objet}` : 'Visite technique Devis',
+        corpsEtat: d.corpsEtat || 'Visite Devis',
+        datePlanifiee: d.visiteDate || undefined,
+        heureDebut: d.visiteHeureDebut || '08:30',
+        heureFin: d.visiteHeureFin || '10:30',
+        statutOperationnel: d.visiteStatut === 'Terminée' ? 'Clôturée' : (d.visiteStatut || 'Planifiée'),
+        isVisiteDevis: true,
+        devisId: d.id,
+        origineDevisId: d.id,
+        status: 'a-traiter' as any,
+        priorite: d.priorite || 'Normale',
+        notes: d.notes || undefined,
+        photos: [],
+        actionsRealisees: [],
+      }));
+
+    const combined = [...allForTech, ...devisVisitsForTech];
     const filtered =
       filterMode === 'jour'
-        ? allForTech.filter((i) => i.datePlanifiee === selectedDate)
-        : allForTech;
+        ? combined.filter((i) => i.datePlanifiee === selectedDate)
+        : combined;
 
     return [...filtered].sort((a, b) => {
       const da = a.datePlanifiee || '9999-99-99';
@@ -173,7 +231,7 @@ export function TechnicianMobileView({
       if (da !== db) return da.localeCompare(db);
       return (a.heureDebut || '08:00').localeCompare(b.heureDebut || '08:00');
     });
-  }, [interventionsList, currentTechnicien, filterMode, selectedDate]);
+  }, [interventionsList, devisList, currentTechnicien, filterMode, selectedDate]);
 
   const activeMission = useMemo(
     () => techMissions.find((m) => m.id === activeMissionId) || techMissions[0] || null,
@@ -189,7 +247,7 @@ export function TechnicianMobileView({
   // Dernière intervention effectuée pour la clôture du soir
   const lastMissionRef = useMemo(() => {
     const done = techMissions.filter((m) =>
-      ['Terminée - à valider', 'Clôturée', 'En cours'].includes(m.statutOperationnel)
+      ['Terminée - à valider', 'Clôturée', 'En cours', 'Intervention non terminée'].includes(m.statutOperationnel)
     );
     return (
       done[done.length - 1]?.reference ||
@@ -198,36 +256,157 @@ export function TechnicianMobileView({
     );
   }, [techMissions]);
 
-  const handleActivateMission = async (mission: Intervention) => {
+  const handleActivateMissionDirect = async (mission: Intervention) => {
     const nowHHMM = getNowHHMM();
-    await updateMissionMut.mutateAsync({
-      id: mission.id,
-      data: {
-        statutOperationnel: 'En cours',
-        traitement: 'En cours de traitement',
-        heureDebutReelle: mission.heureDebutReelle || nowHHMM,
-        dateDebut: mission.dateDebut || selectedDate,
-        statutRapport: 'Déclaré par technicien',
-      },
-    });
+    if (mission.id < 0) {
+      const realDevisId = Math.abs(mission.id);
+      await updateDevisMut.mutateAsync({
+        id: realDevisId,
+        data: {
+          visiteStatut: 'En cours',
+          visiteHeureDebut: mission.heureDebutReelle || nowHHMM,
+        },
+      });
+    } else {
+      await updateMissionMut.mutateAsync({
+        id: mission.id,
+        data: {
+          statutOperationnel: 'En cours',
+          traitement: 'En cours de traitement',
+          heureDebutReelle: mission.heureDebutReelle || nowHHMM,
+          dateDebut: mission.dateDebut || selectedDate,
+          statutRapport: 'Déclaré par technicien',
+        },
+      });
+    }
     setActiveMissionId(mission.id);
     toast.success(`▶️ Mission ${mission.reference} activée à ${nowHHMM}`);
   };
 
+  const handleActivateMission = async (mission: Intervention) => {
+    // RÈGLE 1 : L'intervention ne peut commencer que si le technicien démarre son arrivée au bureau
+    if (!currentPointage?.heureArriveeBureau) {
+      setShowMorningBlockerModal({ mission });
+      toast.error('⚠️ Vous devez d\'abord pointer votre arrivée au bureau avant de démarrer une intervention !');
+      return;
+    }
+
+    await handleActivateMissionDirect(mission);
+  };
+
   const handleDeactivateMission = async (mission: Intervention) => {
     const nowHHMM = getNowHHMM();
-    await updateMissionMut.mutateAsync({
-      id: mission.id,
-      data: {
-        statutOperationnel: 'Terminée - à valider',
-        heureFinReelle: nowHHMM,
-        dateReelle: selectedDate,
-        elementsChiffrage: activeMission?.id === mission.id ? chiffrageDraft : mission.elementsChiffrage,
-        compteRendu: activeMission?.id === mission.id ? compteRenduDraft : mission.compteRendu,
-        statutRapport: 'Déclaré par technicien',
-      },
-    });
-    toast.success(`⏹️ Mission ${mission.reference} terminée à ${nowHHMM}`);
+    const cr = activeMission?.id === mission.id ? compteRenduDraft : mission.compteRendu;
+    const chiffrage = activeMission?.id === mission.id ? chiffrageDraft : mission.elementsChiffrage;
+
+    if (mission.id < 0) {
+      // Visite devis directe
+      const realDevisId = Math.abs(mission.id);
+      const dev = devisList.find((d) => d.id === realDevisId);
+      await updateDevisMut.mutateAsync({
+        id: realDevisId,
+        data: {
+          visiteStatut: 'Terminée',
+          statutCommercial: dev?.statutCommercial === 'À préparer' ? 'En cours de rédaction' : dev?.statutCommercial,
+          prochaineAction: 'Chiffrer le devis (Visite terrain clôturée)',
+          notes: [dev?.notes, `[Clôture visite ${selectedDate} ${nowHHMM} par ${currentTechnicien}] ${cr || ''}`].filter(Boolean).join('\n'),
+        },
+      });
+      toast.success(`✅ Visite Devis ${mission.reference} clôturée et envoyée au chiffrage !`);
+    } else {
+      // Intervention TCE
+      await updateMissionMut.mutateAsync({
+        id: mission.id,
+        data: {
+          statutOperationnel: 'Clôturée',
+          traitement: 'Clôturé par technicien - Prêt pour facturation',
+          heureFinReelle: nowHHMM,
+          dateReelle: selectedDate,
+          elementsChiffrage: chiffrage,
+          compteRendu: cr,
+          statutRapport: 'Validé par technicien',
+        },
+      });
+
+      // Si l'intervention est liée à un devis : clôture automatique du devis associé
+      const targetDevisId = mission.devisId || mission.origineDevisId;
+      if (targetDevisId) {
+        const associatedDevis = devisList.find((d) => d.id === targetDevisId);
+        if (associatedDevis) {
+          await updateDevisMut.mutateAsync({
+            id: associatedDevis.id,
+            data: {
+              visiteStatut: 'Terminée',
+              prochaineAction: 'Prêt pour facturation / dossier clôturé',
+              notes: [
+                associatedDevis.notes,
+                `[Clôture intervention ${mission.reference} le ${selectedDate} à ${nowHHMM} par ${currentTechnicien}]: Mission terminée sur le terrain. Envoyée à la clôture.`
+              ].filter(Boolean).join('\n'),
+            },
+          });
+          toast.success(`✅ Intervention ${mission.reference} et Devis ${associatedDevis.reference || associatedDevis.id} envoyés à la clôture !`);
+          return;
+        }
+      }
+
+      toast.success(`✅ Intervention ${mission.reference} clôturée automatiquement à ${nowHHMM} !`);
+    }
+  };
+
+  const handleMarkNonTerminee = async (
+    mission: Intervention,
+    motif: string,
+    precision: string
+  ) => {
+    const nowHHMM = getNowHHMM();
+    const noteEntry = `[${selectedDate} ${nowHHMM}] Non terminée par ${currentTechnicien}. Motif : ${motif}.${precision ? ` Détails : ${precision}` : ''} -> À replanifier.`;
+
+    if (mission.id < 0) {
+      const realDevisId = Math.abs(mission.id);
+      const dev = devisList.find((d) => d.id === realDevisId);
+      await updateDevisMut.mutateAsync({
+        id: realDevisId,
+        data: {
+          visiteStatut: 'À replanifier',
+          prochaineAction: 'Replanifier la visite (Intervention non terminée sur site)',
+          notes: [dev?.notes, noteEntry].filter(Boolean).join('\n'),
+        },
+      });
+    } else {
+      const mergedNotes = [mission.notes, noteEntry].filter(Boolean).join('\n');
+      const mergedCR = [mission.compteRendu, noteEntry].filter(Boolean).join('\n');
+      await updateMissionMut.mutateAsync({
+        id: mission.id,
+        data: {
+          statutOperationnel: 'Intervention non terminée',
+          traitement: 'À replanifier',
+          motifBlocage: motif,
+          heureFinReelle: nowHHMM,
+          dateReelle: selectedDate,
+          compteRendu: mergedCR,
+          notes: mergedNotes,
+          statutRapport: 'Déclaré non terminé par technicien',
+        },
+      });
+
+      if (mission.devisId || mission.origineDevisId) {
+        const linkedId = mission.devisId || mission.origineDevisId;
+        const dev = devisList.find((d) => d.id === linkedId);
+        if (dev) {
+          await updateDevisMut.mutateAsync({
+            id: dev.id,
+            data: {
+              visiteStatut: 'À replanifier',
+              notes: [dev.notes, noteEntry].filter(Boolean).join('\n'),
+            },
+          });
+        }
+      }
+    }
+
+    setNonTermineeModalMission(null);
+    setNonTermineeDetails('');
+    toast.success(`⏳ Intervention ${mission.reference} marquée non terminée. Elle est transmise au bureau pour replanification.`);
   };
 
   const handleSaveReportAndChiffrage = async (mission: Intervention) => {
@@ -796,6 +975,18 @@ export function TechnicianMobileView({
                       boxShadow: '0 4px 14px rgba(37, 99, 235, 0.25)',
                     }}
                     onClick={() => {
+                      // RÈGLE 2 : Vérification stricte qu'aucune intervention n'est encore en cours
+                      const runningMission = techMissions.find(
+                        (m) => m.statutOperationnel === 'En cours'
+                      );
+                      if (runningMission) {
+                        setShowRunningBlockerModal(runningMission);
+                        toast.error(
+                          `⛔ Impossible de clôturer la journée : la mission ${runningMission.reference} est encore en cours !`
+                        );
+                        return;
+                      }
+
                       clockOutMut.mutate({
                         technicien: currentTechnicien,
                         dateJour: selectedDate,
@@ -938,13 +1129,21 @@ export function TechnicianMobileView({
 
                         <span
                           className={`badge ${
-                            isRunning ? 'badge-warning' : isDone ? 'badge-success' : 'badge-neutral'
+                            isRunning
+                              ? 'badge-warning'
+                              : isDone
+                              ? 'badge-success'
+                              : m.statutOperationnel === 'Intervention non terminée'
+                              ? 'badge-danger'
+                              : 'badge-neutral'
                           }`}
                         >
                           {isRunning
                             ? `🟢 EN COURS (${m.heureDebutReelle || ''})`
                             : isDone
-                            ? `✓ TERMINÉE (${m.heureDebutReelle || ''}→${m.heureFinReelle || ''})`
+                            ? `✓ CLÔTURÉE (${m.heureDebutReelle || ''}→${m.heureFinReelle || ''})`
+                            : m.statutOperationnel === 'Intervention non terminée'
+                            ? `⏳ NON TERMINÉE (${m.motifBlocage || 'Replanifier'})`
                             : m.statutOperationnel}
                         </span>
                       </div>
@@ -981,7 +1180,7 @@ export function TechnicianMobileView({
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Ligne 1 : Activer / Démarrer ou Désactiver / Terminer */}
-                        {!isRunning && !isDone && (
+                        {!isRunning && !isDone && m.statutOperationnel !== 'Intervention non terminée' && (
                           <button
                             type="button"
                             className="btn btn-primary"
@@ -1000,21 +1199,62 @@ export function TechnicianMobileView({
                         )}
 
                         {isRunning && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{
-                              width: '100%',
-                              minHeight: '44px',
-                              background: '#dc2626',
-                              borderColor: '#dc2626',
-                              fontWeight: 800,
-                              fontSize: '13px',
-                            }}
-                            onClick={() => handleDeactivateMission(m)}
-                          >
-                            ⏹️ Désactiver / Terminer la mission
-                          </button>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{
+                                minHeight: '44px',
+                                background: '#dc2626',
+                                borderColor: '#dc2626',
+                                fontWeight: 800,
+                                fontSize: '12px',
+                              }}
+                              onClick={() => handleDeactivateMission(m)}
+                            >
+                              ⏹️ Clôturer la mission
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{
+                                minHeight: '44px',
+                                color: '#d97706',
+                                borderColor: 'rgba(217, 119, 6, 0.4)',
+                                fontWeight: 800,
+                                fontSize: '11.5px',
+                              }}
+                              onClick={() => setNonTermineeModalMission(m)}
+                            >
+                              ⏳ Non terminée (Replanifier)
+                            </button>
+                          </div>
+                        )}
+
+                        {m.statutOperationnel === 'Intervention non terminée' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                background: 'rgba(245, 158, 11, 0.12)',
+                                border: '1px solid rgba(245, 158, 11, 0.35)',
+                                color: '#d97706',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                              }}
+                            >
+                              ⏳ Non terminée • Replanification requise ({m.motifBlocage || 'Blocage'})
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ width: '100%', fontWeight: 700 }}
+                              onClick={() => handleActivateMission(m)}
+                            >
+                              🔄 Reprendre cette intervention
+                            </button>
+                          </div>
                         )}
 
                         {/* Ligne 2 : Ouvrir Compte Rendu & Photos + GPS */}
@@ -1139,7 +1379,7 @@ export function TechnicianMobileView({
                     {activeMission.client} — {activeMission.chantier}
                   </h3>
 
-                  {/* Bouton rapide Activer / Terminer directement depuis la fiche Compte Rendu */}
+                  {/* Boutons rapides Activer / Clôturer / Non terminée directement depuis la fiche Compte Rendu */}
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
                     {activeMission.statutOperationnel !== 'En cours' ? (
                       <button
@@ -1148,17 +1388,27 @@ export function TechnicianMobileView({
                         style={{ flex: 1, background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
                         onClick={() => handleActivateMission(activeMission)}
                       >
-                        ▶️ Activer le début de mission
+                        ▶️ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
-                        onClick={() => handleDeactivateMission(activeMission)}
-                      >
-                        ⏹️ Terminer & Clôturer la mission
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
+                          onClick={() => handleDeactivateMission(activeMission)}
+                        >
+                          ⏹️ Terminer & Clôturer la mission
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ flex: 1, color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', minHeight: '40px', fontWeight: 800 }}
+                          onClick={() => setNonTermineeModalMission(activeMission)}
+                        >
+                          ⏳ Non terminée (Replanifier)
+                        </button>
+                      </>
                     )}
                   </div>
 
@@ -1485,6 +1735,356 @@ export function TechnicianMobileView({
           </div>
         )}
       </div>
+
+      {/* =====================================================================
+          MODALE 1 : BLOCAGE MATIN — ARRIVÉE AU BUREAU OBLIGATOIRE
+         ===================================================================== */}
+      {showMorningBlockerModal && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => setShowMorningBlockerModal(null)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '480px', padding: '22px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '22px',
+                  flexShrink: 0,
+                }}
+              >
+                ☀️
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Prise de service requise
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  Règle ANELEC : L'arrivée au bureau doit être pointée avant de démarrer une mission.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                lineHeight: 1.5,
+              }}
+            >
+              Vous vous apprêtez à démarrer :<br />
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {showMorningBlockerModal.mission.reference} — {showMorningBlockerModal.mission.client}
+              </strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Veuillez certifier votre arrivée au bureau pour déverrouiller le démarrage de l'intervention.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  minHeight: '48px',
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  borderColor: '#059669',
+                  fontWeight: 800,
+                  fontSize: '13.5px',
+                }}
+                disabled={clockInMut.isPending}
+                onClick={async () => {
+                  const targetMission = showMorningBlockerModal.mission;
+                  try {
+                    await clockInMut.mutateAsync({
+                      technicien: currentTechnicien,
+                      dateJour: selectedDate,
+                    });
+                    setShowMorningBlockerModal(null);
+                    // Démarrer la mission immédiatement après le pointage
+                    await handleActivateMissionDirect(targetMission);
+                  } catch (err) {
+                    console.error('Erreur pointage matin:', err);
+                  }
+                }}
+              >
+                {clockInMut.isPending
+                  ? '⏳ Enregistrement...'
+                  : `☀️ Pointer mon arrivée (${liveParisTime || getNowHHMM()}) & Démarrer`}
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowMorningBlockerModal(null)}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODALE 2 : BLOCAGE SOIR — IMPOSSIBLE DE CLÔTURER LA JOURNÉE SI INTV EN COURS
+         ===================================================================== */}
+      {showRunningBlockerModal && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => setShowRunningBlockerModal(null)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '480px', padding: '22px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  background: 'rgba(220, 38, 38, 0.15)',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '22px',
+                  flexShrink: 0,
+                }}
+              >
+                ⛔
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Intervention en cours non terminée
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  Vous ne pouvez pas clôturer votre journée tant qu'une mission est active.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'rgba(220, 38, 38, 0.08)',
+                border: '1px solid rgba(220, 38, 38, 0.3)',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                lineHeight: 1.5,
+              }}
+            >
+              Mission actuellement active :<br />
+              <strong style={{ color: 'var(--text-primary)', fontSize: '14px' }}>
+                {showRunningBlockerModal.reference} — {showRunningBlockerModal.client}
+              </strong>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                📍 {showRunningBlockerModal.chantier}
+              </div>
+              <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700, marginTop: '6px' }}>
+                Choisissez l'une des actions ci-dessous pour débloquer la clôture de votre journée :
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  minHeight: '44px',
+                  background: '#059669',
+                  borderColor: '#059669',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+                onClick={async () => {
+                  const m = showRunningBlockerModal;
+                  setShowRunningBlockerModal(null);
+                  await handleDeactivateMission(m);
+                  // Déclenche le pointage soir
+                  clockOutMut.mutate({
+                    technicien: currentTechnicien,
+                    dateJour: selectedDate,
+                    derniereInterventionRef: m.reference || undefined,
+                  });
+                }}
+              >
+                ⏹️ Clôturer la mission & Pointer ma fin de journée
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  minHeight: '44px',
+                  color: '#d97706',
+                  borderColor: 'rgba(217, 119, 6, 0.4)',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+                onClick={() => {
+                  const m = showRunningBlockerModal;
+                  setShowRunningBlockerModal(null);
+                  setNonTermineeModalMission(m);
+                }}
+              >
+                ⏳ Déclarer non terminée (À replanifier)
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowRunningBlockerModal(null)}
+              >
+                Continuer l'intervention
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODALE 3 : INTERVENTION NON TERMINÉE — À REPLANIFIER
+         ===================================================================== */}
+      {nonTermineeModalMission && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => setNonTermineeModalMission(null)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '500px', padding: '22px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '22px',
+                  flexShrink: 0,
+                }}
+              >
+                ⏳
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Intervention Non Terminée — À replanifier
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  {nonTermineeModalMission.reference} — {nonTermineeModalMission.client}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+                  Motif d'interruption / blocage :
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {[
+                    '📦 Matériel / Pièces manquantes',
+                    '🚫 Accès impossible / Client absent',
+                    '⚠️ Travaux supplémentaires imprévus',
+                    '⏰ Chantier trop long / Fin de journée',
+                    '🔧 Autre motif technique',
+                  ].map((motif) => (
+                    <button
+                      key={motif}
+                      type="button"
+                      className={`btn btn-sm ${nonTermineeReason === motif ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: nonTermineeReason === motif ? 800 : 500,
+                      }}
+                      onClick={() => setNonTermineeReason(motif)}
+                    >
+                      {motif}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+                  Précisions pour le planning & la direction (obligatoire) :
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Ex: Disjoncteur 32A à commander, le client demande un retour mardi matin, clé du local non fournie..."
+                  value={nonTermineeDetails}
+                  onChange={(e) => setNonTermineeDetails(e.target.value)}
+                />
+              </div>
+
+              <div
+                style={{
+                  background: 'rgba(37, 99, 235, 0.08)',
+                  border: '1px solid rgba(37, 99, 235, 0.25)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                ℹ️ Cette intervention passera au statut <strong>"Intervention non terminée"</strong>. Elle sera libérée pour que vous puissiez continuer ou clôturer votre journée, et apparaîtra en alerte sur le planning de l'administrateur pour replanification.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setNonTermineeModalMission(null)}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ background: '#d97706', borderColor: '#d97706', fontWeight: 800 }}
+                  onClick={async () => {
+                    await handleMarkNonTerminee(
+                      nonTermineeModalMission,
+                      nonTermineeReason,
+                      nonTermineeDetails
+                    );
+                  }}
+                >
+                  ⏳ Valider & Transmettre au bureau
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
