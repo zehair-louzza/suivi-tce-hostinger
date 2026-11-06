@@ -11,6 +11,14 @@ import './styles/global.css';
 import './styles/layout.css';
 import { registerServiceWorker } from './components/InstallAppButton';
 
+// Purge service workers pour garantir la dernière version sans cache rémanent
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const r of regs) {
+      r.update();
+    }
+  });
+}
 registerServiceWorker();
 
 const queryClient = new QueryClient({
