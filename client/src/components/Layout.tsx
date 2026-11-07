@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
+import { isUserMobileOnly, canUserAccessSection } from '../../../shared/types';
 
 export type AppSection =
   | 'aujourdhui'
@@ -288,17 +289,9 @@ export function Layout({
     },
   ];
 
-  const isAdminOrManager =
-    user?.id === 1 ||
-    (user?.role || '').toUpperCase() === 'ADMIN' ||
-    Boolean(user?.permissions?.canManageUsers) ||
-    Boolean(user?.permissions?.canWriteReports);
+  const isMobileTechOnly = isUserMobileOnly(user);
 
-  const isMobileTechOnly =
-    (user?.role || '').toUpperCase() === 'TECHNICIEN' ||
-    (Boolean(user?.permissions?.mobileOnly) && !isAdminOrManager);
-
-  // Filter items in groups according to role
+  // Cloisonnement étanche : filtrer les services affichés strictement selon les droits conférés
   const visibleGroups = allGroups
     .map((group) => {
       if (isMobileTechOnly) {
@@ -306,11 +299,12 @@ export function Layout({
         return group;
       }
       if (group.title === 'ESPACE TERRAIN') {
-        return null;
+        const canSeeMobile = canUserAccessSection('mobile_tech', user);
+        if (!canSeeMobile) return null;
+        return group;
       }
       const filteredItems = group.items.filter((item) => {
-        if (item.id === 'admin') return isAdminOrManager;
-        return true;
+        return canUserAccessSection(item.id, user);
       });
       if (filteredItems.length === 0) return null;
       return { ...group, items: filteredItems };
@@ -324,6 +318,10 @@ export function Layout({
 
   const handleSelectSection = (sec: AppSection) => {
     setMobileMenuOpen(false);
+    if (!canUserAccessSection(sec, user)) {
+      toast.error('Accès non autorisé à ce service');
+      return;
+    }
     onSectionChange?.(sec);
   };
 
@@ -508,11 +506,11 @@ export function Layout({
 
             <div style={{ minWidth: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                <span
-                  className="topbar-breadcrumb-prefix"
-                >
-                  {(user?.companyName ? user.companyName.toUpperCase() : 'ANELEC GROUPE')} /
-                </span>
+                {!isMobileTechOnly && (
+                  <span className="topbar-breadcrumb-prefix">
+                    {(user?.companyName ? user.companyName.toUpperCase() : 'ANELEC GROUPE')} /
+                  </span>
+                )}
                 <h1
                   style={{
                     fontSize: '14.5px',
@@ -525,7 +523,7 @@ export function Layout({
                   }}
                 >
                   {isMobileTechOnly
-                    ? `ANELEC Terrain • ${user?.technicienNom || user?.name || ''}`
+                    ? (user?.technicienNom ? `Terrain • ${user.technicienNom}` : 'App Terrain')
                     : activeSection === 'aujourdhui'
                     ? "Vue d'ensemble"
                     : activeMeta.label}
@@ -573,7 +571,7 @@ export function Layout({
                 </svg>
               </button>
             )}
-            {!isMobileTechOnly && onOpenSituationReport && (
+            {!isMobileTechOnly && onOpenSituationReport && canUserAccessSection('rentabilite', user) && (
               <button
                 type="button"
                 onClick={onOpenSituationReport}
@@ -610,7 +608,7 @@ export function Layout({
               </div>
             )}
 
-            {!isMobileTechOnly && onOpenSituationReport && (
+            {!isMobileTechOnly && onOpenSituationReport && canUserAccessSection('rentabilite', user) && (
               <button
                 type="button"
                 className="btn btn--secondary desktop-only-el"
@@ -635,7 +633,7 @@ export function Layout({
               </button>
             )}
 
-            {!isMobileTechOnly && onQuickNewDevis && (
+            {!isMobileTechOnly && onQuickNewDevis && canUserAccessSection('devis', user) && (
               <button
                 type="button"
                 className="btn btn--secondary desktop-only-el"
@@ -647,7 +645,7 @@ export function Layout({
               </button>
             )}
 
-            {!isMobileTechOnly && onQuickNewIntervention && (
+            {!isMobileTechOnly && onQuickNewIntervention && canUserAccessSection('interventions', user) && (
               <button
                 type="button"
                 className="btn btn--primary desktop-only-el"

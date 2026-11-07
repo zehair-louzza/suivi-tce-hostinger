@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
-import { ROLE_DEFINITIONS } from '../../shared/types.js';
+import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
 import {
   sendWelcomeUserEmail,
   getActiveSmtpConfig,
@@ -79,8 +79,9 @@ async function getCallerUser(req: Request) {
     if (p?.canManageUsers) hasAdminPerm = true;
   } catch {}
   const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' || u.role === 'ADMIN' ? 'ADMIN' : u.role;
+  const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
   const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
-  return { ...u, effectiveRole, isAdmin };
+  return { ...u, effectiveRole, isAdmin, perms };
 }
 
 // ============================================================================
@@ -246,8 +247,8 @@ adminRouter.get(
     const dateJour = (req.query.dateJour as string) || '';
     let technicien = (req.query.technicien as string) || '';
 
-    // Un technicien ne peut voir QUE ses propres pointages
-    if (!caller.isAdmin) {
+    // Un technicien ne peut voir QUE ses propres pointages (sauf si Admin ou Conducteur avec canEditPlanning)
+    if (!caller.isAdmin && !caller.perms.canEditPlanning) {
       technicien = (caller.technicienNom || caller.name || '').trim();
     }
 

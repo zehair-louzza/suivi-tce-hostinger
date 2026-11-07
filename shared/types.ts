@@ -1341,6 +1341,8 @@ export function getEffectivePermissions(
     ROLE_DEFINITIONS[normRole]?.defaultPermissions ||
     (normRole === 'ADMIN'
       ? ROLE_DEFINITIONS.ADMIN.defaultPermissions
+      : normRole === 'TECHNICIEN'
+      ? ROLE_DEFINITIONS.TECHNICIEN.defaultPermissions
       : ROLE_DEFINITIONS.CONDUCTEUR_TRAVAUX.defaultPermissions);
 
   if (!customPermissionsJson) return { ...base };
@@ -1350,6 +1352,127 @@ export function getEffectivePermissions(
   } catch {
     return { ...base };
   }
+}
+
+/**
+ * Détecte si un utilisateur est strictement restreint à l'application mobile terrain.
+ * S'applique si :
+ * - Il a le rôle TECHNICIEN
+ * - OU la permission mobileOnly est activée
+ * - OU un nom de technicien lui est associé et il n'a aucun droit de gestion de bureau (Devis, Planning, Facturation, Admin)
+ */
+export function isUserMobileOnly(user?: User | null): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  if (isAdmin) return false;
+
+  if (role === 'TECHNICIEN' || Boolean(perms.mobileOnly)) return true;
+
+  // Utilisateur lié à un profil technicien terrain sans droits d'administration de bureau
+  if (
+    Boolean(user.technicienNom) &&
+    !perms.canEditDevis &&
+    !perms.canManageBilling &&
+    !perms.canEditPlanning &&
+    !perms.canManageReferentiels
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Vérifie de façon étanche si un collaborateur a le droit d'accéder à un service / module métier.
+ * Chaque service est strictement cloisonné selon les permissions attribuées.
+ */
+export function canUserAccessSection(
+  section: string,
+  user?: User | null
+): boolean {
+  if (!user) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+
+  // Un utilisateur mobile-only (Technicien terrain) n'a accès QU'À l'espace mobile
+  if (isUserMobileOnly(user)) {
+    return section === 'mobile_tech';
+  }
+
+  if (isAdmin) return true;
+
+  switch (section) {
+    case 'mobile_tech':
+      return Boolean(perms.canAccessMobileTech) || Boolean(perms.mobileOnly) || Boolean(user.technicienNom);
+
+    case 'admin':
+      return Boolean(perms.canManageUsers);
+
+    case 'referentiels':
+      return Boolean(perms.canManageReferentiels);
+
+    case 'devis':
+      return Boolean(perms.canEditDevis);
+
+    case 'planning':
+      return Boolean(perms.canEditPlanning);
+
+    case 'interventions':
+      return Boolean(perms.canEditInterventions) || Boolean(perms.canWriteReports);
+
+    case 'carte':
+      return Boolean(perms.canEditPlanning) || Boolean(perms.canEditInterventions);
+
+    case 'facturation':
+      return Boolean(perms.canManageBilling);
+
+    case 'rentabilite':
+      return Boolean(perms.canViewFinancials) && (Boolean(perms.canManageBilling) || Boolean(perms.canManageUsers));
+
+    case 'clients':
+      return Boolean(perms.canEditDevis) || Boolean(perms.canManageBilling) || Boolean(perms.canEditInterventions);
+
+    case 'aujourdhui':
+      return (
+        Boolean(perms.canViewFinancials) ||
+        Boolean(perms.canEditPlanning) ||
+        Boolean(perms.canEditDevis) ||
+        Boolean(perms.canEditInterventions)
+      );
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Retourne le premier service autorisé pour rediriger proprement l'utilisateur
+ */
+export function getDefaultAuthorizedSection(user?: User | null): string {
+  if (isUserMobileOnly(user)) return 'mobile_tech';
+
+  const order = [
+    'aujourdhui',
+    'planning',
+    'devis',
+    'interventions',
+    'carte',
+    'facturation',
+    'rentabilite',
+    'clients',
+    'referentiels',
+    'admin',
+    'mobile_tech',
+  ];
+
+  for (const sec of order) {
+    if (canUserAccessSection(sec, user)) return sec;
+  }
+
+  return 'mobile_tech';
 }
 
 export const ACTIONS_PREREMPLIES_TERRAIN: Record<string, string[]> = {

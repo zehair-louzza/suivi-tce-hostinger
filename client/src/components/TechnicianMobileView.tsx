@@ -190,7 +190,7 @@ export function TechnicianMobileView({
   });
 
   // Missions du technicien (interventions individuelles + interventions d'équipe + visites devis affectées)
-  const techMissions = useMemo(() => {
+  const allTechMissionsCombined = useMemo(() => {
     const targetLower = (currentTechnicien || '').trim().toLowerCase();
     const devisById = new Map<number, Devis>();
     const devisByRef = new Map<string, Devis>();
@@ -295,11 +295,14 @@ export function TechnicianMobileView({
         };
       });
 
-    const combined = [...allForTech, ...devisVisitsForTech];
+    return [...allForTech, ...devisVisitsForTech];
+  }, [interventionsList, devisList, currentTechnicien]);
+
+  const techMissions = useMemo(() => {
     const filtered =
       filterMode === 'jour'
-        ? combined.filter((i) => i.datePlanifiee === selectedDate)
-        : combined;
+        ? allTechMissionsCombined.filter((i) => i.datePlanifiee === selectedDate)
+        : allTechMissionsCombined;
 
     return [...filtered].sort((a, b) => {
       const da = a.datePlanifiee || '9999-99-99';
@@ -307,7 +310,72 @@ export function TechnicianMobileView({
       if (da !== db) return da.localeCompare(db);
       return (a.heureDebut || '08:00').localeCompare(b.heureDebut || '08:00');
     });
-  }, [interventionsList, devisList, currentTechnicien, filterMode, selectedDate]);
+  }, [allTechMissionsCombined, filterMode, selectedDate]);
+
+  // Suivi journalier sur une semaine avec navigation fluide de semaine en semaine et dans tous les mois
+  const weekDays = useMemo(() => {
+    const parts = selectedDate.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const current = new Date(y, m, d);
+
+    // In JS getDay(): 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+    const day = current.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(y, m, d + diffToMonday);
+
+    const days = [];
+    const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const curY = cur.getFullYear();
+      const curM = String(cur.getMonth() + 1).padStart(2, '0');
+      const curD = String(cur.getDate()).padStart(2, '0');
+      const iso = `${curY}-${curM}-${curD}`;
+
+      // Nombre de missions pour ce jour et ce technicien
+      const count = allTechMissionsCombined.filter((intv) => intv.datePlanifiee === iso).length;
+
+      days.push({
+        iso,
+        dateObj: cur,
+        dayNumber: cur.getDate(),
+        dayNameShort: dayNames[cur.getDay()],
+        isToday: iso === todayISO,
+        isSelected: iso === selectedDate,
+        missionsCount: count,
+      });
+    }
+    return days;
+  }, [selectedDate, todayISO, allTechMissionsCombined]);
+
+  const monthYearTitle = useMemo(() => {
+    const parts = selectedDate.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const cur = new Date(y, m, d);
+    const label = cur.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }, [selectedDate]);
+
+  const handleShiftWeek = (deltaDays: number) => {
+    const parts = selectedDate.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const nextDate = new Date(y, m, d + deltaDays);
+    const nextY = nextDate.getFullYear();
+    const nextM = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const nextD = String(nextDate.getDate()).padStart(2, '0');
+    setSelectedDate(`${nextY}-${nextM}-${nextD}`);
+  };
+
+  const handleGoToToday = () => {
+    setSelectedDate(todayISO);
+  };
 
   const activeMission = useMemo(
     () => techMissions.find((m) => m.id === activeMissionId) || techMissions[0] || null,
@@ -889,6 +957,7 @@ export function TechnicianMobileView({
 
   return (
     <div
+      className="tech-mobile-container"
       style={{
         width: '100%',
         maxWidth: '1040px',
@@ -897,25 +966,27 @@ export function TechnicianMobileView({
         flexDirection: 'column',
         gap: '10px',
         paddingBottom: '24px',
+        boxSizing: 'border-box',
       }}
     >
       {/* =====================================================================
-          EN-TÊTE MOBILE COMPACT ADAPTÉ À TOUS LES TÉLÉPHONES (320px -> 430px+)
+          EN-TÊTE MOBILE COMPACT & CENTRÉ (ZÉRO DÉBORDEMENT, 100% LARGEUR)
          ===================================================================== */}
       <div
-        className="pro-table-container"
+        className="tech-mobile-card"
         style={{
-          padding: '14px',
-          background: '#ffffff',
-          border: '1px solid #cbd5e1',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
           borderLeft: '5px solid #00bf63',
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
+          boxSizing: 'border-box',
+          width: '100%',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
             <div
               style={{
                 width: '36px',
@@ -933,12 +1004,17 @@ export function TechnicianMobileView({
             >
               {(currentTechnicien || 'TE').slice(0, 2).toUpperCase()}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {currentTechnicien || 'Technicien'}
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {currentTechnicien || 'Technicien'}
+                </span>
+                <span className="badge badge-success" style={{ fontSize: '9.5px', padding: '1px 5px', flexShrink: 0 }}>
+                  Certifié
+                </span>
               </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                App Mobile Terrain • {formatDateFR(selectedDate)}
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                App Terrain • {formatDateFR(selectedDate)}
               </div>
             </div>
           </div>
@@ -952,7 +1028,7 @@ export function TechnicianMobileView({
               className="badge"
               style={{
                 fontSize: '11px',
-                padding: '5px 10px',
+                padding: '5px 8px',
                 cursor: 'pointer',
                 border: '1px solid #0284c7',
                 background: lastTransmittedGps ? '#e0f2fe' : '#f0f9ff',
@@ -961,16 +1037,17 @@ export function TechnicianMobileView({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
+                whiteSpace: 'nowrap',
               }}
               title="Envoyer ma position GPS actuelle à l'équipe bureau"
             >
               <span>⌖</span>
               <span>
                 {isBroadcastingLiveGps
-                  ? 'GPS en cours...'
+                  ? 'GPS...'
                   : lastTransmittedGps
-                  ? `GPS Actif (${lastTransmittedGps.lat.toFixed(3)}, ${lastTransmittedGps.lng.toFixed(3)})`
-                  : 'Transmettre ma position GPS'}
+                  ? 'GPS Actif'
+                  : 'GPS'}
               </span>
             </button>
 
@@ -985,123 +1062,66 @@ export function TechnicianMobileView({
                   : 'badge-warning'
               }`}
               style={{
-                fontSize: '11.5px',
-                padding: '5px 10px',
+                fontSize: '11px',
+                padding: '5px 8px',
                 cursor: 'pointer',
                 border: 'none',
                 fontWeight: 700,
+                whiteSpace: 'nowrap',
               }}
             >
               {currentPointage?.statutJournee === 'EN_SERVICE'
                 ? `● En service (${currentPointage.heureArriveeBureau})`
                 : currentPointage?.statutJournee === 'TERMINEE'
-                ? `◆ Fin (${currentPointage.heureArriveeBureau}→${currentPointage.heureFinJournee})`
-                : '▲ Pointage matin à activer'}
+                ? `◆ Fin (${currentPointage.heureFinJournee})`
+                : '▲ Pointer matin'}
             </button>
           </div>
         </div>
 
-        {/* Identification du Technicien & Date */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: canSwitchTechnicien ? 'repeat(auto-fit, minmax(160px, 1fr))' : '1fr auto',
-            gap: '8px',
-            alignItems: 'center',
-          }}
-        >
-          {canSwitchTechnicien ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                Mode Superviseur :
-              </span>
-              <select
-                className="select"
-                style={{ width: '100%', fontWeight: 700 }}
-                value={currentTechnicien}
-                aria-label="Choisir le technicien"
-                onChange={(e) => {
-                  onSelectTechnicien(e.target.value);
-                  setActiveMissionId(null);
-                }}
-              >
-                {techniciens.map((t) => (
-                  <option key={t} value={t}>
-                    ▪ {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                fontSize: '12.5px',
+        {/* Si superviseur : choix direct du technicien */}
+        {canSwitchTechnicien && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', boxSizing: 'border-box' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+              Mode Superviseur :
+            </span>
+            <select
+              className="select"
+              style={{ width: '100%', fontWeight: 700, minHeight: '36px' }}
+              value={currentTechnicien}
+              aria-label="Choisir le technicien"
+              onChange={(e) => {
+                onSelectTechnicien(e.target.value);
+                setActiveMissionId(null);
               }}
             >
-              <span style={{ color: 'var(--text-secondary)' }}>◈ Compte personnel :</span>
-              <strong style={{ color: 'var(--text-primary)', fontSize: '13.5px' }}>{currentTechnicien}</strong>
-              <span className="badge badge-success" style={{ fontSize: '10.5px', padding: '2px 8px' }}>
-                Droits Certifiés
-              </span>
-            </div>
-          )}
+              {techniciens.map((t) => (
+                <option key={t} value={t}>
+                  ▪ {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-          <input
-            type="date"
-            className="input"
-            style={{ width: canSwitchTechnicien ? '100%' : '140px', fontWeight: 600 }}
-            value={selectedDate}
-            aria-label="Date des missions"
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
-        </div>
-
-        {/* Barre d'onglets tactile adaptée à tous les téléphones */}
+        {/* Barre d'onglets principale : 3 volets épurés (Missions en premier volet !) */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(3, 1fr)',
             gap: '4px',
-            background: 'var(--bg-surface)',
-            padding: '4px',
+            background: 'var(--bg-app)',
+            padding: '3px',
             borderRadius: '10px',
             border: '1px solid var(--border-default)',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab('pointage')}
-            style={{
-              padding: '8px 2px',
-              borderRadius: '7px',
-              border: 'none',
-              fontSize: '11px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'pointage' ? '#00bf63' : 'transparent',
-              color: activeTab === 'pointage' ? '#ffffff' : 'var(--text-secondary)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '2px',
-              minWidth: 0,
-            }}
-          >
-            <span>⏱</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Pointage</span>
-          </button>
-
           <button
             type="button"
             onClick={() => setActiveTab('missions')}
+            className="tech-nav-tab-btn"
             style={{
               padding: '8px 2px',
               borderRadius: '7px',
@@ -1117,15 +1137,19 @@ export function TechnicianMobileView({
               justifyContent: 'center',
               gap: '2px',
               minWidth: 0,
+              minHeight: '44px',
             }}
           >
-            <span>≡</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Missions ({techMissions.length})</span>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>≡</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Missions ({techMissions.length})
+            </span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('trajet')}
+            onClick={() => setActiveTab('pointage')}
+            className="tech-nav-tab-btn"
             style={{
               padding: '8px 2px',
               borderRadius: '7px',
@@ -1133,23 +1157,27 @@ export function TechnicianMobileView({
               fontSize: '11px',
               fontWeight: 800,
               cursor: 'pointer',
-              background: activeTab === 'trajet' ? '#00bf63' : 'transparent',
-              color: activeTab === 'trajet' ? '#ffffff' : 'var(--text-secondary)',
+              background: activeTab === 'pointage' ? '#00bf63' : 'transparent',
+              color: activeTab === 'pointage' ? '#ffffff' : 'var(--text-secondary)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '2px',
               minWidth: 0,
+              minHeight: '44px',
             }}
           >
-            <span>⌖</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Trajet & GPS</span>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>⏱</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Pointage
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('compte_rendu')}
+            className="tech-nav-tab-btn"
             style={{
               padding: '8px 2px',
               borderRadius: '7px',
@@ -1165,55 +1193,288 @@ export function TechnicianMobileView({
               justifyContent: 'center',
               gap: '2px',
               minWidth: 0,
+              minHeight: '44px',
             }}
           >
-            <span>✎</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport ⊞</span>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>✎</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Rapport
+            </span>
           </button>
         </div>
       </div>
 
       {/* =====================================================================
-          BANNIÈRE RAPIDE MATIN (SI NON POINTÉ ET SUR L'ONGLET MISSIONS)
+          SUIVI JOURNALIER PAR SEMAINE AVEC DÉFILEMENT DE TOUS LES MOIS
+          (CENTRALISÉ, ZERO DÉBORDEMENT, DÉFILEMENT VERTICAL UNIQUEMENT)
+         ===================================================================== */}
+      <div
+        className="tech-mobile-card"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '12px',
+          padding: '10px 8px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          width: '100%',
+          boxSizing: 'border-box',
+          overflowX: 'hidden',
+        }}
+      >
+        {/* Navigation des semaines et des mois */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '6px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleShiftWeek(-7)}
+              style={{
+                minHeight: '34px',
+                padding: '4px 10px',
+                fontWeight: 800,
+                fontSize: '15px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Semaine précédente"
+            >
+              ‹
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleShiftWeek(7)}
+              style={{
+                minHeight: '34px',
+                padding: '4px 10px',
+                fontWeight: 800,
+                fontSize: '15px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Semaine suivante"
+            >
+              ›
+            </button>
+          </div>
+
+          {/* Titre Mois & Année avec sélecteur de date complet sur tous les mois */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              position: 'relative',
+              flex: 1,
+              minWidth: 0,
+              padding: '4px 8px',
+              borderRadius: '8px',
+              background: 'var(--bg-app)',
+              border: '1px solid var(--border-subtle)',
+              cursor: 'pointer',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              📅 {monthYearTitle} ▾
+            </span>
+
+            {/* Input date invisible positionné pour ouvrir le calendrier natif au clic */}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              title="Choisir un mois ou une date"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+
+          {/* Raccourci Aujourd'hui */}
+          {selectedDate !== todayISO && (
+            <button
+              type="button"
+              className="badge badge-success"
+              onClick={handleGoToToday}
+              style={{
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Aujourd'hui
+            </button>
+          )}
+        </div>
+
+        {/* Grille des 7 jours de la semaine (100% sans débordement, 7 colonnes égales) */}
+        <div
+          className="tech-week-strip"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, 1fr)',
+            gap: '3px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
+          {weekDays.map((d) => {
+            const isSelected = d.isSelected;
+            const isToday = d.isToday;
+            return (
+              <button
+                key={d.iso}
+                type="button"
+                onClick={() => setSelectedDate(d.iso)}
+                style={{
+                  border: isSelected
+                    ? '2px solid #00bf63'
+                    : isToday
+                    ? '1.5px solid #0284c7'
+                    : '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '6px 2px',
+                  background: isSelected
+                    ? '#00bf63'
+                    : isToday
+                    ? '#f0f9ff'
+                    : 'var(--bg-app)',
+                  color: isSelected ? '#ffffff' : 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '2px',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: isSelected
+                      ? '#ffffff'
+                      : isToday
+                      ? '#0369a1'
+                      : 'var(--text-secondary)',
+                  }}
+                >
+                  {d.dayNameShort}
+                </span>
+                <span
+                  style={{
+                    fontSize: '14.5px',
+                    fontWeight: 900,
+                    fontFamily: 'monospace',
+                    lineHeight: 1.1,
+                    color: isSelected ? '#ffffff' : 'var(--text-primary)',
+                  }}
+                >
+                  {d.dayNumber}
+                </span>
+
+                {/* Pastille indiquant le nombre de missions pour ce jour */}
+                <div style={{ height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {d.missionsCount > 0 ? (
+                    <span
+                      style={{
+                        fontSize: '9.5px',
+                        fontWeight: 800,
+                        padding: '1px 4px',
+                        borderRadius: '6px',
+                        background: isSelected ? '#ffffff' : '#00bf63',
+                        color: isSelected ? '#00bf63' : '#ffffff',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {d.missionsCount}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10px', opacity: 0.25 }}>•</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* =====================================================================
+          BANNIÈRE DISCRÈTE POINTAGE MATIN (SI NON POINTÉ ET SUR MISSIONS)
          ===================================================================== */}
       {activeTab === 'missions' && !currentPointage?.heureArriveeBureau && (
         <div
           style={{
-            padding: '12px 14px',
-            borderRadius: '12px',
-            background: 'rgba(245, 158, 11, 0.12)',
-            border: '1.5px solid rgba(245, 158, 11, 0.5)',
+            padding: '10px 12px',
+            borderRadius: '10px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            border: '1.5px solid rgba(245, 158, 11, 0.4)',
             display: 'flex',
-            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '8px',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              ▲ Arrivée au bureau non activée ce matin
-            </span>
-            {liveParisTime && (
-              <span className="badge badge-warning font-mono" style={{ fontWeight: 800 }}>
-                {liveParisTime}
-              </span>
-            )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: '#b45309' }}>
+              ▲ Arrivée bureau non pointée
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+              {liveParisTime || getNowHHMM()} • Requis avant 1ère mission
+            </div>
           </div>
           <button
             type="button"
             className="btn btn-primary"
             style={{
-              width: '100%',
               background: '#00bf63',
               borderColor: '#00994f',
               fontWeight: 800,
-              minHeight: '44px',
-              fontSize: '13px',
-              whiteSpace: 'normal',
-              height: 'auto',
-              padding: '10px 12px',
-              lineHeight: 1.35,
-              textAlign: 'center',
-              boxShadow: '0 2px 8px rgba(0, 191, 99, 0.28)',
+              minHeight: '36px',
+              fontSize: '11.5px',
+              padding: '6px 12px',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
             disabled={clockInMut.isPending}
             onClick={() => {
@@ -1223,7 +1484,7 @@ export function TechnicianMobileView({
               });
             }}
           >
-            {clockInMut.isPending ? '◷ Enregistrement...' : `• Pointer mon arrivée au bureau (${liveParisTime || getNowHHMM()})`}
+            {clockInMut.isPending ? '◷...' : 'Pointer'}
           </button>
         </div>
       )}
@@ -1234,52 +1495,54 @@ export function TechnicianMobileView({
          ===================================================================== */}
       {showPointage && (
         <div
-          className="pro-table-container"
+          className="tech-mobile-card"
           style={{
-            padding: '16px',
             borderTop:
               currentPointage?.statutJournee === 'EN_SERVICE'
                 ? '4px solid #10b981'
                 : currentPointage?.statutJournee === 'TERMINEE'
                 ? '4px solid #2563eb'
                 : '4px solid #f59e0b',
+            boxSizing: 'border-box',
+            width: '100%',
           }}
         >
           {/* Horloge numérique en direct */}
           <div
             style={{
-              padding: '12px 14px',
+              padding: '10px 12px',
               borderRadius: '10px',
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-subtle)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '14px',
+              marginBottom: '12px',
               flexWrap: 'wrap',
-              gap: '8px',
+              gap: '6px',
             }}
           >
             <div>
-              <div style={{ fontSize: '13.5px', fontWeight: 800 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800 }}>
                 ⏱ Pointage Quotidien Certifié ({formatDateFR(selectedDate)})
               </div>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                L'heure est certifiée automatiquement à la pression du bouton. Aucune saisie manuelle.
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Horodatage certifié au clic. Zéro saisie manuelle.
               </div>
             </div>
 
             <div
               className="font-mono"
               style={{
-                fontSize: '14.5px',
+                fontSize: '14px',
                 fontWeight: 800,
                 color: 'var(--accent-primary)',
                 background: 'var(--bg-surface)',
-                padding: '5px 12px',
+                padding: '4px 10px',
                 borderRadius: '8px',
                 border: '1px solid var(--border-default)',
                 letterSpacing: '0.04em',
+                flexShrink: 0,
               }}
             >
               ◷ {liveParisTime || getNowHHMM()}
@@ -1289,15 +1552,17 @@ export function TechnicianMobileView({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: '12px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
+              gap: '10px',
+              width: '100%',
+              boxSizing: 'border-box',
             }}
           >
             {/* Carte Matin : Arrivée au bureau */}
             <div
               style={{
-                padding: '16px',
-                borderRadius: '14px',
+                padding: '14px',
+                borderRadius: '12px',
                 background: currentPointage?.heureArriveeBureau
                   ? 'rgba(16, 185, 129, 0.08)'
                   : 'var(--bg-elevated)',
@@ -1306,26 +1571,27 @@ export function TechnicianMobileView({
                   : '1.5px solid var(--border-default)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '8px',
+                boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#059669' }}>
-                  • 1. MATIN — Arrivée au Bureau
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                <span style={{ fontWeight: 800, fontSize: '13px', color: '#059669' }}>
+                  • 1. MATIN — Arrivée Bureau
                 </span>
                 {currentPointage?.heureArriveeBureau ? (
-                  <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
+                  <span className="badge badge-success font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
                     ✓ {currentPointage.heureArriveeBureau}
                   </span>
                 ) : (
-                  <span className="badge badge-warning">À pointer</span>
+                  <span className="badge badge-warning" style={{ fontSize: '11px' }}>À pointer</span>
                 )}
               </div>
 
               {!currentPointage?.heureArriveeBureau ? (
                 <>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Appuyez dès votre arrivée au bureau. L'heure officielle du clic sera certifiée.
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    Appuyez à votre arrivée au bureau. L'heure officielle sera certifiée.
                   </div>
                   <button
                     type="button"
@@ -1333,12 +1599,13 @@ export function TechnicianMobileView({
                     disabled={clockInMut.isPending}
                     style={{
                       width: '100%',
-                      minHeight: '48px',
+                      minHeight: '46px',
                       background: '#00bf63',
                       borderColor: '#00994f',
                       fontWeight: 800,
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
+                      boxSizing: 'border-box',
                     }}
                     onClick={() => {
                       clockInMut.mutate({
@@ -1356,13 +1623,13 @@ export function TechnicianMobileView({
                     padding: '8px 10px',
                     borderRadius: '8px',
                     background: '#ecfdf5',
-                    fontSize: '12px',
+                    fontSize: '11.5px',
                     color: '#047857',
                     fontWeight: 700,
                     border: '1px solid #a7f3d0',
                   }}
                 >
-                  ◈ Horodatage officiel certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
+                  ◈ Horodatage certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
                 </div>
               )}
             </div>
@@ -1370,8 +1637,8 @@ export function TechnicianMobileView({
             {/* Carte Soir : Fin de dernière intervention */}
             <div
               style={{
-                padding: '16px',
-                borderRadius: '14px',
+                padding: '14px',
+                borderRadius: '12px',
                 background: currentPointage?.heureFinJournee
                   ? '#ecfdf5'
                   : 'var(--bg-elevated)',
@@ -1380,32 +1647,33 @@ export function TechnicianMobileView({
                   : '1.5px solid var(--border-default)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '8px',
+                boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#0a0f1d' }}>
-                  • 2. SOIR — Fin Dernière Intervention
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                <span style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
+                  • 2. SOIR — Fin Dernière Intv.
                 </span>
                 {currentPointage?.heureFinJournee ? (
-                  <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
+                  <span className="badge badge-success font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
                     ✓ {currentPointage.heureFinJournee}
                   </span>
                 ) : currentPointage?.heureArriveeBureau ? (
-                  <span className="badge badge-info" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }}>En service</span>
+                  <span className="badge badge-info" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', fontSize: '11px' }}>En service</span>
                 ) : (
-                  <span className="badge badge-neutral">En attente</span>
+                  <span className="badge badge-neutral" style={{ fontSize: '11px' }}>En attente</span>
                 )}
               </div>
 
               {!currentPointage?.heureArriveeBureau ? (
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Activez d'abord votre arrivée au bureau le matin pour pouvoir pointer la fin de journée le soir.
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                  Activez d'abord votre arrivée au bureau le matin pour pointer la fin le soir.
                 </div>
               ) : !currentPointage?.heureFinJournee ? (
                 <>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Appuyez à la fin de votre dernière intervention. L'heure officielle du clic sera certifiée.
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    Appuyez à la fin de votre dernière mission.
                   </div>
                   <button
                     type="button"
@@ -1413,13 +1681,14 @@ export function TechnicianMobileView({
                     disabled={clockOutMut.isPending}
                     style={{
                       width: '100%',
-                      minHeight: '48px',
+                      minHeight: '46px',
                       background: '#0a0f1d',
                       borderColor: '#1e293b',
                       color: '#ffffff',
                       fontWeight: 800,
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       boxShadow: '0 4px 14px rgba(10, 15, 29, 0.25)',
+                      boxSizing: 'border-box',
                     }}
                     onClick={() => {
                       // RÈGLE 2 : Vérification stricte qu'aucune intervention n'est encore en cours
@@ -1450,7 +1719,7 @@ export function TechnicianMobileView({
                     padding: '8px 10px',
                     borderRadius: '8px',
                     background: 'rgba(37, 99, 235, 0.12)',
-                    fontSize: '12px',
+                    fontSize: '11.5px',
                     color: '#2563eb',
                     fontWeight: 700,
                   }}
@@ -1479,25 +1748,44 @@ export function TechnicianMobileView({
           ONGLET TRAJET & OPTIMISATION DE TOURNÉE AUTOMATIQUE (GPS)
          ===================================================================== */}
       {activeTab === 'trajet' && (
-        <TourneeMapOptimizer
-          interventions={interventionsList}
-          devis={devisList}
-          selectedDate={selectedDate}
-          currentTechnicien={currentTechnicien}
-          techniciensList={techniciens}
-          onSelectTechnicien={onSelectTechnicien}
-          onOpenIntervention={(i) => {
-            setActiveMissionId(i.id);
-            setActiveTab('missions');
-          }}
-          onOpenDevis={(d) => {
-            const linkedIntv = interventionsList.find(
-              (i) => i.devisId === d.id || i.origineDevisId === d.id || i.refDevisTexte === d.reference
-            );
-            setActiveMissionId(linkedIntv ? linkedIntv.id : -d.id);
-            setActiveTab('missions');
-          }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setActiveTab('missions')}
+            style={{
+              width: '100%',
+              minHeight: '42px',
+              fontWeight: 800,
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            ← Retour à mes missions ({techMissions.length})
+          </button>
+          <TourneeMapOptimizer
+            interventions={interventionsList}
+            devis={devisList}
+            selectedDate={selectedDate}
+            currentTechnicien={currentTechnicien}
+            techniciensList={techniciens}
+            onSelectTechnicien={onSelectTechnicien}
+            onOpenIntervention={(i) => {
+              setActiveMissionId(i.id);
+              setActiveTab('missions');
+            }}
+            onOpenDevis={(d) => {
+              const linkedIntv = interventionsList.find(
+                (i) => i.devisId === d.id || i.origineDevisId === d.id || i.refDevisTexte === d.reference
+              );
+              setActiveMissionId(linkedIntv ? linkedIntv.id : -d.id);
+              setActiveTab('missions');
+            }}
+          />
+        </div>
       )}
 
       {/* =====================================================================
@@ -1511,11 +1799,11 @@ export function TechnicianMobileView({
           gap: '12px',
         }}
       >
-        {/* LISTE DES INTERVENTIONS & VISITES DEVIS */}
+        {/* LISTE DES INTERVENTIONS & VISITES DEVIS (PREMIER VOLET PAR DÉFAUT) */}
         {showMissions && (
           <div
-            className="pro-table-container"
-            style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}
+            className="tech-mobile-card"
+            style={{ display: 'flex', flexDirection: 'column', gap: '10px', boxSizing: 'border-box', width: '100%' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ fontWeight: 800, fontSize: '14px' }}>
@@ -1538,6 +1826,36 @@ export function TechnicianMobileView({
                 </button>
               </div>
             </div>
+
+            {/* Option pour accéder à la carte (proposée comme option, non imposée dès le départ) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('trajet')}
+              style={{
+                width: '100%',
+                minHeight: '40px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: 'var(--bg-elevated)',
+                border: '1.5px dashed var(--border-default)',
+                color: 'var(--text-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                boxSizing: 'border-box',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>🗺️</span>
+              <span>Option : Consulter la Carte & Tournée GPS</span>
+              <span className="badge badge-info" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                {techMissions.length} étape(s)
+              </span>
+            </button>
 
             {techMissions.length === 0 ? (
               <div
@@ -1576,7 +1894,7 @@ export function TechnicianMobileView({
                       key={m.id}
                       onClick={() => setActiveMissionId(m.id)}
                       style={{
-                        padding: '12px',
+                        padding: '11px',
                         borderRadius: '12px',
                         cursor: 'pointer',
                         background: isSelected ? 'var(--accent-glow)' : 'var(--bg-elevated)',
@@ -1587,6 +1905,8 @@ export function TechnicianMobileView({
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '8px',
+                        boxSizing: 'border-box',
+                        width: '100%',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
@@ -1615,7 +1935,7 @@ export function TechnicianMobileView({
                             : isDone
                             ? `✓ CLÔTURÉE (${m.heureDebutReelle || ''}→${m.heureFinReelle || ''})`
                             : m.statutOperationnel === 'Intervention non terminée'
-                            ? `◷ NON TERMINÉE (${m.motifBlocage || 'Replanifier'})`
+                            ? `◷ NON TERMINÉE`
                             : m.statutOperationnel}
                         </span>
                       </div>
@@ -1624,21 +1944,21 @@ export function TechnicianMobileView({
                         <div style={{ fontWeight: 800, fontSize: '14.5px', color: 'var(--text-primary)' }}>
                           {m.client || 'Client ANELEC'}
                         </div>
-                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
+                        <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
                           ⌖ {m.chantier}
                         </div>
                         {m.objet && (
-                          <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', marginTop: '4px', fontWeight: 600 }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-primary)', marginTop: '4px', fontWeight: 600 }}>
                             Objet : {m.objet}
                           </div>
                         )}
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '6px' }}>
                         <span className="font-mono" style={{ fontWeight: 700 }}>
                           ▪ {formatDateFR(m.datePlanifiee)} • ◷ {m.heureDebut || '08:30'}-{m.heureFin || '10:30'}
                         </span>
-                        <span className="badge badge-neutral">{m.corpsEtat || 'Tous corps d’état'}</span>
+                        <span className="badge badge-neutral" style={{ fontSize: '10.5px' }}>{m.corpsEtat || 'Tous corps d’état'}</span>
                       </div>
 
                       {/* Boutons Tactiles Pleine Largeur adaptés à tous les téléphones */}
@@ -1646,35 +1966,35 @@ export function TechnicianMobileView({
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '8px',
+                          gap: '6px',
                           marginTop: '4px',
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Ligne 1 : Activer / Démarrer ou Déclarer terminé / Clôturer avec GPS */}
                         {!isRunning && !isDone && m.statutOperationnel !== 'Intervention non terminée' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div className="tech-btn-grid-2">
                             <button
                               type="button"
-                              className="btn btn-primary"
+                              className="btn btn-primary tech-action-btn"
                               style={{
                                 width: '100%',
-                                minHeight: '44px',
+                                minHeight: '42px',
                                 background: '#059669',
                                 borderColor: '#059669',
                                 fontWeight: 800,
-                                fontSize: '12.5px',
+                                fontSize: '12px',
                               }}
                               onClick={() => handleActivateMission(m)}
                             >
-                              ▸ Démarrer ({m.isVisiteDevis ? 'Devis' : 'Intv.'})
+                              ▸ Démarrer {m.isVisiteDevis ? 'Devis' : 'Intv.'}
                             </button>
                             <button
                               type="button"
-                              className="btn btn-primary"
+                              className="btn btn-primary tech-action-btn"
                               style={{
                                 width: '100%',
-                                minHeight: '44px',
+                                minHeight: '42px',
                                 background: '#dc2626',
                                 borderColor: '#dc2626',
                                 fontWeight: 800,
@@ -1688,12 +2008,12 @@ export function TechnicianMobileView({
                         )}
 
                         {isRunning && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div className="tech-btn-grid-2">
                             <button
                               type="button"
-                              className="btn btn-primary"
+                              className="btn btn-primary tech-action-btn"
                               style={{
-                                minHeight: '44px',
+                                minHeight: '42px',
                                 background: '#dc2626',
                                 borderColor: '#dc2626',
                                 fontWeight: 800,
@@ -1701,13 +2021,13 @@ export function TechnicianMobileView({
                               }}
                               onClick={() => handleDeactivateMission(m)}
                             >
-                              ⌖⏹ Clôturer avec GPS
+                              ⌖ Clôturer (GPS)
                             </button>
                             <button
                               type="button"
-                              className="btn btn-secondary"
+                              className="btn btn-secondary tech-action-btn"
                               style={{
-                                minHeight: '44px',
+                                minHeight: '42px',
                                 color: '#d97706',
                                 borderColor: 'rgba(217, 119, 6, 0.4)',
                                 fontWeight: 800,
@@ -1715,7 +2035,7 @@ export function TechnicianMobileView({
                               }}
                               onClick={() => setNonTermineeModalMission(m)}
                             >
-                              ◷ Non terminée (Replanifier)
+                              ◷ Non terminée
                             </button>
                           </div>
                         )}
@@ -1738,7 +2058,7 @@ export function TechnicianMobileView({
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              style={{ width: '100%', fontWeight: 700 }}
+                              style={{ width: '100%', fontWeight: 700, minHeight: '40px' }}
                               onClick={() => handleActivateMission(m)}
                             >
                               ↻ Reprendre cette intervention
@@ -1747,23 +2067,27 @@ export function TechnicianMobileView({
                         )}
 
                         {/* Ligne 2 : Ouvrir Compte Rendu & Photos + GPS */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn btn-secondary tech-action-btn"
                             style={{
                               minHeight: '42px',
                               fontWeight: 800,
-                              fontSize: '12.5px',
+                              fontSize: '12px',
                               borderColor: 'var(--accent-primary)',
                               color: 'var(--accent-primary)',
+                              padding: '0 8px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
                             }}
                             onClick={() => {
                               setActiveMissionId(m.id);
                               setActiveTab('compte_rendu');
                             }}
                           >
-                            ✎ Compte-Rendu & ⊞ ({nbActions} act. • {nbPhotos} ph.)
+                            ✎ Compte-Rendu ({nbActions} act. • {nbPhotos} ph.)
                           </button>
 
                           <a
@@ -1778,6 +2102,11 @@ export function TechnicianMobileView({
                               padding: '0 12px',
                               textDecoration: 'none',
                               fontWeight: 700,
+                              fontSize: '12px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
                             }}
                           >
                             ⌖ GPS
@@ -1788,7 +2117,7 @@ export function TechnicianMobileView({
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', minHeight: '38px', fontWeight: 600 }}
                             onClick={() => handleActivateMission(m)}
                           >
                             ↻ Ré-activer cette mission si besoin
@@ -1808,25 +2137,25 @@ export function TechnicianMobileView({
            =================================================================== */}
         {showCompteRendu && (
           <div
-            className="pro-table-container"
-            style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+            className="tech-mobile-card"
+            style={{ display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box', width: '100%' }}
           >
             {/* Barre supérieure de retour rapide sur téléphone */}
             {activeTab === 'compte_rendu' && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={() => setActiveTab('missions')}
-                  style={{ fontWeight: 700 }}
+                  style={{ fontWeight: 700, minHeight: '38px' }}
                 >
-                  ← Retour aux missions ({techMissions.length})
+                  ← Missions ({techMissions.length})
                 </button>
 
                 {techMissions.length > 1 && (
                   <select
                     className="select"
-                    style={{ flex: 1, minWidth: '150px', fontWeight: 700 }}
+                    style={{ flex: 1, minWidth: '140px', fontWeight: 700, minHeight: '38px' }}
                     value={activeMission?.id || ''}
                     onChange={(e) => setActiveMissionId(Number(e.target.value))}
                   >
@@ -1861,33 +2190,33 @@ export function TechnicianMobileView({
                       {activeMission.reference} • {activeMission.corpsEtat}
                     </span>
                     <span className="badge badge-info">
-                      {activeMission.isVisiteDevis ? '◈ Infos Chiffrage Devis' : '❖ Déclaration Intervention'}
+                      {activeMission.isVisiteDevis ? '◈ Chiffrage Devis' : '❖ Déclaration Travaux'}
                     </span>
                   </div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px', wordBreak: 'break-word' }}>
+                  <h3 style={{ fontSize: '14.5px', fontWeight: 800, marginTop: '4px', wordBreak: 'break-word', color: 'var(--text-primary)' }}>
                     {activeMission.client} — {activeMission.chantier}
                   </h3>
 
                   {/* Boutons rapides Activer / Clôturer / Non terminée directement depuis la fiche Compte Rendu */}
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                  <div className="tech-btn-grid-2" style={{ marginTop: '8px' }}>
                     {activeMission.statutOperationnel !== 'En cours' ? (
                       <>
                         <button
                           type="button"
-                          className="btn btn-primary btn-sm"
-                          style={{ flex: 1, background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
+                          className="btn btn-primary btn-sm tech-action-btn"
+                          style={{ background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
                           onClick={() => handleActivateMission(activeMission)}
                         >
-                          ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
+                          ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre mission' : 'Démarrer mission'}
                         </button>
                         {!['Terminée - à valider', 'Clôturée'].includes(activeMission.statutOperationnel) && (
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
-                            style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
+                            className="btn btn-primary btn-sm tech-action-btn"
+                            style={{ background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
                             onClick={() => handleDeactivateMission(activeMission)}
                           >
-                            ⌖✓ Déclarer terminé & Clôturer
+                            ⌖✓ Déclarer terminé
                           </button>
                         )}
                       </>
@@ -1895,19 +2224,19 @@ export function TechnicianMobileView({
                       <>
                         <button
                           type="button"
-                          className="btn btn-primary btn-sm"
-                          style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
+                          className="btn btn-primary btn-sm tech-action-btn"
+                          style={{ background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
                           onClick={() => handleDeactivateMission(activeMission)}
                         >
-                          ⏹ Terminer & Clôturer la mission
+                          ⏹ Clôturer (GPS)
                         </button>
                         <button
                           type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ flex: 1, color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', minHeight: '40px', fontWeight: 800 }}
+                          className="btn btn-secondary btn-sm tech-action-btn"
+                          style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', minHeight: '40px', fontWeight: 800 }}
                           onClick={() => setNonTermineeModalMission(activeMission)}
                         >
-                          ◷ Non terminée (Replanifier)
+                          ◷ Non terminée
                         </button>
                       </>
                     )}
@@ -2127,10 +2456,10 @@ export function TechnicianMobileView({
                     4. ⊞ Photos Terrain & Relevés ({(activeMission.photos || []).length}) :
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+                  <div className="tech-meta-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
                     <select
                       className="select"
-                      style={{ width: '100%', fontWeight: 700 }}
+                      style={{ width: '100%', fontWeight: 700, minHeight: '40px' }}
                       value={photoCategory}
                       onChange={(e) => setPhotoCategory(e.target.value as any)}
                     >
@@ -2143,7 +2472,7 @@ export function TechnicianMobileView({
                     <input
                       type="text"
                       className="input"
-                      style={{ width: '100%' }}
+                      style={{ width: '100%', minHeight: '40px' }}
                       placeholder="Légende photo (optionnel)..."
                       value={photoCaption}
                       onChange={(e) => setPhotoCaption(e.target.value)}
@@ -2151,14 +2480,17 @@ export function TechnicianMobileView({
                   </div>
 
                   {/* Deux boutons grands formats adaptés iOS et Android : Appareil Photo direct + Galerie */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+                  <div className="tech-btn-grid-2">
                     <label
-                      className="btn btn-primary"
+                      className="btn btn-primary tech-action-btn"
                       style={{
                         cursor: 'pointer',
-                        minHeight: '46px',
+                        minHeight: '44px',
                         fontWeight: 800,
                         justifyContent: 'center',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                     >
                       <span>⊞ Prendre Photo</span>
@@ -2172,12 +2504,15 @@ export function TechnicianMobileView({
                     </label>
 
                     <label
-                      className="btn btn-secondary"
+                      className="btn btn-secondary tech-action-btn"
                       style={{
                         cursor: 'pointer',
-                        minHeight: '46px',
+                        minHeight: '44px',
                         fontWeight: 800,
                         justifyContent: 'center',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                     >
                       <span>⊞ Choisir Galerie</span>
@@ -2195,9 +2530,11 @@ export function TechnicianMobileView({
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                        gap: '8px',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 95px), 1fr))',
+                        gap: '6px',
                         marginTop: '4px',
+                        width: '100%',
+                        boxSizing: 'border-box',
                       }}
                     >
                       {(activeMission.photos || []).map((ph: any) => (
@@ -2266,32 +2603,32 @@ export function TechnicianMobileView({
           style={{ zIndex: 9999 }}
         >
           <div
-            className="cmd-palette-modal"
-            style={{ maxWidth: '480px', padding: '22px', borderRadius: '16px' }}
+            className="cmd-palette-modal tech-modal-mobile"
+            style={{ maxWidth: '480px', padding: '16px', borderRadius: '16px', width: 'min(480px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
+                  width: '42px',
+                  height: '42px',
                   borderRadius: '12px',
                   background: 'rgba(245, 158, 11, 0.15)',
                   color: '#d97706',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '22px',
+                  fontSize: '20px',
                   flexShrink: 0,
                 }}
               >
                 •
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                   Prise de service requise
                 </h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
                   Règle ANELEC : L'arrivée au bureau doit être pointée avant de démarrer une mission.
                 </p>
               </div>
@@ -2302,18 +2639,19 @@ export function TechnicianMobileView({
                 background: 'rgba(245, 158, 11, 0.08)',
                 border: '1px solid rgba(245, 158, 11, 0.3)',
                 borderRadius: '10px',
-                padding: '12px 14px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                lineHeight: 1.5,
+                padding: '10px 12px',
+                marginBottom: '14px',
+                fontSize: '12.5px',
+                lineHeight: 1.45,
+                wordBreak: 'break-word',
               }}
             >
               Vous vous apprêtez à démarrer :<br />
               <strong style={{ color: 'var(--text-primary)' }}>
                 {showMorningBlockerModal.mission.reference} — {showMorningBlockerModal.mission.client}
               </strong>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Veuillez certifier votre arrivée au bureau pour déverrouiller le démarrage de l'intervention.
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Veuillez certifier votre arrivée au bureau pour déverrouiller le démarrage.
               </div>
             </div>
 
@@ -2322,12 +2660,15 @@ export function TechnicianMobileView({
                 type="button"
                 className="btn btn-primary"
                 style={{
-                  minHeight: '48px',
+                  minHeight: '46px',
                   background: '#00bf63',
                   borderColor: '#00994f',
                   fontWeight: 800,
-                  fontSize: '13.5px',
+                  fontSize: '13px',
                   boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                  padding: '8px 12px',
                 }}
                 disabled={clockInMut.isPending}
                 onClick={async () => {
@@ -2372,32 +2713,32 @@ export function TechnicianMobileView({
           style={{ zIndex: 9999 }}
         >
           <div
-            className="cmd-palette-modal"
-            style={{ maxWidth: '480px', padding: '22px', borderRadius: '16px' }}
+            className="cmd-palette-modal tech-modal-mobile"
+            style={{ maxWidth: '480px', padding: '16px', borderRadius: '16px', width: 'min(480px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
+                  width: '42px',
+                  height: '42px',
                   borderRadius: '12px',
                   background: 'rgba(220, 38, 38, 0.15)',
                   color: '#dc2626',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '22px',
+                  fontSize: '20px',
                   flexShrink: 0,
                 }}
               >
                 ⊘
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                   Intervention en cours non terminée
                 </h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
                   Vous ne pouvez pas clôturer votre journée tant qu'une mission est active.
                 </p>
               </div>
@@ -2408,21 +2749,22 @@ export function TechnicianMobileView({
                 background: 'rgba(220, 38, 38, 0.08)',
                 border: '1px solid rgba(220, 38, 38, 0.3)',
                 borderRadius: '10px',
-                padding: '12px 14px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                lineHeight: 1.5,
+                padding: '10px 12px',
+                marginBottom: '14px',
+                fontSize: '12.5px',
+                lineHeight: 1.45,
+                wordBreak: 'break-word',
               }}
             >
               Mission actuellement active :<br />
-              <strong style={{ color: 'var(--text-primary)', fontSize: '14px' }}>
+              <strong style={{ color: 'var(--text-primary)', fontSize: '13.5px' }}>
                 {showRunningBlockerModal.reference} — {showRunningBlockerModal.client}
               </strong>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                 ⌖ {showRunningBlockerModal.chantier}
               </div>
-              <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700, marginTop: '6px' }}>
-                Choisissez l'une des actions ci-dessous pour débloquer la clôture de votre journée :
+              <div style={{ fontSize: '11.5px', color: '#dc2626', fontWeight: 700, marginTop: '6px' }}>
+                Choisissez l'une des actions ci-dessous pour débloquer la clôture :
               </div>
             </div>
 
@@ -2435,7 +2777,10 @@ export function TechnicianMobileView({
                   background: '#059669',
                   borderColor: '#059669',
                   fontWeight: 800,
-                  fontSize: '13px',
+                  fontSize: '12.5px',
+                  padding: '8px 12px',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
                 }}
                 onClick={() => {
                   const m = showRunningBlockerModal;
@@ -2443,7 +2788,7 @@ export function TechnicianMobileView({
                   handleDeactivateMission(m, true);
                 }}
               >
-                ⌖⏹ Clôturer avec GPS & Pointer ma fin de journée
+                ⌖⏹ Clôturer avec GPS & Pointer fin de journée
               </button>
 
               <button
@@ -2454,7 +2799,10 @@ export function TechnicianMobileView({
                   color: '#d97706',
                   borderColor: 'rgba(217, 119, 6, 0.4)',
                   fontWeight: 800,
-                  fontSize: '13px',
+                  fontSize: '12.5px',
+                  padding: '8px 12px',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
                 }}
                 onClick={() => {
                   const m = showRunningBlockerModal;
@@ -2487,40 +2835,40 @@ export function TechnicianMobileView({
           style={{ zIndex: 9999 }}
         >
           <div
-            className="cmd-palette-modal"
-            style={{ maxWidth: '500px', padding: '22px', borderRadius: '16px' }}
+            className="cmd-palette-modal tech-modal-mobile"
+            style={{ maxWidth: '500px', padding: '16px', borderRadius: '16px', width: 'min(500px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
+                  width: '42px',
+                  height: '42px',
                   borderRadius: '12px',
                   background: 'rgba(245, 158, 11, 0.15)',
                   color: '#d97706',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '22px',
+                  fontSize: '20px',
                   flexShrink: 0,
                 }}
               >
                 ◷
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                   Intervention Non Terminée — À replanifier
                 </h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
                   {nonTermineeModalMission.reference} — {nonTermineeModalMission.client}
                 </p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
                   Motif d'interruption / blocage :
                 </label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -2536,8 +2884,9 @@ export function TechnicianMobileView({
                       type="button"
                       className={`btn btn-sm ${nonTermineeReason === motif ? 'btn-primary' : 'btn-secondary'}`}
                       style={{
-                        fontSize: '11.5px',
+                        fontSize: '11px',
                         fontWeight: nonTermineeReason === motif ? 800 : 500,
+                        padding: '6px 9px',
                       }}
                       onClick={() => setNonTermineeReason(motif)}
                     >
@@ -2548,7 +2897,7 @@ export function TechnicianMobileView({
               </div>
 
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
                   Précisions pour le planning & la direction (obligatoire) :
                 </label>
                 <textarea
@@ -2565,15 +2914,16 @@ export function TechnicianMobileView({
                   background: 'rgba(37, 99, 235, 0.08)',
                   border: '1px solid rgba(37, 99, 235, 0.25)',
                   borderRadius: '8px',
-                  padding: '10px 12px',
-                  fontSize: '12px',
+                  padding: '8px 10px',
+                  fontSize: '11.5px',
                   color: 'var(--text-secondary)',
+                  lineHeight: 1.4,
                 }}
               >
                 ℹ Cette intervention passera au statut <strong>"Intervention non terminée"</strong>. Elle sera libérée pour que vous puissiez continuer ou clôturer votre journée, et apparaîtra en alerte sur le planning de l'administrateur pour replanification.
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -2584,7 +2934,7 @@ export function TechnicianMobileView({
                 <button
                   type="button"
                   className="btn btn-primary"
-                  style={{ background: '#d97706', borderColor: '#d97706', fontWeight: 800 }}
+                  style={{ background: '#d97706', borderColor: '#d97706', fontWeight: 800, minHeight: '40px' }}
                   onClick={async () => {
                     await handleMarkNonTerminee(
                       nonTermineeModalMission,
@@ -2616,15 +2966,15 @@ export function TechnicianMobileView({
           style={{ zIndex: 9999 }}
         >
           <div
-            className="cmd-palette-modal"
-            style={{ maxWidth: '500px', padding: '22px', borderRadius: '16px' }}
+            className="cmd-palette-modal tech-modal-mobile"
+            style={{ maxWidth: '500px', padding: '16px', borderRadius: '16px', width: 'min(500px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div
                 style={{
-                  width: '48px',
-                  height: '48px',
+                  width: '44px',
+                  height: '44px',
                   borderRadius: '12px',
                   background:
                     gpsStatus === 'READY'
@@ -2641,17 +2991,17 @@ export function TechnicianMobileView({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '24px',
+                  fontSize: '22px',
                   flexShrink: 0,
                 }}
               >
                 ⌖
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                   Localisation GPS obligatoire pour clôturer
                 </h3>
-                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
                   {closingGpsModalMission.reference} — {closingGpsModalMission.client}
                 </p>
               </div>
@@ -2662,24 +3012,25 @@ export function TechnicianMobileView({
                 background: '#f8fafc',
                 border: '1px solid #cbd5e1',
                 borderRadius: '10px',
-                padding: '12px 14px',
-                marginBottom: '14px',
-                fontSize: '12.5px',
-                lineHeight: 1.5,
+                padding: '10px 12px',
+                marginBottom: '12px',
+                fontSize: '12px',
+                lineHeight: 1.45,
+                wordBreak: 'break-word',
               }}
             >
               <div style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
                 ⌖ Lieu d'intervention : {closingGpsModalMission.chantier}
               </div>
-              <div style={{ color: '#475569', fontSize: '12px' }}>
+              <div style={{ color: '#475569', fontSize: '11.5px' }}>
                 Pour finaliser cette intervention :
               </div>
-              <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '11.5px', color: '#334155' }}>
+              <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px', fontSize: '11px', color: '#334155' }}>
                 <li>
-                  Votre <strong>dernière position GPS actuelle</strong> est transmise en direct à l'équipe opérationnelle au bureau.
+                  Votre <strong>dernière position GPS actuelle</strong> est transmise en direct au bureau.
                 </li>
                 <li>
-                  Cette intervention est enregistrée comme <strong>terminée</strong> et <strong>supprimée de la carte du trajet</strong> pour ne laisser que les interventions et devis restants à faire.
+                  Cette intervention est marquée <strong>terminée</strong> et <strong>retirée de la carte du trajet</strong>.
                 </li>
               </ul>
             </div>
@@ -2688,23 +3039,23 @@ export function TechnicianMobileView({
             {gpsStatus === 'ACQUIRING' && (
               <div
                 style={{
-                  padding: '16px',
+                  padding: '14px',
                   borderRadius: '12px',
                   background: '#f0f9ff',
                   border: '1.5px solid #38bdf8',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
-                  marginBottom: '16px',
+                  gap: '10px',
+                  marginBottom: '14px',
                 }}
               >
-                <span className="spinner" style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+                <span className="spinner" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '13px', color: '#0369a1' }}>
+                  <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#0369a1' }}>
                     Acquisition du signal GPS de votre téléphone...
                   </div>
-                  <div style={{ fontSize: '11.5px', color: '#0284c7', marginTop: '2px' }}>
-                    Veuillez autoriser la localisation si votre téléphone vous le demande.
+                  <div style={{ fontSize: '11px', color: '#0284c7', marginTop: '2px' }}>
+                    Veuillez autoriser la localisation si demandé.
                   </div>
                 </div>
               </div>
@@ -2714,27 +3065,27 @@ export function TechnicianMobileView({
             {gpsStatus === 'READY' && gpsCoords && (
               <div
                 style={{
-                  padding: '14px',
+                  padding: '12px',
                   borderRadius: '12px',
                   background: '#ecfdf5',
                   border: '1.5px solid #10b981',
-                  marginBottom: '16px',
+                  marginBottom: '14px',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '13px', color: '#065f46' }}>
-                    ● Position actuelle verrouillée & prête à transmettre
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#065f46' }}>
+                    ● Position verrouillée & prête à transmettre
                   </span>
-                  <span className="badge badge-success" style={{ fontSize: '10.5px', fontWeight: 800 }}>
+                  <span className="badge badge-success" style={{ fontSize: '10px', fontWeight: 800 }}>
                     {gpsCoords.source === 'GPS_MOBILE' ? '⌖ GPS Téléphone' : '⌖ Site Certifié'}
                   </span>
                 </div>
-                <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: '#047857' }}>
-                  Latitude : {gpsCoords.lat} • Longitude : {gpsCoords.lng}
+                <div className="font-mono" style={{ fontSize: '11.5px', fontWeight: 800, color: '#047857', wordBreak: 'break-all' }}>
+                  Lat : {gpsCoords.lat} • Lng : {gpsCoords.lng}
                   {gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''}
                 </div>
-                <div style={{ fontSize: '11.5px', color: '#065f46', marginTop: '4px' }}>
-                  ✓ Prêt pour l'envoi au bureau et la mise à jour de l'itinéraire restant.
+                <div style={{ fontSize: '11px', color: '#065f46', marginTop: '3px' }}>
+                  ✓ Prêt pour l'envoi au bureau et la mise à jour de l'itinéraire.
                 </div>
               </div>
             )}
@@ -2743,23 +3094,23 @@ export function TechnicianMobileView({
             {gpsStatus === 'ERROR' && (
               <div
                 style={{
-                  padding: '14px',
+                  padding: '12px',
                   borderRadius: '12px',
                   background: 'rgba(220, 38, 38, 0.08)',
                   border: '1.5px solid rgba(220, 38, 38, 0.45)',
-                  marginBottom: '16px',
+                  marginBottom: '14px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '10px',
+                  gap: '8px',
                 }}
               >
-                <div style={{ fontWeight: 800, fontSize: '13px', color: '#dc2626' }}>
+                <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#dc2626' }}>
                   ▲ GPS non activé ou signal indisponible
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-primary)', lineHeight: 1.4, wordBreak: 'break-word' }}>
                   {gpsErrorMsg}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -2767,12 +3118,12 @@ export function TechnicianMobileView({
                       background: '#0284c7',
                       borderColor: '#0284c7',
                       fontWeight: 800,
-                      minHeight: '42px',
-                      fontSize: '12.5px',
+                      minHeight: '40px',
+                      fontSize: '12px',
                     }}
                     onClick={() => acquireGpsForMission(closingGpsModalMission)}
                   >
-                    ↻ Activer / Réessayer la détection GPS maintenant
+                    ↻ Activer / Réessayer la détection GPS
                   </button>
 
                   <button
@@ -2780,14 +3131,17 @@ export function TechnicianMobileView({
                     className="btn btn-secondary"
                     style={{
                       fontWeight: 700,
-                      minHeight: '40px',
-                      fontSize: '12px',
+                      minHeight: '38px',
+                      fontSize: '11.5px',
                       borderColor: '#059669',
                       color: '#059669',
+                      wordBreak: 'break-word',
+                      whiteSpace: 'normal',
+                      padding: '6px 10px',
                     }}
                     onClick={() => certifyOnChantierAddressFallback(closingGpsModalMission)}
                   >
-                    ⌖ Certifier ma position sur le lieu d'intervention (Secours hors-signal)
+                    ⌖ Certifier sur l'adresse du chantier (Secours)
                   </button>
                 </div>
               </div>
@@ -2800,14 +3154,18 @@ export function TechnicianMobileView({
                 className="btn btn-primary"
                 disabled={gpsStatus !== 'READY' || !gpsCoords || isFinalizingWithGps}
                 style={{
-                  minHeight: '48px',
+                  minHeight: '46px',
                   background: gpsStatus === 'READY' && gpsCoords ? '#00bf63' : '#94a3b8',
                   borderColor: gpsStatus === 'READY' && gpsCoords ? '#00994f' : '#94a3b8',
                   fontWeight: 800,
-                  fontSize: '13.5px',
+                  fontSize: '13px',
                   boxShadow:
                     gpsStatus === 'READY' && gpsCoords ? '0 4px 14px rgba(0, 191, 99, 0.3)' : 'none',
                   cursor: gpsStatus === 'READY' && gpsCoords ? 'pointer' : 'not-allowed',
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  padding: '8px 12px',
+                  textAlign: 'center',
                 }}
                 onClick={confirmGpsAndFinalizeMission}
               >

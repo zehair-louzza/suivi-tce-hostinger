@@ -13,6 +13,7 @@ import {
   statusCodeToTraitement,
   HistoriqueEvent,
   GpsPositionPayload,
+  getEffectivePermissions,
 } from '../../shared/types.js';
 
 export const devisRouter = Router();
@@ -358,17 +359,29 @@ devisRouter.get(
         : {}),
     };
 
-    // Cloisonnement strict des techniciens : ils ne voient que les visites devis qui leur sont affectées
-    const userRole = (req.user?.role || '').toUpperCase();
-    const isAdmin = req.user?.userId === 1 || userRole === 'ADMIN';
-    if (!isAdmin && userRole === 'TECHNICIEN') {
-      const callerUser = await prisma.user.findUnique({
-        where: { id: req.user?.userId },
-        select: { technicienNom: true, name: true },
-      });
+    // Récupération de l'appelant pour cloisonnement étanche
+    const callerId = req.user?.userId;
+    const callerUser = callerId
+      ? await prisma.user.findUnique({
+          where: { id: callerId },
+          select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, companyId: true },
+        })
+      : null;
+    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
+    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
+    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    const isMobileOnly = !isAdmin && (callerRole === 'TECHNICIEN' || Boolean(callerPerms.mobileOnly) || (Boolean(callerUser?.technicienNom) && !callerPerms.canEditDevis && !callerPerms.canManageBilling && !callerPerms.canEditPlanning));
+
+    // Cloisonnement strict : les profils sans droit Devis (ex: Techniciens) ne voient que les visites devis qui leur sont expressément affectées
+    if (!isAdmin && (isMobileOnly || callerRole === 'TECHNICIEN' || !callerPerms.canEditDevis)) {
       const boundTech = (callerUser?.technicienNom || callerUser?.name || '').trim();
       if (boundTech) {
         where.visiteTechnicien = { contains: boundTech, mode: 'insensitive' };
+      } else {
+        return res.json({
+          data: [],
+          pagination: { page: 1, limit, total: 0, totalPages: 0 },
+        });
       }
     }
 
@@ -384,6 +397,19 @@ devisRouter.get(
     ]);
 
     let transformed = items.map(transformDevis);
+
+    // Censure des montants financiers si l'utilisateur n'a pas la permission canViewFinancials
+    if (!isAdmin && !callerPerms.canViewFinancials) {
+      transformed = transformed.map((d) => ({
+        ...d,
+        amount: null,
+        montantHt: null,
+        computed: {
+          ...d.computed,
+          totalFactureHt: 0,
+        },
+      }));
+    }
     if (status) {
       transformed = transformed.filter(
         (d) => d.status === status || d.traitement === status || d.statutCommercial === status
@@ -466,6 +492,18 @@ devisRouter.post(
     const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
+
+    // Contrôle d'accès : création de devis réservée au chiffrage ou admin
+    const callerUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, permissionsJson: true },
+    });
+    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
+    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
+    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    if (!isAdmin && !callerPerms.canEditDevis) {
+      throw new AppError(403, 'Permission insuffisante pour créer un devis', 'FORBIDDEN');
+    }
 
     const client = String(b.client || 'Client à qualifier (Boîte de réception)').trim();
     const traitement = b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
@@ -558,6 +596,26 @@ devisRouter.patch(
     const existing = await prisma.devis.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
+    }
+
+    // Contrôle d'accès : modification réservée au chiffrage devis ou au technicien affecté à la visite
+    const callerUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
+    });
+    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
+    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
+    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    const isMobileOnly = !isAdmin && (callerRole === 'TECHNICIEN' || Boolean(callerPerms.mobileOnly) || (Boolean(callerUser?.technicienNom) && !callerPerms.canEditDevis && !callerPerms.canManageBilling && !callerPerms.canEditPlanning));
+
+    if (isMobileOnly) {
+      const boundTech = (callerUser?.technicienNom || callerUser?.name || '').trim().toLowerCase();
+      const devisTech = (existing.visiteTechnicien || '').trim().toLowerCase();
+      if (!devisTech.includes(boundTech) && !boundTech.includes(devisTech)) {
+        throw new AppError(403, 'Vous ne pouvez mettre à jour que les visites devis qui vous sont affectées', 'FORBIDDEN');
+      }
+    } else if (!isAdmin && !callerPerms.canEditDevis && !callerPerms.canConvertDevis) {
+      throw new AppError(403, 'Permission insuffisante pour modifier ce devis', 'FORBIDDEN');
     }
 
     const changes: string[] = [];
@@ -692,6 +750,19 @@ devisRouter.delete(
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
     }
 
+    // Contrôle d'accès : suppression de devis réservée aux profils autorisés
+    const callerUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
+    });
+    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
+    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
+    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+
+    if (!isAdmin && !callerPerms.canDeleteRecords) {
+      throw new AppError(403, 'Suppression de devis non autorisée sur ce profil', 'FORBIDDEN');
+    }
+
     await prisma.devis.delete({ where: { id } });
     notify(() => socketEvents.devisDeleted(userId, { id }));
 
@@ -707,6 +778,18 @@ devisRouter.post(
     const companyId = req.user?.companyId || 1;
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
+
+    // Contrôle d'accès : conversion de devis réservée aux profils habilités
+    const callerUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true, permissionsJson: true },
+    });
+    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
+    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
+    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    if (!isAdmin && !callerPerms.canConvertDevis && !callerPerms.canEditDevis) {
+      throw new AppError(403, 'Permission insuffisante pour convertir un devis', 'FORBIDDEN');
+    }
 
     // Si une clé d'idempotence stricte est fournie sans mode planning spécifique, on supporte aussi convertKeepingQuote
     const idempotencyKey = req.get('Idempotency-Key');

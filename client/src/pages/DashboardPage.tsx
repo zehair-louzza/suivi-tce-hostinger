@@ -42,6 +42,11 @@ import { DashboardAnalyse } from '../components/dashboard/DashboardAnalyse';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
+import {
+  isUserMobileOnly,
+  canUserAccessSection,
+  getDefaultAuthorizedSection,
+} from '../../../shared/types';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -49,23 +54,27 @@ export function DashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isMobileTechUser =
-    (user?.role || '').toUpperCase() === 'TECHNICIEN' ||
-    (Boolean(user?.permissions?.mobileOnly) && user?.id !== 1 && (user?.role || '').toUpperCase() !== 'ADMIN');
+  const isMobileTechUser = isUserMobileOnly(user);
 
   const sectionFromPath = (pathname: string): AppSection => {
     if (isMobileTechUser) return 'mobile_tech';
-    if (pathname.startsWith('/planning')) return 'planning';
-    if (pathname.startsWith('/devis')) return 'devis';
-    if (pathname.startsWith('/interventions')) return 'interventions';
-    if (pathname.startsWith('/carte')) return 'carte';
-    if (pathname.startsWith('/facturation')) return 'facturation';
-    if (pathname.startsWith('/rentabilite')) return 'rentabilite';
-    if (pathname.startsWith('/clients')) return 'clients';
-    if (pathname.startsWith('/referentiels')) return 'referentiels';
-    if (pathname.startsWith('/admin')) return 'admin';
-    if (pathname.startsWith('/mobile')) return 'mobile_tech';
-    return 'aujourdhui';
+    let target: AppSection = 'aujourdhui';
+    if (pathname.startsWith('/planning')) target = 'planning';
+    else if (pathname.startsWith('/devis')) target = 'devis';
+    else if (pathname.startsWith('/interventions')) target = 'interventions';
+    else if (pathname.startsWith('/carte')) target = 'carte';
+    else if (pathname.startsWith('/facturation')) target = 'facturation';
+    else if (pathname.startsWith('/rentabilite')) target = 'rentabilite';
+    else if (pathname.startsWith('/clients')) target = 'clients';
+    else if (pathname.startsWith('/referentiels')) target = 'referentiels';
+    else if (pathname.startsWith('/admin')) target = 'admin';
+    else if (pathname.startsWith('/mobile')) target = 'mobile_tech';
+
+    // Isolation stricte : si l'utilisateur n'a pas les droits pour cette section, basculer sur sa section par défaut
+    if (!canUserAccessSection(target, user)) {
+      return getDefaultAuthorizedSection(user) as AppSection;
+    }
+    return target;
   };
 
   const [activeSection, setActiveSection] = useState<AppSection>(() =>
@@ -84,9 +93,13 @@ export function DashboardPage() {
 
   useEffect(() => {
     setActiveSection(sectionFromPath(location.pathname));
-  }, [location.pathname, isMobileTechUser]);
+  }, [location.pathname, isMobileTechUser, user?.role, user?.permissions]);
 
   const handleSectionChange = (sec: AppSection) => {
+    if (!canUserAccessSection(sec, user)) {
+      toast.error('Accès non autorisé à ce service');
+      return;
+    }
     setActiveSection(sec);
     const pathMap: Record<AppSection, string> = {
       aujourdhui: '/',
@@ -173,9 +186,12 @@ export function DashboardPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const canAccessDevisData = !isMobileTechUser && (canUserAccessSection('devis', user) || canUserAccessSection('aujourdhui', user));
+
   // Fetch Data (actualisation automatique via WebSockets + sécurité toutes les 25s)
   const { data: devisRes } = useQuery({
     queryKey: ['devis'],
+    enabled: Boolean(user) && canAccessDevisData,
     queryFn: async () => {
       const r = await devisApi.list({ limit: 500 });
       return r.data;
@@ -184,10 +200,15 @@ export function DashboardPage() {
     refetchOnWindowFocus: true,
   });
 
+  const boundTechnicienName = (user?.technicienNom || user?.name || '').trim();
   const { data: intvRes } = useQuery({
-    queryKey: ['interventions'],
+    queryKey: ['interventions', isMobileTechUser ? boundTechnicienName : 'all'],
     queryFn: async () => {
-      const r = await interventionApi.list({ limit: 500 });
+      const params: any = { limit: 500 };
+      if (isMobileTechUser && boundTechnicienName) {
+        params.technicien = boundTechnicienName;
+      }
+      const r = await interventionApi.list(params);
       return r.data;
     },
     refetchInterval: 20000,
@@ -727,7 +748,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI" / TABLEAU DE BORD)
          ===================================================================== */}
-      {activeSection === 'aujourdhui' && (
+      {activeSection === 'aujourdhui' && canUserAccessSection('aujourdhui', user) && (
         <>
           {dashboardTab === 'synthese' && (
             <DashboardSynthese
@@ -827,7 +848,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 2 : CONSOLE DISPATCH & PLANNING TECHNICIENS
          ===================================================================== */}
-      {activeSection === 'planning' && (
+      {activeSection === 'planning' && canUserAccessSection('planning', user) && (
         <div className="dashboard-container" style={{ maxWidth: '100%' }}>
           <div className="dashboard-header">
             <div>
@@ -887,7 +908,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 3 : PIPELINE DEVIS (TABLEAU 8 COLONNES + KANBAN + DRAWER 22 COL)
          ===================================================================== */}
-      {activeSection === 'devis' && (
+      {activeSection === 'devis' && canUserAccessSection('devis', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -1267,7 +1288,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 4 : INTERVENTIONS TCE (TABLEAU 8 COL + KANBAN + DRAWER 23 COL)
          ===================================================================== */}
-      {activeSection === 'interventions' && (
+      {activeSection === 'interventions' && canUserAccessSection('interventions', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -1670,7 +1691,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 4B-MAP : CARTE INTERACTIVE & CALCUL AUTOMATIQUE DE TRAJET
          ===================================================================== */}
-      {activeSection === 'carte' && (
+      {activeSection === 'carte' && canUserAccessSection('carte', user) && (
         <div className="dashboard-container" style={{ maxWidth: '100%' }}>
           <div className="dashboard-header">
             <div>
@@ -1705,7 +1726,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 4B : ESPACE FACTURATION & RELATION CLIENT (B2B & B2C)
          ===================================================================== */}
-      {activeSection === 'facturation' && (
+      {activeSection === 'facturation' && canUserAccessSection('facturation', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -1747,7 +1768,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 4C : COMPTABILITÉ, SUIVI D'ACTIVITÉ & RENTABILITÉ ÉQUIPES
          ===================================================================== */}
-      {activeSection === 'rentabilite' && (
+      {activeSection === 'rentabilite' && canUserAccessSection('rentabilite', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -1776,7 +1797,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 4D : PROFILS ENTREPRISES & DONNEURS D'ORDRE (FICHES TECHNIQUES)
          ===================================================================== */}
-      {activeSection === 'clients' && (
+      {activeSection === 'clients' && canUserAccessSection('clients', user) && (
         <div className="dashboard-container">
           <ClientsDirectoryView
             clientProfiles={clientProfiles}
@@ -1798,7 +1819,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 5 : RÉFÉRENTIELS MÉTIER ANELEC
          ===================================================================== */}
-      {activeSection === 'referentiels' && (
+      {activeSection === 'referentiels' && canUserAccessSection('referentiels', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -2240,7 +2261,7 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 6 : WORKSTATION ADMIN (UTILISATEURS, DROITS, POINTAGES & RAPPORTS)
          ===================================================================== */}
-      {activeSection === 'admin' && (
+      {activeSection === 'admin' && canUserAccessSection('admin', user) && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
@@ -2298,13 +2319,35 @@ export function DashboardPage() {
                 ? (user?.technicienNom || user?.name || 'Technicien')
                 : (selectedMobileTech || user?.technicienNom || techniciensList[0] || 'Anouar')
             }
-            canSwitchTechnicien={!isMobileTechUser}
+            canSwitchTechnicien={!isMobileTechUser && Boolean(user?.id === 1 || (user?.role || '').toUpperCase() === 'ADMIN' || user?.permissions?.canEditPlanning)}
             onSelectTechnicien={(t) => {
               if (!isMobileTechUser) setSelectedMobileTech(t);
             }}
             interventionsList={interventionsList}
             devisList={devisList}
           />
+        </div>
+      )}
+
+      {/* =====================================================================
+          MESSAGE DE SÉCURITÉ : ACCÈS NON AUTORISÉ AU SERVICE
+         ===================================================================== */}
+      {!canUserAccessSection(activeSection, user) && (
+        <div className="dashboard-container" style={{ padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            Accès non autorisé à ce service
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '460px', margin: '0 auto 20px', lineHeight: 1.6 }}>
+            Votre compte collaborateur ne dispose pas des droits nécessaires pour accéder à ce module métier.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => handleSectionChange(getDefaultAuthorizedSection(user) as AppSection)}
+          >
+            Retourner à votre espace de travail autorisé
+          </button>
         </div>
       )}
 
@@ -3471,40 +3514,42 @@ export function DashboardPage() {
                 Commandes Rapides
               </div>
               {[
-                { label: 'Ouvrir Console Dispatch & Timeline Gantt', action: () => handleSectionChange('planning') },
-                { label: 'Créer un Nouveau Devis (22 colonnes)', action: openNewDevisDrawer },
-                { label: 'Créer une Nouvelle Intervention (23 colonnes)', action: openNewIntvDrawer },
-                { label: 'Aller au Centre de Pilotage (Aujourd’hui)', action: () => handleSectionChange('aujourdhui') },
-              ].map((cmd) => (
-                <button
-                  key={cmd.label}
-                  type="button"
-                  onClick={() => {
-                    cmd.action();
-                    setCmdOpen(false);
-                  }}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    borderRadius: '7px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                    fontSize: '12.5px',
-                    fontWeight: 500,
-                  }}
-                >
-                  → {cmd.label}
-                </button>
-              ))}
+                { label: 'Ouvrir Console Dispatch & Timeline Gantt', action: () => handleSectionChange('planning'), section: 'planning' as AppSection },
+                { label: 'Créer un Nouveau Devis (22 colonnes)', action: openNewDevisDrawer, section: 'devis' as AppSection },
+                { label: 'Créer une Nouvelle Intervention (23 colonnes)', action: openNewIntvDrawer, section: 'interventions' as AppSection },
+                { label: 'Aller au Centre de Pilotage (Aujourd’hui)', action: () => handleSectionChange('aujourdhui'), section: 'aujourdhui' as AppSection },
+              ]
+                .filter((cmd) => canUserAccessSection(cmd.section, user))
+                .map((cmd) => (
+                  <button
+                    key={cmd.label}
+                    type="button"
+                    onClick={() => {
+                      cmd.action();
+                      setCmdOpen(false);
+                    }}
+                    style={{
+                      textAlign: 'left',
+                      padding: '8px 10px',
+                      borderRadius: '7px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '12.5px',
+                      fontWeight: 500,
+                    }}
+                  >
+                    → {cmd.label}
+                  </button>
+                ))}
 
               {cmdQuery.trim() && (
                 <>
                   <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', padding: '8px 8px 4px', textTransform: 'uppercase' }}>
                     Résultats Devis & Interventions
                   </div>
-                  {devisList
+                  {canUserAccessSection('devis', user) && devisList
                     .filter((d) =>
                       `${d.reference} ${d.client} ${d.site} ${d.objet}`
                         .toLowerCase()
@@ -3538,7 +3583,7 @@ export function DashboardPage() {
                         <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{d.statutCommercial}</span>
                       </button>
                     ))}
-                  {interventionsList
+                  {canUserAccessSection('interventions', user) && interventionsList
                     .filter((i) =>
                       `${i.reference} ${i.client} ${i.chantier} ${i.objet} ${i.entreprise}`
                         .toLowerCase()

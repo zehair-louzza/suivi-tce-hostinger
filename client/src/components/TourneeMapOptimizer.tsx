@@ -995,7 +995,7 @@ export function TourneeMapOptimizer({
             <button
               type="button"
               onClick={() => setIsFullscreen(true)}
-              className="btn btn-primary"
+              className="btn btn-primary desktop-only-el"
               style={{
                 height: '36px',
                 padding: '0 14px',
@@ -1057,6 +1057,7 @@ export function TourneeMapOptimizer({
 
         {/* BARRE DE BASCULE : POSITIONS ACTUELLES vs TRAJET RESTANT vs LES DEUX */}
         <div
+          className="tournee-mode-bar"
           style={{
             marginTop: '12px',
             padding: '10px 12px',
@@ -1070,14 +1071,15 @@ export function TourneeMapOptimizer({
             gap: '10px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', marginRight: '4px' }}>
+          <div className="tournee-mode-btns" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span className="desktop-only-el" style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', marginRight: '4px' }}>
               Mode d'affichage carte :
             </span>
 
             <button
               type="button"
               onClick={() => setDisplayMode('positions')}
+              className="tournee-mode-btn"
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
@@ -1089,12 +1091,14 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'positions' ? '#ffffff' : '#334155',
               }}
             >
-              ⌖ Positions Actuelles Techniciens
+              <span className="desktop-only-inline">⌖ Positions Actuelles Techniciens</span>
+              <span className="mobile-only-inline">⌖ Positions</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDisplayMode('trajet')}
+              className="tournee-mode-btn"
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
@@ -1106,12 +1110,14 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'trajet' ? '#ffffff' : '#334155',
               }}
             >
-              ⌖ Afficher le Trajet Restant ({remainingCount})
+              <span className="desktop-only-inline">⌖ Afficher le Trajet Restant ({remainingCount})</span>
+              <span className="mobile-only-inline">⌖ Trajet ({remainingCount})</span>
             </button>
 
             <button
               type="button"
               onClick={() => setDisplayMode('both')}
+              className="tournee-mode-btn"
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
@@ -1123,7 +1129,8 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'both' ? '#ffffff' : '#334155',
               }}
             >
-              ⌖ Les Deux (Positions + Trajet)
+              <span className="desktop-only-inline">⌖ Les Deux (Positions + Trajet)</span>
+              <span className="mobile-only-inline">⌖ Les Deux</span>
             </button>
           </div>
 
@@ -1253,6 +1260,7 @@ export function TourneeMapOptimizer({
           BANDEAU RÉSULTATS & AVANCEMENT DU TRAJET RESTANT
          ===================================================================== */}
       <div
+        className="tournee-kpi-mobile"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',

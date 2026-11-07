@@ -2,6 +2,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { socketEvents } from '../socket/index.js';
 import {
   ClientProfile,
@@ -10,6 +11,7 @@ import {
   EquipeJournaliere,
   GpsPositionPayload,
   ReferentielsMap,
+  getEffectivePermissions,
 } from '../../shared/types.js';
 
 export const referentielsRouter = Router();
@@ -131,9 +133,28 @@ referentielsRouter.get(
 referentielsRouter.put(
   '/:categorie',
   asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user?.userId) {
+      throw new AppError(401, 'Authentification requise', 'UNAUTHORIZED');
+    }
+    const caller = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, role: true, permissionsJson: true, companyId: true, active: true },
+    });
+    if (!caller || caller.active === false) {
+      throw new AppError(403, 'Compte inactif ou introuvable', 'FORBIDDEN');
+    }
+    const effectiveRole = caller.id === 1 || caller.role === 'ADMIN' ? 'ADMIN' : caller.role;
+    const perms = getEffectivePermissions(effectiveRole as any, caller.permissionsJson);
+    const isAdmin = caller.id === 1 || effectiveRole === 'ADMIN' || perms.canManageUsers;
+
+    // Seuls les administrateurs ou les utilisateurs avec droit canManageReferentiels peuvent altérer les référentiels métiers
+    if (!isAdmin && !perms.canManageReferentiels) {
+      throw new AppError(403, 'Permission insuffisante pour modifier les référentiels de configuration de l’entreprise', 'FORBIDDEN');
+    }
+
     const rawCat = req.params.categorie === 'corpsEtat' ? 'corps_etat' : req.params.categorie;
     const categorie = rawCat as keyof ReferentielsMap;
-    const companyId = req.user?.companyId || 1;
+    const companyId = caller.companyId || req.user?.companyId || 1;
 
     if (categorie === 'technicien_competences') {
       const rawMap = req.body?.competences || req.body?.valeurs || {};
@@ -424,7 +445,18 @@ referentielsRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const companyId = req.user?.companyId || 1;
     const b = req.body || {};
-    const technicien = String(b.technicien || '').trim();
+    let technicien = String(b.technicien || '').trim();
+
+    if (req.user?.userId) {
+      const caller = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { id: true, role: true, technicienNom: true, name: true },
+      });
+      if (caller && (caller.role === 'TECHNICIEN' || caller.technicienNom)) {
+        technicien = (caller.technicienNom || caller.name || technicien).trim();
+      }
+    }
+
     const lat = Number(b.lat);
     const lng = Number(b.lng);
 
