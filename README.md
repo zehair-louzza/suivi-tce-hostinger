@@ -3,7 +3,8 @@
 > **Progiciel d'Entreprise Tout Corps d'État (TCE) — Multi-Tenant Supabase PostgreSQL**  
 > **Production Officielle :** [suivi.anelecgroupe.com](https://suivi.anelecgroupe.com)  
 > **Version :** Production 2026 Stable & Homologuée  
-> **Manuel Opérationnel & Guide Complet PDF :** [`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`](docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf)
+> **Manuel Opérationnel & Guide Complet PDF :** [`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`](docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf)  
+> **Vidéo Commerciale & Publicitaire (Full HD 1080p, 44s) :** [`docs/video_publicitaire_anelec_tce.mp4`](docs/video_publicitaire_anelec_tce.mp4)
 
 <p align="center">
   <img src="docs/images/01-logo-anelec-groupe.png" alt="Logo Officiel ANELEC GROUPE" width="420" />
