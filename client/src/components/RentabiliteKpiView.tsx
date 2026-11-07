@@ -6,6 +6,7 @@ import {
   formatDateFR,
   computeDurationHours,
 } from '../lib/api';
+import { ActivityRevenueDashboard, useActivityAnalytics } from '../activity';
 import toast from 'react-hot-toast';
 
 interface RentabiliteKpiViewProps {
@@ -113,8 +114,16 @@ export function RentabiliteKpiView({
   const [sortBy, setSortBy] = useState<'hourlyRevenue' | 'totalMontant' | 'margin' | 'productivity'>('hourlyRevenue');
   // Recherche
   const [searchQuery, setSearchQuery] = useState('');
-  // Onglet vue active : par Technicien ou par Équipe / Corps d'état
-  const [activeViewTab, setActiveViewTab] = useState<'techniciens' | 'equipes'>('techniciens');
+  // Données analytiques consolidées Suivi d'Activité & CA
+  const {
+    days: activityDays,
+    issues: activityIssues,
+    loading: activityLoading,
+    error: activityError,
+  } = useActivityAnalytics(interventionsList, devisList);
+
+  // Onglet vue active : Suivi Activité & CA, par Technicien ou par Équipe / Corps d'état
+  const [activeViewTab, setActiveViewTab] = useState<'activite' | 'techniciens' | 'equipes'>('activite');
 
   const today = useMemo(() => new Date(), []);
   const currentMonthPrefix = useMemo(() => today.toISOString().slice(0, 7), [today]);
@@ -459,9 +468,72 @@ export function RentabiliteKpiView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* =====================================================================
-          1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE (STYLE VOLET 2)
+          COMMUTATEUR PRINCIPAL DU VOLET COMPTABILITÉ & ÉQUIPE
          ===================================================================== */}
-      <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+      <div
+        className="pro-table-container"
+        style={{
+          padding: '12px 18px',
+          background: '#ffffff',
+          border: '1px solid #cbd5e1',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 2px 6px rgba(15,23,42,0.04)',
+        }}
+      >
+        <div className="segmented-control segmented-control-fluid" style={{ flex: '1 1 auto' }}>
+          <button
+            type="button"
+            className={`segmented-btn ${activeViewTab === 'activite' ? 'active' : ''}`}
+            onClick={() => setActiveViewTab('activite')}
+          >
+            <span className="desktop-only-el">📈 Suivi Activité & Chiffre d'Affaires (Sky & Ice)</span>
+            <span className="mobile-only-flex">📈 Suivi Activité & CA</span>
+          </button>
+          <button
+            type="button"
+            className={`segmented-btn ${activeViewTab === 'techniciens' ? 'active' : ''}`}
+            onClick={() => setActiveViewTab('techniciens')}
+          >
+            <span className="desktop-only-el">👷 Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
+            <span className="mobile-only-flex">👷 Techniciens ({filteredAndSortedTechniciens.length})</span>
+          </button>
+          <button
+            type="button"
+            className={`segmented-btn ${activeViewTab === 'equipes' ? 'active' : ''}`}
+            onClick={() => setActiveViewTab('equipes')}
+          >
+            <span className="desktop-only-el">🏗️ Rentabilité par Équipe / Métier ({equipesStats.length})</span>
+            <span className="mobile-only-flex">🏗️ Équipes ({equipesStats.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* =====================================================================
+          VUE 1 : SUIVI DE L'ACTIVITÉ ET DU CHIFFRE D'AFFAIRES (SKY & ICE)
+         ===================================================================== */}
+      {activeViewTab === 'activite' && (
+        <ActivityRevenueDashboard
+          days={activityDays}
+          issues={activityIssues}
+          loading={activityLoading}
+          error={activityError}
+        />
+      )}
+
+      {/* =====================================================================
+          VUES 2 & 3 : RENTABILITÉ DÉTAILLÉE PAR TECHNICIEN ET ÉQUIPES
+         ===================================================================== */}
+      {activeViewTab !== 'activite' && (
+        <>
+          {/* =====================================================================
+              1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE (STYLE VOLET 2)
+             ===================================================================== */}
+          <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1479,6 +1551,8 @@ export function RentabiliteKpiView({
               })
             )}
           </div>
+        </>
+      )}
         </>
       )}
     </div>

@@ -1721,15 +1721,15 @@ export function DashboardPage() {
       )}
 
       {/* =====================================================================
-          SECTION 4C : ANALYSE DE RENTABILITÉ TECHNICIENS & ÉQUIPES TCE
+          SECTION 4C : COMPTABILITÉ, SUIVI D'ACTIVITÉ & RENTABILITÉ ÉQUIPES
          ===================================================================== */}
       {activeSection === 'rentabilite' && (
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
-              <h1 className="dashboard-title">Analyse de Rentabilité Techniciens & Équipes</h1>
+              <h1 className="dashboard-title">Comptabilité & Suivi d'Activité</h1>
               <p className="dashboard-subtitle">
-                Performance horaire (€ HT / h), marges brutes par corps d'état et productivité des équipes terrain.
+                Chiffre d'affaires facturé, devis, interventions réalisées, marges brutes et productivité des équipes terrain.
               </p>
             </div>
             <div className="dashboard-header__actions">

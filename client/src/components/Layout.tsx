@@ -209,8 +209,8 @@ export function Layout({
         },
         {
           id: 'rentabilite',
-          label: 'Rentabilité & équipes',
-          subtitle: 'Marges, coûts & rendement horaire',
+          label: 'Comptabilité & équipe',
+          subtitle: 'Activité, CA, marges & rentabilité',
           shortcut: '7',
           icon: (
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -684,7 +684,7 @@ export function Layout({
                   : item.id === 'facturation'
                   ? 'Factures'
                   : item.id === 'rentabilite'
-                  ? 'Rentabilité'
+                  ? 'Comptabilité'
                   : item.id === 'admin'
                   ? 'Admin'
                   : item.id === 'mobile_tech'
