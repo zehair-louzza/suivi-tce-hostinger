@@ -3,6 +3,8 @@ import { Search, Bell, Sheet, ChevronDown, LogOut, MoreHorizontal, X, Menu as Me
 import { NAV, NAV_ITEMS, NAV_BY_ID, MOBILE_PRIMARY } from './nav';
 import { useMock, Logo, Avatar, IconBtn, Menu, Pill } from './ui';
 import { ME, COMPANY, TODAY_LABEL, ACTIVITY, TECHS } from '../data/sample';
+import { useNavigate } from 'react-router-dom';
+import { DIRECTIONS, ORIGINAL_THEMES } from '../data/directions';
 
 function NavButton({ item, active, onClick, showLabel = true, variant = '' }) {
   const Icon = item.icon;
@@ -40,19 +42,16 @@ function UserMenu({ compact, onOpenProfile }) {
 }
 
 function ProfileModal({ open, onClose }) {
-  const { go } = useMock();
-  const [userPref, setUserPref] = useState(null);
+  const { go, dir, screen } = useMock();
+  const navigate = useNavigate();
   const companyDefault = 'atlas';
   const allowOverride = true;
   const themes = [
-    { id: 'light', name: 'ANELEC Original — Clair', dark: false, sw: ['#047857', '#142536'] },
-    { id: 'dark', name: 'ANELEC Original — Sombre', dark: true, sw: ['#10b981', '#0a1017'] },
-    { id: 'atlas', name: 'Atlas Clarity', dark: false, sw: ['#1D4ED8', '#0F172A'] },
-    { id: 'craft', name: 'Craft Warmth', dark: false, sw: ['#0F766E', '#22201C'] },
-    { id: 'signal', name: 'Signal Command', dark: true, sw: ['#38BDF8', '#0B1220'] },
-    { id: 'swiss', name: 'Editorial Swiss', dark: false, sw: ['#0B3B8F', '#0B1220'] },
-    { id: 'bento', name: 'Bento Modular', dark: false, sw: ['#111827', '#F5B400'] },
+    ...DIRECTIONS.map((d) => ({ id: d.id, name: d.name, dark: d.dark, sw: [d.swatches[0], d.swatches[2]] })),
+    ...ORIGINAL_THEMES.map((t) => ({ id: t.id, name: t.name, dark: t.dark, sw: [t.swatches[0], t.swatches[2]] })),
   ];
+  const active = dir.id;
+  const choose = (id) => { if (id !== active) navigate(`/m/${id}/${screen}`); };
   if (!open) return null;
   return (
     <div className="m-overlay" data-testid="mock-profile-modal" onClick={onClose}>
@@ -72,8 +71,8 @@ function ProfileModal({ open, onClose }) {
                 <strong style={{ fontSize: 14 }}>Mon apparence</strong>
                 <p className="m-muted m-small" style={{ margin: '2px 0 0' }}>Choisissez votre apparence personnelle, elle vous suit d'un appareil à l'autre.</p>
               </div>
-              {userPref && (
-                <button type="button" className="m-btn m-btn--sm" onClick={() => setUserPref(null)} data-testid="mock-profile-reset">↺ Revenir au défaut</button>
+              {active !== companyDefault && (
+                <button type="button" className="m-btn m-btn--sm" onClick={() => choose(companyDefault)} data-testid="mock-profile-reset">↺ Revenir au défaut entreprise</button>
               )}
             </div>
             {!allowOverride ? (
@@ -84,12 +83,12 @@ function ProfileModal({ open, onClose }) {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
                 {themes.map((t) => {
-                  const isActive = (userPref || companyDefault) === t.id;
+                  const isActive = active === t.id;
                   return (
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setUserPref(t.id)}
+                      onClick={() => choose(t.id)}
                       data-testid={`mock-profile-theme-${t.id}`}
                       style={{ all: 'unset', cursor: 'pointer', padding: 10, borderRadius: 10, border: `2px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10 }}
                     >

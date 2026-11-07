@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
+import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
 import {
   sendWelcomeUserEmail,
@@ -16,28 +17,10 @@ import {
 
 export const adminRouter = Router();
 
-const publicUserSelect = {
-  id: true,
-  email: true,
-  name: true,
-  role: true,
-  technicienNom: true,
-  permissionsJson: true,
-  active: true,
-  companyId: true,
-  themePref: true,
-  company: {
-    select: {
-      id: true,
-      name: true,
-      siret: true,
-      siren: true,
-      defaultTheme: true,
-      allowThemeOverride: true,
-    },
-  },
-  createdAt: true,
-} as const;
+// Sélection publique SANS colonnes d'apparence (robuste même si la migration
+// de thème n'a pas encore été appliquée à la base). Les valeurs d'apparence
+// sont gérées à part via les routes /appearance.
+const publicUserSelect = basePublicUserSelect;
 
 function computeDurationMinutes(startHHMM?: string | null, endHHMM?: string | null): number | null {
   if (!startHHMM || !endHHMM) return null;
@@ -626,10 +609,20 @@ adminRouter.get(
       throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     }
     const companyId = caller.companyId || 1;
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
-    });
+    let company: { id: number; name: string; defaultTheme?: string | null; allowThemeOverride?: boolean | null } | null;
+    try {
+      company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+      });
+    } catch (e) {
+      if (!isMissingSchemaError(e)) throw e;
+      // Colonnes d'apparence absentes : on renvoie les valeurs par défaut.
+      company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true },
+      });
+    }
     if (!company) throw new AppError(404, 'Entreprise introuvable', 'COMPANY_NOT_FOUND');
     res.json({
       companyId: company.id,
@@ -662,14 +655,26 @@ adminRouter.patch(
     }
 
     const companyId = caller.companyId || 1;
-    const updated = await prisma.company.update({
-      where: { id: companyId },
-      data: {
-        ...(defaultTheme !== undefined ? { defaultTheme } : {}),
-        ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
-      },
-      select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
-    });
+    let updated;
+    try {
+      updated = await prisma.company.update({
+        where: { id: companyId },
+        data: {
+          ...(defaultTheme !== undefined ? { defaultTheme } : {}),
+          ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
+        },
+        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+      });
+    } catch (e) {
+      if (isMissingSchemaError(e)) {
+        throw new AppError(
+          503,
+          "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
+          'THEME_PERSISTENCE_UNAVAILABLE'
+        );
+      }
+      throw e;
+    }
 
     res.json({
       companyId: updated.id,

@@ -10,6 +10,8 @@ import './styles/dir-craft.css';
 import './styles/dir-signal.css';
 import './styles/dir-swiss.css';
 import './styles/dir-bento.css';
+import './styles/dir-origin-light.css';
+import './styles/dir-origin-dark.css';
 import Home from './gallery/Home.jsx';
 import Viewer from './gallery/Viewer.jsx';
 import Compare from './gallery/Compare.jsx';

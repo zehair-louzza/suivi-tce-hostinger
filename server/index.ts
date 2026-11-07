@@ -3,6 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { execFileSync } from 'child_process';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -130,6 +131,31 @@ process.on('SIGINT', async () => {
   await prisma.$disconnect();
   httpServer.close(() => process.exit(0));
 });
+
+/**
+ * Applique automatiquement les migrations Prisma en attente au démarrage (prod).
+ * Garantit que le schéma de la base (ex. colonnes d'apparence) est à jour, ce
+ * qui évite les erreurs 500 « column does not exist » après un déploiement.
+ * En cas d'échec (CLI Prisma absente, etc.) le serveur démarre quand même : la
+ * couche d'authentification est résiliente aux colonnes manquantes.
+ */
+function applyPendingMigrations() {
+  if (config.nodeEnv !== 'production') return;
+  try {
+    console.log('→ Application des migrations Prisma (prisma migrate deploy)...');
+    const localBin = path.resolve(process.cwd(), 'node_modules/.bin/prisma');
+    const bin = fs.existsSync(localBin) ? localBin : 'prisma';
+    execFileSync(bin, ['migrate', 'deploy'], { stdio: 'inherit' });
+    console.log('✓ Migrations Prisma à jour.');
+  } catch (err) {
+    console.error(
+      '⚠ Échec de `prisma migrate deploy` au démarrage (le serveur continue) :',
+      (err as Error)?.message
+    );
+  }
+}
+
+applyPendingMigrations();
 
 httpServer.listen(config.port, () => {
   console.log(`→ Server running on port ${config.port} (${config.nodeEnv})`);

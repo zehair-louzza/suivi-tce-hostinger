@@ -107,7 +107,55 @@ export const DIRECTIONS = [
   },
 ];
 
-export const DIR_BY_ID = Object.fromEntries(DIRECTIONS.map((d) => [d.id, d]));
+// Apparence d'origine ANELEC (clair / sombre) — proposée en plus des 5
+// directions dans le sélecteur d'apparence de l'application, mais volontairement
+// absente de la galerie principale (ce n'est pas une "direction" de refonte).
+export const ORIGINAL_THEMES = [
+  {
+    id: 'origin-light',
+    num: 0,
+    name: 'ANELEC Original — Clair',
+    tagline: "L'apparence actuelle de l'application, en clair",
+    mood: 'Sobre · Marque · Familier',
+    forWho: "Pour conserver l'apparence actuelle d'ANELEC TCE, sans changement visuel pour les équipes.",
+    nav: 'Barre latérale claire',
+    navMobile: 'Barre du bas',
+    density: 'Standard',
+    fonts: { display: 'Inter', body: 'Inter', mono: 'IBM Plex Mono' },
+    swatches: ['#047857', '#0EA5A4', '#142536', '#F6F8FA', '#B91C1C'],
+    chart: ['#047857', '#0EA5A4', '#F59E0B', '#94A3B8', '#2563EB', '#B91C1C'],
+    tiles: 'positron',
+    dark: false,
+    references: 'Apparence historique ANELEC',
+    pros: ['Aucun changement pour les équipes', 'Marque ANELEC (vert)'],
+    cons: ['Moins distinctif que les refontes'],
+    tags: ['Original', 'Clair', 'Marque'],
+  },
+  {
+    id: 'origin-dark',
+    num: 0,
+    name: 'ANELEC Original — Sombre',
+    tagline: "L'apparence actuelle de l'application, en sombre",
+    mood: 'Reposant · Marque · Familier',
+    forWho: "Pour les équipes qui préfèrent un fond sombre tout en gardant l'identité ANELEC.",
+    nav: 'Barre latérale sombre',
+    navMobile: 'Barre du bas',
+    density: 'Standard',
+    fonts: { display: 'Inter', body: 'Inter', mono: 'IBM Plex Mono' },
+    swatches: ['#10B981', '#38BDF8', '#0A1017', '#111A26', '#F87171'],
+    chart: ['#10B981', '#38BDF8', '#F59E0B', '#94A7B5', '#A78BFA', '#F472B6'],
+    tiles: 'dark',
+    dark: true,
+    references: 'Apparence historique ANELEC (sombre)',
+    pros: ['Confort visuel en faible luminosité', 'Marque ANELEC (vert)'],
+    cons: ['Moins adapté aux longues lectures de tableaux'],
+    tags: ['Original', 'Sombre', 'Marque'],
+  },
+];
+
+export const DIR_BY_ID = Object.fromEntries(
+  [...DIRECTIONS, ...ORIGINAL_THEMES].map((d) => [d.id, d])
+);
 
 export const TILES = {
   positron: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

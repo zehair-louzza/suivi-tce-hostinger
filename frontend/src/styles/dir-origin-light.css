@@ -1,0 +1,36 @@
+/* Apparence d'origine ANELEC — Clair (vert émeraude de marque sur fond clair) */
+[data-dir="origin-light"] {
+  --bg: #F6F8FA;
+  --bg-2: #EDF2F1;
+  --surface: #FFFFFF;
+  --surface-2: #F1F5F4;
+  --surface-3: #E6ECEA;
+  --text: #142536;
+  --text-strong: #0B1A16;
+  --muted: #5B6B73;
+  --muted-2: #93A1A6;
+  --border: #E3E8E7;
+  --border-strong: #C9D2CF;
+  --primary: #047857;
+  --primary-ink: #ffffff;
+  --primary-soft: rgba(4, 120, 87, .10);
+  --accent: #0EA5A4;
+  --warn: #B45309;
+  --danger: #B91C1C;
+  --ok: #047857;
+  --info: #0EA5A4;
+
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(20, 37, 54, .05);
+  --shadow: 0 2px 8px rgba(20, 37, 54, .07);
+}
+[data-dir="origin-light"] .m-table thead th { background: var(--surface-2); }
+[data-dir="origin-light"] .m-kpi { border-radius: 12px; }

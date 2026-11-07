@@ -9,6 +9,13 @@ import { getEffectivePermissions } from '../../shared/types.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
+import {
+  basePublicUserSelect,
+  findPublicUserUnique,
+  findPublicUserFirst,
+  areThemeColumnsAvailable,
+  isMissingSchemaError,
+} from '../lib/userSelect.js';
 
 export const authRouter = Router();
 
@@ -169,29 +176,7 @@ export function formatPublicUser(u: {
   };
 }
 
-const publicUserSelect = {
-  id: true,
-  email: true,
-  name: true,
-  role: true,
-  technicienNom: true,
-  permissionsJson: true,
-  active: true,
-  emailConfirmed: true,
-  companyId: true,
-  themePref: true,
-  company: {
-    select: {
-      id: true,
-      name: true,
-      siret: true,
-      siren: true,
-      defaultTheme: true,
-      allowThemeOverride: true,
-    },
-  },
-  createdAt: true,
-} as const;
+const publicUserSelect = basePublicUserSelect;
 
 authRouter.post(
   '/register',
@@ -437,10 +422,7 @@ authRouter.post(
       throw new AppError(400, 'Jeton valide et nouveau mot de passe (min 8 caractères) requis', 'INVALID_RESET');
     }
 
-    const user = await prisma.user.findFirst({
-      where: { confirmationToken: token },
-      select: publicUserSelect,
-    });
+    const user = await findPublicUserFirst({ confirmationToken: token });
 
     if (!user) {
       throw new AppError(404, 'Lien de réinitialisation invalide ou expiré', 'INVALID_TOKEN');
@@ -501,10 +483,7 @@ authRouter.post(
       throw new AppError(400, 'Adresse e-mail introuvable dans le jeton Supabase', 'EMAIL_MISSING');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: publicUserSelect,
-    });
+    const user = await findPublicUserUnique({ email });
 
     if (!user) {
       throw new AppError(404, `Aucun compte trouvé pour ${email}`, 'USER_NOT_FOUND');
@@ -537,15 +516,9 @@ authRouter.post(
   '/login',
   asyncHandler(async (req, res) => {
     const data = LoginSchema.parse(req.body);
-    const user = await prisma.user.findUnique({
-      where: { email: data.email },
-      select: {
-        ...publicUserSelect,
-        password: true,
-      },
-    });
+    const user = await findPublicUserUnique({ email: data.email }, { withPassword: true });
 
-    if (!user || !(await bcrypt.compare(data.password, user.password))) {
+    if (!user || !user.password || !(await bcrypt.compare(data.password, user.password))) {
       throw new AppError(401, 'Email ou mot de passe incorrect', 'INVALID_CREDENTIALS');
     }
     if ((user as any).emailConfirmed === false && user.id !== 1) {
@@ -580,10 +553,7 @@ authRouter.get(
   authMiddleware,
   asyncHandler(async (req, res) => {
     if (!req.user) throw new AppError(401, 'Non authentifié', 'UNAUTHORIZED');
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: publicUserSelect,
-    });
+    const user = await findPublicUserUnique({ id: req.user.userId });
     if (!user) throw new AppError(404, 'Utilisateur non trouvé', 'USER_NOT_FOUND');
     res.json({ user: formatPublicUser(user) });
   })
@@ -619,27 +589,51 @@ authRouter.patch(
       nextTheme = parsed.data;
     }
 
-    // Vérifier que l'entreprise autorise la personnalisation (sauf pour reset).
-    if (nextTheme !== null) {
-      const u = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        select: { companyId: true, company: { select: { allowThemeOverride: true } } },
-      });
-      if (u?.company && u.company.allowThemeOverride === false) {
-        throw new AppError(
-          403,
-          "La personnalisation individuelle de l'apparence a été désactivée par votre administrateur.",
-          'THEME_OVERRIDE_DISABLED'
-        );
-      }
+    // La persistance d'apparence nécessite les colonnes de thème en base.
+    if (!areThemeColumnsAvailable()) {
+      throw new AppError(
+        503,
+        "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
+        'THEME_PERSISTENCE_UNAVAILABLE'
+      );
     }
 
-    const updated = await prisma.user.update({
-      where: { id: req.user.userId },
-      data: { themePref: nextTheme },
-      select: publicUserSelect,
+    try {
+      // Vérifier que l'entreprise autorise la personnalisation (sauf pour reset).
+      if (nextTheme !== null) {
+        const u = await prisma.user.findUnique({
+          where: { id: req.user.userId },
+          select: { companyId: true, company: { select: { allowThemeOverride: true } } },
+        });
+        if (u?.company && u.company.allowThemeOverride === false) {
+          throw new AppError(
+            403,
+            "La personnalisation individuelle de l'apparence a été désactivée par votre administrateur.",
+            'THEME_OVERRIDE_DISABLED'
+          );
+        }
+      }
+
+      await prisma.user.update({
+        where: { id: req.user.userId },
+        data: { themePref: nextTheme },
+      });
+    } catch (e) {
+      if (isMissingSchemaError(e)) {
+        throw new AppError(
+          503,
+          "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
+          'THEME_PERSISTENCE_UNAVAILABLE'
+        );
+      }
+      throw e;
+    }
+
+    const updated = await findPublicUserUnique({ id: req.user.userId });
+    res.json({
+      user: updated ? formatPublicUser(updated) : null,
+      message: nextTheme ? 'Apparence personnelle mise à jour.' : 'Apparence personnelle réinitialisée.',
     });
-    res.json({ user: formatPublicUser(updated), message: nextTheme ? "Apparence personnelle mise à jour." : "Apparence personnelle réinitialisée." });
   })
 );
 
@@ -659,10 +653,7 @@ authRouter.post(
       if (decoded.type !== 'refresh') {
         throw new AppError(401, 'Token de refresh invalide', 'INVALID_REFRESH_TOKEN');
       }
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-        select: publicUserSelect,
-      });
+      const user = await findPublicUserUnique({ id: decoded.userId });
       if (!user) throw new AppError(401, 'Utilisateur non trouvé', 'USER_NOT_FOUND');
       const pub = formatPublicUser(user);
       const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
@@ -761,13 +752,7 @@ authRouter.post(
     }
 
     // 1. L'utilisateur existe déjà : Connexion directe
-    let user = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        ...publicUserSelect,
-        password: true,
-      },
-    });
+    let user = await findPublicUserUnique({ email }, { withPassword: true });
 
     if (user) {
       if (user.active === false && user.id !== 1) {

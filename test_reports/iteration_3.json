@@ -1,0 +1,37 @@
+{
+  "summary": "Completed comprehensive frontend testing of the ANELEC interface chooser feature in the Utilisateurs & accès tab. All 7 interfaces (atlas, craft, signal, swiss, bento, origin-light, origin-dark) are working correctly with live theme switching. Profile menu theme picker also functional. No issues found.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Navigate to /m/atlas/utilisateurs and click Apparence tab - all 7 interface cards displayed",
+    "All interface cards have correct data-testids (mock-appearance-theme-{id})",
+    "Active interface badge shows correctly on current interface",
+    "Clicking origin-dark navigates to /m/origin-dark/utilisateurs and applies dark theme",
+    "Clicking craft navigates to /m/craft/utilisateurs and applies craft theme",
+    "Clicking origin-light navigates to /m/origin-light/utilisateurs and applies light ANELEC-green theme",
+    "Clicking swiss navigates to /m/swiss/utilisateurs and applies swiss theme",
+    "Clicking signal navigates to /m/signal/utilisateurs and applies signal theme",
+    "Clicking bento navigates to /m/bento/utilisateurs and applies bento theme",
+    "Profile menu theme picker shows all 7 themes with correct data-testids (mock-profile-theme-{id})",
+    "Clicking theme in profile modal switches interface live (tested with signal)",
+    "Header text updates to show active interface name (e.g., 'Atlas Clarity', 'ANELEC Original — Sombre')",
+    "Home page (/) loads correctly without errors",
+    "Planning screen (/m/atlas/planning) renders Gantt chart without layout breakage"
+  ],
+  "test_report_links": [],
+  "action_item_for_main_agent": "",
+  "updated_files": [],
+  "success_percentage": {
+    "frontend": "100%",
+    "backend": "N/A (frontend-only static gallery)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}
