@@ -74,6 +74,7 @@ export function DashboardPage() {
   const [selectedMobileTech, setSelectedMobileTech] = useState<string>(
     () => user?.technicienNom || 'Anouar'
   );
+  const [selectedMapTech, setSelectedMapTech] = useState<string>('TOUS');
 
   useEffect(() => {
     if (user?.technicienNom) {
@@ -1673,22 +1674,22 @@ export function DashboardPage() {
         <div className="dashboard-container" style={{ maxWidth: '100%' }}>
           <div className="dashboard-header">
             <div>
-              <h1 className="dashboard-title">Carte Interactive & Tournées TCE</h1>
+              <h1 className="dashboard-title">Carte Interactive, Positions GPS & Tournées TCE</h1>
               <p className="dashboard-subtitle">
-                Visualisation cartographique des chantiers et calcul automatique d'itinéraire optimisé (TSP 2-Opt) au départ du siège ANELEC.
+                Suivi en temps réel de la position actuelle des techniciens, avancement des travaux et calcul automatique du trajet restant (interventions clôturées retirées automatiquement de la carte).
               </p>
             </div>
             <div className="dashboard-header__actions">
-              <span className="badge badge--primary">Optimiseur Routier</span>
+              <span className="badge badge--primary">📡 GPS Live & Optimiseur Routier</span>
             </div>
           </div>
           <TourneeMapOptimizer
             interventions={interventionsList}
             devis={devisList}
             selectedDate={new Date().toISOString().slice(0, 10)}
-            currentTechnicien="TOUS"
+            currentTechnicien={selectedMapTech}
             techniciensList={techniciensList}
-            onSelectTechnicien={setSelectedMobileTech}
+            onSelectTechnicien={setSelectedMapTech}
             onOpenIntervention={(i) => {
               setIsCreatingIntv(false);
               setSelectedIntv(i);

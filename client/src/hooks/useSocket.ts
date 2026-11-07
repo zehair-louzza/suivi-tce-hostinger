@@ -36,7 +36,17 @@ function useResourceRealtime(resource: RealtimeResource) {
  const { isAuthenticated, accessToken } = useAuthStore();
  useEffect(() => {
   if (!isAuthenticated) return;
-  return subscribeToRealtimeInvalidation(on, queryClient, resource);
+  const unsub = subscribeToRealtimeInvalidation(on, queryClient, resource);
+  const unsubGps = resource === 'interventions'
+    ? on('technicien:gps_updated', () => {
+        void queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+        void queryClient.invalidateQueries({ queryKey: ['interventions'] });
+      })
+    : () => {};
+  return () => {
+   unsub();
+   unsubGps();
+  };
   // Rebind after token changes, since useSocket recreates its connection.
  }, [on, queryClient, resource, isAuthenticated, accessToken]);
 }

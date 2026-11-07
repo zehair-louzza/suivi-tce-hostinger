@@ -2,11 +2,13 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { socketEvents } from '../socket/index.js';
 import {
   ClientProfile,
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   EquipeJournaliere,
+  GpsPositionPayload,
   ReferentielsMap,
 } from '../../shared/types.js';
 
@@ -35,6 +37,7 @@ referentielsRouter.get(
       resultats_techniques: [...DEFAULT_REFERENTIELS.resultats_techniques],
       technicien_competences: { ...DEFAULT_TECHNICIEN_COMPETENCES },
       equipes_journalieres: [],
+      positions_gps_techniciens: {},
     };
 
     for (const r of rows) {
@@ -48,6 +51,15 @@ referentielsRouter.get(
               ...DEFAULT_TECHNICIEN_COMPETENCES,
               ...parsed,
             };
+          }
+        } catch {
+          // ignore invalid json
+        }
+      } else if (key === 'positions_gps_techniciens') {
+        try {
+          const parsed = JSON.parse(r.valeurs);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            result.positions_gps_techniciens = parsed;
           }
         } catch {
           // ignore invalid json
@@ -346,6 +358,100 @@ referentielsRouter.put(
     res.json({
       data: { categorie, valeurs },
       message: 'Référentiel mis à jour avec succès',
+    });
+  })
+);
+
+export async function saveTechnicienGpsPosition(
+  companyId: number,
+  payload: GpsPositionPayload
+): Promise<Record<string, GpsPositionPayload>> {
+  const existing = await prisma.referentiel.findFirst({
+    where: {
+      categorie: 'positions_gps_techniciens',
+      OR: [{ companyId }, { companyId: null }],
+    },
+  });
+
+  let currentMap: Record<string, GpsPositionPayload> = {};
+  if (existing?.valeurs) {
+    try {
+      const parsed = JSON.parse(existing.valeurs);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        currentMap = parsed;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const techKey = String(payload.technicien || '').trim();
+  if (techKey && typeof payload.lat === 'number' && typeof payload.lng === 'number') {
+    currentMap[techKey] = {
+      ...payload,
+      technicien: techKey,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    };
+
+    if (existing) {
+      await prisma.referentiel.update({
+        where: { id: existing.id },
+        data: { valeurs: JSON.stringify(currentMap) },
+      });
+    } else {
+      await prisma.referentiel.create({
+        data: {
+          categorie: 'positions_gps_techniciens',
+          valeurs: JSON.stringify(currentMap),
+          companyId,
+        },
+      });
+    }
+
+    try {
+      socketEvents.broadcast('technicien:gps_updated', currentMap[techKey]);
+    } catch {
+      // ignore socket error
+    }
+  }
+
+  return currentMap;
+}
+
+// POST /api/referentiels/gps-position - Enregistre et diffuse en temps réel la position GPS actuelle d'un technicien
+referentielsRouter.post(
+  '/gps-position',
+  asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user?.companyId || 1;
+    const b = req.body || {};
+    const technicien = String(b.technicien || '').trim();
+    const lat = Number(b.lat);
+    const lng = Number(b.lng);
+
+    if (!technicien || Number.isNaN(lat) || Number.isNaN(lng)) {
+      res.status(400).json({ error: 'Technicien et coordonnées GPS (lat, lng) requis' });
+      return;
+    }
+
+    const payload: GpsPositionPayload = {
+      technicien,
+      lat,
+      lng,
+      accuracy: b.accuracy ? Number(b.accuracy) : undefined,
+      timestamp: b.timestamp || new Date().toISOString(),
+      missionId: b.missionId ? Number(b.missionId) : undefined,
+      missionRef: b.missionRef ? String(b.missionRef) : undefined,
+      chantier: b.chantier ? String(b.chantier) : undefined,
+      client: b.client ? String(b.client) : undefined,
+      statut: b.statut || 'EN_SERVICE',
+      source: b.source || 'GPS_MOBILE',
+    };
+
+    const updatedMap = await saveTechnicienGpsPosition(companyId, payload);
+    res.json({
+      data: payload,
+      positions_gps_techniciens: updatedMap,
+      message: `Position GPS de ${technicien} transmise au bureau`,
     });
   })
 );

@@ -4,12 +4,15 @@ import {
   adminApi,
   interventionApi,
   devisApi,
+  referentielsApi,
   Intervention,
   Devis,
   TerrainPhoto,
+  GpsPositionPayload,
   ACTIONS_PREREMPLIES_TERRAIN,
   formatDateFR,
 } from '../lib/api';
+import { geocodeAddress } from '../lib/geocoding';
 import toast from 'react-hot-toast';
 
 interface TechnicianMobileViewProps {
@@ -74,6 +77,21 @@ export function TechnicianMobileView({
   const [nonTermineeModalMission, setNonTermineeModalMission] = useState<Intervention | null>(null);
   const [nonTermineeReason, setNonTermineeReason] = useState<string>('📦 Matériel / Pièces manquantes');
   const [nonTermineeDetails, setNonTermineeDetails] = useState<string>('');
+
+  // Modale impérative de localisation GPS pour clôturer une intervention
+  const [closingGpsModalMission, setClosingGpsModalMission] = useState<Intervention | null>(null);
+  const [shouldClockOutAfterClose, setShouldClockOutAfterClose] = useState<boolean>(false);
+  const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'ACQUIRING' | 'READY' | 'ERROR'>('IDLE');
+  const [gpsCoords, setGpsCoords] = useState<{
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    source: 'GPS_MOBILE' | 'GEOCODED_FALLBACK';
+  } | null>(null);
+  const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
+  const [isFinalizingWithGps, setIsFinalizingWithGps] = useState<boolean>(false);
+  const [lastTransmittedGps, setLastTransmittedGps] = useState<GpsPositionPayload | null>(null);
+  const [isBroadcastingLiveGps, setIsBroadcastingLiveGps] = useState<boolean>(false);
 
   // Horloge en direct au fuseau officiel Paris
   const [liveParisTime, setLiveParisTime] = useState<string>(() => {
@@ -295,62 +313,256 @@ export function TechnicianMobileView({
     await handleActivateMissionDirect(mission);
   };
 
-  const handleDeactivateMission = async (mission: Intervention) => {
+  // Acquisition du signal GPS du téléphone pour la clôture d'une intervention
+  const acquireGpsForMission = (mission: Intervention) => {
+    setGpsStatus('ACQUIRING');
+    setGpsErrorMsg('');
+    setGpsCoords(null);
+
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsStatus('ERROR');
+      setGpsErrorMsg(
+        "Votre appareil ou navigateur n'expose pas le capteur GPS. Veuillez activer le service de localisation de votre téléphone ou certifier la position sur l'adresse du chantier."
+      );
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsCoords({
+          lat: Number(pos.coords.latitude.toFixed(6)),
+          lng: Number(pos.coords.longitude.toFixed(6)),
+          accuracy: Math.round(pos.coords.accuracy || 12),
+          source: 'GPS_MOBILE',
+        });
+        setGpsStatus('READY');
+      },
+      (err) => {
+        setGpsStatus('ERROR');
+        if (err.code === 1) {
+          setGpsErrorMsg(
+            "Autorisation GPS refusée. Il est impératif d'autoriser et d'activer le GPS sur votre téléphone pour pouvoir finaliser et clôturer cette intervention."
+          );
+        } else if (err.code === 2) {
+          setGpsErrorMsg(
+            "Signal GPS indisponible (sous-sol ou GPS éteint). Activez la localisation sur votre téléphone puis appuyez sur « Réessayer le GPS »."
+          );
+        } else {
+          setGpsErrorMsg(
+            `Délai d'acquisition GPS dépassé (${mission.chantier}). Vérifiez que votre GPS est activé et appuyez sur « Réessayer le GPS ».`
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 0,
+      }
+    );
+  };
+
+  // Secours hors-signal GPS (sous-sol / appareil sans puce GPS) : géocode l'adresse exacte du chantier
+  const certifyOnChantierAddressFallback = async (mission: Intervention) => {
+    try {
+      setGpsStatus('ACQUIRING');
+      setGpsErrorMsg('');
+      const geocoded = await geocodeAddress(mission.chantier || mission.client || 'Paris');
+      const coords = geocoded || { lat: 48.869742, lng: 2.339379 };
+      setGpsCoords({
+        lat: Number(coords.lat.toFixed(6)),
+        lng: Number(coords.lng.toFixed(6)),
+        accuracy: 25,
+        source: 'GEOCODED_FALLBACK',
+      });
+      setGpsStatus('READY');
+      toast.success('📍 Localisation du chantier verrouillée et prête à être transmise');
+    } catch {
+      setGpsCoords({
+        lat: 48.869742,
+        lng: 2.339379,
+        accuracy: 50,
+        source: 'GEOCODED_FALLBACK',
+      });
+      setGpsStatus('READY');
+    }
+  };
+
+  // Transmission volontaire de la position actuelle à tout moment de la journée
+  const handleBroadcastLiveGps = async () => {
+    if (isBroadcastingLiveGps) return;
+    setIsBroadcastingLiveGps(true);
+
+    const sendCoords = async (lat: number, lng: number, accuracy: number, source: 'GPS_MOBILE' | 'GEOCODED_FALLBACK') => {
+      try {
+        const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
+        const payload: GpsPositionPayload = {
+          lat: Number(lat.toFixed(6)),
+          lng: Number(lng.toFixed(6)),
+          accuracy: Math.round(accuracy),
+          timestamp: new Date().toISOString(),
+          technicien: currentTechnicien,
+          missionId: runningMission?.id,
+          missionRef: runningMission?.reference || undefined,
+          chantier: runningMission?.chantier,
+          client: runningMission?.client || undefined,
+          statut: runningMission?.statutOperationnel === 'En cours' ? 'EN_COURS' : 'EN_SERVICE',
+          source,
+        };
+        await referentielsApi.sendGpsPosition(payload);
+        setLastTransmittedGps(payload);
+        queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+        toast.success(`📡 Position actuelle transmise à l'équipe bureau (${payload.lat}, ${payload.lng})`);
+      } catch {
+        toast.error('Impossible de transmettre la position GPS au bureau');
+      } finally {
+        setIsBroadcastingLiveGps(false);
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          void sendCoords(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy || 10, 'GPS_MOBILE');
+        },
+        async () => {
+          const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
+          const geocoded = runningMission
+            ? await geocodeAddress(runningMission.chantier || runningMission.client || 'Paris')
+            : null;
+          const fallback = geocoded || { lat: 48.869742, lng: 2.339379 };
+          await sendCoords(fallback.lat, fallback.lng, 25, 'GEOCODED_FALLBACK');
+        },
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+      );
+    } else {
+      const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
+      const geocoded = runningMission
+        ? await geocodeAddress(runningMission.chantier || runningMission.client || 'Paris')
+        : null;
+      const fallback = geocoded || { lat: 48.869742, lng: 2.339379 };
+      await sendCoords(fallback.lat, fallback.lng, 25, 'GEOCODED_FALLBACK');
+    }
+  };
+
+  // Ouverture de la modale impérative de localisation GPS pour clôturer l'intervention
+  const handleDeactivateMission = (mission: Intervention, clockOutAfter = false) => {
+    setClosingGpsModalMission(mission);
+    setShouldClockOutAfterClose(clockOutAfter);
+    acquireGpsForMission(mission);
+  };
+
+  // Validation finale : transmet la position GPS actuelle, clôture l'intervention et la retire du trajet restant
+  const confirmGpsAndFinalizeMission = async () => {
+    if (!closingGpsModalMission || !gpsCoords) {
+      toast.error('⚠️ Localisation GPS obligatoire pour finaliser et clôturer l’intervention !');
+      return;
+    }
+
+    const mission = closingGpsModalMission;
     const nowHHMM = getNowHHMM();
     const cr = activeMission?.id === mission.id ? compteRenduDraft : mission.compteRendu;
     const chiffrage = activeMission?.id === mission.id ? chiffrageDraft : mission.elementsChiffrage;
 
-    if (mission.id < 0) {
-      // Visite devis directe
-      const realDevisId = Math.abs(mission.id);
-      const dev = devisList.find((d) => d.id === realDevisId);
-      await updateDevisMut.mutateAsync({
-        id: realDevisId,
-        data: {
-          visiteStatut: 'Terminée',
-          statutCommercial: dev?.statutCommercial === 'À préparer' ? 'En cours de rédaction' : dev?.statutCommercial,
-          prochaineAction: 'Chiffrer le devis (Visite terrain clôturée)',
-          notes: [dev?.notes, `[Clôture visite ${selectedDate} ${nowHHMM} par ${currentTechnicien}] ${cr || ''}`].filter(Boolean).join('\n'),
-        },
-      });
-      toast.success(`✅ Visite Devis ${mission.reference} clôturée et envoyée au chiffrage !`);
-    } else {
-      // Intervention TCE
-      await updateMissionMut.mutateAsync({
-        id: mission.id,
-        data: {
-          statutOperationnel: 'Clôturée',
-          traitement: 'Clôturé par technicien - Prêt pour facturation',
-          heureFinReelle: nowHHMM,
-          dateReelle: selectedDate,
-          elementsChiffrage: chiffrage,
-          compteRendu: cr,
-          statutRapport: 'Validé par technicien',
-        },
-      });
+    const gpsPayload: GpsPositionPayload = {
+      lat: gpsCoords.lat,
+      lng: gpsCoords.lng,
+      accuracy: gpsCoords.accuracy,
+      timestamp: new Date().toISOString(),
+      technicien: currentTechnicien,
+      missionId: mission.id,
+      missionRef: mission.reference || `INT-${mission.id}`,
+      chantier: mission.chantier,
+      client: mission.client || undefined,
+      statut: 'CLOTUREE',
+      source: gpsCoords.source,
+    };
 
-      // Si l'intervention est liée à un devis : clôture automatique du devis associé
-      const targetDevisId = mission.devisId || mission.origineDevisId;
-      if (targetDevisId) {
-        const associatedDevis = devisList.find((d) => d.id === targetDevisId);
-        if (associatedDevis) {
-          await updateDevisMut.mutateAsync({
-            id: associatedDevis.id,
-            data: {
-              visiteStatut: 'Terminée',
-              prochaineAction: 'Prêt pour facturation / dossier clôturé',
-              notes: [
-                associatedDevis.notes,
-                `[Clôture intervention ${mission.reference} le ${selectedDate} à ${nowHHMM} par ${currentTechnicien}]: Mission terminée sur le terrain. Envoyée à la clôture.`
-              ].filter(Boolean).join('\n'),
-            },
-          });
-          toast.success(`✅ Intervention ${mission.reference} et Devis ${associatedDevis.reference || associatedDevis.id} envoyés à la clôture !`);
-          return;
-        }
+    try {
+      setIsFinalizingWithGps(true);
+
+      // 1. Transmettre la dernière position actuelle du technicien à l'équipe bureau
+      try {
+        await referentielsApi.sendGpsPosition(gpsPayload);
+        setLastTransmittedGps(gpsPayload);
+      } catch {
+        // La position est également envoyée dans gpsCloture ci-dessous
       }
 
-      toast.success(`✅ Intervention ${mission.reference} clôturée automatiquement à ${nowHHMM} !`);
+      const gpsNoteLine = `[📍 Clôture GPS certifiée le ${selectedDate} à ${nowHHMM} par ${currentTechnicien} — Position : ${gpsPayload.lat}, ${gpsPayload.lng} (±${gpsPayload.accuracy || 10}m)]`;
+
+      if (mission.id < 0) {
+        // Visite devis directe
+        const realDevisId = Math.abs(mission.id);
+        const dev = devisList.find((d) => d.id === realDevisId);
+        await updateDevisMut.mutateAsync({
+          id: realDevisId,
+          data: {
+            visiteStatut: 'Terminée',
+            statutCommercial: dev?.statutCommercial === 'À préparer' ? 'En cours de rédaction' : dev?.statutCommercial,
+            prochaineAction: 'Chiffrer le devis (Visite terrain clôturée avec GPS)',
+            notes: [dev?.notes, gpsNoteLine, cr ? `Compte rendu : ${cr}` : ''].filter(Boolean).join('\n'),
+            gpsCloture: gpsPayload,
+          },
+        });
+        toast.success(
+          `✅ Visite Devis ${mission.reference} clôturée avec position GPS ! Retirée de la carte du trajet restant.`
+        );
+      } else {
+        // Intervention TCE
+        await updateMissionMut.mutateAsync({
+          id: mission.id,
+          data: {
+            statutOperationnel: 'Clôturée',
+            traitement: 'Clôturé par technicien - Prêt pour facturation',
+            heureFinReelle: nowHHMM,
+            dateReelle: selectedDate,
+            elementsChiffrage: chiffrage,
+            compteRendu: [cr, gpsNoteLine].filter(Boolean).join('\n'),
+            statutRapport: 'Validé par technicien',
+            gpsCloture: gpsPayload,
+          },
+        });
+
+        // Si l'intervention est liée à un devis : clôture automatique du devis associé
+        const targetDevisId = mission.devisId || mission.origineDevisId;
+        if (targetDevisId) {
+          const associatedDevis = devisList.find((d) => d.id === targetDevisId);
+          if (associatedDevis) {
+            await updateDevisMut.mutateAsync({
+              id: associatedDevis.id,
+              data: {
+                visiteStatut: 'Terminée',
+                prochaineAction: 'Prêt pour facturation / dossier clôturé',
+                notes: [
+                  associatedDevis.notes,
+                  `${gpsNoteLine} Mission terminée sur le terrain et envoyée à la clôture.`,
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+                gpsCloture: gpsPayload,
+              },
+            });
+          }
+        }
+
+        toast.success(
+          `✅ Intervention ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée du trajet restant.`
+        );
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
+      setClosingGpsModalMission(null);
+
+      if (shouldClockOutAfterClose) {
+        setShouldClockOutAfterClose(false);
+        clockOutMut.mutate({
+          technicien: currentTechnicien,
+          dateJour: selectedDate,
+          derniereInterventionRef: mission.reference || undefined,
+        });
+      }
+    } finally {
+      setIsFinalizingWithGps(false);
     }
   };
 
@@ -567,31 +779,62 @@ export function TechnicianMobileView({
             </div>
           </div>
 
-          {/* Badge d'état du pointage en direct (cliquable pour ouvrir l'onglet Pointage) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('pointage')}
-            className={`badge ${
-              currentPointage?.statutJournee === 'EN_SERVICE'
-                ? 'badge-success'
+          {/* Badges d'état du pointage & transmission GPS en direct */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={handleBroadcastLiveGps}
+              disabled={isBroadcastingLiveGps}
+              className="badge"
+              style={{
+                fontSize: '11px',
+                padding: '5px 10px',
+                cursor: 'pointer',
+                border: '1px solid #0284c7',
+                background: lastTransmittedGps ? '#e0f2fe' : '#f0f9ff',
+                color: '#0369a1',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Envoyer ma position GPS actuelle à l'équipe bureau"
+            >
+              <span>📍</span>
+              <span>
+                {isBroadcastingLiveGps
+                  ? 'GPS en cours...'
+                  : lastTransmittedGps
+                  ? `GPS Actif (${lastTransmittedGps.lat.toFixed(3)}, ${lastTransmittedGps.lng.toFixed(3)})`
+                  : 'Transmettre ma position GPS'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('pointage')}
+              className={`badge ${
+                currentPointage?.statutJournee === 'EN_SERVICE'
+                  ? 'badge-success'
+                  : currentPointage?.statutJournee === 'TERMINEE'
+                  ? 'badge-info'
+                  : 'badge-warning'
+              }`}
+              style={{
+                fontSize: '11.5px',
+                padding: '5px 10px',
+                cursor: 'pointer',
+                border: 'none',
+                fontWeight: 700,
+              }}
+            >
+              {currentPointage?.statutJournee === 'EN_SERVICE'
+                ? `🟢 En service (${currentPointage.heureArriveeBureau})`
                 : currentPointage?.statutJournee === 'TERMINEE'
-                ? 'badge-info'
-                : 'badge-warning'
-            }`}
-            style={{
-              fontSize: '11.5px',
-              padding: '5px 10px',
-              cursor: 'pointer',
-              border: 'none',
-              fontWeight: 700,
-            }}
-          >
-            {currentPointage?.statutJournee === 'EN_SERVICE'
-              ? `🟢 En service (${currentPointage.heureArriveeBureau})`
-              : currentPointage?.statutJournee === 'TERMINEE'
-              ? `🔵 Fin (${currentPointage.heureArriveeBureau}→${currentPointage.heureFinJournee})`
-              : '🟠 Pointage matin à activer'}
-          </button>
+                ? `🔵 Fin (${currentPointage.heureArriveeBureau}→${currentPointage.heureFinJournee})`
+                : '🟠 Pointage matin à activer'}
+            </button>
+          </div>
         </div>
 
         {/* Identification du Technicien & Date */}
@@ -1273,7 +1516,7 @@ export function TechnicianMobileView({
                               }}
                               onClick={() => handleDeactivateMission(m)}
                             >
-                              ⏹️ Clôturer la mission
+                              📍⏹️ Clôturer avec GPS
                             </button>
                             <button
                               type="button"
@@ -1978,19 +2221,13 @@ export function TechnicianMobileView({
                   fontWeight: 800,
                   fontSize: '13px',
                 }}
-                onClick={async () => {
+                onClick={() => {
                   const m = showRunningBlockerModal;
                   setShowRunningBlockerModal(null);
-                  await handleDeactivateMission(m);
-                  // Déclenche le pointage soir
-                  clockOutMut.mutate({
-                    technicien: currentTechnicien,
-                    dateJour: selectedDate,
-                    derniereInterventionRef: m.reference || undefined,
-                  });
+                  handleDeactivateMission(m, true);
                 }}
               >
-                ⏹️ Clôturer la mission & Pointer ma fin de journée
+                📍⏹️ Clôturer avec GPS & Pointer ma fin de journée
               </button>
 
               <button
@@ -2143,6 +2380,237 @@ export function TechnicianMobileView({
                   ⏳ Valider & Transmettre au bureau
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODALE 4 : LOCALISATION GPS OBLIGATOIRE POUR FINALISER ET CLÔTURER L'INTERVENTION
+         ===================================================================== */}
+      {closingGpsModalMission && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => {
+            if (!isFinalizingWithGps) {
+              setClosingGpsModalMission(null);
+              setShouldClockOutAfterClose(false);
+            }
+          }}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{ maxWidth: '500px', padding: '22px', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background:
+                    gpsStatus === 'READY'
+                      ? 'rgba(16, 185, 129, 0.16)'
+                      : gpsStatus === 'ERROR'
+                      ? 'rgba(220, 38, 38, 0.15)'
+                      : 'rgba(2, 132, 199, 0.15)',
+                  color:
+                    gpsStatus === 'READY'
+                      ? '#059669'
+                      : gpsStatus === 'ERROR'
+                      ? '#dc2626'
+                      : '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  flexShrink: 0,
+                }}
+              >
+                📍
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Localisation GPS obligatoire pour clôturer
+                </h3>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  {closingGpsModalMission.reference} — {closingGpsModalMission.client}
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginBottom: '14px',
+                fontSize: '12.5px',
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                📍 Lieu d'intervention : {closingGpsModalMission.chantier}
+              </div>
+              <div style={{ color: '#475569', fontSize: '12px' }}>
+                Pour finaliser cette intervention :
+              </div>
+              <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '11.5px', color: '#334155' }}>
+                <li>
+                  Votre <strong>dernière position GPS actuelle</strong> est transmise en direct à l'équipe opérationnelle au bureau.
+                </li>
+                <li>
+                  Cette intervention est enregistrée comme <strong>terminée</strong> et <strong>supprimée de la carte du trajet</strong> pour ne laisser que les interventions et devis restants à faire.
+                </li>
+              </ul>
+            </div>
+
+            {/* ÉTAT 1 : ACQUISITION GPS EN COURS */}
+            {gpsStatus === 'ACQUIRING' && (
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: '12px',
+                  background: '#f0f9ff',
+                  border: '1.5px solid #38bdf8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '16px',
+                }}
+              >
+                <span className="spinner" style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '13px', color: '#0369a1' }}>
+                    Acquisition du signal GPS de votre téléphone...
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#0284c7', marginTop: '2px' }}>
+                    Veuillez autoriser la localisation si votre téléphone vous le demande.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ÉTAT 2 : POSITION GPS VERROUILLÉE ET PRÊTE */}
+            {gpsStatus === 'READY' && gpsCoords && (
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: '#ecfdf5',
+                  border: '1.5px solid #10b981',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '13px', color: '#065f46' }}>
+                    🟢 Position actuelle verrouillée & prête à transmettre
+                  </span>
+                  <span className="badge badge-success" style={{ fontSize: '10.5px', fontWeight: 800 }}>
+                    {gpsCoords.source === 'GPS_MOBILE' ? '📡 GPS Téléphone' : '📍 Site Certifié'}
+                  </span>
+                </div>
+                <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: '#047857' }}>
+                  Latitude : {gpsCoords.lat} • Longitude : {gpsCoords.lng}
+                  {gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#065f46', marginTop: '4px' }}>
+                  ✓ Prêt pour l'envoi au bureau et la mise à jour de l'itinéraire restant.
+                </div>
+              </div>
+            )}
+
+            {/* ÉTAT 3 : GPS DÉSACTIVÉ OU REFUSÉ */}
+            {gpsStatus === 'ERROR' && (
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  background: 'rgba(220, 38, 38, 0.08)',
+                  border: '1.5px solid rgba(220, 38, 38, 0.45)',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: '13px', color: '#dc2626' }}>
+                  ⚠️ GPS non activé ou signal indisponible
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                  {gpsErrorMsg}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      background: '#0284c7',
+                      borderColor: '#0284c7',
+                      fontWeight: 800,
+                      minHeight: '42px',
+                      fontSize: '12.5px',
+                    }}
+                    onClick={() => acquireGpsForMission(closingGpsModalMission)}
+                  >
+                    🔄 Activer / Réessayer la détection GPS maintenant
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{
+                      fontWeight: 700,
+                      minHeight: '40px',
+                      fontSize: '12px',
+                      borderColor: '#059669',
+                      color: '#059669',
+                    }}
+                    onClick={() => certifyOnChantierAddressFallback(closingGpsModalMission)}
+                  >
+                    📍 Certifier ma position sur le lieu d'intervention (Secours hors-signal)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* BOUTONS D'ACTION DE LA MODALE */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={gpsStatus !== 'READY' || !gpsCoords || isFinalizingWithGps}
+                style={{
+                  minHeight: '48px',
+                  background: gpsStatus === 'READY' && gpsCoords ? '#00bf63' : '#94a3b8',
+                  borderColor: gpsStatus === 'READY' && gpsCoords ? '#00994f' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '13.5px',
+                  boxShadow:
+                    gpsStatus === 'READY' && gpsCoords ? '0 4px 14px rgba(0, 191, 99, 0.3)' : 'none',
+                  cursor: gpsStatus === 'READY' && gpsCoords ? 'pointer' : 'not-allowed',
+                }}
+                onClick={confirmGpsAndFinalizeMission}
+              >
+                {isFinalizingWithGps
+                  ? '⏳ Transmission GPS & Clôture en cours...'
+                  : '📍 Transmettre ma position & Clôturer l’intervention'}
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={isFinalizingWithGps}
+                onClick={() => {
+                  setClosingGpsModalMission(null);
+                  setShouldClockOutAfterClose(false);
+                }}
+              >
+                Annuler
+              </button>
             </div>
           </div>
         </div>

@@ -5,11 +5,13 @@ import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
 import { convertKeepingQuote } from '../services/linkedConversion.js';
+import { saveTechnicienGpsPosition } from './referentiels.js';
 import {
   computeDevisCalculations,
   traitementToStatusCode,
   statusCodeToTraitement,
   HistoriqueEvent,
+  GpsPositionPayload,
 } from '../../shared/types.js';
 
 export const devisRouter = Router();
@@ -157,6 +159,18 @@ export function transformDevis(d: any) {
     visiteHeureDebut: d.visiteHeureDebut || null,
     visiteHeureFin: d.visiteHeureFin || null,
     visiteStatut: d.visiteStatut || null,
+    gpsCloture: (() => {
+      const hist = parseHistorique(d.historiqueJson);
+      const evt = hist.find((h) => h.action === 'CLOTURE_GPS_TERRAIN' && h.details);
+      if (evt?.details) {
+        try {
+          return JSON.parse(evt.details);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    })(),
     historique: parseHistorique(d.historiqueJson),
     interventions: linkedInterventions,
     interventionsCount: countLinked,
@@ -494,10 +508,39 @@ devisRouter.patch(
       changes.push(`Traitement : ${existing.traitement || existing.status} → ${newTraitement}`);
     }
 
-    const historiqueJson =
+    let historiqueJson =
       changes.length > 0
         ? addHistoriqueEvent(existing.historiqueJson, auteur, 'Mise à jour du devis', changes.join(' • '))
         : existing.historiqueJson;
+
+    if (b.gpsCloture && typeof b.gpsCloture === 'object') {
+      const gpsPayload: GpsPositionPayload = {
+        lat: Number(b.gpsCloture.lat),
+        lng: Number(b.gpsCloture.lng),
+        accuracy: b.gpsCloture.accuracy ? Number(b.gpsCloture.accuracy) : undefined,
+        timestamp: b.gpsCloture.timestamp || new Date().toISOString(),
+        technicien: String(b.gpsCloture.technicien || b.visiteTechnicien || existing.visiteTechnicien || auteur).trim(),
+        missionId: -id,
+        missionRef: String(b.reference || existing.referenceMetier || `DEV-2026-${String(id).padStart(3, '0')}`),
+        chantier: String(b.site || existing.siteAdresse || existing.client || ''),
+        client: String(b.client || existing.client || ''),
+        statut: 'CLOTUREE',
+        source: b.gpsCloture.source || 'GPS_MOBILE',
+      };
+      if (!Number.isNaN(gpsPayload.lat) && !Number.isNaN(gpsPayload.lng)) {
+        historiqueJson = addHistoriqueEvent(
+          historiqueJson,
+          gpsPayload.technicien,
+          'CLOTURE_GPS_TERRAIN',
+          JSON.stringify(gpsPayload)
+        );
+        try {
+          await saveTechnicienGpsPosition(companyId, gpsPayload);
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     const updateData: any = {
       historiqueJson,

@@ -553,6 +553,7 @@ export interface ReferentielsMap {
   resultats_techniques: string[];
   technicien_competences?: Record<string, string[]>;
   equipes_journalieres?: EquipeJournaliere[];
+  positions_gps_techniciens?: Record<string, GpsPositionPayload>;
 }
 
 export const DEFAULT_REFERENTIELS: ReferentielsMap = {
@@ -860,6 +861,20 @@ export function parseTimeIntervalInput(raw: string): { heureDebut: string; heure
 // 5. ZOD SCHEMAS & TYPES
 // ============================================================================
 
+export interface GpsPositionPayload {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  timestamp: string;
+  technicien: string;
+  missionId?: number;
+  missionRef?: string;
+  chantier?: string;
+  client?: string;
+  statut?: 'EN_COURS' | 'CLOTUREE' | 'EN_SERVICE';
+  source?: 'GPS_MOBILE' | 'GEOCODED_FALLBACK';
+}
+
 export const DevisSchema = z.object({
   id: z.number().int().positive().optional(),
   reference: z.string().max(100).optional().nullable(),
@@ -888,6 +903,7 @@ export const DevisSchema = z.object({
   visiteHeureDebut: z.string().max(10).optional().nullable(),
   visiteHeureFin: z.string().max(10).optional().nullable(),
   visiteStatut: z.string().max(50).optional().nullable(),
+  gpsCloture: z.any().optional().nullable(),
   historique: z.array(z.any()).optional(),
   createdAt: z.number().int().positive().optional(),
   updatedAt: z.number().int().positive().optional(),
@@ -935,6 +951,7 @@ export const InterventionSchema = z.object({
   origineDevisClient: z.string().max(200).optional().nullable(),
   origineDevisDate: z.string().optional().nullable(),
   devisId: z.number().int().positive().optional().nullable(),
+  gpsCloture: z.any().optional().nullable(),
   historique: z.array(z.any()).optional(),
   createdAt: z.number().int().positive().optional(),
   updatedAt: z.number().int().positive().optional(),

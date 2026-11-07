@@ -26,6 +26,7 @@ import {
   ClientServiceContact,
   DEFAULT_CLIENT_PROFILES,
   SendReportEmailPayload,
+  GpsPositionPayload,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -53,6 +54,7 @@ export type {
   ClientProfileType,
   ClientServiceContact,
   SendReportEmailPayload,
+  GpsPositionPayload,
 };
 export {
   formatCurrency,
@@ -253,6 +255,12 @@ export const referentielsApi = {
       '/referentiels/clients_fiches',
       { fiches }
     ),
+  sendGpsPosition: (payload: GpsPositionPayload) =>
+    api.post<{
+      data: GpsPositionPayload;
+      positions_gps_techniciens: Record<string, GpsPositionPayload>;
+      message: string;
+    }>('/referentiels/gps-position', payload),
 };
 
 export const authApi = {
