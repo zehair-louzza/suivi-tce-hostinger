@@ -1494,6 +1494,29 @@ export function LoginPage() {
           </div>
 
           <InstallAppButton variant="banner" />
+
+          <div style={{ marginTop: '12px', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/showcase')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                background: 'rgba(16, 185, 129, 0.08)',
+                color: '#059669',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <span>🎬</span>
+              <span>Découvrir la Démo Interactive & Vidéo Publicitaire</span>
+            </button>
+          </div>
         </div>
       </div>
 
