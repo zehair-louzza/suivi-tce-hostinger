@@ -34,6 +34,8 @@ import { TourneeMapOptimizer } from '../components/TourneeMapOptimizer';
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
 import { SendReportEmailModal } from '../components/SendReportEmailModal';
 import { ClientsDirectoryView } from '../components/ClientsDirectoryView';
+import { SituationReportModal } from '../components/SituationReportModal';
+import { exportSituationInterventionsExcel, exportSituationDevisExcel } from '../lib/exportSituationExcel';
 import { DashboardSynthese } from '../components/dashboard/DashboardSynthese';
 import { DashboardOperations } from '../components/dashboard/DashboardOperations';
 import { DashboardAnalyse } from '../components/dashboard/DashboardAnalyse';
@@ -135,6 +137,9 @@ export function DashboardPage() {
 
   // Modale d'envoi du Rapport Officiel d'Intervention par e-mail
   const [reportEmailIntv, setReportEmailIntv] = useState<Intervention | null>(null);
+
+  // Modale des Rapports de Situation & Avancement en 1 Clic (Excel .xlsx)
+  const [isSituationModalOpen, setIsSituationModalOpen] = useState(false);
 
   // Modal de Reconversion d'un Devis déjà transformé (SAV, Reprise, Avenant, Phase 2)
   const [reconversionModalDevis, setReconversionModalDevis] = useState<Devis | null>(null);
@@ -716,6 +721,7 @@ export function DashboardPage() {
       onOpenCommandPalette={() => setCmdOpen(true)}
       onQuickNewDevis={openNewDevisDrawer}
       onQuickNewIntervention={openNewIntvDrawer}
+      onOpenSituationReport={() => setIsSituationModalOpen(true)}
     >
       {/* =====================================================================
           SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI" / TABLEAU DE BORD)
@@ -749,6 +755,7 @@ export function DashboardPage() {
                 setIntvSearch(trade);
                 handleSectionChange('interventions');
               }}
+              onOpenSituationModal={() => setIsSituationModalOpen(true)}
             />
           )}
 
@@ -889,6 +896,14 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-header__actions">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => exportSituationDevisExcel(devisList)}
+                title="Télécharger la situation complète des devis en 1 clic (Excel)"
+              >
+                📊 Situation Devis (.xlsx)
+              </button>
               <button type="button" className="btn btn--primary" onClick={openNewDevisDrawer}>
                 + Nouveau Devis
               </button>
@@ -1261,6 +1276,14 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-header__actions">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => exportSituationInterventionsExcel(interventionsList)}
+                title="Télécharger la situation complète des interventions en 1 clic (Excel)"
+              >
+                📊 Situation Interventions (.xlsx)
+              </button>
               <button type="button" className="btn btn--primary" onClick={openNewIntvDrawer}>
                 + Nouvelle Intervention
               </button>
@@ -3575,6 +3598,15 @@ export function DashboardPage() {
           }}
         />
       )}
+
+      {/* Modale des Rapports de Situation & Avancement en 1 Clic (Excel) */}
+      <SituationReportModal
+        isOpen={isSituationModalOpen}
+        onClose={() => setIsSituationModalOpen(false)}
+        interventions={interventionsList}
+        devis={devisList}
+        clientsList={clientsList}
+      />
 
       {/* =====================================================================
           MODAL DE SÉLECTION DU MOTIF DE RECONVERSION EN INTERVENTION (SAV / REPRISE)

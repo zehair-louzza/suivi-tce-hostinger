@@ -33,6 +33,7 @@ interface LayoutProps {
   onOpenCommandPalette?: () => void;
   onQuickNewDevis?: () => void;
   onQuickNewIntervention?: () => void;
+  onOpenSituationReport?: () => void;
 }
 
 export function Layout({
@@ -43,6 +44,7 @@ export function Layout({
   onOpenCommandPalette,
   onQuickNewDevis,
   onQuickNewIntervention,
+  onOpenSituationReport,
 }: LayoutProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -571,6 +573,17 @@ export function Layout({
                 </svg>
               </button>
             )}
+            {!isMobileTechOnly && onOpenSituationReport && (
+              <button
+                type="button"
+                onClick={onOpenSituationReport}
+                className="btn btn-secondary btn-sm mobile-only-flex"
+                style={{ padding: '6px 8px' }}
+                title="Rapports de Situation Excel"
+              >
+                📊
+              </button>
+            )}
             {parisTime && (
               <div
                 className="font-mono topbar-date-pill desktop-only-el"
@@ -591,6 +604,27 @@ export function Layout({
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00bf63' }} />
                 {parisTime}
               </div>
+            )}
+
+            {!isMobileTechOnly && onOpenSituationReport && (
+              <button
+                type="button"
+                className="btn btn--secondary desktop-only-el"
+                onClick={onOpenSituationReport}
+                title="Exporter un rapport de situation complet en fichier Excel (.xlsx)"
+                style={{
+                  fontSize: '12px',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  borderColor: '#10b981',
+                  color: 'var(--color-text-primary, #0f172a)',
+                }}
+              >
+                <span style={{ fontSize: '13px' }}>📊</span>
+                <span>Situation Excel</span>
+              </button>
             )}
 
             {!isMobileTechOnly && onQuickNewDevis && (

@@ -32,6 +32,7 @@ interface DashboardSyntheseProps {
   onConvertDevis: (devis: Devis) => void;
   onGoAdminRapports: () => void;
   onFilterInterventions: (search: string) => void;
+  onOpenSituationModal?: () => void;
 }
 
 export function DashboardSynthese({
@@ -48,6 +49,7 @@ export function DashboardSynthese({
   onConvertDevis,
   onGoAdminRapports,
   onFilterInterventions,
+  onOpenSituationModal,
 }: DashboardSyntheseProps) {
   // Date du jour en Europe/Paris
   const todayParisISO = useMemo(() => {
@@ -242,6 +244,16 @@ export function DashboardSynthese({
               <span className="date-pill__dot" />
               <span>Ce mois-ci · {currentMonthLabel}</span>
             </div>
+            {onOpenSituationModal && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={onOpenSituationModal}
+                title="Exporter un rapport de situation complet en fichier Excel (.xlsx)"
+              >
+                <span>📊 Situation Excel</span>
+              </button>
+            )}
             <button
               type="button"
               className="btn btn--primary"

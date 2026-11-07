@@ -34,6 +34,9 @@ import {
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
+  computeDevisCalculations,
+  computeInterventionCalculations,
+  getTodayParisISO,
 } from '../../../shared/types';
 
 export type {
@@ -71,6 +74,9 @@ export {
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
+  computeDevisCalculations,
+  computeInterventionCalculations,
+  getTodayParisISO,
 };
 
 export const api = axios.create({
