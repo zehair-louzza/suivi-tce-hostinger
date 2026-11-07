@@ -1,0 +1,30 @@
+[
+  {
+    "content": "Create base.css with all m-* shared styles and token scaffolding",
+    "status": "completed"
+  },
+  {
+    "content": "Create 5 direction CSS files (dir-atlas, dir-craft, dir-signal, dir-swiss, dir-bento)",
+    "status": "completed"
+  },
+  {
+    "content": "Create 4 missing screens (Parametres, Utilisateurs, Terrain, Vitrine)",
+    "status": "completed"
+  },
+  {
+    "content": "Run yarn build and fix any errors",
+    "status": "completed"
+  },
+  {
+    "content": "Screenshot gallery home + viewer + compare to verify",
+    "status": "completed"
+  },
+  {
+    "content": "Call testing agent to verify flows",
+    "status": "completed"
+  },
+  {
+    "content": "Update plan.md with status COMPLETED",
+    "status": "completed"
+  }
+]

@@ -1,0 +1,35 @@
+/* Direction 1 — Atlas Clarity : clarté enterprise, bleu Linear/Stripe */
+[data-dir="atlas"] {
+  --bg: #F6F7FB;
+  --bg-2: #EEF0F6;
+  --surface: #FFFFFF;
+  --surface-2: #F3F4F8;
+  --surface-3: #E8EAF1;
+  --text: #0F172A;
+  --text-strong: #0B1220;
+  --muted: #64748B;
+  --muted-2: #94A3B8;
+  --border: #E5E7EB;
+  --border-strong: #CBD1DA;
+  --primary: #1D4ED8;
+  --primary-ink: #ffffff;
+  --primary-soft: rgba(29,78,216,.08);
+  --accent: #0EA5A4;
+  --warn: #F59E0B;
+
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.05);
+  --shadow: 0 2px 8px rgba(15,23,42,.06);
+  --shadow-lg: 0 16px 42px rgba(15,23,42,.12);
+}
+[data-dir="atlas"] .m-page-titles h1 { letter-spacing: -0.02em; }
+[data-dir="atlas"] .m-kpi { border-radius: 12px; }
+[data-dir="atlas"] .m-table thead th { background: #F7F8FB; }

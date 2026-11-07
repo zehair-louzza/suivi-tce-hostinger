@@ -1,0 +1,58 @@
+/* Direction 4 — Editorial Swiss : premium typographique, grille suisse */
+[data-dir="swiss"] {
+  --bg: #FFFFFF;
+  --bg-2: #F5F5F3;
+  --surface: #FFFFFF;
+  --surface-2: #F5F5F3;
+  --surface-3: #ECECE8;
+  --text: #0B1220;
+  --text-strong: #000000;
+  --muted: #6B6B68;
+  --muted-2: #9A9A96;
+  --border: #0B1220;
+  --border-strong: #0B1220;
+  --primary: #0B3B8F;
+  --primary-ink: #ffffff;
+  --primary-soft: rgba(11,59,143,.08);
+  --accent: #E07A5F;
+  --warn: #D97706;
+  --danger: #B91C1C;
+  --ok: #2A9D8F;
+  --info: #0B3B8F;
+
+  --font-display: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-body: 'Karla', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, monospace;
+
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-pill: 999px;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-lg: 0 24px 50px rgba(11,18,32,.12);
+
+  --top-h: 70px;
+}
+[data-dir="swiss"] .m-card, [data-dir="swiss"] .m-kpi { border-radius: 0; border-color: #0B1220; box-shadow: none; }
+[data-dir="swiss"] .m-kpi { border-width: 1px 1px 3px; }
+[data-dir="swiss"] .m-kpi-value { font-family: 'Manrope'; font-size: 32px; font-weight: 800; }
+[data-dir="swiss"] .m-page-titles h1 { font-family: 'Manrope'; font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+[data-dir="swiss"] .m-page-titles p { font-size: 15px; max-width: 580px; }
+[data-dir="swiss"] .m-btn { border-radius: 0; border-color: #0B1220; }
+[data-dir="swiss"] .m-btn--primary { background: #0B1220; color: #fff; border-color: #0B1220; }
+[data-dir="swiss"] .m-btn--primary:hover { background: var(--primary); }
+[data-dir="swiss"] .m-pill, [data-dir="swiss"] .m-chip { border-radius: 0; }
+[data-dir="swiss"] .m-input { border-radius: 0; border-color: #0B1220; }
+[data-dir="swiss"] .m-table thead th { background: #F5F5F3; color: #0B1220; border-bottom: 2px solid #0B1220; text-transform: uppercase; letter-spacing: .08em; }
+[data-dir="swiss"] .m-table tbody td { border-color: #ECECE8; }
+[data-dir="swiss"] .m-icon-btn { border-radius: 0; border-color: #CFCFCB; }
+[data-dir="swiss"] .m-swiss-head { background: #FFFFFF; border-bottom: 2px solid #0B1220; }
+[data-dir="swiss"] .m-mono { font-family: 'Source Code Pro', monospace; }
+[data-dir="swiss"] .m-tone-red { background: color-mix(in srgb, var(--accent) 20%, white); color: #9A3412; border-color: var(--accent); }
+[data-dir="swiss"] .m-kpi-tone-blue .m-kpi-icon { background: var(--primary-soft); color: var(--primary); }
+[data-dir="swiss"] .m-dash-priority .m-prio-item { border-bottom-style: solid; }
+[data-dir="swiss"] .m-swiss-nav button.is-active { color: #0B1220; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
+[data-dir="swiss"] .m-swiss-nav button.is-active::after { display: none; }

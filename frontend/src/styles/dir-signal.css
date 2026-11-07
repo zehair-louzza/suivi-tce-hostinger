@@ -1,0 +1,65 @@
+/* Direction 3 — Signal Command : cockpit sombre, cyan + ambre */
+[data-dir="signal"] {
+  --bg: #0B1220;
+  --bg-2: #0F1A2E;
+  --surface: #13213A;
+  --surface-2: #1A2B4A;
+  --surface-3: #22365A;
+  --text: #E6EEFB;
+  --text-strong: #FFFFFF;
+  --muted: #8EA4C8;
+  --muted-2: #637CA4;
+  --border: #23364F;
+  --border-strong: #2E4568;
+  --primary: #38BDF8;
+  --primary-ink: #06121F;
+  --primary-soft: rgba(56,189,248,.14);
+  --accent: #F59E0B;
+  --warn: #FBBF24;
+  --danger: #F87171;
+  --ok: #34D399;
+  --info: #38BDF8;
+
+  --font-display: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --chart-grid: rgba(142,164,200,.14);
+  --focus: color-mix(in srgb, var(--primary) 65%, white);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow: 0 6px 22px rgba(0,0,0,.45);
+  --shadow-lg: 0 24px 60px rgba(0,0,0,.6);
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+}
+[data-dir="signal"] body.m-body, [data-dir="signal"] .m-root { background: var(--bg); color: var(--text); }
+[data-dir="signal"] .m-topbar { background: color-mix(in srgb, var(--bg) 92%, black); backdrop-filter: blur(10px); }
+[data-dir="signal"] .m-card, [data-dir="signal"] .m-kpi { background: var(--surface); }
+[data-dir="signal"] .m-table thead th { background: var(--surface-2); color: var(--muted); border-color: var(--border); }
+[data-dir="signal"] .m-table tbody tr:hover { background: var(--surface-2); }
+[data-dir="signal"] .m-nav-item.is-active { background: var(--primary-soft); color: var(--primary); }
+[data-dir="signal"] .m-search-trigger, [data-dir="signal"] .m-input, [data-dir="signal"] .m-btn, [data-dir="signal"] .m-icon-btn, [data-dir="signal"] .m-dd-btn { background: var(--surface); color: var(--text); border-color: var(--border); }
+[data-dir="signal"] .m-btn--primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+[data-dir="signal"] .m-pill { background: color-mix(in srgb, var(--surface-2) 70%, transparent); color: var(--text); border-color: var(--border); }
+[data-dir="signal"] .m-tone-green { background: color-mix(in srgb, var(--ok) 20%, var(--surface)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-amber { background: color-mix(in srgb, var(--warn) 22%, var(--surface)); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-red { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-blue { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-teal { background: color-mix(in srgb, #2DD4BF 20%, var(--surface)); color: #2DD4BF; border-color: color-mix(in srgb, #2DD4BF 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-indigo { background: color-mix(in srgb, #A78BFA 22%, var(--surface)); color: #A78BFA; border-color: color-mix(in srgb, #A78BFA 32%, var(--surface)); }
+[data-dir="signal"] .m-tone-slate { background: var(--surface-2); color: var(--muted); border-color: var(--border); }
+[data-dir="signal"] .m-tone-purple { background: color-mix(in srgb, #C084FC 22%, var(--surface)); color: #C084FC; border-color: color-mix(in srgb, #C084FC 32%, var(--surface)); }
+[data-dir="signal"] .m-kind--travaux { background: color-mix(in srgb, var(--primary) 20%, var(--surface)); color: var(--primary); }
+[data-dir="signal"] .m-kind--visite { background: color-mix(in srgb, #A78BFA 20%, var(--surface)); color: #A78BFA; }
+[data-dir="signal"] .m-kind--urgence { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); color: var(--danger); }
+[data-dir="signal"] .m-modal, [data-dir="signal"] .m-drawer, [data-dir="signal"] .m-cmd { background: var(--surface); }
+[data-dir="signal"] .m-modal-foot, [data-dir="signal"] .m-drawer-foot, [data-dir="signal"] .m-cmd-foot { background: var(--surface-2); }
+[data-dir="signal"] .m-photo { background: linear-gradient(135deg, #1A2B4A, #2E4568); color: var(--muted); border-color: var(--border); }
+[data-dir="signal"] .m-photo--0 { background: linear-gradient(135deg, #0F3463, #1D4ED8); color: #BFDBFE; }
+[data-dir="signal"] .m-photo--1 { background: linear-gradient(135deg, #3B2306, #92400E); color: #FDE68A; }
+[data-dir="signal"] .m-photo--2 { background: linear-gradient(135deg, #064E3B, #047857); color: #A7F3D0; }
+[data-dir="signal"] .m-mtop, [data-dir="signal"] .m-topnav { background: var(--surface); }
+[data-dir="signal"] .m-bnav { background: var(--surface); border-color: var(--border); }
+[data-dir="signal"] .m-rail { background: var(--bg-2); }

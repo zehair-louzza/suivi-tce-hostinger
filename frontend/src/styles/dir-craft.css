@@ -1,0 +1,50 @@
+/* Direction 2 — Craft Warmth : chaud et artisan, formes arrondies */
+[data-dir="craft"] {
+  --bg: #FAF7F2;
+  --bg-2: #F3EFE8;
+  --surface: #FFFDF9;
+  --surface-2: #F3EFE8;
+  --surface-3: #E7E0D6;
+  --text: #22201C;
+  --text-strong: #0F0E0C;
+  --muted: #6D6356;
+  --muted-2: #928678;
+  --border: #E7E0D6;
+  --border-strong: #CBBFAD;
+  --primary: #0F766E;
+  --primary-ink: #ffffff;
+  --primary-soft: rgba(15,118,110,.10);
+  --accent: #D97706;
+  --warn: #D97706;
+  --danger: #B91C1C;
+  --ok: #15803D;
+  --info: #2563EB;
+
+  --font-display: 'Merriweather Sans', 'Inter', system-ui, sans-serif;
+  --font-body: 'Work Sans', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, monospace;
+
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --shadow-sm: 0 1px 2px rgba(60,42,22,.06);
+  --shadow: 0 6px 20px rgba(60,42,22,.08);
+  --shadow-lg: 0 20px 48px rgba(60,42,22,.16);
+
+  --side-w: 0px;
+  --top-h: 0px;
+}
+[data-dir="craft"] .m-topnav { padding: 12px 32px; background: var(--surface); border-bottom: 1px solid var(--border); }
+[data-dir="craft"] .m-topnav-link.is-active { background: var(--primary); color: var(--primary-ink); }
+[data-dir="craft"] .m-btn { border-radius: 999px; }
+[data-dir="craft"] .m-btn--primary { background: var(--primary); }
+[data-dir="craft"] .m-card { border-radius: 22px; }
+[data-dir="craft"] .m-kpi { border-radius: 22px; }
+[data-dir="craft"] .m-kpi-value { font-family: 'Merriweather Sans', serif; }
+[data-dir="craft"] .m-pill { border-radius: 999px; }
+[data-dir="craft"] .m-chip { border-radius: 999px; }
+[data-dir="craft"] .m-input { border-radius: 14px; }
+[data-dir="craft"] .m-bnav-fab { background: var(--accent); }
+[data-dir="craft"] .m-page-titles h1 { font-family: 'Merriweather Sans'; font-weight: 800; }

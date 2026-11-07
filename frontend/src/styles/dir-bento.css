@@ -1,0 +1,58 @@
+/* Direction 5 — Bento Modular : marque ANELEC (jaune/corail/vert), tuiles bento */
+[data-dir="bento"] {
+  --bg: #F2F3F5;
+  --bg-2: #E8EAEE;
+  --surface: #FFFFFF;
+  --surface-2: #F2F3F5;
+  --surface-3: #E6E8EC;
+  --text: #1F2937;
+  --text-strong: #0B0F19;
+  --muted: #6B7280;
+  --muted-2: #9CA3AF;
+  --border: #E3E6EC;
+  --border-strong: #C9CFD8;
+  --primary: #111827;
+  --primary-ink: #ffffff;
+  --primary-soft: rgba(17,24,39,.06);
+  --accent: #F5B400;
+  --warn: #F5B400;
+  --danger: #EF5B4C;
+  --ok: #16A34A;
+  --info: #2563EB;
+
+  --font-display: 'Sora', 'Inter', system-ui, sans-serif;
+  --font-body: 'Figtree', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --shadow-sm: 0 1px 2px rgba(17,24,39,.04);
+  --shadow: 0 4px 16px rgba(17,24,39,.06);
+  --shadow-lg: 0 24px 60px rgba(17,24,39,.14);
+
+  --side-w: 258px;
+}
+[data-dir="bento"] .m-content { padding: 20px 24px 60px; background: var(--bg); }
+[data-dir="bento"] .m-side { background: var(--surface); margin: 10px 0 10px 10px; border: 1px solid var(--border); border-radius: var(--radius-lg); height: calc(100vh - 20px); box-shadow: var(--shadow-sm); position: sticky; top: 10px; }
+[data-dir="bento"] .m-topbar { background: transparent; border-bottom: 0; backdrop-filter: none; height: 54px; padding: 0 24px; }
+[data-dir="bento"] .m-page-titles h1 { font-family: 'Sora'; font-weight: 700; letter-spacing: -0.025em; font-size: 30px; }
+[data-dir="bento"] .m-card, [data-dir="bento"] .m-kpi { border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+[data-dir="bento"] .m-kpi-value { font-family: 'Sora'; font-weight: 700; font-size: 28px; }
+[data-dir="bento"] .m-kpi-tone-amber .m-kpi-icon { background: color-mix(in srgb, var(--accent) 20%, white); color: #8A5A05; }
+[data-dir="bento"] .m-kpi-tone-green .m-kpi-icon { background: color-mix(in srgb, var(--ok) 16%, white); color: #166534; }
+[data-dir="bento"] .m-kpi-tone-red .m-kpi-icon, [data-dir="bento"] .m-kind--urgence { background: color-mix(in srgb, var(--danger) 16%, white); color: #B91C1C; }
+[data-dir="bento"] .m-btn { border-radius: 12px; }
+[data-dir="bento"] .m-btn--primary { background: #111827; }
+[data-dir="bento"] .m-input { border-radius: 12px; }
+[data-dir="bento"] .m-pill { border-radius: 999px; font-weight: 700; }
+[data-dir="bento"] .m-nav-item.is-active { background: #111827; color: #fff; }
+[data-dir="bento"] .m-nav-item.is-active::before { display: none; }
+[data-dir="bento"] .m-nav-item.is-active .m-nav-badge { background: color-mix(in srgb, var(--accent) 80%, white); color: #0B0F19; }
+[data-dir="bento"] .m-bnav { left: 14px; right: 14px; bottom: 14px; border-radius: 22px; box-shadow: 0 18px 44px rgba(17,24,39,.22); border: 1px solid var(--border); padding: 10px 6px; }
+[data-dir="bento"] .m-bnav-fab { background: var(--accent); color: #0B0F19; }
+[data-dir="bento"] .m-dash .m-kpis--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+[data-dir="bento"] .m-auth-brand { background: #0B0F19; }
+[data-dir="bento"] .m-table { border-radius: var(--radius-lg); overflow: hidden; }
