@@ -192,51 +192,108 @@ export function TechnicianMobileView({
   // Missions du technicien (interventions individuelles + interventions d'équipe + visites devis affectées)
   const techMissions = useMemo(() => {
     const targetLower = (currentTechnicien || '').trim().toLowerCase();
-    const allForTech = interventionsList.filter((i) => {
-      const ent = (i.entreprise || '').trim();
-      if (!ent) return false;
-      if (ent.toLowerCase() === targetLower) return true;
-      if (ent.includes('+')) {
-        return ent
-          .split('+')
-          .map((p) => p.trim().toLowerCase())
-          .includes(targetLower);
-      }
-      return false;
+    const devisById = new Map<number, Devis>();
+    const devisByRef = new Map<string, Devis>();
+    devisList.forEach((d) => {
+      devisById.set(d.id, d);
+      if (d.reference) devisByRef.set(d.reference.trim().toLowerCase(), d);
     });
 
-    // Intégration des Visites Devis planifiées pour ce technicien (s'il n'y a pas déjà une intervention liée)
-    const existingDevisIds = new Set(
-      allForTech.map((i) => i.devisId || i.origineDevisId).filter(Boolean)
-    );
+    const allForTech = interventionsList
+      .filter((i) => {
+        const ent = (i.entreprise || '').trim();
+        if (!ent) return false;
+        if (ent.toLowerCase() === targetLower) return true;
+        if (ent.includes('+')) {
+          return ent
+            .split('+')
+            .map((p) => p.trim().toLowerCase())
+            .includes(targetLower);
+        }
+        return false;
+      })
+      .map((i) => {
+        const isVisite = Boolean(i.isVisiteDevis || i.typeIntervention === 'Visite technique devis');
+        const parentDevis =
+          (i.devisId ? devisById.get(i.devisId) : undefined) ||
+          (i.origineDevisId ? devisById.get(i.origineDevisId) : undefined) ||
+          (i.refDevisTexte ? devisByRef.get(i.refDevisTexte.trim().toLowerCase()) : undefined);
+        const parentDevisDone = parentDevis
+          ? ['Terminée', 'Effectuée', 'Clôturée', 'Réalisée', 'Validée'].includes(
+              (parentDevis.visiteStatut || '').trim()
+            ) || Boolean(parentDevis.gpsCloture)
+          : false;
+        const alreadyDone =
+          ['Clôturée', 'Terminée - à valider', 'Terminée', 'Effectuée', 'Facturée'].includes(
+            (i.statutOperationnel || '').trim()
+          ) ||
+          Boolean(i.gpsCloture) ||
+          (isVisite && parentDevisDone);
+
+        if (alreadyDone && i.statutOperationnel !== 'Clôturée' && i.statutOperationnel !== 'Terminée - à valider') {
+          return {
+            ...i,
+            statutOperationnel: 'Clôturée',
+            gpsCloture: i.gpsCloture || parentDevis?.gpsCloture || null,
+          };
+        }
+        return i;
+      });
+
+    // Intégration des Bons de Devis / Visites Devis planifiées pour ce technicien (sans doublon avec une intervention liée)
+    const existingDevisIds = new Set<number>();
+    const existingDevisRefs = new Set<string>();
+    allForTech.forEach((i) => {
+      const dId = i.devisId || i.origineDevisId;
+      if (dId) existingDevisIds.add(dId);
+      if (i.refDevisTexte) existingDevisRefs.add(i.refDevisTexte.trim().toLowerCase());
+    });
+
     const devisVisitsForTech: Intervention[] = devisList
       .filter((d) => {
-        if (!d.visiteNecessaire) return false;
-        if (d.statutCommercial === 'Perdu' || d.statutCommercial === 'Sans suite') return false;
+        if (['Perdu', 'Sans suite', 'Refusé', 'Annulé'].includes(d.statutCommercial || '')) return false;
         if (existingDevisIds.has(d.id)) return false;
-        const tech = (d.visiteTechnicien || '').trim().toLowerCase();
-        return tech === targetLower;
+        if (d.reference && existingDevisRefs.has(d.reference.trim().toLowerCase())) return false;
+        const tech = (d.visiteTechnicien || d.responsable || '').trim().toLowerCase();
+        if (!tech) return false;
+        const matchTech =
+          tech === targetLower ||
+          tech.includes(targetLower);
+        return matchTech && Boolean(d.visiteNecessaire || d.visiteDate || d.visiteTechnicien || d.site);
       })
-      .map((d) => ({
-        id: -d.id, // ID négatif pour identifier la visite devis directe
-        reference: d.reference || `DEV-${d.id}`,
-        client: d.client,
-        chantier: d.site || d.client || 'Site à préciser',
-        objet: d.objet ? `[Visite Devis] ${d.objet}` : 'Visite technique Devis',
-        corpsEtat: d.corpsEtat || 'Visite Devis',
-        datePlanifiee: d.visiteDate || undefined,
-        heureDebut: d.visiteHeureDebut || '08:30',
-        heureFin: d.visiteHeureFin || '10:30',
-        statutOperationnel: d.visiteStatut === 'Terminée' ? 'Clôturée' : (d.visiteStatut || 'Planifiée'),
-        isVisiteDevis: true,
-        devisId: d.id,
-        origineDevisId: d.id,
-        status: 'a-traiter' as any,
-        priorite: d.priorite || 'Normale',
-        notes: d.notes || undefined,
-        photos: [],
-        actionsRealisees: [],
-      }));
+      .map((d) => {
+        const isDevisDone =
+          ['Terminée', 'Effectuée', 'Clôturée', 'Réalisée', 'Validée', 'Fait', 'Traitée'].includes(
+            (d.visiteStatut || '').trim()
+          ) ||
+          Boolean(d.gpsCloture) ||
+          ['Traité', 'Clôturé'].includes((d.traitement || '').trim()) ||
+          d.status === 'traite' ||
+          ['Accepté', 'Signé', 'Facturé', 'Gagné', 'Terminé', 'Clôturé'].includes(
+            (d.statutCommercial || '').trim()
+          );
+        return {
+          id: -d.id, // ID négatif pour identifier la visite devis directe
+          reference: d.reference || `DEV-${d.id}`,
+          client: d.client,
+          chantier: d.site || d.client || 'Site à préciser',
+          objet: d.objet ? `[Visite Devis] ${d.objet}` : 'Visite technique Devis',
+          corpsEtat: d.corpsEtat || 'Visite Devis',
+          datePlanifiee: d.visiteDate || d.dateCreated || undefined,
+          heureDebut: d.visiteHeureDebut || '08:30',
+          heureFin: d.visiteHeureFin || '10:30',
+          statutOperationnel: isDevisDone ? 'Clôturée' : (d.visiteStatut || 'Planifiée'),
+          isVisiteDevis: true,
+          devisId: d.id,
+          origineDevisId: d.id,
+          gpsCloture: d.gpsCloture || null,
+          status: isDevisDone ? ('traite' as any) : ('a-traiter' as any),
+          priorite: d.priorite || 'Normale',
+          notes: d.notes || undefined,
+          photos: [],
+          actionsRealisees: [],
+        };
+      });
 
     const combined = [...allForTech, ...devisVisitsForTech];
     const filtered =
@@ -491,7 +548,7 @@ export function TechnicianMobileView({
       const gpsNoteLine = `[⌖ Clôture GPS certifiée le ${selectedDate} à ${nowHHMM} par ${currentTechnicien} — Position : ${gpsPayload.lat}, ${gpsPayload.lng} (±${gpsPayload.accuracy || 10}m)]`;
 
       if (mission.id < 0) {
-        // Visite devis directe
+        // Visite devis / Bon de devis direct
         const realDevisId = Math.abs(mission.id);
         const dev = devisList.find((d) => d.id === realDevisId);
         await updateDevisMut.mutateAsync({
@@ -500,15 +557,60 @@ export function TechnicianMobileView({
             visiteStatut: 'Terminée',
             statutCommercial: dev?.statutCommercial === 'À préparer' ? 'En cours de rédaction' : dev?.statutCommercial,
             prochaineAction: 'Chiffrer le devis (Visite terrain clôturée avec GPS)',
-            notes: [dev?.notes, gpsNoteLine, cr ? `Compte rendu : ${cr}` : ''].filter(Boolean).join('\n'),
+            notes: [
+              dev?.notes,
+              gpsNoteLine,
+              chiffrage ? `Éléments chiffrage : ${chiffrage}` : '',
+              cr ? `Compte rendu : ${cr}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
             gpsCloture: gpsPayload,
           },
         });
+
+        // Si une intervention liée existe aussi pour ce devis, on la clôture simultanément
+        const linkedIntv = interventionsList.find(
+          (i) =>
+            i.devisId === realDevisId ||
+            i.origineDevisId === realDevisId ||
+            (dev?.reference &&
+              (i.refDevisTexte || '').trim().toLowerCase() === dev.reference.trim().toLowerCase())
+        );
+        if (linkedIntv) {
+          await updateMissionMut.mutateAsync({
+            id: linkedIntv.id,
+            data: {
+              statutOperationnel: 'Clôturée',
+              traitement: 'Clôturé par technicien - Prêt pour facturation',
+              heureFinReelle: nowHHMM,
+              dateReelle: selectedDate,
+              elementsChiffrage: chiffrage || linkedIntv.elementsChiffrage,
+              compteRendu: [cr || linkedIntv.compteRendu, gpsNoteLine].filter(Boolean).join('\n'),
+              statutRapport: 'Validé par technicien',
+              gpsCloture: gpsPayload,
+            },
+          });
+        }
+
+        // Mise à jour optimiste immédiate du cache React Query pour retrait instantané de la carte
+        queryClient.setQueriesData({ queryKey: ['devis'] }, (old: any) => {
+          if (!old?.data || !Array.isArray(old.data)) return old;
+          return {
+            ...old,
+            data: old.data.map((d: Devis) =>
+              d.id === realDevisId
+                ? { ...d, visiteStatut: 'Terminée', gpsCloture: gpsPayload }
+                : d
+            ),
+          };
+        });
+
         toast.success(
-          `✓ Visite Devis ${mission.reference} clôturée avec position GPS ! Retirée de la carte du trajet restant.`
+          `✓ Bon de Devis ${mission.reference} clôturé avec position GPS ! Retiré de la carte du trajet restant.`
         );
       } else {
-        // Intervention TCE
+        // Intervention TCE ou Visite Devis planifiée
         await updateMissionMut.mutateAsync({
           id: mission.id,
           data: {
@@ -523,30 +625,66 @@ export function TechnicianMobileView({
           },
         });
 
-        // Si l'intervention est liée à un devis : clôture automatique du devis associé
+        // Si l'intervention est liée à un devis (par ID ou par référence texte) : clôture automatique du devis associé
         const targetDevisId = mission.devisId || mission.origineDevisId;
-        if (targetDevisId) {
-          const associatedDevis = devisList.find((d) => d.id === targetDevisId);
-          if (associatedDevis) {
-            await updateDevisMut.mutateAsync({
-              id: associatedDevis.id,
-              data: {
-                visiteStatut: 'Terminée',
-                prochaineAction: 'Prêt pour facturation / dossier clôturé',
-                notes: [
-                  associatedDevis.notes,
-                  `${gpsNoteLine} Mission terminée sur le terrain et envoyée à la clôture.`,
-                ]
-                  .filter(Boolean)
-                  .join('\n'),
-                gpsCloture: gpsPayload,
-              },
-            });
-          }
+        const targetDevisRef = (mission.refDevisTexte || '').trim().toLowerCase();
+        const associatedDevis = devisList.find(
+          (d) =>
+            (targetDevisId && d.id === targetDevisId) ||
+            (targetDevisRef && (d.reference || '').trim().toLowerCase() === targetDevisRef)
+        );
+        if (associatedDevis) {
+          await updateDevisMut.mutateAsync({
+            id: associatedDevis.id,
+            data: {
+              visiteStatut: 'Terminée',
+              prochaineAction: 'Prêt pour facturation / dossier clôturé',
+              notes: [
+                associatedDevis.notes,
+                `${gpsNoteLine} Mission terminée sur le terrain et envoyée à la clôture.`,
+              ]
+                .filter(Boolean)
+                .join('\n'),
+              gpsCloture: gpsPayload,
+            },
+          });
+        }
+
+        // Mise à jour optimiste immédiate du cache React Query pour retrait instantané de la carte
+        queryClient.setQueriesData({ queryKey: ['interventions'] }, (old: any) => {
+          if (!old?.data || !Array.isArray(old.data)) return old;
+          return {
+            ...old,
+            data: old.data.map((i: Intervention) =>
+              i.id === mission.id
+                ? {
+                    ...i,
+                    statutOperationnel: 'Clôturée',
+                    traitement: 'Clôturé par technicien - Prêt pour facturation',
+                    heureFinReelle: nowHHMM,
+                    statutRapport: 'Validé par technicien',
+                    gpsCloture: gpsPayload,
+                  }
+                : i
+            ),
+          };
+        });
+        if (associatedDevis) {
+          queryClient.setQueriesData({ queryKey: ['devis'] }, (old: any) => {
+            if (!old?.data || !Array.isArray(old.data)) return old;
+            return {
+              ...old,
+              data: old.data.map((d: Devis) =>
+                d.id === associatedDevis.id
+                  ? { ...d, visiteStatut: 'Terminée', gpsCloture: gpsPayload }
+                  : d
+              ),
+            };
+          });
         }
 
         toast.success(
-          `✓ Intervention ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée du trajet restant.`
+          `✓ ${mission.isVisiteDevis ? 'Visite Devis' : 'Intervention'} ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée de la carte.`
         );
       }
 
@@ -623,6 +761,25 @@ export function TechnicianMobileView({
   };
 
   const handleSaveReportAndChiffrage = async (mission: Intervention) => {
+    if (mission.id < 0) {
+      const realDevisId = Math.abs(mission.id);
+      const dev = devisList.find((d) => d.id === realDevisId);
+      await updateDevisMut.mutateAsync({
+        id: realDevisId,
+        data: {
+          notes: [
+            dev?.notes,
+            chiffrageDraft ? `Éléments chiffrage : ${chiffrageDraft}` : '',
+            compteRenduDraft ? `Compte rendu : ${compteRenduDraft}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        },
+      });
+      toast.success('✓ Compte rendu & éléments de chiffrage du devis enregistrés');
+      return;
+    }
+
     await updateMissionMut.mutateAsync({
       id: mission.id,
       data: {
@@ -635,6 +792,13 @@ export function TechnicianMobileView({
   };
 
   const handleTogglePreFilledAction = async (mission: Intervention, actionLabel: string) => {
+    if (mission.id < 0) {
+      const nextText = [compteRenduDraft, `• ${actionLabel}`].filter(Boolean).join('\n');
+      setCompteRenduDraft(nextText);
+      toast.success(`✓ Action ajoutée au compte rendu du devis`);
+      return;
+    }
+
     const current = Array.isArray(mission.actionsRealisees) ? mission.actionsRealisees : [];
     const exists = current.includes(actionLabel);
     const nextActions = exists
@@ -1326,7 +1490,11 @@ export function TechnicianMobileView({
             setActiveMissionId(i.id);
             setActiveTab('missions');
           }}
-          onOpenDevis={() => {
+          onOpenDevis={(d) => {
+            const linkedIntv = interventionsList.find(
+              (i) => i.devisId === d.id || i.origineDevisId === d.id || i.refDevisTexte === d.reference
+            );
+            setActiveMissionId(linkedIntv ? linkedIntv.id : -d.id);
             setActiveTab('missions');
           }}
         />
@@ -1483,23 +1651,40 @@ export function TechnicianMobileView({
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {/* Ligne 1 : Activer / Démarrer ou Désactiver / Terminer */}
+                        {/* Ligne 1 : Activer / Démarrer ou Déclarer terminé / Clôturer avec GPS */}
                         {!isRunning && !isDone && m.statutOperationnel !== 'Intervention non terminée' && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{
-                              width: '100%',
-                              minHeight: '44px',
-                              background: '#059669',
-                              borderColor: '#059669',
-                              fontWeight: 800,
-                              fontSize: '13px',
-                            }}
-                            onClick={() => handleActivateMission(m)}
-                          >
-                            ▸ Activer / Démarrer ({m.isVisiteDevis ? 'Visite Devis' : 'Intervention'})
-                          </button>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{
+                                width: '100%',
+                                minHeight: '44px',
+                                background: '#059669',
+                                borderColor: '#059669',
+                                fontWeight: 800,
+                                fontSize: '12.5px',
+                              }}
+                              onClick={() => handleActivateMission(m)}
+                            >
+                              ▸ Démarrer ({m.isVisiteDevis ? 'Devis' : 'Intv.'})
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{
+                                width: '100%',
+                                minHeight: '44px',
+                                background: '#dc2626',
+                                borderColor: '#dc2626',
+                                fontWeight: 800,
+                                fontSize: '12px',
+                              }}
+                              onClick={() => handleDeactivateMission(m)}
+                            >
+                              ⌖✓ Déclarer terminé
+                            </button>
+                          </div>
                         )}
 
                         {isRunning && (
@@ -1686,14 +1871,26 @@ export function TechnicianMobileView({
                   {/* Boutons rapides Activer / Clôturer / Non terminée directement depuis la fiche Compte Rendu */}
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
                     {activeMission.statutOperationnel !== 'En cours' ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ flex: 1, background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
-                        onClick={() => handleActivateMission(activeMission)}
-                      >
-                        ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{ flex: 1, background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
+                          onClick={() => handleActivateMission(activeMission)}
+                        >
+                          ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
+                        </button>
+                        {!['Terminée - à valider', 'Clôturée'].includes(activeMission.statutOperationnel) && (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
+                            onClick={() => handleDeactivateMission(activeMission)}
+                          >
+                            ⌖✓ Déclarer terminé & Clôturer
+                          </button>
+                        )}
+                      </>
                     ) : (
                       <>
                         <button
@@ -1893,6 +2090,25 @@ export function TechnicianMobileView({
                   >
                     ✓ Enregistrer le Compte Rendu & Chiffrage
                   </button>
+
+                  {!['Terminée - à valider', 'Clôturée'].includes(activeMission.statutOperationnel) && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{
+                        width: '100%',
+                        marginTop: '8px',
+                        minHeight: '46px',
+                        fontWeight: 800,
+                        background: '#dc2626',
+                        borderColor: '#dc2626',
+                        boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
+                      }}
+                      onClick={() => handleDeactivateMission(activeMission)}
+                    >
+                      ⌖✓ Enregistrer, Déclarer Terminé & Retirer de la Carte (GPS)
+                    </button>
+                  )}
                 </div>
 
                 {/* 4. Prise de Photos (Caméra Mobile + Galerie) */}

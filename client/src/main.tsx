@@ -1,9 +1,9 @@
 // Vite entry point
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, useToasterStore } from 'react-hot-toast';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import './styles/design-tokens.css';
@@ -31,36 +31,85 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Gestionnaire de notifications éphémères (Toasts) :
+ * - Fond blanc 100% opaque (#ffffff), non transparent
+ * - Aucun chevauchement (1 seul message affiché à la fois, les précédents sont fermés automatiquement)
+ * - Disparition automatique rapide (2,5 secondes)
+ */
+function EphemeralToaster() {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    toasts
+      .filter((t) => t.visible)
+      .filter((_, i) => i >= 1)
+      .forEach((t) => toast.dismiss(t.id));
+  }, [toasts]);
+
+  return (
+    <Toaster
+      position="top-center"
+      gutter={8}
+      containerStyle={{
+        top: 12,
+        zIndex: 99999,
+      }}
+      toastOptions={{
+        duration: 2500,
+        style: {
+          background: '#ffffff',
+          backgroundColor: '#ffffff',
+          color: '#0f172a',
+          border: '1.5px solid #cbd5e1',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          boxShadow: '0 14px 32px rgba(15, 23, 42, 0.2), 0 4px 10px rgba(15, 23, 42, 0.08)',
+          fontWeight: 600,
+          fontSize: '13px',
+          lineHeight: 1.4,
+          maxWidth: '400px',
+          opacity: 1,
+        },
+        success: {
+          duration: 2500,
+          style: {
+            background: '#ffffff',
+            backgroundColor: '#ffffff',
+            color: '#0f172a',
+            border: '1.5px solid #10b981',
+            borderLeft: '5px solid #059669',
+          },
+          iconTheme: {
+            primary: '#059669',
+            secondary: '#ffffff',
+          },
+        },
+        error: {
+          duration: 3000,
+          style: {
+            background: '#ffffff',
+            backgroundColor: '#ffffff',
+            color: '#0f172a',
+            border: '1.5px solid #f87171',
+            borderLeft: '5px solid #dc2626',
+          },
+          iconTheme: {
+            primary: '#dc2626',
+            secondary: '#ffffff',
+          },
+        },
+      }}
+    />
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: 'var(--color-level3-surface)',
-              color: 'var(--color-primary-text)',
-              border: '1px solid var(--color-border-standard)',
-              borderRadius: 'var(--rounded-card)',
-              padding: '12px 16px',
-            },
-            success: {
-              iconTheme: {
-                primary: 'var(--color-success-emerald)',
-                secondary: 'var(--color-inverse-text)',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: 'var(--color-danger-red)',
-                secondary: 'var(--color-inverse-text)',
-              },
-            },
-          }}
-        />
+        <EphemeralToaster />
         <ReactQueryDevtools initialIsOpen={false} />
       </BrowserRouter>
     </QueryClientProvider>

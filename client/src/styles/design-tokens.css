@@ -99,6 +99,15 @@
 
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
+
+  /* Variables pour notifications éphémères (Toasts) — Fond blanc 100% opaque */
+  --color-level3-surface: #ffffff;
+  --color-primary-text: #0f172a;
+  --color-border-standard: #cbd5e1;
+  --rounded-card: 12px;
+  --color-success-emerald: #059669;
+  --color-danger-red: #dc2626;
+  --color-inverse-text: #ffffff;
 }
 
 /* ============================================================================

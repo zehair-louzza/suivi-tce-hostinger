@@ -599,36 +599,74 @@ interventionRouter.patch(
     });
 
     const linkedDevisId = updated.devisId || updated.origineDevisId;
-    if (linkedDevisId && updated.isVisiteDevis) {
-      const parentDevis = await prisma.devis.findUnique({ where: { id: linkedDevisId } });
-      if (parentDevis) {
-        const isVisitDone = ['Terminée - à valider', 'Clôturée'].includes(updated.statutOperationnel || '');
-        await prisma.devis.update({
-          where: { id: linkedDevisId },
+    let parentDevis = linkedDevisId
+      ? await prisma.devis.findUnique({ where: { id: linkedDevisId } })
+      : null;
+
+    if (!parentDevis && updated.refDevisTexte) {
+      parentDevis = await prisma.devis.findFirst({
+        where: { companyId, referenceMetier: updated.refDevisTexte.trim() },
+      });
+    }
+
+    if (parentDevis) {
+      const isVisitDone =
+        ['Terminée - à valider', 'Clôturée', 'Terminée', 'Effectuée', 'Facturée'].includes(
+          (updated.statutOperationnel || '').trim()
+        ) || Boolean(b.gpsCloture);
+
+      if (updated.isVisiteDevis || isVisitDone) {
+        let nextDevisHist = addHistoriqueEvent(
+          parentDevis.historiqueJson,
+          auteur,
+          isVisitDone
+            ? 'Visite / intervention liée terminée par le technicien — Retirée de la carte'
+            : 'Créneau de visite technique mis à jour au planning',
+          `${updated.entreprise || 'Technicien à affecter'} • ${toISO(updated.datePlanifiee) || 'À planifier'} ${
+            updated.heureDebut || ''
+          }-${updated.heureFin || ''}`
+        );
+
+        if (b.gpsCloture && typeof b.gpsCloture === 'object') {
+          const parsedDevisHist = parseHistorique(nextDevisHist);
+          if (!parsedDevisHist.some((h) => h.action === 'CLOTURE_GPS_TERRAIN')) {
+            nextDevisHist = addHistoriqueEvent(
+              nextDevisHist,
+              auteur,
+              'CLOTURE_GPS_TERRAIN',
+              JSON.stringify(b.gpsCloture)
+            );
+          }
+        }
+
+        const updatedParentDevis = await prisma.devis.update({
+          where: { id: parentDevis.id },
           data: {
-            visiteTechnicien: updated.entreprise,
-            visiteDate: updated.datePlanifiee,
-            visiteHeureDebut: updated.heureDebut,
-            visiteHeureFin: updated.heureFin,
-            visiteStatut: isVisitDone ? 'Effectuée' : 'Planifiée',
+            ...(updated.isVisiteDevis
+              ? {
+                  visiteTechnicien: updated.entreprise || parentDevis.visiteTechnicien,
+                  visiteDate: updated.datePlanifiee || parentDevis.visiteDate,
+                  visiteHeureDebut: updated.heureDebut || parentDevis.visiteHeureDebut,
+                  visiteHeureFin: updated.heureFin || parentDevis.visiteHeureFin,
+                }
+              : {}),
+            visiteStatut: isVisitDone ? 'Terminée' : (updated.isVisiteDevis ? 'Planifiée' : parentDevis.visiteStatut),
             ...(isVisitDone && parentDevis.traitement === 'En attente technicien'
               ? {
                   traitement: 'En cours de traitement',
                   prochaineAction: 'Chiffrer',
                 }
               : {}),
-            historiqueJson: addHistoriqueEvent(
-              parentDevis.historiqueJson,
-              auteur,
-              isVisitDone
-                ? 'Visite technique terminée par le technicien — Prêt à chiffrer'
-                : 'Créneau de visite technique mis à jour au planning',
-              `${updated.entreprise || 'Technicien à affecter'} • ${toISO(updated.datePlanifiee) || 'À planifier'} ${
-                updated.heureDebut || ''
-              }-${updated.heureFin || ''}`
-            ),
+            historiqueJson: nextDevisHist,
           },
         });
+
+        try {
+          socketEvents.devisUpdated(userId, updatedParentDevis);
+          socketEvents.broadcast('devis:updated', updatedParentDevis);
+        } catch {
+          // ignore
+        }
       }
     }
 

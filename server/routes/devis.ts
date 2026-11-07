@@ -159,7 +159,18 @@ export function transformDevis(d: any) {
     visiteDate,
     visiteHeureDebut: d.visiteHeureDebut || null,
     visiteHeureFin: d.visiteHeureFin || null,
-    visiteStatut: d.visiteStatut || null,
+    visiteStatut: (() => {
+      const anyVisitDone = linkedInterventions.some(
+        (li: any) =>
+          ['Clôturée', 'Terminée - à valider', 'Terminée', 'Effectuée', 'Facturée'].includes(
+            (li.statutOperationnel || '').trim()
+          )
+      );
+      if (anyVisitDone && (!d.visiteStatut || ['Planifiée', 'À planifier', 'En cours', 'À réaliser'].includes(d.visiteStatut))) {
+        return 'Terminée';
+      }
+      return d.visiteStatut || null;
+    })(),
     gpsCloture: (() => {
       const hist = parseHistorique(d.historiqueJson);
       const evt = hist.find((h) => h.action === 'CLOTURE_GPS_TERRAIN' && h.details);
@@ -194,25 +205,63 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
 
   if (!needsVisite) return null;
 
+  const refDevis = devis.referenceMetier || `DEV-2026-${String(devis.id).padStart(3, '0')}`;
+  const devisHist = parseHistorique(devis.historiqueJson);
+  const gpsEvt = devisHist.find((h) => h.action === 'CLOTURE_GPS_TERRAIN' && h.details);
+  const isDevisVisitDone =
+    ['Terminée', 'Effectuée', 'Clôturée', 'Réalisée', 'Validée', 'Fait', 'Traitée'].includes(
+      (devis.visiteStatut || '').trim()
+    ) ||
+    Boolean(gpsEvt) ||
+    ['Traité', 'Clôturé'].includes((devis.traitement || '').trim()) ||
+    ['Accepté', 'Signé', 'Facturé', 'Gagné', 'Terminé', 'Clôturé'].includes(
+      (devis.statutCommercial || '').trim()
+    );
+
   const existingVisite = await prisma.intervention.findFirst({
     where: {
-      devisId: devis.id,
+      OR: [
+        { devisId: devis.id },
+        { origineDevisId: devis.id },
+        { refDevisTexte: refDevis },
+      ],
       isVisiteDevis: true,
     },
   });
 
-  const refDevis = devis.referenceMetier || `DEV-2026-${String(devis.id).padStart(3, '0')}`;
   const datePlan = devis.visiteDate || devis.dateCreated || new Date();
-  const statutOp = devis.visiteDate
+  const baseStatutOp = isDevisVisitDone
+    ? 'Clôturée'
+    : devis.visiteStatut === 'En cours'
+    ? 'En cours'
+    : devis.visiteStatut === 'À replanifier'
+    ? 'Intervention non terminée'
+    : devis.visiteDate
     ? devis.visiteTechnicien
       ? 'Planifiée'
       : 'À planifier'
     : 'À planifier';
 
   if (existingVisite) {
+    const existingAlreadyDone = ['Clôturée', 'Terminée - à valider', 'Terminée', 'Effectuée', 'Facturée'].includes(
+      (existingVisite.statutOperationnel || '').trim()
+    );
+    const finalStatutOp = existingAlreadyDone || isDevisVisitDone ? 'Clôturée' : baseStatutOp;
+
+    let intvHist = existingVisite.historiqueJson;
+    if (gpsEvt?.details) {
+      const parsedIntvHist = parseHistorique(intvHist);
+      if (!parsedIntvHist.some((h) => h.action === 'CLOTURE_GPS_TERRAIN')) {
+        intvHist = addHistoriqueEvent(intvHist, auteur, 'CLOTURE_GPS_TERRAIN', gpsEvt.details);
+      }
+    }
+
     return prisma.intervention.update({
       where: { id: existingVisite.id },
       data: {
+        devisId: devis.id,
+        origineDevisId: devis.id,
+        refDevisTexte: refDevis,
         client: devis.client,
         chantier: devis.siteAdresse || devis.client,
         siteAdresse: devis.siteAdresse || devis.client,
@@ -225,11 +274,23 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         datePlanifiee: datePlan,
         heureDebut: devis.visiteHeureDebut || existingVisite.heureDebut || '09:00',
         heureFin: devis.visiteHeureFin || existingVisite.heureFin || '10:30',
-        statutOperationnel: existingVisite.statutOperationnel === 'Clôturée' ? 'Clôturée' : statutOp,
+        statutOperationnel: finalStatutOp,
+        ...(finalStatutOp === 'Clôturée'
+          ? {
+              traitement: 'Clôturé par technicien - Prêt pour facturation',
+              status: 'TRAITE',
+              statutRapport: 'Validé par technicien',
+            }
+          : {}),
+        historiqueJson: intvHist,
         modePlanification: devis.visiteDate ? 'Planifiée' : 'Non planifiée',
       },
     });
   } else {
+    // Si la visite devis est déjà déclarée terminée/clôturée, on ne recrée surtout pas une mission "Planifiée"
+    if (isDevisVisitDone) {
+      return null;
+    }
     return prisma.intervention.create({
       data: {
         referenceMetier: `VIS-${String(devis.id).padStart(3, '0')}`,
@@ -245,7 +306,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         priorite: devis.priorite || 'Normale',
         dateDemande: devis.dateCreated || new Date(),
         datePlanifiee: datePlan,
-        statutOperationnel: statutOp,
+        statutOperationnel: baseStatutOp,
         traitement: 'En cours de traitement',
         status: 'EN_COURS',
         entreprise: devis.visiteTechnicien || null,

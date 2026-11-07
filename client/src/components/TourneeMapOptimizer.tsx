@@ -61,12 +61,22 @@ interface TechnicienLiveMarkerData {
   progressPercent: number;
 }
 
-function isMissionCompletedStatus(statut: string, isVisiteDevis: boolean): boolean {
+function isMissionCompletedStatus(statut: string, _isVisiteDevis: boolean): boolean {
   const s = (statut || '').trim();
-  if (isVisiteDevis) {
-    return ['Terminée', 'Effectuée', 'Clôturée'].includes(s);
-  }
-  return ['Clôturée', 'Terminée - à valider', 'Terminée', 'Facturée'].includes(s);
+  return [
+    'Clôturée',
+    'Terminée - à valider',
+    'Terminée',
+    'Effectuée',
+    'Facturée',
+    'Réalisée',
+    'Validée',
+    'Fait',
+    'Traitée',
+    'Traité',
+    'Clôturé',
+    'Terminé',
+  ].includes(s);
 }
 
 function formatTimeFromISO(iso?: string): string {
@@ -195,7 +205,28 @@ export function TourneeMapOptimizer({
     const activeDate =
       dateFilterMode === 'today' ? todayStr : dateFilterMode === 'custom' ? customDate : null;
 
-    // A. Interventions
+    const devisById = new Map<number, Devis>();
+    const devisByRef = new Map<string, Devis>();
+    devis.forEach((d) => {
+      devisById.set(d.id, d);
+      if (d.reference) {
+        devisByRef.set(d.reference.trim().toLowerCase(), d);
+      }
+    });
+
+    // Garder trace des devis déjà représentés par une intervention / visite liée afin d'éviter tout doublon sur la carte
+    const devisIdsWithIntervention = new Set<number>();
+    const devisRefsWithIntervention = new Set<string>();
+    interventions.forEach((i) => {
+      if (i.statutOperationnel === 'Annulée') return;
+      const dId = i.devisId || i.origineDevisId;
+      if (dId) devisIdsWithIntervention.add(dId);
+      if (i.refDevisTexte) {
+        devisRefsWithIntervention.add(i.refDevisTexte.trim().toLowerCase());
+      }
+    });
+
+    // A. Interventions (Travaux & Visites Devis planifiées en intervention)
     const intvs = interventions
       .filter((i) => {
         if (i.statutOperationnel === 'Annulée') return false;
@@ -211,7 +242,31 @@ export function TourneeMapOptimizer({
       .map((i) => {
         const rawAddr = i.chantier || (i as any).siteAdresse || (i as any).adresse || '';
         const statut = i.statutOperationnel || 'Planifiée';
-        const isCompleted = isMissionCompletedStatus(statut, false);
+        const isVisite = Boolean(i.isVisiteDevis || i.typeIntervention === 'Visite technique devis');
+        const parentDevis =
+          (i.devisId ? devisById.get(i.devisId) : undefined) ||
+          (i.origineDevisId ? devisById.get(i.origineDevisId) : undefined) ||
+          (i.refDevisTexte ? devisByRef.get(i.refDevisTexte.trim().toLowerCase()) : undefined);
+
+        const parentDevisDone = parentDevis
+          ? isMissionCompletedStatus(parentDevis.visiteStatut || '', true) || Boolean(parentDevis.gpsCloture)
+          : false;
+
+        const isCompleted =
+          isMissionCompletedStatus(statut, isVisite) ||
+          Boolean(i.gpsCloture) ||
+          (Boolean(i.heureFinReelle) &&
+            statut !== 'Intervention non terminée' &&
+            statut !== 'En cours') ||
+          ['Traité', 'Clôturé par technicien - Prêt pour facturation', 'Clôturée'].includes(
+            (i.traitement || '').trim()
+          ) ||
+          i.status === 'traite' ||
+          ['Validé par technicien', 'Validé & Clôturé', 'Envoyé au client'].includes(
+            (i.statutRapport || '').trim()
+          ) ||
+          (isVisite && parentDevisDone);
+
         return {
           id: i.id,
           reference: i.reference || `INT-${i.id}`,
@@ -222,31 +277,49 @@ export function TourneeMapOptimizer({
           heurePrevue: i.heureDebut || '08:30',
           heureFinReelle: i.heureFinReelle || undefined,
           technicien: (i.entreprise || (i as any).technicien || '').trim(),
-          statut,
-          isVisiteDevis: false,
+          statut: isCompleted && !isMissionCompletedStatus(statut, isVisite) ? 'Clôturée' : statut,
+          isVisiteDevis: isVisite,
           isCompleted,
-          gpsCloture: i.gpsCloture || null,
+          gpsCloture: i.gpsCloture || parentDevis?.gpsCloture || null,
           rawMission: i,
         };
       });
 
-    // B. Visites Devis
+    // B. Bons de Devis / Visites Devis directes (sans doublon avec une intervention liée déjà présente)
     const devisVisits = devis
       .filter((d) => {
-        if (d.statutCommercial === 'Perdu' || d.statutCommercial === 'Sans suite') return false;
+        if (['Perdu', 'Sans suite', 'Refusé', 'Annulé'].includes(d.statutCommercial || '')) return false;
+        if (devisIdsWithIntervention.has(d.id)) return false;
+        if (d.reference && devisRefsWithIntervention.has(d.reference.trim().toLowerCase())) return false;
+
         const t = (d.visiteTechnicien || d.responsable || '').trim();
         const matchTech =
           !techFilter ||
           techFilter === 'TOUS' ||
           t.toLowerCase().includes(techFilter.toLowerCase());
-        const vDate = (d.visiteDate || '').trim();
-        const matchDate = !activeDate || vDate === activeDate;
-        return matchTech && matchDate && Boolean(d.visiteDate || d.visiteTechnicien || d.site);
+        const vDate = (d.visiteDate || d.dateCreated || '').trim();
+        const matchDate = !activeDate || !d.visiteDate || vDate === activeDate;
+        return matchTech && matchDate && Boolean(d.visiteNecessaire || d.visiteDate || d.visiteTechnicien || d.site);
       })
       .map((d) => {
         const rawAddr = d.site || (d as any).siteAdresse || (d as any).adresse || '';
         const statut = d.visiteStatut || 'À réaliser';
-        const isCompleted = isMissionCompletedStatus(statut, true);
+        const linkedIntvDone = Array.isArray((d as any).interventions)
+          ? (d as any).interventions.some((li: any) =>
+              isMissionCompletedStatus(li.statutOperationnel || '', true)
+            )
+          : false;
+
+        const isCompleted =
+          isMissionCompletedStatus(statut, true) ||
+          Boolean(d.gpsCloture) ||
+          ['Traité', 'Clôturé'].includes((d.traitement || '').trim()) ||
+          d.status === 'traite' ||
+          ['Accepté', 'Signé', 'Facturé', 'Gagné', 'Terminé', 'Clôturé'].includes(
+            (d.statutCommercial || '').trim()
+          ) ||
+          linkedIntvDone;
+
         return {
           id: -d.id,
           reference: d.reference || `DEV-${d.id}`,
@@ -257,7 +330,7 @@ export function TourneeMapOptimizer({
           heurePrevue: d.visiteHeureDebut || '09:00',
           heureFinReelle: undefined,
           technicien: (d.visiteTechnicien || d.responsable || '').trim(),
-          statut,
+          statut: isCompleted ? 'Terminée' : statut,
           isVisiteDevis: true,
           isCompleted,
           gpsCloture: d.gpsCloture || null,
