@@ -81,7 +81,7 @@ function setLocalCache(cache: Record<string, GeoPoint>) {
 export function cleanAddressString(raw: string): string {
   if (!raw) return '';
   return raw
-    .replace(/[📍🏢🏷️⚠️✓✓]/g, '')
+    .replace(/[⌖▪•▲✓✓]/g, '')
     .replace(/\[[^\]]+\]/g, '') // supprime les [Visite Devis]
     .replace(/^(site|adresse|chantier)\s*:\s*/i, '')
     .replace(/\s+/g, ' ')

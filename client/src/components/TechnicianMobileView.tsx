@@ -75,7 +75,7 @@ export function TechnicianMobileView({
 
   // Modale intervention non terminée / à replanifier
   const [nonTermineeModalMission, setNonTermineeModalMission] = useState<Intervention | null>(null);
-  const [nonTermineeReason, setNonTermineeReason] = useState<string>('📦 Matériel / Pièces manquantes');
+  const [nonTermineeReason, setNonTermineeReason] = useState<string>('≡ Matériel / Pièces manquantes');
   const [nonTermineeDetails, setNonTermineeDetails] = useState<string>('');
 
   // Modale impérative de localisation GPS pour clôturer une intervention
@@ -299,14 +299,14 @@ export function TechnicianMobileView({
       });
     }
     setActiveMissionId(mission.id);
-    toast.success(`▶️ Mission ${mission.reference} activée à ${nowHHMM}`);
+    toast.success(`▸ Mission ${mission.reference} activée à ${nowHHMM}`);
   };
 
   const handleActivateMission = async (mission: Intervention) => {
     // RÈGLE 1 : L'intervention ne peut commencer que si le technicien démarre son arrivée au bureau
     if (!currentPointage?.heureArriveeBureau) {
       setShowMorningBlockerModal({ mission });
-      toast.error('⚠️ Vous devez d\'abord pointer votre arrivée au bureau avant de démarrer une intervention !');
+      toast.error('▲ Vous devez d\'abord pointer votre arrivée au bureau avant de démarrer une intervention !');
       return;
     }
 
@@ -375,7 +375,7 @@ export function TechnicianMobileView({
         source: 'GEOCODED_FALLBACK',
       });
       setGpsStatus('READY');
-      toast.success('📍 Localisation du chantier verrouillée et prête à être transmise');
+      toast.success('⌖ Localisation du chantier verrouillée et prête à être transmise');
     } catch {
       setGpsCoords({
         lat: 48.869742,
@@ -411,7 +411,7 @@ export function TechnicianMobileView({
         await referentielsApi.sendGpsPosition(payload);
         setLastTransmittedGps(payload);
         queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-        toast.success(`📡 Position actuelle transmise à l'équipe bureau (${payload.lat}, ${payload.lng})`);
+        toast.success(`⌖ Position actuelle transmise à l'équipe bureau (${payload.lat}, ${payload.lng})`);
       } catch {
         toast.error('Impossible de transmettre la position GPS au bureau');
       } finally {
@@ -454,7 +454,7 @@ export function TechnicianMobileView({
   // Validation finale : transmet la position GPS actuelle, clôture l'intervention et la retire du trajet restant
   const confirmGpsAndFinalizeMission = async () => {
     if (!closingGpsModalMission || !gpsCoords) {
-      toast.error('⚠️ Localisation GPS obligatoire pour finaliser et clôturer l’intervention !');
+      toast.error('▲ Localisation GPS obligatoire pour finaliser et clôturer l’intervention !');
       return;
     }
 
@@ -488,7 +488,7 @@ export function TechnicianMobileView({
         // La position est également envoyée dans gpsCloture ci-dessous
       }
 
-      const gpsNoteLine = `[📍 Clôture GPS certifiée le ${selectedDate} à ${nowHHMM} par ${currentTechnicien} — Position : ${gpsPayload.lat}, ${gpsPayload.lng} (±${gpsPayload.accuracy || 10}m)]`;
+      const gpsNoteLine = `[⌖ Clôture GPS certifiée le ${selectedDate} à ${nowHHMM} par ${currentTechnicien} — Position : ${gpsPayload.lat}, ${gpsPayload.lng} (±${gpsPayload.accuracy || 10}m)]`;
 
       if (mission.id < 0) {
         // Visite devis directe
@@ -505,7 +505,7 @@ export function TechnicianMobileView({
           },
         });
         toast.success(
-          `✅ Visite Devis ${mission.reference} clôturée avec position GPS ! Retirée de la carte du trajet restant.`
+          `✓ Visite Devis ${mission.reference} clôturée avec position GPS ! Retirée de la carte du trajet restant.`
         );
       } else {
         // Intervention TCE
@@ -546,7 +546,7 @@ export function TechnicianMobileView({
         }
 
         toast.success(
-          `✅ Intervention ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée du trajet restant.`
+          `✓ Intervention ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée du trajet restant.`
         );
       }
 
@@ -619,7 +619,7 @@ export function TechnicianMobileView({
 
     setNonTermineeModalMission(null);
     setNonTermineeDetails('');
-    toast.success(`⏳ Intervention ${mission.reference} marquée non terminée. Elle est transmise au bureau pour replanification.`);
+    toast.success(`◷ Intervention ${mission.reference} marquée non terminée. Elle est transmise au bureau pour replanification.`);
   };
 
   const handleSaveReportAndChiffrage = async (mission: Intervention) => {
@@ -631,7 +631,7 @@ export function TechnicianMobileView({
         statutRapport: 'Déclaré par technicien',
       },
     });
-    toast.success('💾 Compte rendu & éléments de chiffrage enregistrés');
+    toast.success('✓ Compte rendu & éléments de chiffrage enregistrés');
   };
 
   const handleTogglePreFilledAction = async (mission: Intervention, actionLabel: string) => {
@@ -695,7 +695,7 @@ export function TechnicianMobileView({
       });
       setPhotoCaption('');
       toast.success(
-        `📷 ${newPhotos.length} photo(s) optimisée(s) et enregistrée(s) (~${lastKo} Ko, -${lastReduction}%)`
+        `⊞ ${newPhotos.length} photo(s) optimisée(s) et enregistrée(s) (~${lastKo} Ko, -${lastReduction}%)`
       );
     } catch {
       toast.error('Impossible de traiter la photo');
@@ -800,7 +800,7 @@ export function TechnicianMobileView({
               }}
               title="Envoyer ma position GPS actuelle à l'équipe bureau"
             >
-              <span>📍</span>
+              <span>⌖</span>
               <span>
                 {isBroadcastingLiveGps
                   ? 'GPS en cours...'
@@ -829,10 +829,10 @@ export function TechnicianMobileView({
               }}
             >
               {currentPointage?.statutJournee === 'EN_SERVICE'
-                ? `🟢 En service (${currentPointage.heureArriveeBureau})`
+                ? `● En service (${currentPointage.heureArriveeBureau})`
                 : currentPointage?.statutJournee === 'TERMINEE'
-                ? `🔵 Fin (${currentPointage.heureArriveeBureau}→${currentPointage.heureFinJournee})`
-                : '🟠 Pointage matin à activer'}
+                ? `◆ Fin (${currentPointage.heureArriveeBureau}→${currentPointage.heureFinJournee})`
+                : '▲ Pointage matin à activer'}
             </button>
           </div>
         </div>
@@ -863,7 +863,7 @@ export function TechnicianMobileView({
               >
                 {techniciens.map((t) => (
                   <option key={t} value={t}>
-                    👷 {t}
+                    ▪ {t}
                   </option>
                 ))}
               </select>
@@ -881,7 +881,7 @@ export function TechnicianMobileView({
                 fontSize: '12.5px',
               }}
             >
-              <span style={{ color: 'var(--text-secondary)' }}>🔒 Compte personnel :</span>
+              <span style={{ color: 'var(--text-secondary)' }}>◈ Compte personnel :</span>
               <strong style={{ color: 'var(--text-primary)', fontSize: '13.5px' }}>{currentTechnicien}</strong>
               <span className="badge badge-success" style={{ fontSize: '10.5px', padding: '2px 8px' }}>
                 Droits Certifiés
@@ -931,7 +931,7 @@ export function TechnicianMobileView({
               minWidth: 0,
             }}
           >
-            <span>⏱️</span>
+            <span>⏱</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Pointage</span>
           </button>
 
@@ -955,7 +955,7 @@ export function TechnicianMobileView({
               minWidth: 0,
             }}
           >
-            <span>📋</span>
+            <span>≡</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Missions ({techMissions.length})</span>
           </button>
 
@@ -979,7 +979,7 @@ export function TechnicianMobileView({
               minWidth: 0,
             }}
           >
-            <span>🗺️</span>
+            <span>⌖</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Trajet & GPS</span>
           </button>
 
@@ -1003,8 +1003,8 @@ export function TechnicianMobileView({
               minWidth: 0,
             }}
           >
-            <span>📝</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport 📷</span>
+            <span>✎</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Rapport ⊞</span>
           </button>
         </div>
       </div>
@@ -1026,7 +1026,7 @@ export function TechnicianMobileView({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              ⚠️ Arrivée au bureau non activée ce matin
+              ▲ Arrivée au bureau non activée ce matin
             </span>
             {liveParisTime && (
               <span className="badge badge-warning font-mono" style={{ fontWeight: 800 }}>
@@ -1059,7 +1059,7 @@ export function TechnicianMobileView({
               });
             }}
           >
-            {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau (${liveParisTime || getNowHHMM()})`}
+            {clockInMut.isPending ? '◷ Enregistrement...' : `• Pointer mon arrivée au bureau (${liveParisTime || getNowHHMM()})`}
           </button>
         </div>
       )}
@@ -1098,7 +1098,7 @@ export function TechnicianMobileView({
           >
             <div>
               <div style={{ fontSize: '13.5px', fontWeight: 800 }}>
-                ⏱️ Pointage Quotidien Certifié ({formatDateFR(selectedDate)})
+                ⏱ Pointage Quotidien Certifié ({formatDateFR(selectedDate)})
               </div>
               <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 L'heure est certifiée automatiquement à la pression du bouton. Aucune saisie manuelle.
@@ -1118,7 +1118,7 @@ export function TechnicianMobileView({
                 letterSpacing: '0.04em',
               }}
             >
-              🕒 {liveParisTime || getNowHHMM()}
+              ◷ {liveParisTime || getNowHHMM()}
             </div>
           </div>
 
@@ -1147,7 +1147,7 @@ export function TechnicianMobileView({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#059669' }}>
-                  ☀️ 1. MATIN — Arrivée au Bureau
+                  • 1. MATIN — Arrivée au Bureau
                 </span>
                 {currentPointage?.heureArriveeBureau ? (
                   <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
@@ -1183,7 +1183,7 @@ export function TechnicianMobileView({
                       });
                     }}
                   >
-                    {clockInMut.isPending ? '⏳ Enregistrement...' : `☀️ Pointer mon arrivée au bureau`}
+                    {clockInMut.isPending ? '◷ Enregistrement...' : `• Pointer mon arrivée au bureau`}
                   </button>
                 </>
               ) : (
@@ -1198,7 +1198,7 @@ export function TechnicianMobileView({
                     border: '1px solid #a7f3d0',
                   }}
                 >
-                  🔒 Horodatage officiel certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
+                  ◈ Horodatage officiel certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
                 </div>
               )}
             </div>
@@ -1221,7 +1221,7 @@ export function TechnicianMobileView({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#0a0f1d' }}>
-                  🌙 2. SOIR — Fin Dernière Intervention
+                  • 2. SOIR — Fin Dernière Intervention
                 </span>
                 {currentPointage?.heureFinJournee ? (
                   <span className="badge badge-success font-mono" style={{ fontSize: '14px', fontWeight: 800 }}>
@@ -1265,7 +1265,7 @@ export function TechnicianMobileView({
                       if (runningMission) {
                         setShowRunningBlockerModal(runningMission);
                         toast.error(
-                          `⛔ Impossible de clôturer la journée : la mission ${runningMission.reference} est encore en cours !`
+                          `⊘ Impossible de clôturer la journée : la mission ${runningMission.reference} est encore en cours !`
                         );
                         return;
                       }
@@ -1277,7 +1277,7 @@ export function TechnicianMobileView({
                       });
                     }}
                   >
-                    {clockOutMut.isPending ? '⏳ Enregistrement...' : `🌙 Pointer ma fin de journée`}
+                    {clockOutMut.isPending ? '◷ Enregistrement...' : `• Pointer ma fin de journée`}
                   </button>
                 </>
               ) : (
@@ -1291,7 +1291,7 @@ export function TechnicianMobileView({
                     fontWeight: 700,
                   }}
                 >
-                  🔒 Fin de journée certifiée à {currentPointage.heureFinJournee}.
+                  ◈ Fin de journée certifiée à {currentPointage.heureFinJournee}.
                   {currentPointage.dureeMinutes ? ` Amplitude : ${Math.floor(currentPointage.dureeMinutes / 60)}h${String(currentPointage.dureeMinutes % 60).padStart(2, '0')}.` : ''}
                 </div>
               )}
@@ -1305,7 +1305,7 @@ export function TechnicianMobileView({
               style={{ width: '100%', marginTop: '12px', minHeight: '44px', fontWeight: 700 }}
               onClick={() => setActiveTab('missions')}
             >
-              📋 Aller à mes missions ({techMissions.length}) →
+              ≡ Aller à mes missions ({techMissions.length}) →
             </button>
           )}
         </div>
@@ -1351,7 +1351,7 @@ export function TechnicianMobileView({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ fontWeight: 800, fontSize: '14px' }}>
-                📋 Mes Missions ({techMissions.length})
+                ≡ Mes Missions ({techMissions.length})
               </div>
               <div className="segmented-control">
                 <button
@@ -1424,7 +1424,7 @@ export function TechnicianMobileView({
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span className={`badge ${m.isVisiteDevis ? 'badge-purple' : 'badge-info'}`}>
-                            {m.isVisiteDevis ? '📐 VISITE DEVIS' : '🔧 TRAVAUX'}
+                            {m.isVisiteDevis ? '◈ VISITE DEVIS' : '❖ TRAVAUX'}
                           </span>
                           <span className="font-mono" style={{ fontWeight: 800, fontSize: '12px' }}>
                             {m.reference}
@@ -1443,11 +1443,11 @@ export function TechnicianMobileView({
                           }`}
                         >
                           {isRunning
-                            ? `🟢 EN COURS (${m.heureDebutReelle || ''})`
+                            ? `● EN COURS (${m.heureDebutReelle || ''})`
                             : isDone
                             ? `✓ CLÔTURÉE (${m.heureDebutReelle || ''}→${m.heureFinReelle || ''})`
                             : m.statutOperationnel === 'Intervention non terminée'
-                            ? `⏳ NON TERMINÉE (${m.motifBlocage || 'Replanifier'})`
+                            ? `◷ NON TERMINÉE (${m.motifBlocage || 'Replanifier'})`
                             : m.statutOperationnel}
                         </span>
                       </div>
@@ -1457,7 +1457,7 @@ export function TechnicianMobileView({
                           {m.client || 'Client ANELEC'}
                         </div>
                         <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
-                          📍 {m.chantier}
+                          ⌖ {m.chantier}
                         </div>
                         {m.objet && (
                           <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', marginTop: '4px', fontWeight: 600 }}>
@@ -1468,7 +1468,7 @@ export function TechnicianMobileView({
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '6px' }}>
                         <span className="font-mono" style={{ fontWeight: 700 }}>
-                          🗓️ {formatDateFR(m.datePlanifiee)} • 🕒 {m.heureDebut || '08:30'}-{m.heureFin || '10:30'}
+                          ▪ {formatDateFR(m.datePlanifiee)} • ◷ {m.heureDebut || '08:30'}-{m.heureFin || '10:30'}
                         </span>
                         <span className="badge badge-neutral">{m.corpsEtat || 'Tous corps d’état'}</span>
                       </div>
@@ -1498,7 +1498,7 @@ export function TechnicianMobileView({
                             }}
                             onClick={() => handleActivateMission(m)}
                           >
-                            ▶️ Activer / Démarrer ({m.isVisiteDevis ? 'Visite Devis' : 'Intervention'})
+                            ▸ Activer / Démarrer ({m.isVisiteDevis ? 'Visite Devis' : 'Intervention'})
                           </button>
                         )}
 
@@ -1516,7 +1516,7 @@ export function TechnicianMobileView({
                               }}
                               onClick={() => handleDeactivateMission(m)}
                             >
-                              📍⏹️ Clôturer avec GPS
+                              ⌖⏹ Clôturer avec GPS
                             </button>
                             <button
                               type="button"
@@ -1530,7 +1530,7 @@ export function TechnicianMobileView({
                               }}
                               onClick={() => setNonTermineeModalMission(m)}
                             >
-                              ⏳ Non terminée (Replanifier)
+                              ◷ Non terminée (Replanifier)
                             </button>
                           </div>
                         )}
@@ -1548,7 +1548,7 @@ export function TechnicianMobileView({
                                 fontWeight: 700,
                               }}
                             >
-                              ⏳ Non terminée • Replanification requise ({m.motifBlocage || 'Blocage'})
+                              ◷ Non terminée • Replanification requise ({m.motifBlocage || 'Blocage'})
                             </div>
                             <button
                               type="button"
@@ -1556,7 +1556,7 @@ export function TechnicianMobileView({
                               style={{ width: '100%', fontWeight: 700 }}
                               onClick={() => handleActivateMission(m)}
                             >
-                              🔄 Reprendre cette intervention
+                              ↻ Reprendre cette intervention
                             </button>
                           </div>
                         )}
@@ -1578,7 +1578,7 @@ export function TechnicianMobileView({
                               setActiveTab('compte_rendu');
                             }}
                           >
-                            📝 Compte-Rendu & 📷 ({nbActions} act. • {nbPhotos} ph.)
+                            ✎ Compte-Rendu & ⊞ ({nbActions} act. • {nbPhotos} ph.)
                           </button>
 
                           <a
@@ -1595,7 +1595,7 @@ export function TechnicianMobileView({
                               fontWeight: 700,
                             }}
                           >
-                            🗺️ GPS
+                            ⌖ GPS
                           </a>
                         </div>
 
@@ -1606,7 +1606,7 @@ export function TechnicianMobileView({
                             style={{ width: '100%' }}
                             onClick={() => handleActivateMission(m)}
                           >
-                            🔄 Ré-activer cette mission si besoin
+                            ↻ Ré-activer cette mission si besoin
                           </button>
                         )}
                       </div>
@@ -1657,14 +1657,14 @@ export function TechnicianMobileView({
 
             {!activeMission ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Sélectionnez d’abord une mission dans l’onglet <strong>📋 Missions</strong> pour remplir son compte rendu et ajouter des photos.
+                Sélectionnez d’abord une mission dans l’onglet <strong>≡ Missions</strong> pour remplir son compte rendu et ajouter des photos.
                 <div style={{ marginTop: '12px' }}>
                   <button
                     type="button"
                     className="btn btn-primary"
                     onClick={() => setActiveTab('missions')}
                   >
-                    📋 Choisir une mission
+                    ≡ Choisir une mission
                   </button>
                 </div>
               </div>
@@ -1676,7 +1676,7 @@ export function TechnicianMobileView({
                       {activeMission.reference} • {activeMission.corpsEtat}
                     </span>
                     <span className="badge badge-info">
-                      {activeMission.isVisiteDevis ? '📐 Infos Chiffrage Devis' : '🔧 Déclaration Intervention'}
+                      {activeMission.isVisiteDevis ? '◈ Infos Chiffrage Devis' : '❖ Déclaration Intervention'}
                     </span>
                   </div>
                   <h3 style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px', wordBreak: 'break-word' }}>
@@ -1692,7 +1692,7 @@ export function TechnicianMobileView({
                         style={{ flex: 1, background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
                         onClick={() => handleActivateMission(activeMission)}
                       >
-                        ▶️ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
+                        ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre la mission' : 'Activer le début de mission'}
                       </button>
                     ) : (
                       <>
@@ -1702,7 +1702,7 @@ export function TechnicianMobileView({
                           style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
                           onClick={() => handleDeactivateMission(activeMission)}
                         >
-                          ⏹️ Terminer & Clôturer la mission
+                          ⏹ Terminer & Clôturer la mission
                         </button>
                         <button
                           type="button"
@@ -1710,7 +1710,7 @@ export function TechnicianMobileView({
                           style={{ flex: 1, color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', minHeight: '40px', fontWeight: 800 }}
                           onClick={() => setNonTermineeModalMission(activeMission)}
                         >
-                          ⏳ Non terminée (Replanifier)
+                          ◷ Non terminée (Replanifier)
                         </button>
                       </>
                     )}
@@ -1741,7 +1741,7 @@ export function TechnicianMobileView({
                         fontSize: '12px',
                       }}
                     >
-                      <strong>📐 Devis associé : {linkedDevis.reference}</strong> — Objet :{' '}
+                      <strong>◈ Devis associé : {linkedDevis.reference}</strong> — Objet :{' '}
                       {linkedDevis.objet || 'Relevé technique pour chiffrage'}
                     </div>
                   )}
@@ -1891,7 +1891,7 @@ export function TechnicianMobileView({
                     style={{ width: '100%', marginTop: '8px', minHeight: '44px', fontWeight: 800 }}
                     onClick={() => handleSaveReportAndChiffrage(activeMission)}
                   >
-                    💾 Enregistrer le Compte Rendu & Chiffrage
+                    ✓ Enregistrer le Compte Rendu & Chiffrage
                   </button>
                 </div>
 
@@ -1908,7 +1908,7 @@ export function TechnicianMobileView({
                   }}
                 >
                   <div style={{ fontSize: '13px', fontWeight: 800 }}>
-                    4. 📷 Photos Terrain & Relevés ({(activeMission.photos || []).length}) :
+                    4. ⊞ Photos Terrain & Relevés ({(activeMission.photos || []).length}) :
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
@@ -1918,10 +1918,10 @@ export function TechnicianMobileView({
                       value={photoCategory}
                       onChange={(e) => setPhotoCategory(e.target.value as any)}
                     >
-                      <option value="AVANT">📷 Photo AVANT travaux</option>
-                      <option value="APRES">✅ Photo APRÈS travaux</option>
-                      <option value="RELEVE_CHIFFRAGE">📐 Relevé / Chiffrage Devis</option>
-                      <option value="CONSTAT">⚠️ Constat / Anomalie</option>
+                      <option value="AVANT">⊞ Photo AVANT travaux</option>
+                      <option value="APRES">✓ Photo APRÈS travaux</option>
+                      <option value="RELEVE_CHIFFRAGE">◈ Relevé / Chiffrage Devis</option>
+                      <option value="CONSTAT">▲ Constat / Anomalie</option>
                     </select>
 
                     <input
@@ -1945,7 +1945,7 @@ export function TechnicianMobileView({
                         justifyContent: 'center',
                       }}
                     >
-                      <span>📷 Prendre Photo</span>
+                      <span>⊞ Prendre Photo</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1964,7 +1964,7 @@ export function TechnicianMobileView({
                         justifyContent: 'center',
                       }}
                     >
-                      <span>🖼️ Choisir Galerie</span>
+                      <span>⊞ Choisir Galerie</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -2069,7 +2069,7 @@ export function TechnicianMobileView({
                   flexShrink: 0,
                 }}
               >
-                ☀️
+                •
               </div>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
@@ -2130,8 +2130,8 @@ export function TechnicianMobileView({
                 }}
               >
                 {clockInMut.isPending
-                  ? '⏳ Enregistrement...'
-                  : `☀️ Pointer mon arrivée (${liveParisTime || getNowHHMM()}) & Démarrer`}
+                  ? '◷ Enregistrement...'
+                  : `• Pointer mon arrivée (${liveParisTime || getNowHHMM()}) & Démarrer`}
               </button>
 
               <button
@@ -2175,7 +2175,7 @@ export function TechnicianMobileView({
                   flexShrink: 0,
                 }}
               >
-                ⛔
+                ⊘
               </div>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
@@ -2203,7 +2203,7 @@ export function TechnicianMobileView({
                 {showRunningBlockerModal.reference} — {showRunningBlockerModal.client}
               </strong>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                📍 {showRunningBlockerModal.chantier}
+                ⌖ {showRunningBlockerModal.chantier}
               </div>
               <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700, marginTop: '6px' }}>
                 Choisissez l'une des actions ci-dessous pour débloquer la clôture de votre journée :
@@ -2227,7 +2227,7 @@ export function TechnicianMobileView({
                   handleDeactivateMission(m, true);
                 }}
               >
-                📍⏹️ Clôturer avec GPS & Pointer ma fin de journée
+                ⌖⏹ Clôturer avec GPS & Pointer ma fin de journée
               </button>
 
               <button
@@ -2246,7 +2246,7 @@ export function TechnicianMobileView({
                   setNonTermineeModalMission(m);
                 }}
               >
-                ⏳ Déclarer non terminée (À replanifier)
+                ◷ Déclarer non terminée (À replanifier)
               </button>
 
               <button
@@ -2290,7 +2290,7 @@ export function TechnicianMobileView({
                   flexShrink: 0,
                 }}
               >
-                ⏳
+                ◷
               </div>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
@@ -2309,11 +2309,11 @@ export function TechnicianMobileView({
                 </label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {[
-                    '📦 Matériel / Pièces manquantes',
-                    '🚫 Accès impossible / Client absent',
-                    '⚠️ Travaux supplémentaires imprévus',
+                    '≡ Matériel / Pièces manquantes',
+                    '⊘ Accès impossible / Client absent',
+                    '▲ Travaux supplémentaires imprévus',
                     '⏰ Chantier trop long / Fin de journée',
-                    '🔧 Autre motif technique',
+                    '❖ Autre motif technique',
                   ].map((motif) => (
                     <button
                       key={motif}
@@ -2354,7 +2354,7 @@ export function TechnicianMobileView({
                   color: 'var(--text-secondary)',
                 }}
               >
-                ℹ️ Cette intervention passera au statut <strong>"Intervention non terminée"</strong>. Elle sera libérée pour que vous puissiez continuer ou clôturer votre journée, et apparaîtra en alerte sur le planning de l'administrateur pour replanification.
+                ℹ Cette intervention passera au statut <strong>"Intervention non terminée"</strong>. Elle sera libérée pour que vous puissiez continuer ou clôturer votre journée, et apparaîtra en alerte sur le planning de l'administrateur pour replanification.
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
@@ -2377,7 +2377,7 @@ export function TechnicianMobileView({
                     );
                   }}
                 >
-                  ⏳ Valider & Transmettre au bureau
+                  ◷ Valider & Transmettre au bureau
                 </button>
               </div>
             </div>
@@ -2429,7 +2429,7 @@ export function TechnicianMobileView({
                   flexShrink: 0,
                 }}
               >
-                📍
+                ⌖
               </div>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
@@ -2453,7 +2453,7 @@ export function TechnicianMobileView({
               }}
             >
               <div style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                📍 Lieu d'intervention : {closingGpsModalMission.chantier}
+                ⌖ Lieu d'intervention : {closingGpsModalMission.chantier}
               </div>
               <div style={{ color: '#475569', fontSize: '12px' }}>
                 Pour finaliser cette intervention :
@@ -2507,10 +2507,10 @@ export function TechnicianMobileView({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <span style={{ fontWeight: 800, fontSize: '13px', color: '#065f46' }}>
-                    🟢 Position actuelle verrouillée & prête à transmettre
+                    ● Position actuelle verrouillée & prête à transmettre
                   </span>
                   <span className="badge badge-success" style={{ fontSize: '10.5px', fontWeight: 800 }}>
-                    {gpsCoords.source === 'GPS_MOBILE' ? '📡 GPS Téléphone' : '📍 Site Certifié'}
+                    {gpsCoords.source === 'GPS_MOBILE' ? '⌖ GPS Téléphone' : '⌖ Site Certifié'}
                   </span>
                 </div>
                 <div className="font-mono" style={{ fontSize: '12.5px', fontWeight: 800, color: '#047857' }}>
@@ -2538,7 +2538,7 @@ export function TechnicianMobileView({
                 }}
               >
                 <div style={{ fontWeight: 800, fontSize: '13px', color: '#dc2626' }}>
-                  ⚠️ GPS non activé ou signal indisponible
+                  ▲ GPS non activé ou signal indisponible
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.45 }}>
                   {gpsErrorMsg}
@@ -2556,7 +2556,7 @@ export function TechnicianMobileView({
                     }}
                     onClick={() => acquireGpsForMission(closingGpsModalMission)}
                   >
-                    🔄 Activer / Réessayer la détection GPS maintenant
+                    ↻ Activer / Réessayer la détection GPS maintenant
                   </button>
 
                   <button
@@ -2571,7 +2571,7 @@ export function TechnicianMobileView({
                     }}
                     onClick={() => certifyOnChantierAddressFallback(closingGpsModalMission)}
                   >
-                    📍 Certifier ma position sur le lieu d'intervention (Secours hors-signal)
+                    ⌖ Certifier ma position sur le lieu d'intervention (Secours hors-signal)
                   </button>
                 </div>
               </div>
@@ -2596,8 +2596,8 @@ export function TechnicianMobileView({
                 onClick={confirmGpsAndFinalizeMission}
               >
                 {isFinalizingWithGps
-                  ? '⏳ Transmission GPS & Clôture en cours...'
-                  : '📍 Transmettre ma position & Clôturer l’intervention'}
+                  ? '◷ Transmission GPS & Clôture en cours...'
+                  : '⌖ Transmettre ma position & Clôturer l’intervention'}
               </button>
 
               <button

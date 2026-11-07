@@ -130,7 +130,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
             title="Zoomer"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}
           >
-            🔍+
+            ⌕+
           </button>
           {/* Zoom Out */}
           <button
@@ -140,7 +140,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
             title="Dézoomer"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}
           >
-            🔍-
+            ⌕-
           </button>
           {zoom !== 1 && (
             <button

@@ -101,8 +101,6 @@ export function InstallAppButton({ variant = 'compact' }: InstallAppButtonProps)
     setShowHelp(true);
   };
 
-  const label = '📲 Installer l’application';
-
   return (
     <>
       {variant === 'banner' ? (
@@ -110,19 +108,36 @@ export function InstallAppButton({ variant = 'compact' }: InstallAppButtonProps)
           type="button"
           onClick={handleClick}
           className="btn btn-secondary"
-          style={{ width: '100%', minHeight: '44px', fontWeight: 800 }}
+          style={{
+            width: '100%',
+            minHeight: '44px',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
         >
-          {label}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span>Installer l’application</span>
         </button>
       ) : (
         <button
           type="button"
           onClick={handleClick}
           className="btn btn-secondary btn-sm"
-          style={{ padding: '6px 10px', fontWeight: 700 }}
+          style={{ padding: '6px 10px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           title="Installer l’application sur cet appareil"
         >
-          <span>📲</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
           <span className="desktop-only-el">Installer l’app</span>
         </button>
       )}
@@ -149,12 +164,12 @@ export function InstallAppButton({ variant = 'compact' }: InstallAppButtonProps)
                 <ol style={{ paddingLeft: '20px', fontSize: '13.5px', lineHeight: 1.7 }}>
                   <li>Sur iPhone, l’installation se fait depuis <strong>Safari</strong>.</li>
                   <li>Copiez l’adresse <strong>suivi.anelecgroupe.com</strong> et ouvrez-la dans Safari.</li>
-                  <li>Puis suivez : <strong>Partager ⬆️ → « Sur l’écran d’accueil »</strong>.</li>
+                  <li>Puis suivez : <strong>Partager ⬆ → « Sur l’écran d’accueil »</strong>.</li>
                 </ol>
               ) : (
                 <ol style={{ paddingLeft: '20px', fontSize: '13.5px', lineHeight: 1.7 }}>
-                  <li>Touchez le bouton <strong>Partager</strong> ⬆️ en bas de Safari.</li>
-                  <li>Faites défiler et choisissez <strong>« Sur l’écran d’accueil »</strong> ➕.</li>
+                  <li>Touchez le bouton <strong>Partager</strong> ⬆ en bas de Safari.</li>
+                  <li>Faites défiler et choisissez <strong>« Sur l’écran d’accueil »</strong> +.</li>
                   <li>Touchez <strong>« Ajouter »</strong> en haut à droite.</li>
                 </ol>
               )

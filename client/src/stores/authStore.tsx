@@ -20,13 +20,15 @@ interface AuthState {
     password: string,
     companyName?: string,
     siretOrSiren?: string
-  ) => Promise<void>;
+  ) => Promise<any>;
   loginWithGoogle: (payload: {
     credential: string;
+    name?: string;
     companyName?: string;
     siretOrSiren?: string;
     acceptTerms?: boolean;
   }) => Promise<{ requiresCompanyInfo?: boolean; googleProfile?: any; message?: string }>;
+  confirmSupabaseToken: (accessToken: string) => Promise<any>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   fetchMe: () => Promise<void>;
@@ -112,16 +114,18 @@ export const useAuthStore = create<AuthState>()(
 
       loginWithGoogle: async (payload: {
         credential: string;
+        name?: string;
         companyName?: string;
         siretOrSiren?: string;
         acceptTerms?: boolean;
       }) => {
-        set({ isLoading: true, error: null });
+        // IMPORTANT : Ne pas activer isLoading: true ici pour ne pas démonter <LoginPage />
+        // lorsque Google retourne requiresCompanyInfo: true (inscription rapide Google) !
+        set({ error: null });
         try {
           const response = await api.post('/auth/google', payload);
           const { user, accessToken, requiresCompanyInfo, googleProfile, message } = response.data;
           if (requiresCompanyInfo) {
-            set({ isLoading: false });
             return { requiresCompanyInfo: true, googleProfile, message };
           }
           set({
@@ -134,6 +138,25 @@ export const useAuthStore = create<AuthState>()(
         } catch (err: any) {
           const message = err.response?.data?.error || 'Erreur lors de la connexion Google';
           set({ error: message, isLoading: false, isAuthenticated: false });
+          throw err;
+        }
+      },
+
+      confirmSupabaseToken: async (accessToken: string) => {
+        set({ error: null });
+        try {
+          const response = await api.post('/auth/confirm-supabase-token', { accessToken });
+          const { user, accessToken: jwtToken } = response.data;
+          set({
+            user,
+            accessToken: jwtToken,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return response.data;
+        } catch (err: any) {
+          const message = err.response?.data?.error || 'Erreur de validation du lien e-mail';
+          set({ error: message, isLoading: false });
           throw err;
         }
       },
@@ -199,6 +222,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { fetchMe, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
+    // Si l'URL contient un retour OAuth Google (#id_token / #access_token) ou confirmation Supabase (#type=signup),
+    // on sauvegarde le hash en sessionStorage et on déverrouille immédiatement l'affichage de LoginPage
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hash &&
+      (window.location.hash.includes('id_token=') ||
+        window.location.hash.includes('access_token=') ||
+        window.location.hash.includes('type=signup'))
+    ) {
+      try {
+        sessionStorage.setItem('anelec_oauth_hash', window.location.hash.substring(1));
+      } catch {
+        // ignore storage error
+      }
+      useAuthStore.setState({ isLoading: false, isAuthenticated: false });
+      return;
+    }
+
     // Sécurité globale anti-blocage (ex: réseau lent, transition d'état)
     const safetyTimer = setTimeout(() => {
       if (useAuthStore.getState().isLoading) {

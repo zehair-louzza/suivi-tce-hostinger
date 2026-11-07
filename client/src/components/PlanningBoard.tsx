@@ -873,7 +873,7 @@ export function PlanningBoard({
       await onUpdateEquipes(nextList);
     }
     toast.success(
-      `👥 Équipe « ${newEntry.nomEquipe} » (${cleanMembers.length} techniciens) enregistrée ${
+      `▪ Équipe « ${newEntry.nomEquipe} » (${cleanMembers.length} techniciens) enregistrée ${
         dStart === dEnd ? `pour le ${formatDateFR(dStart)}` : `du ${formatDateFR(dStart)} au ${formatDateFR(dEnd)}`
       } (${teamAllDay ? 'Journée entière' : `${finalDebut}–${finalFin}`})`
     );
@@ -922,7 +922,7 @@ export function PlanningBoard({
         await onUpdateEquipes(nextList);
       }
       toast.success(
-        `👥 ${sourceTech} ajouté à l'équipe → « ${updatedTeam.nomEquipe} » (${nextMembres.length} individus)`
+        `▪ ${sourceTech} ajouté à l'équipe → « ${updatedTeam.nomEquipe} » (${nextMembres.length} individus)`
       );
       openTeamBuilderForTech(updatedTeam.membres[0], updatedTeam);
       return;
@@ -944,7 +944,7 @@ export function PlanningBoard({
         await onUpdateEquipes(nextList);
       }
       toast.success(
-        `👥 Équipe élargie à ${mergedMembers.length} techniciens : « ${updatedTeam.nomEquipe} »`
+        `▪ Équipe élargie à ${mergedMembers.length} techniciens : « ${updatedTeam.nomEquipe} »`
       );
       openTeamBuilderForTech(targetTechOrTeamId, updatedTeam);
       return;
@@ -968,7 +968,7 @@ export function PlanningBoard({
       await onUpdateEquipes(nextList);
     }
     toast.success(
-      `👥 Équipe journalière formée par glisser-déposer : « ${newTeam.nomEquipe} » (${formatDateFR(selectedDayKey)}). Ajustez la durée ou les heures si besoin.`
+      `▪ Équipe journalière formée par glisser-déposer : « ${newTeam.nomEquipe} » (${formatDateFR(selectedDayKey)}). Ajustez la durée ou les heures si besoin.`
     );
     openTeamBuilderForTech(targetTechOrTeamId, newTeam);
   };
@@ -1372,7 +1372,7 @@ export function PlanningBoard({
               style={{ color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}
               title="Consulter les KPI de rentabilité des techniciens et équipes"
             >
-              📊 Rentabilité & Marges →
+              ⊞ Rentabilité & Marges →
             </button>
           )}
         </div>
@@ -1441,7 +1441,7 @@ export function PlanningBoard({
                     fontWeight: 700,
                   }}
                 >
-                  🕒 {activeStartStr} → {activeEndStr} ({durHoursVal}h) • {selectedSlot.technicien || 'Non affecté'}
+                  ◷ {activeStartStr} → {activeEndStr} ({durHoursVal}h) • {selectedSlot.technicien || 'Non affecté'}
                 </span>
               </div>
 
@@ -1508,7 +1508,7 @@ export function PlanningBoard({
                     setSliderPreview(null);
                   }}
                 >
-                  ↩️ Déplanifier
+                  ↩ Déplanifier
                 </button>
                 <button
                   type="button"
@@ -1517,7 +1517,7 @@ export function PlanningBoard({
                   title="Supprimer définitivement cette intervention ou devis"
                   onClick={() => setSlotToDelete(selectedSlot)}
                 >
-                  🗑️ Supprimer
+                  ✕ Supprimer
                 </button>
                 <button
                   type="button"
@@ -1654,9 +1654,9 @@ export function PlanningBoard({
                 <span style={{ color: 'var(--border-default)', margin: '0 2px' }}>|</span>
 
                 {[
-                  { label: '☀️ Matin', val: '08:00-12:00' },
-                  { label: '🌤️ Aprem', val: '13:30-17:30' },
-                  { label: '📅 Journée', val: '08:00-17:30' },
+                  { label: '• Matin', val: '08:00-12:00' },
+                  { label: '• Aprem', val: '13:30-17:30' },
+                  { label: '▪ Journée', val: '08:00-17:30' },
                 ].map((p) => (
                   <button
                     key={p.val}
@@ -1687,7 +1687,7 @@ export function PlanningBoard({
                   onClick={() => nudgeSelectedSlot('LATER_15')}
                   title="Décaler 15 min plus tard"
                 >
-                  +15m ▶
+                  +15m ▸
                 </button>
               </div>
             </div>
@@ -1871,10 +1871,10 @@ export function PlanningBoard({
                         >
                           <option value="">Affecter par compétence ({selectedDayKey.slice(5)})...</option>
                           {activeTeamsForSelectedDay.length > 0 && (
-                            <optgroup label={`👥 Équipes Journalières (${selectedDayKey})`}>
+                            <optgroup label={`▪ Équipes Journalières (${selectedDayKey})`}>
                               {activeTeamsForSelectedDay.map((eq) => (
                                 <option key={eq.id} value={eq.nomEquipe}>
-                                  👥 Équipe ({eq.membres.length}) : {eq.nomEquipe} [
+                                  ▪ Équipe ({eq.membres.length}) : {eq.nomEquipe} [
                                   {eq.touteLaJournee ? 'Journée' : `${eq.heureDebut}-${eq.heureFin}`}]
                                 </option>
                               ))}
@@ -2053,7 +2053,7 @@ export function PlanningBoard({
                                   color: '#ffffff',
                                 }}
                               >
-                                👥 ÉQUIPE ({eq.membres.length})
+                                ▪ ÉQUIPE ({eq.membres.length})
                               </span>
                               <span style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
                                 {eq.nomEquipe}
@@ -2072,7 +2072,7 @@ export function PlanningBoard({
                                   fontWeight: 700,
                                 }}
                               >
-                                🕒 {eq.touteLaJournee ? 'Toute la journée' : `${eq.heureDebut}–${eq.heureFin}`}
+                                ◷ {eq.touteLaJournee ? 'Toute la journée' : `${eq.heureDebut}–${eq.heureFin}`}
                               </span>
                               <span
                                 className="font-mono"
@@ -2084,7 +2084,7 @@ export function PlanningBoard({
                                   color: 'var(--text-secondary)',
                                 }}
                               >
-                                📅{' '}
+                                ▪{' '}
                                 {eq.dateDebut === eq.dateFin
                                   ? `Jour (${formatDateFR(eq.dateDebut)})`
                                   : `Du ${formatDateFR(eq.dateDebut)} au ${formatDateFR(eq.dateFin)}`}
@@ -2118,7 +2118,7 @@ export function PlanningBoard({
                               onClick={() => openTeamBuilderForTech(eq.membres[0], eq)}
                               title="Ajouter un 3ème/4ème technicien ou modifier la durée / les heures"
                             >
-                              ⚙️ Modifier / +Tech
+                              ❖ Modifier / +Tech
                             </button>
                             <button
                               type="button"
@@ -2301,7 +2301,7 @@ export function PlanningBoard({
                                 <span className="font-mono">{slot.reference}</span>
                               </div>
                               <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                👥 {slot.client} — {slot.title}
+                                ▪ {slot.client} — {slot.title}
                               </div>
 
                               <div
@@ -2460,8 +2460,8 @@ export function PlanningBoard({
                                   >
                                     <span>
                                       {techTeamsToday.length > 0
-                                        ? `👥 Équipe (${techTeamsToday[0].membres.length})`
-                                        : '👥 + Équipe'}
+                                        ? `▪ Équipe (${techTeamsToday[0].membres.length})`
+                                        : '▪ + Équipe'}
                                     </span>
                                     <span>{isExpandedTeam ? '▴' : '▾'}</span>
                                   </button>
@@ -2504,7 +2504,7 @@ export function PlanningBoard({
                                       cursor: 'pointer',
                                     }}
                                   >
-                                    👥 Avec {eq.membres.filter((m) => m !== tech).join(' + ')} (
+                                    ▪ Avec {eq.membres.filter((m) => m !== tech).join(' + ')} (
                                     {eq.touteLaJournee ? 'Journée' : `${eq.heureDebut}–${eq.heureFin}`})
                                   </div>
                                 ))}
@@ -2565,7 +2565,7 @@ export function PlanningBoard({
                                 fontWeight: 700,
                               }}
                             >
-                              👥 Relâcher pour associer {draggedTechName} avec {tech} ({selectedDayKey})
+                              ▪ Relâcher pour associer {draggedTechName} avec {tech} ({selectedDayKey})
                             </div>
                           )}
 
@@ -2590,7 +2590,7 @@ export function PlanningBoard({
                             >
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed' }}>
-                                  👥 Former Équipe avec {tech} ({teamMembers.length} pers.)
+                                  ▪ Former Équipe avec {tech} ({teamMembers.length} pers.)
                                 </span>
                                 <button
                                   type="button"
@@ -3008,7 +3008,7 @@ export function PlanningBoard({
                                       fontWeight: 800,
                                     }}
                                   >
-                                    ➔ {tech} • {movingState.previewDebut}–{movingState.previewFin}
+                                    → {tech} • {movingState.previewDebut}–{movingState.previewFin}
                                   </span>
                                 </div>
                               );
@@ -3207,7 +3207,7 @@ export function PlanningBoard({
                                           marginLeft: 'auto',
                                         }}
                                       >
-                                        🗑️
+                                        ✕
                                       </button>
                                     </>
                                   )}
@@ -3590,7 +3590,7 @@ export function PlanningBoard({
                                     lineHeight: 1,
                                   }}
                                 >
-                                  🗑️
+                                  ✕
                                 </button>
                               </div>
                               <div style={{ fontWeight: 700, fontSize: '11.5px' }}>{slot.client}</div>
@@ -3939,7 +3939,7 @@ export function PlanningBoard({
                               gap: '5px',
                             }}
                           >
-                            <span>{active ? '☑' : '☐'}</span>
+                            <span>{active ? '✓' : '☐'}</span>
                             <span>{metier}</span>
                           </button>
                         );
@@ -3988,7 +3988,7 @@ export function PlanningBoard({
                   flexShrink: 0,
                 }}
               >
-                🗑️
+                ✕
               </div>
               <div style={{ flex: 1 }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
@@ -4016,7 +4016,7 @@ export function PlanningBoard({
                 lineHeight: 1.5,
               }}
             >
-              💡 <strong>Deux choix s'offrent à vous :</strong>
+              • <strong>Deux choix s'offrent à vous :</strong>
               <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
                 <li><strong>Déplanifier uniquement</strong> : Conserve le dossier intact dans la base et le renvoie en liste d'attente à planifier ultérieurement.</li>
                 <li><strong>Supprimer définitivement</strong> : Efface irréversiblement ce dossier de l'application et de la base de données.</li>
@@ -4057,7 +4057,7 @@ export function PlanningBoard({
                   }
                 }}
               >
-                ↩️ Déplanifier uniquement
+                ↩ Déplanifier uniquement
               </button>
 
               <button
@@ -4089,7 +4089,7 @@ export function PlanningBoard({
                   }
                 }}
               >
-                {isDeleting ? 'Suppression...' : '🗑️ Supprimer définitivement'}
+                {isDeleting ? 'Suppression...' : '✕ Supprimer définitivement'}
               </button>
             </div>
           </div>

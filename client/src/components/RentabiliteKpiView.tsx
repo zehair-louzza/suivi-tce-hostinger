@@ -263,7 +263,7 @@ export function RentabiliteKpiView({
 
       // Badge de performance basé sur le taux horaire produit
       let performanceBadge = {
-        label: '🌱 En progression',
+        label: '• En progression',
         bg: 'rgba(59, 130, 246, 0.12)',
         color: '#2563eb',
       };
@@ -281,7 +281,7 @@ export function RentabiliteKpiView({
         };
       } else if (totalInterventions > 0) {
         performanceBadge = {
-          label: '⚠️ Vigilance Rentabilité (<50€/h)',
+          label: '▲ Vigilance Rentabilité (<50€/h)',
           bg: '#fef2f2',
           color: '#b91c1c',
         };
@@ -434,7 +434,7 @@ export function RentabiliteKpiView({
   // Copie d'un briefing exécutif dans le presse-papiers
   const handleCopyReport = () => {
     const lines = [
-      `📊 RAPPORT DE RENTABILITÉ & PERFORMANCE DES TECHNICIENS — ANELEC GROUPE`,
+      `⊞ RAPPORT DE RENTABILITÉ & PERFORMANCE DES TECHNICIENS — ANELEC GROUPE`,
       `Date : ${formatDateFR(today.toISOString().slice(0, 10))} • Base coût horaire : ${hourlyCostParam} €/h chargé`,
       `--------------------------------------------------------------------------`,
       `• Chiffre d'Affaires Produit Total : ${formatCurrency(globalMetrics.totalCA)} HT`,
@@ -444,7 +444,7 @@ export function RentabiliteKpiView({
       `• Taux de Productivité Global : ${globalMetrics.globalProductivity}%`,
       `• Interventions Clôturées : ${globalMetrics.totalCloturees} / ${globalMetrics.totalInterventions}`,
       ``,
-      `🏆 CLASSEMENT DES TECHNICIENS PAR RENTABILITÉ HORAIRE :`,
+      `★ CLASSEMENT DES TECHNICIENS PAR RENTABILITÉ HORAIRE :`,
     ];
 
     filteredAndSortedTechniciens.forEach((t, idx) => {
@@ -454,7 +454,7 @@ export function RentabiliteKpiView({
     });
 
     lines.push('');
-    lines.push('🏗️ RENTABILITÉ PAR ÉQUIPE / CORPS D’ÉTAT :');
+    lines.push('▪ RENTABILITÉ PAR ÉQUIPE / CORPS D’ÉTAT :');
     equipesStats.forEach((eq) => {
       lines.push(
         `• ${eq.corpsEtat} : ${eq.hourlyRevenueHT} €/h | CA: ${formatCurrency(eq.totalMontantHT)} HT (${eq.partCA}% du total) | ${eq.totalRealHours}h | ${eq.techniciensCount} tech(s)`
@@ -462,7 +462,7 @@ export function RentabiliteKpiView({
     });
 
     navigator.clipboard.writeText(lines.join('\n'));
-    toast.success('Rapport de rentabilité copié dans le presse-papiers !', { icon: '📋' });
+    toast.success('Rapport de rentabilité copié dans le presse-papiers !', { icon: '≡' });
   };
 
   return (
@@ -491,24 +491,24 @@ export function RentabiliteKpiView({
             className={`segmented-btn ${activeViewTab === 'activite' ? 'active' : ''}`}
             onClick={() => setActiveViewTab('activite')}
           >
-            <span className="desktop-only-el">📈 Suivi Activité & Chiffre d'Affaires (Sky & Ice)</span>
-            <span className="mobile-only-flex">📈 Suivi Activité & CA</span>
+            <span className="desktop-only-el">↗ Suivi Activité & Chiffre d'Affaires (Sky & Ice)</span>
+            <span className="mobile-only-flex">↗ Suivi Activité & CA</span>
           </button>
           <button
             type="button"
             className={`segmented-btn ${activeViewTab === 'techniciens' ? 'active' : ''}`}
             onClick={() => setActiveViewTab('techniciens')}
           >
-            <span className="desktop-only-el">👷 Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
-            <span className="mobile-only-flex">👷 Techniciens ({filteredAndSortedTechniciens.length})</span>
+            <span className="desktop-only-el">▪ Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
+            <span className="mobile-only-flex">▪ Techniciens ({filteredAndSortedTechniciens.length})</span>
           </button>
           <button
             type="button"
             className={`segmented-btn ${activeViewTab === 'equipes' ? 'active' : ''}`}
             onClick={() => setActiveViewTab('equipes')}
           >
-            <span className="desktop-only-el">🏗️ Rentabilité par Équipe / Métier ({equipesStats.length})</span>
-            <span className="mobile-only-flex">🏗️ Équipes ({equipesStats.length})</span>
+            <span className="desktop-only-el">▪ Rentabilité par Équipe / Métier ({equipesStats.length})</span>
+            <span className="mobile-only-flex">▪ Équipes ({equipesStats.length})</span>
           </button>
         </div>
       </div>
@@ -655,7 +655,7 @@ export function RentabiliteKpiView({
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px' }}
               onClick={handleCopyReport}
             >
-              📋 Copier Synthèse
+              ≡ Copier Synthèse
             </button>
           </div>
         </div>
@@ -776,16 +776,16 @@ export function RentabiliteKpiView({
               className={`segmented-btn ${activeViewTab === 'techniciens' ? 'active' : ''}`}
               onClick={() => setActiveViewTab('techniciens')}
             >
-              <span className="desktop-only-el">👷 Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
-              <span className="mobile-only-flex">👷 Techniciens ({filteredAndSortedTechniciens.length})</span>
+              <span className="desktop-only-el">▪ Rentabilité par Technicien ({filteredAndSortedTechniciens.length})</span>
+              <span className="mobile-only-flex">▪ Techniciens ({filteredAndSortedTechniciens.length})</span>
             </button>
             <button
               type="button"
               className={`segmented-btn ${activeViewTab === 'equipes' ? 'active' : ''}`}
               onClick={() => setActiveViewTab('equipes')}
             >
-              <span className="desktop-only-el">🏗️ Rentabilité par Équipe / Corps d'État ({equipesStats.length})</span>
-              <span className="mobile-only-flex">🏗️ Équipes ({equipesStats.length})</span>
+              <span className="desktop-only-el">▪ Rentabilité par Équipe / Corps d'État ({equipesStats.length})</span>
+              <span className="mobile-only-flex">▪ Équipes ({equipesStats.length})</span>
             </button>
           </div>
         </div>
@@ -793,7 +793,7 @@ export function RentabiliteKpiView({
         {/* Simulateur / Réglage Coût Horaire Moyen Chargé */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-surface)', padding: '6px 12px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
           <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0a0f1d' }}>
-            🧮 Coût Moyen Chargé :
+            ⊞ Coût Moyen Chargé :
           </span>
           <input
             type="range"
@@ -821,10 +821,10 @@ export function RentabiliteKpiView({
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
             >
-              <option value="hourlyRevenue">⚡ Rentabilité Horaire (€/h)</option>
-              <option value="totalMontant">💶 Chiffre d'Affaires HT</option>
-              <option value="margin">📈 Marge Brute (€ HT)</option>
-              <option value="productivity">⏱️ Taux d'Efficience / Délais</option>
+              <option value="hourlyRevenue">▸ Rentabilité Horaire (€/h)</option>
+              <option value="totalMontant">€ Chiffre d'Affaires HT</option>
+              <option value="margin">↗ Marge Brute (€ HT)</option>
+              <option value="productivity">⏱ Taux d'Efficience / Délais</option>
             </select>
           </div>
         )}
@@ -858,7 +858,7 @@ export function RentabiliteKpiView({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                📊 Comparatif en Bâtonnets des Techniciens
+                ⊞ Comparatif en Bâtonnets des Techniciens
                 <span className="font-mono" style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
                   ({filteredAndSortedTechniciens.length} technicien{filteredAndSortedTechniciens.length > 1 ? 's' : ''})
                 </span>
@@ -876,7 +876,7 @@ export function RentabiliteKpiView({
                 onClick={() => setChartMetric('ca')}
                 style={{ fontSize: '11.5px', padding: '4px 10px' }}
               >
-                💶 CA HT (€)
+                € CA HT (€)
               </button>
               <button
                 type="button"
@@ -884,7 +884,7 @@ export function RentabiliteKpiView({
                 onClick={() => setChartMetric('hours')}
                 style={{ fontSize: '11.5px', padding: '4px 10px' }}
               >
-                ⏱️ Heures Travaillées
+                ⏱ Heures Travaillées
               </button>
               <button
                 type="button"
@@ -892,7 +892,7 @@ export function RentabiliteKpiView({
                 onClick={() => setChartMetric('hourlyRevenue')}
                 style={{ fontSize: '11.5px', padding: '4px 10px' }}
               >
-                ⚡ Débit Horaire (€/h)
+                ▸ Débit Horaire (€/h)
               </button>
               <button
                 type="button"
@@ -900,7 +900,7 @@ export function RentabiliteKpiView({
                 onClick={() => setChartMetric('margin')}
                 style={{ fontSize: '11.5px', padding: '4px 10px' }}
               >
-                📈 Marge Estimée (€)
+                ↗ Marge Estimée (€)
               </button>
             </div>
           </div>
@@ -1046,7 +1046,7 @@ export function RentabiliteKpiView({
                 </tr>
               ) : (
                 filteredAndSortedTechniciens.map((t, idx) => {
-                  const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                  const rankIcon = idx === 0 ? '#1' : idx === 1 ? '#2' : idx === 2 ? '#3' : `#${idx + 1}`;
                   return (
                     <tr key={t.technicien}>
                       {/* Rang */}
@@ -1090,12 +1090,12 @@ export function RentabiliteKpiView({
                         </div>
                         {t.retardsCount > 0 && (
                           <div style={{ fontSize: '10.5px', color: '#dc2626', fontWeight: 700 }}>
-                            ⚠️ {t.retardsCount} retard(s)
+                            ▲ {t.retardsCount} retard(s)
                           </div>
                         )}
                         {t.enCoursCount > 0 && (
                           <div style={{ fontSize: '10.5px', color: '#0284c7' }}>
-                            ⚡ {t.enCoursCount} en cours
+                            ▸ {t.enCoursCount} en cours
                           </div>
                         )}
                       </td>
@@ -1167,10 +1167,10 @@ export function RentabiliteKpiView({
                       {/* Preuves & Qualité */}
                       <td>
                         <div style={{ fontSize: '11px', fontWeight: 600 }}>
-                          📷 {t.photosCount} photo(s)
+                          ⊞ {t.photosCount} photo(s)
                         </div>
                         <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                          📝 {t.rapportsCount} rapport(s)
+                          ✎ {t.rapportsCount} rapport(s)
                         </div>
                       </td>
 
@@ -1182,7 +1182,7 @@ export function RentabiliteKpiView({
                           style={{ padding: '2px 8px', fontSize: '11px' }}
                           onClick={onNavigateToPlanning}
                         >
-                          📅 Planning
+                          ▪ Planning
                         </button>
                       </td>
                     </tr>
@@ -1210,7 +1210,7 @@ export function RentabiliteKpiView({
             </div>
           ) : (
             filteredAndSortedTechniciens.map((t, idx) => {
-              const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+              const medal = idx === 0 ? '#1' : idx === 1 ? '#2' : idx === 2 ? '#3' : `#${idx + 1}`;
               const rentabColor = t.hourlyRevenueHT >= 80 ? '#059669' : t.hourlyRevenueHT >= 50 ? '#0284c7' : '#dc2626';
 
               return (
@@ -1322,7 +1322,7 @@ export function RentabiliteKpiView({
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Preuves & Rapports :</span>
                       <span style={{ fontWeight: 700, color: t.photosCount > 0 ? '#059669' : '#d97706' }}>
-                        📷 {t.photosCount} photo(s) • 📝 {t.rapportsCount} rapport(s)
+                        ⊞ {t.photosCount} photo(s) • ✎ {t.rapportsCount} rapport(s)
                       </span>
                     </div>
                   </div>
@@ -1335,7 +1335,7 @@ export function RentabiliteKpiView({
                       style={{ fontSize: '11.5px', padding: '4px 12px', width: '100%', justifyContent: 'center' }}
                       onClick={onNavigateToPlanning}
                     >
-                      📅 Ouvrir dans le Planning
+                      ▪ Ouvrir dans le Planning
                     </button>
                   </div>
                 </div>
@@ -1377,7 +1377,7 @@ export function RentabiliteKpiView({
                     <tr key={eq.corpsEtat}>
                       <td>
                         <div style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
-                          🔨 {eq.corpsEtat}
+                          ❖ {eq.corpsEtat}
                         </div>
                       </td>
                       <td>
@@ -1476,7 +1476,7 @@ export function RentabiliteKpiView({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0a0f1d' }}>
-                        🔨 {eq.corpsEtat}
+                        ❖ {eq.corpsEtat}
                       </div>
                       <span
                         className="status-pill"

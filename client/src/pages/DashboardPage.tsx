@@ -292,7 +292,7 @@ export function DashboardPage() {
     if (!trimmed) return;
     const currentSkills = activeCompMap[tech] || [];
     if (currentSkills.includes(trimmed)) {
-      toast('Cette compétence est déjà attribuée à ce technicien', { icon: 'ℹ️' });
+      toast('Cette compétence est déjà attribuée à ce technicien', { icon: 'ℹ' });
       return;
     }
     const updatedSkills = [...currentSkills, trimmed];
@@ -341,7 +341,7 @@ export function DashboardPage() {
     const rawVals = (refs as any)[category] || [];
     const currentVals: string[] = Array.isArray(rawVals) ? rawVals.map(String) : [];
     if (currentVals.includes(trimmed)) {
-      toast('Cette valeur existe déjà dans cette catégorie', { icon: 'ℹ️' });
+      toast('Cette valeur existe déjà dans cette catégorie', { icon: 'ℹ' });
       return;
     }
     try {
@@ -903,7 +903,7 @@ export function DashboardPage() {
                 onClick={() => exportSituationDevisExcel(devisList)}
                 title="Télécharger la situation complète des devis en 1 clic (Excel)"
               >
-                📊 Situation Devis (.xlsx)
+                ⊞ Situation Devis (.xlsx)
               </button>
               <button type="button" className="btn btn--primary" onClick={openNewDevisDrawer}>
                 + Nouveau Devis
@@ -944,7 +944,7 @@ export function DashboardPage() {
                   onClick={() => setDevisViewStyle('table')}
                 >
                   <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
-                  <span className="mobile-only-flex">📋 Liste</span>
+                  <span className="mobile-only-flex">≡ Liste</span>
                 </button>
                 <button
                   type="button"
@@ -952,7 +952,7 @@ export function DashboardPage() {
                   onClick={() => setDevisViewStyle('kanban')}
                 >
                   <span className="desktop-only-el">Pipeline Kanban</span>
-                  <span className="mobile-only-flex">📊 Kanban</span>
+                  <span className="mobile-only-flex">⊞ Kanban</span>
                 </button>
               </div>
 
@@ -1175,7 +1175,7 @@ export function DashboardPage() {
                       {d.client || 'Client non précisé'}
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                      📍 {d.site || 'Site non précisé'} • 🏷️ {d.corpsEtat || 'Tous corps d’état'}
+                      ⌖ {d.site || 'Site non précisé'} • • {d.corpsEtat || 'Tous corps d’état'}
                     </div>
                     {d.objet && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1283,7 +1283,7 @@ export function DashboardPage() {
                 onClick={() => exportSituationInterventionsExcel(interventionsList)}
                 title="Télécharger la situation complète des interventions en 1 clic (Excel)"
               >
-                📊 Situation Interventions (.xlsx)
+                ⊞ Situation Interventions (.xlsx)
               </button>
               <button type="button" className="btn btn--primary" onClick={openNewIntvDrawer}>
                 + Nouvelle Intervention
@@ -1324,7 +1324,7 @@ export function DashboardPage() {
                   onClick={() => setIntvViewStyle('table')}
                 >
                   <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
-                  <span className="mobile-only-flex">📋 Liste</span>
+                  <span className="mobile-only-flex">≡ Liste</span>
                 </button>
                 <button
                   type="button"
@@ -1332,7 +1332,7 @@ export function DashboardPage() {
                   onClick={() => setIntvViewStyle('kanban')}
                 >
                   <span className="desktop-only-el">Kanban Opérationnel</span>
-                  <span className="mobile-only-flex">📊 Kanban</span>
+                  <span className="mobile-only-flex">⊞ Kanban</span>
                 </button>
               </div>
 
@@ -1465,7 +1465,7 @@ export function DashboardPage() {
                                 }}
                                 title="Voir les photos en haute résolution"
                               >
-                                📷 {i.photos.length}
+                                ⊞ {i.photos.length}
                               </button>
                             ) : (
                               <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sans photo</span>
@@ -1491,7 +1491,7 @@ export function DashboardPage() {
                             style={{ fontSize: '9.5px', padding: '1px 5px', whiteSpace: 'nowrap' }}
                           >
                             {i.statutRapport === 'Déclaré par technicien'
-                              ? '🔔 Reçu'
+                              ? '• Reçu'
                               : i.statutRapport || 'À rédiger'}
                           </span>
                         </div>
@@ -1526,7 +1526,7 @@ export function DashboardPage() {
                               title="Envoyer le rapport officiel par email au donneur d'ordre"
                               onClick={() => setReportEmailIntv(i)}
                             >
-                              ✉️ Rapport
+                              ◈ Rapport
                             </button>
                           )}
                           <button
@@ -1539,7 +1539,7 @@ export function DashboardPage() {
                               setIntvTab('terrain');
                             }}
                           >
-                            📝 Fiche
+                            ✎ Fiche
                           </button>
                           <button
                             type="button"
@@ -1580,7 +1580,7 @@ export function DashboardPage() {
                       {i.client || 'Client non précisé'}
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                      📍 {i.chantier || 'Chantier non précisé'} • 🏷️ {i.corpsEtat || i.typeIntervention || 'Tous corps d’état'}
+                      ⌖ {i.chantier || 'Chantier non précisé'} • • {i.corpsEtat || i.typeIntervention || 'Tous corps d’état'}
                     </div>
                     {i.objet && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1592,10 +1592,10 @@ export function DashboardPage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)', fontSize: '11.5px' }}>
                     <div>
                       <span style={{ color: 'var(--text-secondary)' }}>Tech : </span>
-                      <strong>👷 {i.entreprise || 'Non assigné'}</strong>
+                      <strong>▪ {i.entreprise || 'Non assigné'}</strong>
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      📅 {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'À planifier'} {i.heureDebut ? `(${i.heureDebut})` : ''}
+                      ▪ {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'À planifier'} {i.heureDebut ? `(${i.heureDebut})` : ''}
                     </div>
                   </div>
                 </div>
@@ -1680,7 +1680,7 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-header__actions">
-              <span className="badge badge--primary">📡 GPS Live & Optimiseur Routier</span>
+              <span className="badge badge--primary">⌖ GPS Live & Optimiseur Routier</span>
             </div>
           </div>
           <TourneeMapOptimizer
@@ -2025,7 +2025,7 @@ export function DashboardPage() {
                             onClick={() => handleSectionChange('clients')}
                             title="Ouvrir le répertoire complet des fiches techniques et emails"
                           >
-                            🗂️ Fiches & Emails
+                            ≡ Fiches & Emails
                           </button>
                         )}
                         <span
@@ -2704,7 +2704,7 @@ export function DashboardPage() {
                       }}
                     >
                       <span style={{ color: 'var(--text-secondary)' }}>
-                        🔗 <strong>{selectedDevis.interventionsCount}</strong> intervention(s) liée(s) en cours ou planifiée(s).
+                        ↗ <strong>{selectedDevis.interventionsCount}</strong> intervention(s) liée(s) en cours ou planifiée(s).
                       </span>
                       {(() => {
                         const linked = interventionsList.find(
@@ -2774,7 +2774,7 @@ export function DashboardPage() {
                     onClick={() => handleTriggerConvertDevis(selectedDevis as Devis)}
                     title={(selectedDevis.interventionsCount || 0) > 0 ? "Ajouter une intervention SAV, suite ou reprise" : "Créer une intervention travaux rattachée"}
                   >
-                    {(selectedDevis.interventionsCount || 0) > 0 ? '+ Intervention (Suite)' : '⚡ Convertir en Intervention'}
+                    {(selectedDevis.interventionsCount || 0) > 0 ? '+ Intervention (Suite)' : '▸ Convertir en Intervention'}
                   </button>
                 )}
               </div>
@@ -2844,7 +2844,7 @@ export function DashboardPage() {
                 { id: 'planif', label: '1. Affectation & Créneau' },
                 {
                   id: 'terrain',
-                  label: `2. Dossier Terrain & Photos ${(selectedIntv?.photos || []).length > 0 ? `(${selectedIntv!.photos!.length}) 📷` : ''}`,
+                  label: `2. Dossier Terrain & Photos ${(selectedIntv?.photos || []).length > 0 ? `(${selectedIntv!.photos!.length}) ⊞` : ''}`,
                 },
                 { id: 'facturation', label: '3. Facturation' },
                 { id: 'historique', label: '4. Alertes & Devis lié' },
@@ -3074,7 +3074,7 @@ export function DashboardPage() {
                         }}
                       >
                         <div style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>
-                          ☀️ ARRIVÉE RÉELLE POINTÉE
+                          • ARRIVÉE RÉELLE POINTÉE
                         </div>
                         <div className="font-mono" style={{ fontSize: '14px', fontWeight: 800, color: '#059669' }}>
                           {selectedIntv.heureDebutReelle || '— : —'}
@@ -3090,7 +3090,7 @@ export function DashboardPage() {
                         }}
                       >
                         <div style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700 }}>
-                          🌙 DÉPART RÉEL POINTÉ
+                          • DÉPART RÉEL POINTÉ
                         </div>
                         <div className="font-mono" style={{ fontSize: '14px', fontWeight: 800, color: '#2563eb' }}>
                           {selectedIntv.heureFinReelle || '— : —'}
@@ -3133,7 +3133,7 @@ export function DashboardPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700 }}>
-                        📷 Dossier Photos Terrain ({selectedIntv.photos?.length || 0})
+                        ⊞ Dossier Photos Terrain ({selectedIntv.photos?.length || 0})
                       </div>
                       <span style={{ fontSize: '10.5px', color: '#0284c7', fontWeight: 600 }}>
                         Stockage optimisé (~50 Ko / photo) • Cliquez pour agrandir
@@ -3216,7 +3216,7 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#7c3aed', marginBottom: '4px' }}>
-                        📐 Éléments relevés par le technicien pour chiffrage / devis :
+                        ◈ Éléments relevés par le technicien pour chiffrage / devis :
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
                         {selectedIntv.elementsChiffrage}
@@ -3313,7 +3313,7 @@ export function DashboardPage() {
                           toast.success('Rapport officiel pré-rempli et prêt à être validé');
                         }}
                       >
-                        ⚡ Générer depuis les données terrain
+                        ▸ Générer depuis les données terrain
                       </button>
                     </div>
                     <textarea
@@ -3359,7 +3359,7 @@ export function DashboardPage() {
                             setReportEmailIntv(selectedIntv as Intervention);
                           }}
                         >
-                          ✉️ Envoyer le Rapport par Email
+                          ◈ Envoyer le Rapport par Email
                         </button>
                       )}
                     </div>
@@ -3645,7 +3645,7 @@ export function DashboardPage() {
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>⚠️</span>
+                  <span style={{ fontSize: '18px' }}>▲</span>
                   <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', margin: 0 }}>
                     Ce devis a déjà été transformé en intervention
                   </h3>
@@ -3685,7 +3685,7 @@ export function DashboardPage() {
                 {[
                   {
                     id: 'SAV',
-                    title: '🛠️ Service Après-Vente (SAV / Garantie)',
+                    title: '❖ Service Après-Vente (SAV / Garantie)',
                     badge: 'Garantie / Réserve',
                     color: '#dc2626',
                     bg: '#fef2f2',
@@ -3693,7 +3693,7 @@ export function DashboardPage() {
                   },
                   {
                     id: 'REPRISE',
-                    title: '🔁 Reprise de Travaux / Refaire',
+                    title: '↻ Reprise de Travaux / Refaire',
                     badge: 'Malfaçon ou Inachevé',
                     color: '#b45309',
                     bg: '#fffbeb',
@@ -3701,7 +3701,7 @@ export function DashboardPage() {
                   },
                   {
                     id: 'AVENANT',
-                    title: '➕ Travaux Supplémentaires / Avenant',
+                    title: '+ Travaux Supplémentaires / Avenant',
                     badge: 'Prestation en plus',
                     color: '#047857',
                     bg: '#ecfdf5',
@@ -3709,7 +3709,7 @@ export function DashboardPage() {
                   },
                   {
                     id: 'PHASE2',
-                    title: '📅 2ème Phase / Tranche de Chantier',
+                    title: '▪ 2ème Phase / Tranche de Chantier',
                     badge: 'Étape 2 prévue',
                     color: '#0f172a',
                     bg: '#f1f5f9',

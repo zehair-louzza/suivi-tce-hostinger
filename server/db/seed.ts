@@ -6,7 +6,7 @@ import { DEFAULT_REFERENTIELS } from '../../shared/types.js';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Initialisation des données métier ANELEC...');
+  console.log('• Initialisation des données métier ANELEC...');
 
   await prisma.conversionRequest.deleteMany();
   await prisma.intervention.deleteMany();
@@ -223,12 +223,12 @@ async function main() {
     },
   });
 
-  console.log('✅ Seed ANELEC terminé avec succès !');
+  console.log('✓ Seed ANELEC terminé avec succès !');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('✕ Seed failed:', e);
     process.exit(1);
   })
   .finally(async () => {

@@ -250,8 +250,14 @@ export function DashboardSynthese({
                 className="btn btn--secondary"
                 onClick={onOpenSituationModal}
                 title="Exporter un rapport de situation complet en fichier Excel (.xlsx)"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                <span>📊 Situation Excel</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2">
+                  <rect width="18" height="18" x="3" y="3" rx="2" />
+                  <path d="M3 9h18" />
+                  <path d="M9 21V9" />
+                </svg>
+                <span>Situation Excel</span>
               </button>
             )}
             <button
@@ -685,7 +691,7 @@ export function DashboardSynthese({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                  🔨 {row.label}
+                  ❖ {row.label}
                 </span>
                 <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#047857' }}>
                   {formatCurrency(row.caTrade)}
@@ -693,8 +699,8 @@ export function DashboardSynthese({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                <span>⚡ {row.activeIntvs} en cours • ✓ {row.closedIntvs} terminées</span>
-                <span>📋 {row.devisCount} devis</span>
+                <span>▸ {row.activeIntvs} en cours • ✓ {row.closedIntvs} terminées</span>
+                <span>≡ {row.devisCount} devis</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>

@@ -151,7 +151,7 @@ export function DashboardOperations({
                 fontSize: '18px',
               }}
             >
-              📷
+              ⊞
             </div>
             <div>
               <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-text)' }}>

@@ -127,6 +127,10 @@ api.interceptors.response.use(
     const isAuthEndpoint =
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
+      url.includes('/auth/resend-confirmation') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password') ||
+      url.includes('/auth/confirm-supabase-token') ||
       url.includes('/auth/refresh') ||
       url.includes('/auth/logout') ||
       url.includes('/auth/google') ||
@@ -211,6 +215,18 @@ export const devisApi = {
       objet?: string;
     }
   ) => api.post<{ data: Intervention; devis: Devis; message: string }>(`/devis/${id}/convert`, data || {}),
+
+  sendDevisEmail: (
+    id: number,
+    payload: { toEmail: string; ccEmail?: string; subject?: string; customMessage?: string }
+  ) =>
+    api.post<{
+      success: boolean;
+      data: Devis;
+      deliveryChannel?: string;
+      previewUrl?: string | null;
+      message: string;
+    }>(`/devis/${id}/send-devis-email`, payload),
 };
 
 export const interventionApi = {
@@ -228,7 +244,13 @@ export const interventionApi = {
   delete: (id: number) => api.delete<{ message: string }>(`/interventions/${id}`),
 
   sendReportEmail: (id: number, payload: SendReportEmailPayload) =>
-    api.post<{ success: boolean; data: Intervention; message: string }>(
+    api.post<{
+      success: boolean;
+      data: Intervention;
+      deliveryChannel?: string;
+      previewUrl?: string | null;
+      message: string;
+    }>(
       `/interventions/${id}/send-report-email`,
       payload
     ),
@@ -267,11 +289,38 @@ export const authApi = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   register: (name: string, email: string, password: string) =>
     api.post('/auth/register', { name, email, password }),
+  resendConfirmation: (email: string) =>
+    api.post<{
+      message: string;
+      emailSent?: boolean;
+      alreadyConfirmed?: boolean;
+      deliveryChannel?: string;
+      previewUrl?: string | null;
+      activationLink?: string | null;
+    }>('/auth/resend-confirmation', { email }),
+  forgotPassword: (email: string) =>
+    api.post<{
+      message: string;
+      emailSent?: boolean;
+      deliveryChannel?: string;
+      previewUrl?: string | null;
+      resetLink?: string | null;
+    }>('/auth/forgot-password', { email }),
+  resetPassword: (token: string, password: string) =>
+    api.post<{ user: User; accessToken: string; message: string }>('/auth/reset-password', {
+      token,
+      password,
+    }),
+  confirmSupabaseToken: (accessToken: string) =>
+    api.post<{ user: User; accessToken: string; message: string }>('/auth/confirm-supabase-token', {
+      accessToken,
+    }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   refresh: () => api.post('/auth/refresh'),
   googleAuth: (payload: {
     credential: string;
+    name?: string;
     companyName?: string;
     siretOrSiren?: string;
     acceptTerms?: boolean;
@@ -295,7 +344,14 @@ export const adminApi = {
     role: string;
     technicienNom?: string | null;
     permissions?: UserPermissions;
-  }) => api.post<{ data: User; message: string }>('/admin/users', payload),
+  }) =>
+    api.post<{
+      data: User;
+      emailSent?: boolean;
+      deliveryChannel?: string;
+      previewUrl?: string | null;
+      message: string;
+    }>('/admin/users', payload),
   updateUser: (
     id: number,
     payload: {
@@ -326,6 +382,41 @@ export const adminApi = {
   }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-out', payload),
   destroyCompany: (payload: { password: string; confirmPhrase?: string }) =>
     api.delete<{ message: string; destroyedCompanyId: number }>('/admin/company/destroy', { data: payload }),
+  getSmtpStatus: () =>
+    api.get<{
+      config: {
+        host: string;
+        port: number;
+        secure: boolean;
+        user: string;
+        fromName: string;
+        hasPassword: boolean;
+        updatedAt?: string;
+      };
+      logs: any[];
+    }>('/admin/smtp-status'),
+  updateSmtpConfig: (payload: {
+    host: string;
+    port: number;
+    secure?: boolean;
+    user: string;
+    pass?: string;
+    fromName?: string;
+  }) => api.put<{ config: any; message: string }>('/admin/smtp-config', payload),
+  testSmtpEmail: (toEmail: string) =>
+    api.post<{
+      config: any;
+      delivery: {
+        sent: boolean;
+        channel: string;
+        hostUsed?: string;
+        previewUrl?: string;
+        error?: string;
+        timestamp: string;
+      };
+      logs: any[];
+      message: string;
+    }>('/admin/smtp-test', { toEmail }),
 };
 
 export const healthApi = {

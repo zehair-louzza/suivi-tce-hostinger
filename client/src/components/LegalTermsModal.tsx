@@ -61,7 +61,7 @@ export function LegalTermsModal({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '20px' }}>⚖️</span>
+            <span style={{ fontSize: '20px' }}>§</span>
             <div>
               <h2 style={{ fontSize: '16.5px', fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>
                 Cadre Juridique, CGU & Protection des Données (RGPD)
@@ -195,7 +195,7 @@ export function LegalTermsModal({
                   color: 'var(--text-primary, #0f172a)',
                 }}
               >
-                🛡️ <strong>Principe Fondamental d'Absence de Traitement des Données Métier :</strong>
+                ◈ <strong>Principe Fondamental d'Absence de Traitement des Données Métier :</strong>
                 <br />
                 Notre entreprise et le créateur de cette solution logicielle <strong>NE TRAITENT, N'EXPLOITENT, NE CONSULTENT, NE REVENDENT ET NE PROFILENT AUCUNE DONNÉE MÉTIER</strong> saisie sur la plateforme par les entreprises utilisatrices. Toutes les données appartiennent exclusivement et strictement à chaque entreprise cliente (tenant).
               </div>

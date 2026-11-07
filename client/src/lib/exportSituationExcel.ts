@@ -42,14 +42,14 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
   const isFacturee = statutFact === 'Facturée';
 
   if (statutOp === 'Annulée') {
-    return { stepNumber: 0, label: 'Annulée', badge: '⚪ Annulée', category: 'BLOQUE' };
+    return { stepNumber: 0, label: 'Annulée', badge: '○ Annulée', category: 'BLOQUE' };
   }
   if (statutOp === 'Suspendue' || (intv.traitement && intv.traitement.toLowerCase().includes('bloqué'))) {
     const motif = intv.motifBlocage ? ` : ${intv.motifBlocage}` : '';
     return {
       stepNumber: 99,
       label: `Bloquée / Suspendue${motif}`,
-      badge: '🔴 Bloquée',
+      badge: '■ Bloquée',
       category: 'BLOQUE',
     };
   }
@@ -57,7 +57,7 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 7,
       label: '7. Facturée (Mission terminée & clôturée)',
-      badge: '🟢 7. Facturée',
+      badge: '● 7. Facturée',
       category: 'FACTURE',
     };
   }
@@ -65,7 +65,7 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 6,
       label: '6. Clôturée terrain — Prête pour facturation',
-      badge: '🔵 6. Clôturée',
+      badge: '◆ 6. Clôturée',
       category: 'VALIDE',
     };
   }
@@ -74,7 +74,7 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 5,
       label: `5. Terminée sur site — ${detail}`,
-      badge: '🟣 5. Terminée',
+      badge: '◆ 5. Terminée',
       category: 'VALIDE',
     };
   }
@@ -82,7 +82,7 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 4,
       label: '4. Travaux en cours d’exécution sur site',
-      badge: '🟠 4. En cours',
+      badge: '▲ 4. En cours',
       category: 'EN_COURS',
     };
   }
@@ -90,7 +90,7 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 3,
       label: '3. En route vers le chantier',
-      badge: '🟡 3. En route',
+      badge: '◈ 3. En route',
       category: 'EN_COURS',
     };
   }
@@ -100,14 +100,14 @@ export function getInterventionAvancement(intv: Intervention): InterventionAvanc
     return {
       stepNumber: 2,
       label: `2. Planifiée${dateStr} — ${tech}`,
-      badge: '🔷 2. Planifiée',
+      badge: '◆ 2. Planifiée',
       category: 'PLANIFICATION',
     };
   }
   return {
     stepNumber: 1,
     label: '1. Demande reçue — À planifier',
-    badge: '⏳ 1. À planifier',
+    badge: '◷ 1. À planifier',
     category: 'PLANIFICATION',
   };
 }
@@ -124,7 +124,7 @@ export function getDevisAvancement(devis: Devis): DevisAvancementInfo {
     return {
       stepNumber: 0,
       label: `Sans suite / Refusé (${statutComm})`,
-      badge: '⚪ Refusé/Sans suite',
+      badge: '○ Refusé/Sans suite',
       category: 'REFUSE',
     };
   }
@@ -134,7 +134,7 @@ export function getDevisAvancement(devis: Devis): DevisAvancementInfo {
     return {
       stepNumber: 5,
       label: `5. Devis Accepté / Signé — ${detail}`,
-      badge: '🟢 5. Devis Accepté',
+      badge: '● 5. Devis Accepté',
       category: 'ACCEPTE',
     };
   }
@@ -143,7 +143,7 @@ export function getDevisAvancement(devis: Devis): DevisAvancementInfo {
     return {
       stepNumber: 4,
       label: `4. En cours de relance / négociation${relanceDate}`,
-      badge: '🟠 4. En relance',
+      badge: '▲ 4. En relance',
       category: 'ENVOYE',
     };
   }
@@ -152,7 +152,7 @@ export function getDevisAvancement(devis: Devis): DevisAvancementInfo {
     return {
       stepNumber: 3,
       label: `3. Devis envoyé au client${envoiDate} — En attente accord`,
-      badge: '🔵 3. Devis envoyé',
+      badge: '◆ 3. Devis envoyé',
       category: 'ENVOYE',
     };
   }
@@ -162,14 +162,14 @@ export function getDevisAvancement(devis: Devis): DevisAvancementInfo {
     return {
       stepNumber: 2,
       label: `2. Visite technique préalable requise (${tech} — ${statusV})`,
-      badge: '🟣 2. Visite technique',
+      badge: '◆ 2. Visite technique',
       category: 'PREPARATION',
     };
   }
   return {
     stepNumber: 1,
     label: '1. Demande reçue — À préparer / chiffrer',
-    badge: '⏳ 1. À chiffrer',
+    badge: '◷ 1. À chiffrer',
     category: 'PREPARATION',
   };
 }

@@ -5,6 +5,13 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
 import { ROLE_DEFINITIONS } from '../../shared/types.js';
+import {
+  sendWelcomeUserEmail,
+  getActiveSmtpConfig,
+  saveSmtpConfigToDb,
+  getEmailLogs,
+  verifyAndTestSmtpConfig,
+} from '../services/emailService.js';
 
 export const adminRouter = Router();
 
@@ -130,13 +137,27 @@ adminRouter.post(
         permissionsJson: permissions ? JSON.stringify(permissions) : null,
         companyId: caller.companyId || 1,
         active: true,
+        emailConfirmed: true,
       },
       select: publicUserSelect,
     });
 
+    const pubUser = formatPublicUser(created);
+    const roleLabel = (ROLE_DEFINITIONS as any)[pubUser.role]?.label || pubUser.role;
+    const delivery = await sendWelcomeUserEmail({
+      toEmail: cleanEmail,
+      recipientName: created.name,
+      roleLabel,
+      tempPassword: String(password),
+      companyName: pubUser.companyName || 'ANELEC GROUPE',
+    });
+
     res.status(201).json({
-      data: formatPublicUser(created),
-      message: `Utilisateur ${created.name} créé avec succès`,
+      data: pubUser,
+      emailSent: delivery.sent,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      message: `Utilisateur ${created.name} créé et activé avec succès (e-mail d'accès envoyé)`,
     });
   })
 );
@@ -500,6 +521,80 @@ adminRouter.delete(
     res.json({
       message: "L'espace entreprise " + company.name + " ainsi que l'ensemble de ses devis, interventions, plannings, pointages et comptes utilisateurs ont été DÉFINITIVEMENT et IRRÉVERSIBLEMENT supprimés de la base de données.",
       destroyedCompanyId: companyId,
+    });
+  })
+);
+
+// ============================================================================
+// 4. CONFIGURATION SMTP, DIAGNOSTIC D'ENVOI & JOURNAL DES EMAILS
+// ============================================================================
+adminRouter.get(
+  '/smtp-status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Accès réservé aux administrateurs', 'FORBIDDEN');
+    }
+    const cfg = await getActiveSmtpConfig();
+    const logs = await getEmailLogs();
+    res.json({
+      config: {
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        user: cfg.user,
+        fromName: cfg.fromName,
+        hasPassword: Boolean(cfg.pass && cfg.pass.trim().length > 0),
+        updatedAt: cfg.updatedAt,
+      },
+      logs,
+    });
+  })
+);
+
+adminRouter.put(
+  '/smtp-config',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Modification SMTP réservée aux administrateurs', 'FORBIDDEN');
+    }
+    const saved = await saveSmtpConfigToDb(req.body || {});
+    res.json({
+      config: {
+        host: saved.host,
+        port: saved.port,
+        secure: saved.secure,
+        user: saved.user,
+        fromName: saved.fromName,
+        hasPassword: Boolean(saved.pass && saved.pass.trim().length > 0),
+        updatedAt: saved.updatedAt,
+      },
+      message: 'Configuration SMTP enregistrée avec succès',
+    });
+  })
+);
+
+adminRouter.post(
+  '/smtp-test',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Test SMTP réservé aux administrateurs', 'FORBIDDEN');
+    }
+    const toEmail = String(req.body?.toEmail || caller.email || '').trim();
+    if (!toEmail || !toEmail.includes('@')) {
+      throw new AppError(400, 'Adresse e-mail de test valide requise', 'VALIDATION_ERROR');
+    }
+    const result = await verifyAndTestSmtpConfig(toEmail);
+    const logs = await getEmailLogs();
+    res.json({
+      ...result,
+      logs,
+      message:
+        result.delivery.channel === 'SMTP_PRODUCTION'
+          ? `E-mail de test envoyé avec succès via ${result.delivery.hostUsed} à ${toEmail}`
+          : `E-mail de test généré via le relais de prévisualisation pour ${toEmail}`,
     });
   })
 );

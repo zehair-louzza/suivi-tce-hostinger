@@ -247,7 +247,7 @@ export function SendReportEmailModal({
               </span>
             ) : (
               <span style={{ color: '#d97706', fontSize: '11px' }}>
-                ⚠️ Pas d'email pré-enregistré dans la fiche
+                ▲ Pas d'email pré-enregistré dans la fiche
               </span>
             )}
           </div>
@@ -261,7 +261,7 @@ export function SendReportEmailModal({
               fontWeight: 600,
             }}
           >
-            🛡️ Réservé Équipe Bureau
+            ◈ Réservé Équipe Bureau
           </span>
         </div>
 
@@ -282,7 +282,7 @@ export function SendReportEmailModal({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🏢</span>
+                  <span>▪</span>
                   <span>Services rattachés à {matchedProfile.nom} ({matchedProfile.services.length}) :</span>
                 </span>
                 <span style={{ fontSize: '11px', color: '#15803d', fontWeight: 600 }}>
@@ -328,7 +328,7 @@ export function SendReportEmailModal({
                         }}
                       >
                         <span>{isSelectedInTo ? '✓' : '+'}</span>
-                        <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '💶' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '🔧' : '🏢'}</span>
+                        <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '€' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '❖' : '▪'}</span>
                         <strong>{srv.nomService}</strong>
                         <span style={{ opacity: isSelectedInTo ? 0.9 : 0.6, fontSize: '11px' }}>({srv.email})</span>
                       </button>

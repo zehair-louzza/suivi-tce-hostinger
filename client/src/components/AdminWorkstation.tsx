@@ -22,7 +22,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
-  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'danger_zone';
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone';
   onOpenSendReportEmail?: (intv: Intervention) => void;
 }
 
@@ -93,7 +93,7 @@ const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: str
   { key: 'canWriteReports', label: 'Rapports', short: 'Rapports', color: '#10b981' },
   { key: 'canManageBilling', label: 'Facturation', short: 'Facturation', color: '#f59e0b' },
   { key: 'canManageReferentiels', label: 'Référentiels', short: 'Référentiels', color: '#6366f1' },
-  { key: 'mobileOnly', label: 'App Mobile', short: '📱 Mobile', color: '#64748b' },
+  { key: 'mobileOnly', label: 'App Mobile', short: 'Mobile', color: '#64748b' },
 ];
 
 export function AdminWorkstation({
@@ -108,10 +108,21 @@ export function AdminWorkstation({
 }: AdminWorkstationProps) {
   const queryClient = useQueryClient();
   const { user, logout } = useAuth();
-  const [subTab, setSubTab] = useState<'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'danger_zone'>(
-    initialSubTab || 'users'
-  );
+  const [subTab, setSubTab] = useState<
+    'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone'
+  >(initialSubTab || 'users');
   const [showDestroyModal, setShowDestroyModal] = useState(false);
+
+  // États Configuration & Diagnostic E-mails / SMTP
+  const [smtpHost, setSmtpHost] = useState('smtppro.zoho.eu');
+  const [smtpPort, setSmtpPort] = useState(465);
+  const [smtpUser, setSmtpUser] = useState('zehair@anelecgroupe.com');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpFromName, setSmtpFromName] = useState('ANELEC GROUPE');
+  const [testRecipientEmail, setTestRecipientEmail] = useState('lewislouza@gmail.com');
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [lastSmtpTestResult, setLastSmtpTestResult] = useState<any>(null);
   const [destroyPassword, setDestroyPassword] = useState('');
   const [destroyConfirmPhrase, setDestroyConfirmPhrase] = useState('');
   const [isDestroying, setIsDestroying] = useState(false);
@@ -128,12 +139,12 @@ export function AdminWorkstation({
     if (checked) {
       toast.success(
         'Option activée : Les devis peuvent exceptionnellement être facturés directement.',
-        { icon: '⚠️' }
+        { icon: '▲' }
       );
     } else {
       toast.success(
         'Règle stricte rétablie : On ne facture que les interventions (les devis ne sont pas facturés).',
-        { icon: '✅' }
+        { icon: '✓' }
       );
     }
   };
@@ -192,6 +203,24 @@ export function AdminWorkstation({
       return res.data.data;
     },
   });
+
+  const smtpStatusQuery = useQuery({
+    queryKey: ['admin-smtp-status'],
+    queryFn: async () => {
+      const res = await adminApi.getSmtpStatus();
+      return res.data;
+    },
+  });
+
+  useEffect(() => {
+    if (smtpStatusQuery.data?.config) {
+      const c = smtpStatusQuery.data.config;
+      if (c.host) setSmtpHost(c.host);
+      if (c.port) setSmtpPort(c.port);
+      if (c.user) setSmtpUser(c.user);
+      if (c.fromName) setSmtpFromName(c.fromName);
+    }
+  }, [smtpStatusQuery.data]);
 
   const createUserMut = useMutation({
     mutationFn: adminApi.createUser,
@@ -432,8 +461,17 @@ export function AdminWorkstation({
               onClick={() => setSubTab('billing_rules')}
               style={{ flexShrink: 0 }}
             >
-              <span className="desktop-only-el">⚙️ Règles Facturation</span>
-              <span className="mobile-only-el">⚙️ Règles</span>
+              <span className="desktop-only-el">❖ Règles Facturation</span>
+              <span className="mobile-only-el">❖ Règles</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${subTab === 'emails_smtp' ? 'active' : ''}`}
+              onClick={() => setSubTab('emails_smtp')}
+              style={{ flexShrink: 0 }}
+            >
+              <span className="desktop-only-el">◈ E-mails & SMTP ({smtpStatusQuery.data?.logs?.length || 0})</span>
+              <span className="mobile-only-el">◈ E-mails</span>
             </button>
             <button
               type="button"
@@ -446,8 +484,8 @@ export function AdminWorkstation({
                 flexShrink: 0,
               }}
             >
-              <span className="desktop-only-el">⚠️ Zone Danger & Clôture</span>
-              <span className="mobile-only-el">⚠️ Danger</span>
+              <span className="desktop-only-el">▲ Zone Danger & Clôture</span>
+              <span className="mobile-only-el">▲ Danger</span>
             </button>
           </div>
 
@@ -491,7 +529,7 @@ export function AdminWorkstation({
                     <tr key={u.id}>
                       <td>
                         <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
-                          {u.name} {u.id === 1 && '👑'}
+                          {u.name} {u.id === 1 && '• Fondateur'}
                         </div>
                         <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                           {u.email}
@@ -523,7 +561,7 @@ export function AdminWorkstation({
                               style={{ padding: '1px 5px', fontSize: '10px' }}
                               onClick={() => onSwitchToMobilePreview(u.technicienNom!)}
                             >
-                              📱 Mobile
+                              ▪ Mobile
                             </button>
                           </div>
                         ) : (
@@ -636,7 +674,7 @@ export function AdminWorkstation({
                 <div key={u.id} className="mobile-record-card" style={{ width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                     <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
-                      {u.name} {u.id === 1 && '👑'}
+                      {u.name} {u.id === 1 && '• Fondateur'}
                     </div>
                     <span
                       style={{
@@ -661,7 +699,7 @@ export function AdminWorkstation({
                     <span>{activePermCount} droit(s) actif(s)</span>
                     {u.technicienNom && (
                       <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
-                        📱 {u.technicienNom}
+                        ▪ {u.technicienNom}
                       </span>
                     )}
                   </div>
@@ -704,7 +742,7 @@ export function AdminWorkstation({
                       style={{ flex: 1, padding: '6px 10px', fontSize: '11.5px' }}
                       onClick={() => openEditUserModal(u)}
                     >
-                      ✏️ Paramètres Complets
+                      ✎ Paramètres Complets
                     </button>
                     {u.id !== 1 && (
                       confirmDeleteUserId === u.id ? (
@@ -736,7 +774,7 @@ export function AdminWorkstation({
                           style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '6px 10px', fontSize: '11.5px' }}
                           onClick={() => setConfirmDeleteUserId(u.id)}
                         >
-                          🗑️ Supprimer
+                          ✕ Supprimer
                         </button>
                       )
                     )}
@@ -900,10 +938,10 @@ export function AdminWorkstation({
                       }`}
                     >
                       {isEnService
-                        ? '🟢 En service'
+                        ? '● En service'
                         : isTerminee
-                        ? '🔵 Journée clôturée'
-                        : '⚪ Non pointé'}
+                        ? '◆ Journée clôturée'
+                        : '○ Non pointé'}
                     </span>
                   </div>
 
@@ -920,7 +958,7 @@ export function AdminWorkstation({
                   >
                     <div>
                       <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        ☀️ ARRIVÉE BUREAU (MATIN)
+                        • ARRIVÉE BUREAU (MATIN)
                       </div>
                       <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: pt?.heureArriveeBureau ? '#059669' : 'var(--text-muted)' }}>
                         {pt?.heureArriveeBureau || '— : —'}
@@ -928,7 +966,7 @@ export function AdminWorkstation({
                     </div>
                     <div>
                       <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        🌙 FIN DERNIÈRE INTV. (SOIR)
+                        • FIN DERNIÈRE INTV. (SOIR)
                       </div>
                       <div className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: pt?.heureFinJournee ? '#2563eb' : 'var(--text-muted)' }}>
                         {pt?.heureFinJournee || '— : —'}
@@ -963,7 +1001,7 @@ export function AdminWorkstation({
                           })
                         }
                       >
-                        ☀️ Activer Matin
+                        • Activer Matin
                       </button>
                     )}
                     {isEnService && (
@@ -978,7 +1016,7 @@ export function AdminWorkstation({
                           })
                         }
                       >
-                        🌙 Désactiver Soir
+                        • Désactiver Soir
                       </button>
                     )}
                     <button
@@ -987,7 +1025,7 @@ export function AdminWorkstation({
                       style={{ marginLeft: 'auto' }}
                       onClick={() => onSwitchToMobilePreview(tech)}
                     >
-                      📱 Ouvrir Mobile de {tech}
+                      ▪ Ouvrir Mobile de {tech}
                     </button>
                   </div>
                 </div>
@@ -1046,7 +1084,7 @@ export function AdminWorkstation({
                             {intv.reference || `INT-${intv.id}`}
                           </div>
                           <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
-                            {intv.isVisiteDevis ? '📐 Visite' : intv.typeIntervention || 'Travaux'}
+                            {intv.isVisiteDevis ? '◈ Visite' : intv.typeIntervention || 'Travaux'}
                           </span>
                         </td>
                         <td style={{ maxWidth: '160px' }}>
@@ -1085,7 +1123,7 @@ export function AdminWorkstation({
                           )}
                           {intv.elementsChiffrage && (
                             <div style={{ fontSize: '10.5px', color: '#7c3aed', fontWeight: 600 }}>
-                              📐 Chiffrage : {intv.elementsChiffrage}
+                              ◈ Chiffrage : {intv.elementsChiffrage}
                             </div>
                           )}
                           {intv.compteRendu && (
@@ -1130,7 +1168,7 @@ export function AdminWorkstation({
                                   setLightboxIndex(0);
                                 }}
                               >
-                                📷 {intv.photos.length}
+                                ⊞ {intv.photos.length}
                               </button>
                             </div>
                           ) : (
@@ -1168,7 +1206,7 @@ export function AdminWorkstation({
                                 setDraftStatutRapport('Validé & Clôturé');
                               }}
                             >
-                              📝 Valider
+                              ✎ Valider
                             </button>
                             {parentDevis && (
                               <button
@@ -1240,7 +1278,7 @@ export function AdminWorkstation({
                           {intv.reference || `INT-${intv.id}`}
                         </span>
                         <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
-                          {intv.isVisiteDevis ? '🔍 Visite' : '🔧 Travaux'}
+                          {intv.isVisiteDevis ? '⌕ Visite' : '❖ Travaux'}
                         </span>
                       </div>
                       {intv.rapportFinal ? (
@@ -1255,7 +1293,7 @@ export function AdminWorkstation({
                         {intv.client || '—'}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        📍 {intv.chantier || 'Site client'} • 👷 {intv.entreprise || 'Non assigné'}
+                        ⌖ {intv.chantier || 'Site client'} • ▪ {intv.entreprise || 'Non assigné'}
                       </div>
                     </div>
 
@@ -1270,13 +1308,13 @@ export function AdminWorkstation({
                           color: '#334155',
                         }}
                       >
-                        💬 {intv.compteRendu.slice(0, 120)}{intv.compteRendu.length > 120 ? '...' : ''}
+                        • {intv.compteRendu.slice(0, 120)}{intv.compteRendu.length > 120 ? '...' : ''}
                       </div>
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      <span>📷 Preuves : <strong>{intv.photos?.length || 0} photo(s)</strong></span>
-                      <span className="font-mono">📅 {intv.datePlanifiee || 'Non fixée'}</span>
+                      <span>⊞ Preuves : <strong>{intv.photos?.length || 0} photo(s)</strong></span>
+                      <span className="font-mono">▪ {intv.datePlanifiee || 'Non fixée'}</span>
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', marginTop: '4px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
@@ -1295,7 +1333,7 @@ export function AdminWorkstation({
                           setDraftStatutRapport('Validé & Clôturé');
                         }}
                       >
-                        📝 {intv.rapportFinal ? 'Modifier' : 'Rédiger'}
+                        ✎ {intv.rapportFinal ? 'Modifier' : 'Rédiger'}
                       </button>
                       {parentDevis && (
                         <button
@@ -1368,7 +1406,7 @@ export function AdminWorkstation({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>📌</span>
+                <span style={{ fontSize: '18px' }}>◆</span>
                 <strong style={{ fontSize: '14px', color: '#1d4ed8' }}>
                   Principe Fondamental : « On ne facture pas les devis, on facture uniquement les interventions. »
                 </strong>
@@ -1410,7 +1448,7 @@ export function AdminWorkstation({
                       color: allowDirectDevisBilling ? '#dc2626' : '#059669',
                     }}
                   >
-                    {allowDirectDevisBilling ? '⚠️ Activé (Exception)' : '✓ Auto-décochée par défaut (Règle stricte active)'}
+                    {allowDirectDevisBilling ? '▲ Activé (Exception)' : '✓ Auto-décochée par défaut (Règle stricte active)'}
                   </span>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.4 }}>
@@ -1437,6 +1475,362 @@ export function AdminWorkstation({
         </div>
       )}
 
+      {/* =====================================================================
+          SOUS-ONGLET 5B : CONFIGURATION SMTP, TEST D'ENVOI & JOURNAL DES EMAILS
+         ===================================================================== */}
+      {subTab === 'emails_smtp' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div
+            style={{
+              padding: '22px',
+              borderRadius: '14px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '20px',
+            }}
+          >
+            {/* Colonne 1 : Paramètres Serveur SMTP Zoho / Hostinger */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    color: '#0284c7',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  EXPÉDITEUR OFFICIEL & SERVEUR SMTP
+                </span>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '4px 0 4px 0' }}>
+                  Configuration SMTP (Zoho Pro EU / Hostinger)
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+                  Pour un domaine personnalisé Zoho (<code>@anelecgroupe.com</code>), utilisez{' '}
+                  <strong>smtppro.zoho.eu</strong> (port 465 SSL ou 587 STARTTLS) avec un{' '}
+                  <strong>Mot de passe d'application Zoho</strong>.
+                </p>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Hôte SMTP</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={smtpHost}
+                    onChange={(e) => setSmtpHost(e.target.value)}
+                    placeholder="smtppro.zoho.eu"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Port (465 / 587)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(Number(e.target.value) || 465)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Adresse Expéditeur (SMTP User)</label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={smtpUser}
+                    onChange={(e) => setSmtpUser(e.target.value)}
+                    placeholder="zehair@anelecgroupe.com"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Nom Affiché</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={smtpFromName}
+                    onChange={(e) => setSmtpFromName(e.target.value)}
+                    placeholder="ANELEC GROUPE"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 700 }}>
+                  Mot de passe SMTP / Mot de passe d'application Zoho{' '}
+                  {smtpStatusQuery.data?.config?.hasPassword && (
+                    <span style={{ color: '#059669', fontWeight: 800 }}>(✓ Configuré)</span>
+                  )}
+                </label>
+                <input
+                  type="password"
+                  className="input"
+                  value={smtpPass}
+                  onChange={(e) => setSmtpPass(e.target.value)}
+                  placeholder={
+                    smtpStatusQuery.data?.config?.hasPassword
+                      ? '•••••••••••• (Laisser vide pour conserver l’actuel)'
+                      : 'Saisir le mot de passe d’application Zoho'
+                  }
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={isSavingSmtp}
+                  onClick={async () => {
+                    setIsSavingSmtp(true);
+                    try {
+                      await adminApi.updateSmtpConfig({
+                        host: smtpHost,
+                        port: smtpPort,
+                        secure: smtpPort === 465,
+                        user: smtpUser,
+                        fromName: smtpFromName,
+                        ...(smtpPass.trim() ? { pass: smtpPass.trim() } : {}),
+                      });
+                      setSmtpPass('');
+                      await smtpStatusQuery.refetch();
+                      toast.success('Configuration SMTP enregistrée en base de données');
+                    } catch (err: any) {
+                      toast.error(err.response?.data?.error || 'Erreur sauvegarde SMTP');
+                    } finally {
+                      setIsSavingSmtp(false);
+                    }
+                  }}
+                >
+                  {isSavingSmtp ? 'Enregistrement...' : '✓ Enregistrer la Configuration SMTP'}
+                </button>
+              </div>
+            </div>
+
+            {/* Colonne 2 : Banc de Test d'Envoi en Direct */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '16px',
+                borderRadius: '12px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    color: '#059669',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  DIAGNOSTIC & VÉRIFICATION EN DIRECT
+                </span>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: '4px 0' }}>
+                  Tester l'envoi d'e-mail vers une adresse cible
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
+                  Sélectionnez une adresse fournie ou saisissez n'importe quel e-mail pour tester l'acheminement complet.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {['lewislouza@gmail.com', 'lzgame2020@gmail.com', 'louzza.zehair@gmail.com'].map((addr) => (
+                  <button
+                    key={addr}
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      fontSize: '11px',
+                      background: testRecipientEmail === addr ? 'rgba(2, 132, 199, 0.12)' : undefined,
+                      borderColor: testRecipientEmail === addr ? '#0284c7' : undefined,
+                      fontWeight: testRecipientEmail === addr ? 700 : 500,
+                    }}
+                    onClick={() => setTestRecipientEmail(addr)}
+                  >
+                    ◆ {addr}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="email"
+                  className="input"
+                  style={{ flex: 1 }}
+                  value={testRecipientEmail}
+                  onChange={(e) => setTestRecipientEmail(e.target.value)}
+                  placeholder="destinataire@exemple.com"
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={isTestingSmtp}
+                  onClick={async () => {
+                    setIsTestingSmtp(true);
+                    try {
+                      const res = await adminApi.testSmtpEmail(testRecipientEmail);
+                      setLastSmtpTestResult(res.data.delivery);
+                      await smtpStatusQuery.refetch();
+                      toast.success(res.data.message);
+                    } catch (err: any) {
+                      toast.error(err.response?.data?.error || 'Erreur lors du test SMTP');
+                    } finally {
+                      setIsTestingSmtp(false);
+                    }
+                  }}
+                >
+                  {isTestingSmtp ? '◷ Test...' : '→ Envoyer un E-mail Test'}
+                </button>
+              </div>
+
+              {lastSmtpTestResult && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    fontSize: '12px',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#065f46' }}>
+                    ✓ Résultat du test : Canal {lastSmtpTestResult.channel} ({lastSmtpTestResult.hostUsed})
+                  </div>
+                  {lastSmtpTestResult.previewUrl && (
+                    <div style={{ marginTop: '4px' }}>
+                      ◈{' '}
+                      <a
+                        href={lastSmtpTestResult.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#0284c7', fontWeight: 700, textDecoration: 'underline' }}
+                      >
+                        Ouvrir et inspecter l'e-mail envoyé dans le navigateur
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Journal des Emails envoyés */}
+          <div className="pro-table-container" style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0 }}>
+                  ◈ Journal d'Audit des E-mails Envoyés ({smtpStatusQuery.data?.logs?.length || 0})
+                </h3>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  Traçabilité complète des confirmations de comptes, réinitialisations, créations collaborateurs, rapports d'interventions et devis.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => smtpStatusQuery.refetch()}
+              >
+                ↻ Actualiser
+              </button>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table className="pro-table" style={{ width: '100%', fontSize: '12px' }}>
+                <thead>
+                  <tr>
+                    <th>Horodatage</th>
+                    <th>Type d'envoi</th>
+                    <th>Destinataire</th>
+                    <th>Objet</th>
+                    <th>Canal d'acheminement</th>
+                    <th>Actions / Lien</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(smtpStatusQuery.data?.logs || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                        Aucun e-mail enregistré dans le journal pour le moment.
+                      </td>
+                    </tr>
+                  ) : (
+                    (smtpStatusQuery.data?.logs || []).map((log: any) => (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {log.timestamp ? new Date(log.timestamp).toLocaleString('fr-FR') : '—'}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              background: 'rgba(2, 132, 199, 0.1)',
+                              color: '#0284c7',
+                            }}
+                          >
+                            {log.type}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700 }}>{log.toEmail}</td>
+                        <td>{log.subject}</td>
+                        <td>
+                          <span
+                            style={{
+                              color: log.sent ? '#059669' : '#dc2626',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {log.sent ? '✓ ' : '✕ '}
+                            {log.channel}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {log.previewUrl && (
+                              <a
+                                href={log.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: '#0284c7', fontWeight: 700, textDecoration: 'underline' }}
+                              >
+                                ◉ Voir E-mail
+                              </a>
+                            )}
+                            {log.activationLink && (
+                              <a
+                                href={log.activationLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: '#059669', fontWeight: 700, textDecoration: 'underline' }}
+                              >
+                                ↗ Lien d'activation
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       
       {/* =====================================================================
           SOUS-ONGLET 6 : ZONE DE DANGER - CLÔTURE DU COMPTE & SUPPRESSION BASE
@@ -1453,7 +1847,7 @@ export function AdminWorkstation({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <span style={{ fontSize: '28px' }}>⚠️</span>
+              <span style={{ fontSize: '28px' }}>▲</span>
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626', margin: 0 }}>
                   Zone de Danger : Clôture du Compte et Effacement Intégral de la Base de Données
@@ -1474,7 +1868,7 @@ export function AdminWorkstation({
               }}
             >
               <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#b91c1c', marginBottom: '10px' }}>
-                🛑 Avertissement Légal & Engagement RGPD (Action Définitive et Non Réversible)
+                ▲ Avertissement Légal & Engagement RGPD (Action Définitive et Non Réversible)
               </h4>
               <p style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: '12px' }}>
                 Conformément aux réglementations RGPD et à nos engagements de stricte confidentialité (données cloisonnées hébergées en France sur Supabase / Hostinger), la demande de suppression de compte entraîne la <strong>destruction immédiate, complète et irréversible</strong> de toutes vos données sans possibilité de récupération :
@@ -1502,7 +1896,7 @@ export function AdminWorkstation({
                   lineHeight: 1.5,
                 }}
               >
-                🔒 <strong>Protection Espace Fondateur ANELEC GROUPE (ID 1) :</strong> Pour sécuriser l'espace racine contre toute fausse manipulation, une phrase d'authentification stricte est exigée en complément du mot de passe administrateur.
+                ◈ <strong>Protection Espace Fondateur ANELEC GROUPE (ID 1) :</strong> Pour sécuriser l'espace racine contre toute fausse manipulation, une phrase d'authentification stricte est exigée en complément du mot de passe administrateur.
               </div>
             )}
 
@@ -1527,7 +1921,7 @@ export function AdminWorkstation({
                   setShowDestroyModal(true);
                 }}
               >
-                <span>🗑️</span>
+                <span>✕</span>
                 <span>Supprimer Définitivement mon Compte et ma Base de Données</span>
               </button>
             </div>
@@ -1876,7 +2270,7 @@ export function AdminWorkstation({
                   setDraftRapportFinal(buildAutoReportFromDeclaration(selectedReportIntv))
                 }
               >
-                🔄 Régénérer depuis la déclaration technicien
+                ↻ Régénérer depuis la déclaration technicien
               </button>
             </div>
 
@@ -1887,7 +2281,7 @@ export function AdminWorkstation({
                     Photos prises par le technicien ({selectedReportIntv.photos.length}) :
                   </div>
                   <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>
-                    🔍 Cliquez sur une photo pour l'agrandir / la télécharger
+                    ⌕ Cliquez sur une photo pour l'agrandir / la télécharger
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
@@ -1996,7 +2390,7 @@ export function AdminWorkstation({
                         });
                       }}
                     >
-                      ✉️ Envoyer au Client par Email
+                      ◈ Envoyer au Client par Email
                     </button>
                   )}
                   <button
@@ -2044,7 +2438,7 @@ export function AdminWorkstation({
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <span style={{ fontSize: '26px' }}>🚨</span>
+              <span style={{ fontSize: '26px' }}>▲</span>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#dc2626' }}>
                 Confirmation Obligatoire : Destruction Définitive
               </h3>

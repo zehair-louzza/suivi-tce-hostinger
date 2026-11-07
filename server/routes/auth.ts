@@ -8,7 +8,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getEffectivePermissions } from '../../shared/types.js';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { sendConfirmationEmail } from '../services/emailService.js';
+import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
 
 export const authRouter = Router();
 
@@ -63,7 +63,7 @@ authRouter.get(
 </head>
 <body>
   <div class="card">
-    <div class="icon">✅</div>
+    <div class="icon">✓</div>
     <h1>Espace Entreprise Activé !</h1>
     <p>
       Félicitations <strong>${user.name}</strong> ! Votre compte administrateur et l'espace de <strong>${companyName}</strong> ont été certifiés et activés avec succès.<br /><br />
@@ -286,22 +286,235 @@ authRouter.post(
       select: publicUserSelect,
     });
 
-    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com (asynchrone sécurisé)
+    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com (avec multi-découverte SMTP + relais Supabase + prévisualisation secours)
     const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
-    sendConfirmationEmail({
+    const delivery = await sendConfirmationEmail({
       toEmail: data.email,
       recipientName: data.name,
       companyName: compName,
       confirmationToken,
-    }).catch((err) => {
-      console.error('[AUTH REGISTER] Erreur envoi email activation:', err);
     });
 
     res.status(201).json({
-      message: "Demande enregistrée avec succès. Un e-mail de confirmation avec les conditions d'activation a été envoyé à " + data.email + " depuis zehair@anelecgroupe.com. Veuillez cliquer sur le lien reçu pour activer votre espace entreprise.",
-      emailSent: true,
+      message:
+        delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
+          ? "Demande enregistrée avec succès. Un e-mail de confirmation avec les conditions d'activation a été envoyé à " +
+            data.email +
+            ' depuis zehair@anelecgroupe.com. Veuillez cliquer sur le lien reçu pour activer votre espace entreprise.'
+          : "Demande enregistrée avec succès pour " +
+            data.email +
+            ". L'e-mail de confirmation a été généré via le relais de secours (vous pouvez consulter la prévisualisation de l'e-mail ou activer votre espace directement ci-dessous).",
+      emailSent: delivery.sent,
       email: data.email,
       requiresConfirmation: true,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      activationLink: delivery.activationLink || null,
+    });
+  })
+);
+
+// Renvoi de l'e-mail de confirmation pour un compte en attente d'activation
+authRouter.post(
+  '/resend-confirmation',
+  asyncHandler(async (req: Request, res: Response) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) {
+      throw new AppError(400, 'Adresse e-mail requise', 'EMAIL_REQUIRED');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
+    }
+
+    if (user.emailConfirmed) {
+      return res.json({
+        alreadyConfirmed: true,
+        message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter directement.',
+      });
+    }
+
+    const confirmationToken = user.confirmationToken || crypto.randomBytes(32).toString('hex');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        confirmationToken,
+        confirmationSentAt: new Date(),
+      },
+    });
+
+    const compName = user.company?.name || 'ANELEC GROUPE';
+    const delivery = await sendConfirmationEmail({
+      toEmail: user.email,
+      recipientName: user.name,
+      companyName: compName,
+      confirmationToken,
+    });
+
+    return res.json({
+      message:
+        delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
+          ? `Un nouvel e-mail de confirmation a été envoyé à ${user.email}.`
+          : `Nouvel e-mail de confirmation généré pour ${user.email}.`,
+      emailSent: delivery.sent,
+      email: user.email,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      activationLink: delivery.activationLink || null,
+    });
+  })
+);
+
+// Demande de réinitialisation de mot de passe par e-mail
+authRouter.post(
+  '/forgot-password',
+  asyncHandler(async (req: Request, res: Response) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) {
+      throw new AppError(400, 'Adresse e-mail requise', 'EMAIL_REQUIRED');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'Aucun compte associé à cette adresse e-mail', 'USER_NOT_FOUND');
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        confirmationToken: resetToken,
+        confirmationSentAt: new Date(),
+      },
+    });
+
+    const delivery = await sendPasswordResetEmail({
+      toEmail: user.email,
+      recipientName: user.name,
+      resetToken,
+    });
+
+    return res.json({
+      message: `Un e-mail de réinitialisation de mot de passe a été envoyé à ${user.email}.`,
+      emailSent: delivery.sent,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      resetLink: delivery.activationLink || null,
+    });
+  })
+);
+
+// Validation du nouveau mot de passe avec jeton de réinitialisation
+authRouter.post(
+  '/reset-password',
+  asyncHandler(async (req: Request, res: Response) => {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.password || '');
+
+    if (!token || newPassword.length < 8) {
+      throw new AppError(400, 'Jeton valide et nouveau mot de passe (min 8 caractères) requis', 'INVALID_RESET');
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { confirmationToken: token },
+      select: publicUserSelect,
+    });
+
+    if (!user) {
+      throw new AppError(404, 'Lien de réinitialisation invalide ou expiré', 'INVALID_TOKEN');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        active: true,
+        emailConfirmed: true,
+        confirmationToken: null,
+      },
+      select: publicUserSelect,
+    });
+
+    const pub = formatPublicUser(updated);
+    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    return res.json({
+      user: pub,
+      accessToken: tokens.accessToken,
+      message: 'Votre mot de passe a été mis à jour avec succès et votre compte est connecté.',
+    });
+  })
+);
+
+// Confirmation automatique via jeton Supabase Auth (#access_token=...&type=signup)
+authRouter.post(
+  '/confirm-supabase-token',
+  asyncHandler(async (req: Request, res: Response) => {
+    const accessToken = String(req.body?.accessToken || '').trim();
+    if (!accessToken) {
+      throw new AppError(400, 'Jeton Supabase manquant', 'TOKEN_REQUIRED');
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL || 'https://qfhxptwsuotqnrihzhxw.supabase.co';
+    const supabaseAnonKey =
+      process.env.SUPABASE_ANON_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmaHhwdHdzdW90cW5yaWh6aHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjM0NjgsImV4cCI6MjA4OTUzOTQ2OH0.r83-3B_3e25I2J9u-mN04t2-wF_2t0p_X-p4vH-bI0w';
+
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!userRes.ok) {
+      throw new AppError(401, 'Lien de confirmation Supabase invalide ou expiré', 'INVALID_SUPABASE_TOKEN');
+    }
+
+    const supaUser: any = await userRes.json();
+    const email = String(supaUser?.email || '').toLowerCase().trim();
+    if (!email) {
+      throw new AppError(400, 'Adresse e-mail introuvable dans le jeton Supabase', 'EMAIL_MISSING');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: publicUserSelect,
+    });
+
+    if (!user) {
+      throw new AppError(404, `Aucun compte trouvé pour ${email}`, 'USER_NOT_FOUND');
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        active: true,
+        emailConfirmed: true,
+        confirmationToken: null,
+        termsAcceptedAt: new Date(),
+      },
+      select: publicUserSelect,
+    });
+
+    const pub = formatPublicUser(updated);
+    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    return res.json({
+      user: pub,
+      accessToken: tokens.accessToken,
+      message: `Espace entreprise activé avec succès pour ${pub.email} !`,
     });
   })
 );
@@ -412,6 +625,7 @@ authRouter.get('/config', (_req: Request, res: Response) => {
 
 const GoogleAuthSchema = z.object({
   credential: z.string().min(1, 'Token Google requis'),
+  name: z.string().optional(),
   companyName: z.string().optional(),
   siretOrSiren: z.string().optional(),
   acceptTerms: z.boolean().optional(),
@@ -472,6 +686,10 @@ authRouter.post(
 
     if (!email) {
       throw new AppError(400, 'Email Google introuvable', 'INVALID_EMAIL');
+    }
+
+    if (data.name && data.name.trim()) {
+      name = data.name.trim();
     }
 
     // 1. L'utilisateur existe déjà : Connexion directe

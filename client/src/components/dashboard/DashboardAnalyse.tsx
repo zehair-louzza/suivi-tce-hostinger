@@ -468,7 +468,7 @@ export function DashboardAnalyse({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                  🔨 {row.label}
+                  ❖ {row.label}
                 </span>
                 <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#047857' }}>
                   {formatCurrency(row.caTrade)}
@@ -476,8 +476,8 @@ export function DashboardAnalyse({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                <span>⚡ {row.activeIntvs} actifs • ✓ {row.closedIntvs} clôturés</span>
-                <span>📋 {row.devisCount} devis</span>
+                <span>▸ {row.activeIntvs} actifs • ✓ {row.closedIntvs} clôturés</span>
+                <span>≡ {row.devisCount} devis</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>

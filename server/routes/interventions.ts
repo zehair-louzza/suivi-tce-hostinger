@@ -722,8 +722,8 @@ interventionRouter.post(
     const senderName = req.user?.email ? req.user.email.split('@')[0] : 'Direction Technique';
     const companyName = intv.company?.name || 'ANELEC GROUPE';
 
-    // Envoi sécurisé via emailService (Zoho Mail ou simulation sécurisée)
-    const emailSent = await sendInterventionReportEmail({
+    // Envoi sécurisé via emailService (Zoho Mail multi-hôtes ou prévisualisation secours)
+    const delivery = await sendInterventionReportEmail({
       toEmail: validEmails.join(', '),
       ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
       subject: subject || `[RAPPORT INTERVENTION] ${transformed.reference} • ${transformed.client} • ${transformed.chantier}`,
@@ -749,8 +749,8 @@ interventionRouter.post(
       companyName,
     });
 
-    if (!emailSent) {
-      throw new AppError(500, "Échec de l'envoi de l'e-mail du rapport", 'EMAIL_ERROR');
+    if (!delivery.sent) {
+      throw new AppError(500, `Échec de l'envoi de l'e-mail du rapport : ${delivery.error || 'Erreur SMTP'}`, 'EMAIL_ERROR');
     }
 
     // Traçabilité & Historique ANELEC
@@ -758,7 +758,7 @@ interventionRouter.post(
       intv.historiqueJson,
       senderName,
       "Rapport officiel envoyé par e-mail au donneur d'ordre / client",
-      `Destinataire : ${toEmail}${ccEmail ? ` (CC: ${ccEmail})` : ''}`
+      `Destinataire : ${toEmail}${ccEmail ? ` (CC: ${ccEmail})` : ''} • Canal : ${delivery.channel}`
     );
 
     const updated = await prisma.intervention.update({
@@ -781,6 +781,8 @@ interventionRouter.post(
     res.json({
       success: true,
       data: result,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
       message: `Rapport d'intervention envoyé avec succès par e-mail à ${toEmail}`,
     });
   })

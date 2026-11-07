@@ -132,9 +132,9 @@ process.on('SIGINT', async () => {
 });
 
 httpServer.listen(config.port, () => {
-  console.log(`🚀 Server running on port ${config.port} (${config.nodeEnv})`);
-  console.log('📡 Socket.io ready');
-  console.log(`🔗 CORS: ${config.corsOrigin}`);
+  console.log(`→ Server running on port ${config.port} (${config.nodeEnv})`);
+  console.log('⌖ Socket.io ready');
+  console.log(`↗ CORS: ${config.corsOrigin}`);
 });
 
 export { app, httpServer };

@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
 import { convertKeepingQuote } from '../services/linkedConversion.js';
 import { saveTechnicienGpsPosition } from './referentiels.js';
+import { sendDevisProposalEmail } from '../services/emailService.js';
 import {
   computeDevisCalculations,
   traitementToStatusCode,
@@ -762,6 +763,88 @@ devisRouter.post(
       message: isVisite
         ? 'Visite technique créée et ajoutée au planning (devis conservé)'
         : 'Intervention liée créée avec succès (devis conservé)',
+    });
+  })
+);
+
+// Envoi de proposition commerciale / devis par e-mail au client
+devisRouter.post(
+  '/:id/send-devis-email',
+  asyncHandler(async (req: Request, res: Response) => {
+    const companyId = req.user!.companyId || 1;
+    const devisId = parseInt(req.params.id, 10);
+
+    const devis = await prisma.devis.findFirst({
+      where: { id: devisId, companyId },
+      include: { interventions: true, company: true },
+    });
+
+    if (!devis) {
+      throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
+    }
+
+    const { toEmail, ccEmail, subject, customMessage } = req.body || {};
+    const rawTo = String(toEmail || '').trim();
+    const validEmails = rawTo
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.includes('@'));
+
+    if (validEmails.length === 0) {
+      throw new AppError(400, 'Adresse e-mail de destinataire valide requise', 'VALIDATION_ERROR');
+    }
+
+    const senderEmail = req.user?.email || 'zehair@anelecgroupe.com';
+    const senderName = req.user?.email ? req.user.email.split('@')[0] : 'Service Chiffrage & Devis';
+    const companyName = devis.company?.name || 'ANELEC GROUPE';
+
+    const delivery = await sendDevisProposalEmail({
+      toEmail: validEmails.join(', '),
+      ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
+      subject,
+      customMessage,
+      devis: {
+        id: devis.id,
+        referenceMetier: devis.referenceMetier,
+        client: devis.client,
+        siteAdresse: devis.siteAdresse,
+        objet: devis.objet,
+        corpsEtat: devis.corpsEtat,
+        amount: devis.amount,
+        statutCommercial: devis.statutCommercial,
+      },
+      senderName,
+      senderEmail,
+      companyName,
+    });
+
+    if (!delivery.sent) {
+      throw new AppError(500, `Échec d'envoi de l'e-mail du devis : ${delivery.error || 'Erreur SMTP'}`, 'EMAIL_ERROR');
+    }
+
+    const updated = await prisma.devis.update({
+      where: { id: devisId },
+      data: {
+        dateEnvoi: devis.dateEnvoi || new Date(),
+        statutCommercial:
+          devis.statutCommercial === 'Nouveau' || !devis.statutCommercial ? 'Devis envoyé' : devis.statutCommercial,
+        historiqueJson: addHistoriqueEvent(
+          devis.historiqueJson,
+          senderName,
+          'Proposition de devis envoyée par e-mail au client',
+          `Destinataire : ${validEmails.join(', ')} • Canal : ${delivery.channel}`
+        ),
+      },
+      include: { interventions: true },
+    });
+
+    const transformed = transformDevis(updated);
+    res.json({
+      success: true,
+      data: transformed,
+      deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      message: `Proposition de devis envoyée avec succès par e-mail à ${validEmails.join(', ')}`,
     });
   })
 );
