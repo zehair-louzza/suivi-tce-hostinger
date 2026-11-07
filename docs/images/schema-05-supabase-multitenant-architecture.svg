@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 420" width="1120" height="420" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="60%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+    <linearGradient id="supaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#10b981" />
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#38bdf8" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1120" height="420" rx="16" fill="url(#bgGrad)" stroke="#10b981" stroke-width="2"/>
+
+  <!-- Header Banner -->
+  <rect x="24" y="18" width="1072" height="48" rx="10" fill="rgba(255,255,255,0.06)" stroke="rgba(16,185,129,0.35)"/>
+  <circle cx="48" cy="42" r="12" fill="#10b981"/>
+  <text x="48" y="46" text-anchor="middle" fill="#0f172a" font-weight="900" font-size="13">DB</text>
+  <text x="72" y="39" fill="#ffffff" font-weight="800" font-size="15">ARCHITECTURE MULTI-TENANT SUPABASE POSTGRESQL 17 — CRÉATION DE COMPTE ENTREPRISE &amp; CLOISONNEMENT</text>
+  <text x="72" y="56" fill="#94a3b8" font-weight="500" font-size="11.5">Provisionnement automatique de l'espace entreprise (Tenant), génération des référentiels isolés et activation par jeton cryptographique</text>
+
+  <!-- STEP 1: Formulaire / Google Quick Register -->
+  <g transform="translate(24, 84)">
+    <rect width="235" height="145" rx="12" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+    <rect x="12" y="12" width="211" height="26" rx="6" fill="rgba(56,189,248,0.15)"/>
+    <text x="22" y="29" fill="#38bdf8" font-weight="800" font-size="12">1. INSCRIPTION &amp; GOOGLE OAUTH</text>
+    <text x="14" y="54" fill="#f8fafc" font-weight="700" font-size="11.5">POST /api/auth/register</text>
+    <text x="14" y="73" fill="#cbd5e1" font-size="10.5">• Raison sociale de l'entreprise</text>
+    <text x="14" y="90" fill="#cbd5e1" font-size="10.5">• SIRET (14 ch.) ou SIREN (9 ch.)</text>
+    <text x="14" y="107" fill="#cbd5e1" font-size="10.5">• Pré-remplissage Google 1-Clic</text>
+    <text x="14" y="124" fill="#38bdf8" font-weight="700" font-size="10.5">• Validation CGU &amp; RGPD horodatée</text>
+  </g>
+
+  <line x1="259" y1="156" x2="288" y2="156" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- STEP 2: Table companies & referentiels in Supabase -->
+  <g transform="translate(292, 84)">
+    <rect width="260" height="145" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
+    <rect x="12" y="12" width="236" height="26" rx="6" fill="rgba(16,185,129,0.18)"/>
+    <text x="22" y="29" fill="#10b981" font-weight="800" font-size="12">2. TENANT SUPABASE (companies)</text>
+    <text x="14" y="54" fill="#f8fafc" font-weight="700" font-size="11.5">Table PostgreSQL : public.companies</text>
+    <text x="14" y="73" fill="#cbd5e1" font-size="10.5">• Création d'un companyId unique</text>
+    <text x="14" y="90" fill="#cbd5e1" font-size="10.5">• Normalisation SIRET (14) &amp; SIREN (9)</text>
+    <text x="14" y="107" fill="#10b981" font-weight="700" font-size="10.5">Table : public.referentiels (Seed auto)</text>
+    <text x="14" y="124" fill="#cbd5e1" font-size="10.5">• corpsEtat, origines, responsables liés</text>
+  </g>
+
+  <line x1="552" y1="156" x2="581" y2="156" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- STEP 3: Table users & Token -->
+  <g transform="translate(585, 84)">
+    <rect width="250" height="145" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="12" y="12" width="226" height="26" rx="6" fill="rgba(245,158,11,0.18)"/>
+    <text x="22" y="29" fill="#fbbf24" font-weight="800" font-size="12">3. COMPTE ADMIN (public.users)</text>
+    <text x="14" y="54" fill="#f8fafc" font-weight="700" font-size="11.5">Création Administrateur du Tenant</text>
+    <text x="14" y="73" fill="#cbd5e1" font-size="10.5">• Mot de passe haché bcrypt ( coût 12 )</text>
+    <text x="14" y="90" fill="#cbd5e1" font-size="10.5">• role = 'ADMIN' • companyId = #ID</text>
+    <text x="14" y="107" fill="#cbd5e1" font-size="10.5">• active = false, emailConfirmed = false</text>
+    <text x="14" y="124" fill="#fbbf24" font-weight="700" font-size="10.5">• confirmationToken aléatoire 256 bits</text>
+  </g>
+
+  <line x1="835" y1="156" x2="864" y2="156" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- STEP 4: Activation Email & Validation -->
+  <g transform="translate(868, 84)">
+    <rect width="228" height="145" rx="12" fill="#1e293b" stroke="#a855f7" stroke-width="2"/>
+    <rect x="12" y="12" width="204" height="26" rx="6" fill="rgba(168,85,247,0.2)"/>
+    <text x="20" y="29" fill="#d8b4fe" font-weight="800" font-size="12">4. ACTIVATION E-MAIL &amp; JWT</text>
+    <text x="14" y="54" fill="#f8fafc" font-weight="700" font-size="11.5">GET /api/auth/confirm-email</text>
+    <text x="14" y="73" fill="#cbd5e1" font-size="10.5">• Envoi SMTP / Relais Supabase</text>
+    <text x="14" y="90" fill="#cbd5e1" font-size="10.5">• Clic lien -&gt; emailConfirmed = true</text>
+    <text x="14" y="107" fill="#cbd5e1" font-size="10.5">• Preuve IP &amp; termsAcceptedAt</text>
+    <text x="14" y="124" fill="#10b981" font-weight="700" font-size="10.5">• Connexion JWT (userId, companyId)</text>
+  </g>
+
+  <!-- BOTTOM SECTION: Multi-Tenant Data Isolation in Supabase -->
+  <g transform="translate(24, 248)">
+    <rect width="1072" height="152" rx="14" fill="rgba(15, 23, 42, 0.88)" stroke="#059669" stroke-width="2"/>
+    <rect x="16" y="14" width="1040" height="30" rx="8" fill="url(#supaGrad)"/>
+    <text x="30" y="34" fill="#ffffff" font-weight="800" font-size="13">5. ISOLATION MULTI-TENANT STRICTE DANS SUPABASE POSTGRESQL (Clé étrangère indexée companyId sur toutes les tables)</text>
+
+    <!-- 5 Table boxes -->
+    <g transform="translate(16, 56)">
+      <rect width="198" height="82" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="12" y="22" fill="#38bdf8" font-weight="800" font-size="11.5">Table : public.users</text>
+      <text x="12" y="40" fill="#e2e8f0" font-size="10">• FK : companyId -&gt; companies.id</text>
+      <text x="12" y="56" fill="#94a3b8" font-size="10">• Rôles : ADMIN, USER, TECHNICIEN</text>
+      <text x="12" y="72" fill="#10b981" font-weight="700" font-size="10">• Index : users_companyid_idx</text>
+    </g>
+
+    <g transform="translate(226, 56)">
+      <rect width="202" height="82" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="12" y="22" fill="#a855f7" font-weight="800" font-size="11.5">Table : public.devis</text>
+      <text x="12" y="40" fill="#e2e8f0" font-size="10">• FK : companyId (Cascade)</text>
+      <text x="12" y="56" fill="#94a3b8" font-size="10">• 22 colonnes + Visite + GPS</text>
+      <text x="12" y="72" fill="#10b981" font-weight="700" font-size="10">• Index : devis_companyid_idx</text>
+    </g>
+
+    <g transform="translate(440, 56)">
+      <rect width="212" height="82" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="12" y="22" fill="#10b981" font-weight="800" font-size="11.5">Table : public.interventions</text>
+      <text x="12" y="40" fill="#e2e8f0" font-size="10">• FK : companyId &amp; devisId</text>
+      <text x="12" y="56" fill="#94a3b8" font-size="10">• 23 col. + Photos + Clôture GPS</text>
+      <text x="12" y="72" fill="#10b981" font-weight="700" font-size="10">• Index : interventions_companyid_idx</text>
+    </g>
+
+    <g transform="translate(664, 56)">
+      <rect width="204" height="82" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="12" y="22" fill="#fbbf24" font-weight="800" font-size="11.5">Table : pointages_techniciens</text>
+      <text x="12" y="40" fill="#e2e8f0" font-size="10">• FK : companyId (Cascade)</text>
+      <text x="12" y="56" fill="#94a3b8" font-size="10">• Horodatage certifié Matin / Soir</text>
+      <text x="12" y="72" fill="#10b981" font-weight="700" font-size="10">• Unique (tech, date, companyId)</text>
+    </g>
+
+    <g transform="translate(880, 56)">
+      <rect width="176" height="82" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="12" y="22" fill="#f472b6" font-weight="800" font-size="11.5">Table : public.referentiels</text>
+      <text x="12" y="40" fill="#e2e8f0" font-size="10">• FK : companyId (Cascade)</text>
+      <text x="12" y="56" fill="#94a3b8" font-size="10">• Clients, Tarifs, Positions GPS</text>
+      <text x="12" y="72" fill="#10b981" font-weight="700" font-size="10">• Unique (categorie, companyId)</text>
+    </g>
+  </g>
+</svg>
