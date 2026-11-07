@@ -15,7 +15,7 @@ function NavButton({ item, active, onClick, showLabel = true, variant = '' }) {
   );
 }
 
-function UserMenu({ compact }) {
+function UserMenu({ compact, onOpenProfile }) {
   const { go } = useMock();
   return (
     <Menu
@@ -29,13 +29,100 @@ function UserMenu({ compact }) {
         </button>
       )}
       items={[
-        { label: 'Mon profil', icon: User },
+        { label: 'Mon profil', icon: User, onClick: onOpenProfile, testid: 'mock-open-profile' },
         { label: 'Paramètres métier', icon: Settings, onClick: () => go('parametres') },
         { label: 'Voir la page vitrine', icon: Radio, onClick: () => go('vitrine') },
         { sep: true },
         { label: 'Se déconnecter', icon: LogOut, danger: true, onClick: () => go('connexion'), testid: 'mock-logout' },
       ]}
     />
+  );
+}
+
+function ProfileModal({ open, onClose }) {
+  const { go } = useMock();
+  const [userPref, setUserPref] = useState(null);
+  const companyDefault = 'atlas';
+  const allowOverride = true;
+  const themes = [
+    { id: 'light', name: 'ANELEC Original — Clair', dark: false, sw: ['#047857', '#142536'] },
+    { id: 'dark', name: 'ANELEC Original — Sombre', dark: true, sw: ['#10b981', '#0a1017'] },
+    { id: 'atlas', name: 'Atlas Clarity', dark: false, sw: ['#1D4ED8', '#0F172A'] },
+    { id: 'craft', name: 'Craft Warmth', dark: false, sw: ['#0F766E', '#22201C'] },
+    { id: 'signal', name: 'Signal Command', dark: true, sw: ['#38BDF8', '#0B1220'] },
+    { id: 'swiss', name: 'Editorial Swiss', dark: false, sw: ['#0B3B8F', '#0B1220'] },
+    { id: 'bento', name: 'Bento Modular', dark: false, sw: ['#111827', '#F5B400'] },
+  ];
+  if (!open) return null;
+  return (
+    <div className="m-overlay" data-testid="mock-profile-modal" onClick={onClose}>
+      <div className="m-modal" style={{ '--mw': '680px' }} onClick={(e) => e.stopPropagation()}>
+        <header className="m-modal-head">
+          <span className="m-modal-icon"><User size={18} /></span>
+          <div className="m-modal-titles">
+            <h3>Mon profil</h3>
+            <p>{ME.name} · {ME.email} · <strong>{ME.role}</strong></p>
+          </div>
+          <button type="button" className="m-icon-btn" onClick={onClose} data-testid="mock-profile-close" aria-label="Fermer"><X size={16} /></button>
+        </header>
+        <main className="m-modal-body">
+          <section>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+              <div>
+                <strong style={{ fontSize: 14 }}>Mon apparence</strong>
+                <p className="m-muted m-small" style={{ margin: '2px 0 0' }}>Choisissez votre apparence personnelle, elle vous suit d'un appareil à l'autre.</p>
+              </div>
+              {userPref && (
+                <button type="button" className="m-btn m-btn--sm" onClick={() => setUserPref(null)} data-testid="mock-profile-reset">↺ Revenir au défaut</button>
+              )}
+            </div>
+            {!allowOverride ? (
+              <div className="m-callout m-callout--note">
+                <strong>Désactivée par votre administrateur</strong>
+                <p style={{ margin: 0 }}>Le thème ANELEC Original — Clair s'applique à tous les collaborateurs sans possibilité de le modifier.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
+                {themes.map((t) => {
+                  const isActive = (userPref || companyDefault) === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setUserPref(t.id)}
+                      data-testid={`mock-profile-theme-${t.id}`}
+                      style={{ all: 'unset', cursor: 'pointer', padding: 10, borderRadius: 10, border: `2px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10 }}
+                    >
+                      <div style={{ width: 40, height: 28, borderRadius: 6, background: `linear-gradient(135deg, ${t.sw[0]} 0%, ${t.sw[1]} 100%)`, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</strong>
+                        <span className="m-muted" style={{ fontSize: 10.5 }}>{t.dark ? 'Sombre' : 'Clair'}</span>
+                      </div>
+                      {isActive && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'var(--primary-soft)', color: 'var(--primary)' }}>Actif</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+          <section>
+            <strong style={{ fontSize: 14 }}>Mes informations</strong>
+            <div className="m-dl" style={{ marginTop: 8 }}>
+              <div><dt>Entreprise</dt><dd>{COMPANY.name}</dd></div>
+              <div><dt>Rôle</dt><dd>{ME.role}</dd></div>
+              <div><dt>Dernière connexion</dt><dd>Aujourd'hui, 09:14</dd></div>
+            </div>
+          </section>
+        </main>
+        <footer className="m-modal-foot">
+          <span className="m-muted">Besoin d'aide ? Contactez votre administrateur.</span>
+          <button type="button" className="m-btn" onClick={onClose}>Fermer</button>
+          <button type="button" className="m-btn m-btn--primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => { onClose(); go('connexion'); }} data-testid="mock-profile-logout">
+            <LogOut size={14} /> Se déconnecter
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }
 
@@ -204,6 +291,8 @@ export function Shell({ screen, children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1360);
   const [swissIdx, setSwissIdx] = useState(false);
+  const [profile, setProfile] = useState(false);
+  const openProfile = () => setProfile(true);
   const current = NAV_BY_ID[screen] || NAV_ITEMS[0];
   const [clock, setClock] = useState('10:36');
   useEffect(() => {
@@ -228,7 +317,8 @@ export function Shell({ screen, children }) {
         <main className="m-content">{children}</main>
         {dir.id !== 'swiss' && <MobileNav />}
         <SwissIndex open={swissIdx} onClose={() => setSwissIdx(false)} />
-      </div>
+            <ProfileModal open={profile} onClose={() => setProfile(false)} />
+    </div>
     );
   }
 
@@ -255,11 +345,12 @@ export function Shell({ screen, children }) {
           </nav>
           <div className="m-topnav-end">
             <TopActions compactSearch />
-            <UserMenu compact />
+            <UserMenu compact onOpenProfile={openProfile} />
           </div>
         </header>
         <main className="m-content">{children}</main>
-      </div>
+            <ProfileModal open={profile} onClose={() => setProfile(false)} />
+    </div>
     );
   }
 
@@ -276,7 +367,7 @@ export function Shell({ screen, children }) {
           </nav>
           <div className="m-topnav-end">
             <TopActions compactSearch />
-            <UserMenu compact />
+            <UserMenu compact onOpenProfile={openProfile} />
           </div>
         </header>
         <div className="m-swiss-crumbs">
@@ -284,7 +375,8 @@ export function Shell({ screen, children }) {
           <time>{TODAY_LABEL}</time>
         </div>
         <main className="m-content">{children}</main>
-      </div>
+            <ProfileModal open={profile} onClose={() => setProfile(false)} />
+    </div>
     );
   }
 
@@ -302,7 +394,7 @@ export function Shell({ screen, children }) {
               </div>
             ))}
           </nav>
-          <UserMenu compact />
+          <UserMenu compact onOpenProfile={openProfile} />
         </aside>
         <div className="m-main">
           <header className="m-topbar">
@@ -319,7 +411,8 @@ export function Shell({ screen, children }) {
           <main className="m-content">{children}</main>
         </div>
         {panel && <CommandPanel onClose={() => setPanel(false)} />}
-      </div>
+            <ProfileModal open={profile} onClose={() => setProfile(false)} />
+    </div>
     );
   }
 
@@ -351,7 +444,7 @@ export function Shell({ screen, children }) {
             {bento ? (
               <div className="m-side-sync"><i /> <span><strong>Planning synchronisé</strong><small>6 techniciens connectés</small></span></div>
             ) : (
-              <UserMenu />
+              <UserMenu onOpenProfile={openProfile} />
             )}
           </div>
         )}
@@ -367,11 +460,12 @@ export function Shell({ screen, children }) {
           </div>
           <div className="m-topbar-end">
             <TopActions />
-            {bento && <UserMenu compact />}
+            {bento && <UserMenu compact onOpenProfile={openProfile} />}
           </div>
         </header>
         <main className="m-content">{children}</main>
       </div>
-    </div>
+        <ProfileModal open={profile} onClose={() => setProfile(false)} />
+  </div>
   );
 }

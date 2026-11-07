@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -24,12 +25,15 @@ const publicUserSelect = {
   permissionsJson: true,
   active: true,
   companyId: true,
+  themePref: true,
   company: {
     select: {
       id: true,
       name: true,
       siret: true,
       siren: true,
+      defaultTheme: true,
+      allowThemeOverride: true,
     },
   },
   createdAt: true,
@@ -596,6 +600,83 @@ adminRouter.post(
         result.delivery.channel === 'SMTP_PRODUCTION'
           ? `E-mail de test envoyé avec succès via ${result.delivery.hostUsed} à ${toEmail}`
           : `E-mail de test généré via le relais de prévisualisation pour ${toEmail}`,
+    });
+  })
+);
+
+// ============================================================================
+// 7. APPARENCE & THÈMES — défaut entreprise + autorisation de personnalisation
+// ============================================================================
+
+const ALLOWED_THEMES = ['light', 'dark', 'atlas', 'craft', 'signal', 'swiss', 'bento'] as const;
+const CompanyAppearanceSchema = z.object({
+  defaultTheme: z.enum(ALLOWED_THEMES).optional(),
+  allowThemeOverride: z.boolean().optional(),
+});
+
+/**
+ * GET /api/admin/appearance
+ * Renvoie le défaut et l'autorisation actuels de l'entreprise connectée.
+ */
+adminRouter.get(
+  '/appearance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
+    }
+    const companyId = caller.companyId || 1;
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+    });
+    if (!company) throw new AppError(404, 'Entreprise introuvable', 'COMPANY_NOT_FOUND');
+    res.json({
+      companyId: company.id,
+      companyName: company.name,
+      defaultTheme: company.defaultTheme || 'light',
+      allowThemeOverride: company.allowThemeOverride !== false,
+      availableThemes: ALLOWED_THEMES,
+    });
+  })
+);
+
+/**
+ * PATCH /api/admin/appearance
+ * Modifie le défaut et/ou le flag d'autorisation pour l'entreprise connectée.
+ */
+adminRouter.patch(
+  '/appearance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
+    }
+    const parsed = CompanyAppearanceSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
+    }
+    const { defaultTheme, allowThemeOverride } = parsed.data;
+    if (defaultTheme === undefined && allowThemeOverride === undefined) {
+      throw new AppError(400, 'Rien à mettre à jour', 'EMPTY_PAYLOAD');
+    }
+
+    const companyId = caller.companyId || 1;
+    const updated = await prisma.company.update({
+      where: { id: companyId },
+      data: {
+        ...(defaultTheme !== undefined ? { defaultTheme } : {}),
+        ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
+      },
+      select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+    });
+
+    res.json({
+      companyId: updated.id,
+      companyName: updated.name,
+      defaultTheme: updated.defaultTheme || 'light',
+      allowThemeOverride: updated.allowThemeOverride !== false,
+      message: "Apparence de l'entreprise mise à jour.",
     });
   })
 );

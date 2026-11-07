@@ -2,17 +2,19 @@
  * ANELEC — Thème (apparence) sélectionnable
  * ─────────────────────────────────────────
  * • Deux couches de préférence :
- *   1. Un défaut *entreprise*, choisi par l'administrateur (clé entreprise).
- *   2. Une préférence *personnelle* par utilisateur (si l'option est autorisée).
- * • Persistance : localStorage. Pas de dépendance backend pour cette première
- *   itération — l'intégration côté API peut être ajoutée sans rupture.
- * • L'attribut `data-theme` est posé sur <html> : les tokens CSS (themes.css +
- *   design-tokens.css) prennent le relais automatiquement, sans toucher aux
- *   composants existants.
+ *   1. Un défaut *entreprise*, choisi par l'administrateur (persistance BDD).
+ *   2. Une préférence *personnelle* par utilisateur (persistance BDD si autorisée).
+ * • Sources :
+ *   - Au boot, on prend localStorage (affichage instantané).
+ *   - Dès que /me répond, on remplace par les valeurs du serveur (source de vérité).
+ *   - Les changements admin / utilisateur appellent l'API et, si OK, mettent à jour
+ *     localStorage + authStore.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { api } from '../lib/api';
+import { useAuthStore } from './authStore';
 
 export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';
 
@@ -111,31 +113,30 @@ export const THEMES: ThemeDescriptor[] = [
 ];
 
 export const DEFAULT_THEME: ThemeId = 'light';
+const ALL_IDS = THEMES.map((t) => t.id);
+const isValid = (v: unknown): v is ThemeId => typeof v === 'string' && (ALL_IDS as string[]).includes(v);
 
-// Clés localStorage
+// Clés localStorage (cache rapide pour le premier rendu)
 const K_COMPANY = 'anelec_theme_company_default';
 const K_USER = 'anelec_theme_user_pref';
 const K_ALLOW = 'anelec_theme_allow_user_override';
 
-export function readCompanyDefault(): ThemeId {
-  const v = localStorage.getItem(K_COMPANY) as ThemeId | null;
-  return v && THEMES.some((t) => t.id === v) ? v : DEFAULT_THEME;
+function readCompanyDefault(): ThemeId {
+  const v = localStorage.getItem(K_COMPANY);
+  return isValid(v) ? v : DEFAULT_THEME;
 }
-export function readUserPref(): ThemeId | null {
-  const v = localStorage.getItem(K_USER) as ThemeId | null;
-  return v && THEMES.some((t) => t.id === v) ? v : null;
+function readUserPref(): ThemeId | null {
+  const v = localStorage.getItem(K_USER);
+  return isValid(v) ? v : null;
 }
-export function readAllowOverride(): boolean {
+function readAllowOverride(): boolean {
   return localStorage.getItem(K_ALLOW) !== 'false';
 }
-
-export function resolveTheme(): ThemeId {
-  const allow = readAllowOverride();
-  if (allow) {
-    const u = readUserPref();
-    if (u) return u;
-  }
-  return readCompanyDefault();
+function writeCache(companyDefault: ThemeId, userPref: ThemeId | null, allowOverride: boolean) {
+  localStorage.setItem(K_COMPANY, companyDefault);
+  localStorage.setItem(K_ALLOW, String(allowOverride));
+  if (userPref) localStorage.setItem(K_USER, userPref);
+  else localStorage.removeItem(K_USER);
 }
 
 function applyTheme(id: ThemeId): void {
@@ -145,14 +146,20 @@ function applyTheme(id: ThemeId): void {
   window.setTimeout(() => html.removeAttribute('data-theme-switching'), 260);
 }
 
+function resolve(companyDefault: ThemeId, userPref: ThemeId | null, allow: boolean): ThemeId {
+  return allow && userPref ? userPref : companyDefault;
+}
+
 export interface ThemeContextValue {
   current: ThemeId;
   companyDefault: ThemeId;
   userPref: ThemeId | null;
   allowUserOverride: boolean;
-  setCompanyDefault: (id: ThemeId) => void;
-  setUserPref: (id: ThemeId | null) => void;
-  setAllowUserOverride: (allow: boolean) => void;
+  isPending: boolean;
+  setCompanyDefault: (id: ThemeId) => Promise<void>;
+  setUserPref: (id: ThemeId | null) => Promise<void>;
+  setAllowUserOverride: (allow: boolean) => Promise<void>;
+  previewTheme: (id: ThemeId | null) => void;
   themes: ThemeDescriptor[];
   previewFor: (id: ThemeId) => ThemeDescriptor | undefined;
 }
@@ -164,8 +171,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [companyDefault, setCompanyDefaultState] = useState<ThemeId>(DEFAULT_THEME);
   const [userPref, setUserPrefState] = useState<ThemeId | null>(null);
   const [allowUserOverride, setAllowUserOverrideState] = useState<boolean>(true);
+  const [isPending, setIsPending] = useState<boolean>(false);
 
-  // Initial read + application
+  // 1) Au boot : lire le cache local pour un rendu instantané.
   useEffect(() => {
     const cd = readCompanyDefault();
     const up = readUserPref();
@@ -173,12 +181,45 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setCompanyDefaultState(cd);
     setUserPrefState(up);
     setAllowUserOverrideState(allow);
-    const resolved = allow && up ? up : cd;
+    const resolved = resolve(cd, up, allow);
     setCurrent(resolved);
     applyTheme(resolved);
   }, []);
 
-  // React to multi-tab changes
+  // 2) Dès que /me a répondu, prendre le serveur comme source de vérité.
+  useEffect(() => {
+    const unsub = useAuthStore.subscribe((state) => {
+      const u = state.user;
+      if (!u || !u.theme) return;
+      const cd = (isValid(u.theme.companyDefault) ? u.theme.companyDefault : DEFAULT_THEME) as ThemeId;
+      const up = (isValid(u.theme.userPref) ? u.theme.userPref : null) as ThemeId | null;
+      const allow = u.theme.allowOverride !== false;
+      setCompanyDefaultState(cd);
+      setUserPrefState(up);
+      setAllowUserOverrideState(allow);
+      writeCache(cd, up, allow);
+      const resolved = resolve(cd, up, allow);
+      setCurrent(resolved);
+      applyTheme(resolved);
+    });
+    // Appliquer immédiatement si un user est déjà en mémoire (navigation interne)
+    const u = useAuthStore.getState().user;
+    if (u?.theme) {
+      const cd = (isValid(u.theme.companyDefault) ? u.theme.companyDefault : DEFAULT_THEME) as ThemeId;
+      const up = (isValid(u.theme.userPref) ? u.theme.userPref : null) as ThemeId | null;
+      const allow = u.theme.allowOverride !== false;
+      setCompanyDefaultState(cd);
+      setUserPrefState(up);
+      setAllowUserOverrideState(allow);
+      writeCache(cd, up, allow);
+      const resolved = resolve(cd, up, allow);
+      setCurrent(resolved);
+      applyTheme(resolved);
+    }
+    return () => unsub();
+  }, []);
+
+  // Multi-onglets
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (![K_COMPANY, K_USER, K_ALLOW].includes(e.key || '')) return;
@@ -188,7 +229,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setCompanyDefaultState(cd);
       setUserPrefState(up);
       setAllowUserOverrideState(allow);
-      const resolved = allow && up ? up : cd;
+      const resolved = resolve(cd, up, allow);
       setCurrent(resolved);
       applyTheme(resolved);
     };
@@ -196,48 +237,67 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const setCompanyDefault = useCallback((id: ThemeId) => {
-    localStorage.setItem(K_COMPANY, id);
-    setCompanyDefaultState(id);
-    const allow = readAllowOverride();
-    const up = readUserPref();
-    const resolved = allow && up ? up : id;
-    setCurrent(resolved);
-    applyTheme(resolved);
-  }, []);
+  /** Aperçu temporaire (survol) — n'est pas persisté côté serveur. */
+  const previewTheme = useCallback((id: ThemeId | null) => {
+    const resolved = id ?? resolve(companyDefault, userPref, allowUserOverride);
+    document.documentElement.setAttribute('data-theme', resolved);
+  }, [companyDefault, userPref, allowUserOverride]);
 
-  const setUserPref = useCallback((id: ThemeId | null) => {
-    if (id === null) localStorage.removeItem(K_USER);
-    else localStorage.setItem(K_USER, id);
-    setUserPrefState(id);
-    const allow = readAllowOverride();
-    const cd = readCompanyDefault();
-    const resolved = allow && id ? id : cd;
-    setCurrent(resolved);
-    applyTheme(resolved);
-  }, []);
+  const setCompanyDefault = useCallback(async (id: ThemeId) => {
+    setIsPending(true);
+    try {
+      await api.patch('/admin/appearance', { defaultTheme: id });
+      setCompanyDefaultState(id);
+      writeCache(id, userPref, allowUserOverride);
+      const resolved = resolve(id, userPref, allowUserOverride);
+      setCurrent(resolved);
+      applyTheme(resolved);
+    } finally {
+      setIsPending(false);
+    }
+  }, [userPref, allowUserOverride]);
 
-  const setAllowUserOverride = useCallback((allow: boolean) => {
-    localStorage.setItem(K_ALLOW, String(allow));
-    setAllowUserOverrideState(allow);
-    const cd = readCompanyDefault();
-    const up = readUserPref();
-    const resolved = allow && up ? up : cd;
-    setCurrent(resolved);
-    applyTheme(resolved);
-  }, []);
+  const setUserPref = useCallback(async (id: ThemeId | null) => {
+    setIsPending(true);
+    try {
+      await api.patch('/auth/me/theme', { theme: id ?? 'reset' });
+      setUserPrefState(id);
+      writeCache(companyDefault, id, allowUserOverride);
+      const resolved = resolve(companyDefault, id, allowUserOverride);
+      setCurrent(resolved);
+      applyTheme(resolved);
+    } finally {
+      setIsPending(false);
+    }
+  }, [companyDefault, allowUserOverride]);
+
+  const setAllowUserOverride = useCallback(async (allow: boolean) => {
+    setIsPending(true);
+    try {
+      await api.patch('/admin/appearance', { allowThemeOverride: allow });
+      setAllowUserOverrideState(allow);
+      writeCache(companyDefault, userPref, allow);
+      const resolved = resolve(companyDefault, userPref, allow);
+      setCurrent(resolved);
+      applyTheme(resolved);
+    } finally {
+      setIsPending(false);
+    }
+  }, [companyDefault, userPref]);
 
   const value = useMemo<ThemeContextValue>(() => ({
     current,
     companyDefault,
     userPref,
     allowUserOverride,
+    isPending,
     setCompanyDefault,
     setUserPref,
     setAllowUserOverride,
+    previewTheme,
     themes: THEMES,
     previewFor: (id: ThemeId) => THEMES.find((t) => t.id === id),
-  }), [current, companyDefault, userPref, allowUserOverride, setCompanyDefault, setUserPref, setAllowUserOverride]);
+  }), [current, companyDefault, userPref, allowUserOverride, isPending, setCompanyDefault, setUserPref, setAllowUserOverride, previewTheme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

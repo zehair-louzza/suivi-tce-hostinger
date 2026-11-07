@@ -999,6 +999,15 @@ export interface CompanyInfo {
   siren?: string | null;
 }
 
+export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';
+
+export interface UserThemeSettings {
+  companyDefault: ThemeId;
+  allowOverride: boolean;
+  userPref: ThemeId | null;
+  resolved: ThemeId;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -1011,6 +1020,7 @@ export interface User {
   companyName?: string | null;
   companySiret?: string | null;
   company?: CompanyInfo | null;
+  theme?: UserThemeSettings;
   createdAt?: number | string;
 }
 

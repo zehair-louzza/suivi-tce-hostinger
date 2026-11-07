@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
+import { ProfileMenu } from './ProfileMenu';
 import { isUserMobileOnly, canUserAccessSection } from '../../../shared/types';
 
 export type AppSection =
@@ -53,6 +54,7 @@ export function Layout({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parisTime, setParisTime] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('anelec-theme-v2');
     return (saved === 'light' || saved === 'dark') ? saved : 'light';
@@ -437,7 +439,29 @@ export function Layout({
         <div className="sidebar-footer">
           {!collapsed && user && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                data-testid="sidebar-profile-trigger"
+                title="Mon profil"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  minWidth: 0,
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '4px 6px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  color: 'inherit',
+                  transition: 'background 120ms ease',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+              >
                 <div className="avatar">
                   {user.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() : 'ZL'}
                 </div>
@@ -449,7 +473,7 @@ export function Layout({
                     {isMobileTechOnly ? 'Technicien Terrain' : (user.role === 'ADMIN' ? 'Administrateur' : user.role || 'Gestionnaire')}
                   </div>
                 </div>
-              </div>
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -476,6 +500,7 @@ export function Layout({
           )}
         </div>
       </aside>
+      <ProfileMenu open={profileOpen} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />
 
       {/* MAIN WORKSPACE */}
       <div className="enterprise-main">

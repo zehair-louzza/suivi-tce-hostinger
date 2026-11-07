@@ -136,12 +136,17 @@ export function formatPublicUser(u: {
   permissionsJson?: string | null;
   active?: boolean;
   companyId?: number | null;
-  company?: { id: number; name: string; siret?: string | null; siren?: string | null } | null;
+  themePref?: string | null;
+  company?: { id: number; name: string; siret?: string | null; siren?: string | null; defaultTheme?: string | null; allowThemeOverride?: boolean | null } | null;
   createdAt?: Date | string;
 }) {
   const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
   const companyId = u.companyId || u.company?.id || 1;
   const companyName = u.company?.name || (companyId === 1 ? 'ANELEC GROUPE' : `Entreprise #${companyId}`);
+  const companyDefaultTheme = u.company?.defaultTheme || 'light';
+  const allowThemeOverride = u.company?.allowThemeOverride !== false;
+  const userThemePref = u.themePref || null;
+  const resolvedTheme = allowThemeOverride && userThemePref ? userThemePref : companyDefaultTheme;
   return {
     id: u.id,
     email: u.email,
@@ -154,6 +159,12 @@ export function formatPublicUser(u: {
     companyName,
     companySiret: u.company?.siret || (companyId === 1 ? '933 108 607 00021' : null),
     company: u.company ? { id: u.company.id, name: u.company.name, siret: u.company.siret, siren: u.company.siren } : { id: companyId, name: companyName },
+    theme: {
+      companyDefault: companyDefaultTheme,
+      allowOverride: allowThemeOverride,
+      userPref: userThemePref,
+      resolved: resolvedTheme,
+    },
     createdAt: u.createdAt,
   };
 }
@@ -168,12 +179,15 @@ const publicUserSelect = {
   active: true,
   emailConfirmed: true,
   companyId: true,
+  themePref: true,
   company: {
     select: {
       id: true,
       name: true,
       siret: true,
       siren: true,
+      defaultTheme: true,
+      allowThemeOverride: true,
     },
   },
   createdAt: true,
@@ -572,6 +586,60 @@ authRouter.get(
     });
     if (!user) throw new AppError(404, 'Utilisateur non trouvé', 'USER_NOT_FOUND');
     res.json({ user: formatPublicUser(user) });
+  })
+);
+
+// Liste blanche des thèmes accessibles aux utilisateurs
+const ALLOWED_THEMES = ['light', 'dark', 'atlas', 'craft', 'signal', 'swiss', 'bento'] as const;
+const ThemeIdSchema = z.enum(ALLOWED_THEMES);
+
+/**
+ * PATCH /api/auth/me/theme
+ * ------------------------------------------------------------------
+ * Enregistre la préférence de thème personnelle de l'utilisateur.
+ * - Si l'entreprise n'autorise pas la personnalisation, la requête est
+ *   rejetée pour informer l'utilisateur (403 THEME_OVERRIDE_DISABLED).
+ * - Envoyer `{ theme: null }` ou `{ theme: "reset" }` supprime la
+ *   préférence personnelle (retour au défaut entreprise).
+ */
+authRouter.patch(
+  '/me/theme',
+  authMiddleware,
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new AppError(401, 'Non authentifié', 'UNAUTHORIZED');
+
+    const raw = (req.body ?? {}) as { theme?: string | null };
+    const value = raw.theme;
+    let nextTheme: string | null;
+    if (value === null || value === undefined || value === '' || value === 'reset') {
+      nextTheme = null;
+    } else {
+      const parsed = ThemeIdSchema.safeParse(value);
+      if (!parsed.success) throw new AppError(400, 'Thème inconnu', 'INVALID_THEME');
+      nextTheme = parsed.data;
+    }
+
+    // Vérifier que l'entreprise autorise la personnalisation (sauf pour reset).
+    if (nextTheme !== null) {
+      const u = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { companyId: true, company: { select: { allowThemeOverride: true } } },
+      });
+      if (u?.company && u.company.allowThemeOverride === false) {
+        throw new AppError(
+          403,
+          "La personnalisation individuelle de l'apparence a été désactivée par votre administrateur.",
+          'THEME_OVERRIDE_DISABLED'
+        );
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { themePref: nextTheme },
+      select: publicUserSelect,
+    });
+    res.json({ user: formatPublicUser(updated), message: nextTheme ? "Apparence personnelle mise à jour." : "Apparence personnelle réinitialisée." });
   })
 );
 

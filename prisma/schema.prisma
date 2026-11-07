@@ -13,6 +13,8 @@ model Company {
   siret                String?
   siren                String?
   active               Boolean              @default(true)
+  defaultTheme         String               @default("light")
+  allowThemeOverride   Boolean              @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   users                User[]
@@ -38,6 +40,7 @@ model User {
   confirmationSentAt DateTime?
   termsAcceptedAt    DateTime?
   termsAcceptedIp    String?
+  themePref          String?
   companyId          Int?
   company            Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())

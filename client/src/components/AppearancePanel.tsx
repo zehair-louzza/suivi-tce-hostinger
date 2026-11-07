@@ -152,7 +152,7 @@ function ThemeCard({ theme, isDefault, isCurrent, onSelect, onHover }: ThemeCard
 }
 
 export function AppearancePanel() {
-  const { current, companyDefault, allowUserOverride, setCompanyDefault, setAllowUserOverride } = useTheme();
+  const { current, companyDefault, allowUserOverride, isPending, setCompanyDefault, setAllowUserOverride, previewTheme } = useTheme();
   const { user } = useAuth();
   const [hover, setHover] = useState<ThemeId | null>(null);
   const [pending, setPending] = useState<ThemeId | null>(null);
@@ -161,18 +161,23 @@ export function AppearancePanel() {
   // Appliquer l'aperçu temporairement pendant le survol (non persistant).
   const applyPreview = (id: ThemeId | null) => {
     setHover(id);
-    if (id) document.documentElement.setAttribute('data-theme', id);
-    else document.documentElement.setAttribute('data-theme', current);
+    previewTheme(id);
   };
 
-  const confirm = (id: ThemeId) => {
-    setCompanyDefault(id);
-    setPending(null);
-    setHover(null);
-    toast.success(
-      `Apparence « ${THEMES.find((t) => t.id === id)?.name} » définie comme défaut de l'entreprise.`,
-      { icon: '◆', duration: 3000 },
-    );
+  const confirm = async (id: ThemeId) => {
+    try {
+      setPending(id);
+      await setCompanyDefault(id);
+      setHover(null);
+      toast.success(
+        `Apparence « ${THEMES.find((t) => t.id === id)?.name} » définie comme défaut de l'entreprise.`,
+        { icon: '◆', duration: 3000 },
+      );
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Impossible d'enregistrer le thème. Réessayez.");
+    } finally {
+      setPending(null);
+    }
   };
 
   const isAdmin = user?.role === 'ADMIN' || Boolean(user?.permissions?.canManageUsers) || user?.id === 1;
@@ -259,14 +264,20 @@ export function AppearancePanel() {
               <input
                 type="checkbox"
                 checked={allowUserOverride}
-                onChange={(e) => {
-                  setAllowUserOverride(e.target.checked);
-                  toast.success(
-                    e.target.checked
-                      ? 'Les collaborateurs peuvent désormais personnaliser leur apparence.'
-                      : 'Personnalisation personnelle désactivée — tous reviennent au défaut.',
-                    { icon: e.target.checked ? '✓' : '○', duration: 2500 },
-                  );
+                disabled={isPending}
+                onChange={async (e) => {
+                  const next = e.target.checked;
+                  try {
+                    await setAllowUserOverride(next);
+                    toast.success(
+                      next
+                        ? 'Les collaborateurs peuvent désormais personnaliser leur apparence.'
+                        : 'Personnalisation personnelle désactivée — tous reviennent au défaut.',
+                      { icon: next ? '✓' : '○', duration: 2500 },
+                    );
+                  } catch (err: any) {
+                    toast.error(err?.response?.data?.error || "Modification impossible.");
+                  }
                 }}
                 data-testid="theme-allow-override-toggle"
                 style={{ width: 16, height: 16 }}
@@ -323,7 +334,7 @@ export function AppearancePanel() {
  * permet à chacun de choisir son thème personnel ou de revenir au défaut.
  */
 export function PersonalThemePicker() {
-  const { companyDefault, userPref, allowUserOverride, setUserPref } = useTheme();
+  const { companyDefault, userPref, allowUserOverride, isPending, setUserPref } = useTheme();
   if (!allowUserOverride) {
     return (
       <div style={{ padding: 14, borderRadius: 'var(--rounded-card, 10px)', background: 'var(--color-surface-subtle)', border: '1px solid var(--color-border)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
@@ -337,15 +348,20 @@ export function PersonalThemePicker() {
         <div>
           <strong style={{ fontSize: 14, color: 'var(--color-text)' }}>Mon apparence</strong>
           <p style={{ margin: '2px 0 0', color: 'var(--color-text-secondary)', fontSize: 12.5 }}>
-            Choisissez votre apparence personnelle, elle ne s'applique qu'à votre compte sur cet appareil.
+            Choisissez votre apparence personnelle, elle s'applique à votre compte et vous suit d'un appareil à l'autre.
           </p>
         </div>
         {userPref && (
           <button
             type="button"
-            onClick={() => {
-              setUserPref(null);
-              toast.success('Apparence personnelle réinitialisée — retour au défaut de l\'entreprise.', { icon: '↺', duration: 2500 });
+            disabled={isPending}
+            onClick={async () => {
+              try {
+                await setUserPref(null);
+                toast.success("Apparence personnelle réinitialisée — retour au défaut de l'entreprise.", { icon: '↺', duration: 2500 });
+              } catch (err: any) {
+                toast.error(err?.response?.data?.error || 'Impossible de réinitialiser.');
+              }
             }}
             data-testid="theme-reset-user"
             style={{
@@ -356,7 +372,8 @@ export function PersonalThemePicker() {
               color: 'var(--color-text)',
               fontSize: 12.5,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isPending ? 'wait' : 'pointer',
+              opacity: isPending ? 0.6 : 1,
             }}
           >
             ↺ Revenir au défaut entreprise
@@ -370,14 +387,19 @@ export function PersonalThemePicker() {
             <button
               key={t.id}
               type="button"
-              onClick={() => {
-                setUserPref(t.id);
-                toast.success(`Votre apparence est désormais « ${t.name} ».`, { icon: '◆', duration: 2200 });
+              disabled={isPending}
+              onClick={async () => {
+                try {
+                  await setUserPref(t.id);
+                  toast.success(`Votre apparence est désormais « ${t.name} ».`, { icon: '◆', duration: 2200 });
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.error || 'Impossible de changer de thème.');
+                }
               }}
               data-testid={`theme-personal-${t.id}`}
               style={{
                 all: 'unset',
-                cursor: 'pointer',
+                cursor: isPending ? 'wait' : 'pointer',
                 padding: 10,
                 borderRadius: 10,
                 border: `2px solid ${isActive ? 'var(--color-primary)' : 'var(--color-border)'}`,
@@ -385,6 +407,7 @@ export function PersonalThemePicker() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
+                opacity: isPending ? 0.65 : 1,
               }}
             >
               <div style={{ width: 44, height: 32, borderRadius: 6, background: `linear-gradient(135deg, ${t.swatches[0]} 0%, ${t.swatches[2]} 100%)`, flexShrink: 0 }} />

@@ -1,22 +1,30 @@
 [
   {
-    "content": "Créer themes.css + ThemeProvider + AppearancePanel dans l'app réelle",
+    "content": "Backend: migration Prisma + routes /api/auth/me/theme + /api/admin/appearance",
     "status": "completed"
   },
   {
-    "content": "Brancher AppearancePanel dans AdminWorkstation (nouvel onglet Apparence)",
+    "content": "Backend: tsc --noEmit server passe sans erreur",
     "status": "completed"
   },
   {
-    "content": "Vérifier le build (tsc + vite) sans erreurs",
+    "content": "Frontend: themeStore synchronisé avec /me et les routes PATCH",
     "status": "completed"
   },
   {
-    "content": "Mirror l'admin apparence dans la galerie de mockup",
+    "content": "Frontend: ProfileMenu (modal depuis la sidebar) avec PersonalThemePicker",
     "status": "completed"
   },
   {
-    "content": "Screenshot de vérification visuelle",
+    "content": "Mockup gallery: modal Mon profil pour démonstration",
+    "status": "completed"
+  },
+  {
+    "content": "Build complet tsc + vite OK sur /app",
+    "status": "completed"
+  },
+  {
+    "content": "Screenshot de la modal profil fonctionnel",
     "status": "completed"
   }
 ]
