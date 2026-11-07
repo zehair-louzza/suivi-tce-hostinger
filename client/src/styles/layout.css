@@ -284,6 +284,14 @@
   margin-bottom: 24px;
 }
 
+.dashboard-header:not(:has(.dashboard-header__content)) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .dashboard-header__content {
   display: flex;
   align-items: flex-start;
@@ -296,7 +304,8 @@
   min-width: 0;
 }
 
-.dashboard-header__title {
+.dashboard-header__title,
+.dashboard-title {
   font-size: 26px;
   font-weight: 700;
   color: var(--color-text);
@@ -305,7 +314,8 @@
   line-height: 1.2;
 }
 
-.dashboard-header__description {
+.dashboard-header__description,
+.dashboard-subtitle {
   font-size: 13.5px;
   color: var(--color-text-secondary);
   margin-top: 4px;
@@ -508,9 +518,11 @@
   white-space: nowrap;
 }
 
+.badge--primary,
 .badge--success {
   color: var(--color-primary);
   background: var(--color-primary-soft);
+  border: 1px solid rgba(4, 120, 87, 0.2);
 }
 
 .badge--warning {
@@ -910,9 +922,38 @@
 /* KPI Strip Grid */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 1180px) {
+  .kpi-strip {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+.kpi-strip .kpi-card {
+  padding: 13px 14px;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+/* Glass & Surface Analytics Cards (Facturation / Retards / Gouvernance) */
+.glass-analytics-card {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-default, #cbd5e1);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @media (max-width: 600px) {

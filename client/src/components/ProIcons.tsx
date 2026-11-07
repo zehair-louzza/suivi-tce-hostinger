@@ -177,3 +177,128 @@ export function ProAlertIcon({ size = 16, color = 'currentColor', strokeWidth = 
     </svg>
   );
 }
+
+export function ProClockIcon({ size = 15, color = 'currentColor', strokeWidth = 2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+export function ProSearchIcon({ size = 14, color = 'currentColor', strokeWidth = 2.2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+export function ProCalendarIcon({ size = 14, color = 'currentColor', strokeWidth = 2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+      <line x1="16" x2="16" y1="2" y2="6" />
+      <line x1="8" x2="8" y1="2" y2="6" />
+      <line x1="3" x2="21" y1="10" y2="10" />
+    </svg>
+  );
+}
+
+export function ProFileTextIcon({ size = 14, color = 'currentColor', strokeWidth = 2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" x2="8" y1="13" y2="13" />
+      <line x1="16" x2="8" y1="17" y2="17" />
+      <line x1="10" x2="8" y1="9" y2="9" />
+    </svg>
+  );
+}
+
+export function ProFilterIcon({ size = 14, color = 'currentColor', strokeWidth = 2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+
+export function ProCopyIcon({ size = 14, color = 'currentColor', strokeWidth = 2, style, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...baseStyle, ...style }}
+      className={className}
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+

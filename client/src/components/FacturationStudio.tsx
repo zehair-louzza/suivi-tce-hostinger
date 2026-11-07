@@ -7,6 +7,19 @@ import {
   computeDurationHours,
 } from '../lib/api';
 import { PhotoItem } from './PhotoLightbox';
+import {
+  ProCheckIcon,
+  ProAlertIcon,
+  ProClockIcon,
+  ProSearchIcon,
+  ProCalendarIcon,
+  ProFileTextIcon,
+  ProFilterIcon,
+  ProMailIcon,
+  ProCopyIcon,
+  ProLockIcon,
+  ProExternalIcon,
+} from './ProIcons';
 import toast from 'react-hot-toast';
 
 interface FacturationStudioProps {
@@ -248,14 +261,14 @@ export function FacturationStudio({
         (intv.objet || '').toLowerCase().includes('visite devis');
 
       let fluxType: InterventionFluxType = 'DIRECTE';
-      let fluxLabel = '▸ Directe (Sans devis)';
+      let fluxLabel = 'Directe (Sans devis)';
       let fluxBadge = { bg: 'rgba(37, 99, 235, 0.12)', text: '#1d4ed8', border: '#2563eb' };
       let fluxDescription = 'Intervention directe (dépannage urgent ou régie sans devis préalable)';
       let hasDeplacementVisite = false;
 
       if (isVisitePrealable) {
         fluxType = 'VISITE_DEVIS';
-        fluxLabel = '⌕ Visite Devis (Relevé préalable)';
+        fluxLabel = 'Visite Devis (Relevé préalable)';
         fluxBadge = { bg: 'rgba(100, 116, 139, 0.14)', text: '#475569', border: '#94a3b8' };
         fluxDescription = 'Visite technique préalable sur site pour métré et chiffrage (Non facturable directement)';
       } else if (linkedDevis) {
@@ -270,18 +283,18 @@ export function FacturationStudio({
 
         if (hasDeplacementVisite) {
           fluxType = 'SUITE_DEVIS_AVEC_VISITE';
-          fluxLabel = '→ Suite à Devis (Avec Visite sur site)';
+          fluxLabel = 'Suite à Devis (Avec Visite sur site)';
           fluxBadge = { bg: 'rgba(124, 58, 237, 0.14)', text: '#7c3aed', border: '#8b5cf6' };
           fluxDescription = `Chiffrage validé suite à déplacement sur site (Tech: ${linkedDevis.visiteTechnicien || intv.entreprise || 'Affecté'})`;
         } else {
           fluxType = 'SUITE_DEVIS_SANS_VISITE';
-          fluxLabel = '≡ Suite à Devis (Sans déplacement)';
+          fluxLabel = 'Suite à Devis (Sans déplacement)';
           fluxBadge = { bg: 'rgba(16, 185, 129, 0.14)', text: '#059669', border: '#10b981' };
           fluxDescription = 'Devis chiffré directement à distance sur plans, photos ou descriptif (sans visite préalable)';
         }
       } else {
         fluxType = 'DIRECTE';
-        fluxLabel = '▸ Intervention Directe';
+        fluxLabel = 'Intervention Directe';
         fluxBadge = { bg: 'rgba(37, 99, 235, 0.12)', text: '#1d4ed8', border: '#2563eb' };
         fluxDescription = 'Demande directe client / Ordre de mission sans devis préalable (facturation directe)';
       }
@@ -717,9 +730,10 @@ Service Client & Facturation — ANELEC GROUPE`;
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* =====================================================================
           1. EXECUTIVE BILLING KPI STRIP (À TRAITER / À VÉRIFIER / NON ÉLIGIBLE / RETARDS / FACTURÉ)
-          AVEC DISTINCTION HT & TTC
+          AVEC DISTINCTION HT & TTC — TITRES INTÉGRAUX SANS TRONCATURE
          ===================================================================== */}
       <div className="kpi-strip">
+        {/* CARTE 1 : À FACTURER */}
         <div
           className="kpi-card"
           onClick={() => {
@@ -727,45 +741,51 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_FACTURER');
           }}
           style={{
-            border: filterCategory === 'A_FACTURER' ? '1px solid #047857' : '1px solid #e2e8f0',
+            border: filterCategory === 'A_FACTURER' ? '1.5px solid #047857' : '1px solid #e2e8f0',
             background: '#ffffff',
             borderRadius: '10px',
+            padding: '13px 15px',
             boxShadow: filterCategory === 'A_FACTURER' ? '0 0 0 2px rgba(4, 120, 87, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
             <span
               style={{
-                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#047857',
-                background: 'rgba(4, 120, 87, 0.08)',
-                padding: '2px 8px',
+                background: 'rgba(4, 120, 87, 0.09)',
+                padding: '3px 9px',
                 borderRadius: '6px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                lineHeight: 1.3,
               }}
             >
-              À facturer (Prêtes)
+              <ProCheckIcon size={12} color="#047857" />
+              <span>À facturer (Prêtes)</span>
             </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', margin: '6px 0 3px' }}>
+            <div className="font-mono" style={{ fontSize: '23px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {stats.aFacturer.length}
+            </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAFacturerHT)} HT
               </div>
-              <div className="font-mono" style={{ fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAFacturerTTC)} TTC
               </div>
             </div>
           </div>
-          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
-            {stats.aFacturer.length}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
             Terminées sur site • Rapport validé
           </div>
         </div>
 
+        {/* CARTE 2 : À VÉRIFIER */}
         <div
           className="kpi-card"
           onClick={() => {
@@ -773,45 +793,51 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_VERIFIER');
           }}
           style={{
-            border: filterCategory === 'A_VERIFIER' ? '1px solid #d97706' : '1px solid #e2e8f0',
+            border: filterCategory === 'A_VERIFIER' ? '1.5px solid #d97706' : '1px solid #e2e8f0',
             background: '#ffffff',
             borderRadius: '10px',
+            padding: '13px 15px',
             boxShadow: filterCategory === 'A_VERIFIER' ? '0 0 0 2px rgba(217, 119, 6, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
             <span
               style={{
-                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#b45309',
-                background: 'rgba(217, 119, 6, 0.08)',
-                padding: '2px 8px',
+                background: 'rgba(217, 119, 6, 0.09)',
+                padding: '3px 9px',
                 borderRadius: '6px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                lineHeight: 1.3,
               }}
             >
-              À vérifier (En attente)
+              <ProAlertIcon size={12} color="#b45309" />
+              <span>À vérifier (En attente)</span>
             </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', margin: '6px 0 3px' }}>
+            <div className="font-mono" style={{ fontSize: '23px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {stats.aVerifier.length}
+            </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAVerifierHT)} HT
               </div>
-              <div className="font-mono" style={{ fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantAVerifierTTC)} TTC
               </div>
             </div>
           </div>
-          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
-            {stats.aVerifier.length}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
             Rapport à certifier ou réserve
           </div>
         </div>
 
+        {/* CARTE 3 : NE PAS FACTURER */}
         <div
           className="kpi-card"
           onClick={() => {
@@ -819,78 +845,90 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('NE_PAS_FACTURER');
           }}
           style={{
-            border: filterCategory === 'NE_PAS_FACTURER' ? '1px solid #64748b' : '1px solid #e2e8f0',
+            border: filterCategory === 'NE_PAS_FACTURER' ? '1.5px solid #64748b' : '1px solid #e2e8f0',
             background: '#ffffff',
             borderRadius: '10px',
+            padding: '13px 15px',
             boxShadow: filterCategory === 'NE_PAS_FACTURER' ? '0 0 0 2px rgba(100, 116, 139, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
             <span
               style={{
-                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#475569',
-                background: 'rgba(100, 116, 139, 0.08)',
-                padding: '2px 8px',
+                background: 'rgba(100, 116, 139, 0.09)',
+                padding: '3px 9px',
                 borderRadius: '6px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                lineHeight: 1.3,
               }}
             >
-              Ne pas facturer
+              <ProLockIcon size={12} color="#475569" />
+              <span>Ne se facture pas</span>
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 600 }}>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', margin: '6px 0 3px' }}>
+            <div className="font-mono" style={{ fontSize: '23px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {stats.nePasFacturer.length}
+            </div>
+            <span className="font-mono" style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', fontWeight: 600 }}>
               En cours / Visites
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
-            {stats.nePasFacturer.length}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
             Non terminés, visites devis
           </div>
         </div>
 
+        {/* CARTE 4 : RETARDS & RÉPONSES */}
         <div
           className="kpi-card"
           onClick={() => setActiveTab('retards_clients')}
           style={{
-            border: activeTab === 'retards_clients' ? '1px solid #be123c' : '1px solid #e2e8f0',
+            border: activeTab === 'retards_clients' ? '1.5px solid #be123c' : '1px solid #e2e8f0',
             background: '#ffffff',
             borderRadius: '10px',
+            padding: '13px 15px',
             boxShadow: activeTab === 'retards_clients' ? '0 0 0 2px rgba(190, 18, 60, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
             <span
               style={{
-                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#be123c',
-                background: 'rgba(190, 18, 60, 0.08)',
-                padding: '2px 8px',
+                background: 'rgba(190, 18, 60, 0.09)',
+                padding: '3px 9px',
                 borderRadius: '6px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                lineHeight: 1.3,
               }}
             >
-              Retards & Réponses
+              <ProClockIcon size={12} color="#be123c" />
+              <span>Retards & Réponses</span>
             </span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 600, color: '#be123c', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', margin: '6px 0 3px' }}>
+            <div className="font-mono" style={{ fontSize: '23px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {stats.enRetardOuBloque.length}
+            </div>
+            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 600, color: '#be123c', whiteSpace: 'nowrap' }}>
               Diagnostic 1-Clic
             </span>
           </div>
-          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
-            {stats.enRetardOuBloque.length}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
             Causes retards & courrier prêt
           </div>
         </div>
 
+        {/* CARTE 5 : FACTURÉES (BILAN B2B/B2C) */}
         <div
           className="kpi-card"
           onClick={() => {
@@ -898,41 +936,46 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('FACTUREE');
           }}
           style={{
-            border: filterCategory === 'FACTUREE' ? '1px solid #1e293b' : '1px solid #e2e8f0',
+            border: filterCategory === 'FACTUREE' ? '1.5px solid #1e293b' : '1px solid #e2e8f0',
             background: '#ffffff',
             borderRadius: '10px',
+            padding: '13px 15px',
             boxShadow: filterCategory === 'FACTUREE' ? '0 0 0 2px rgba(30, 41, 59, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
             <span
               style={{
-                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#1e293b',
-                background: 'rgba(30, 41, 59, 0.08)',
-                padding: '2px 8px',
+                background: 'rgba(30, 41, 59, 0.09)',
+                padding: '3px 9px',
                 borderRadius: '6px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                lineHeight: 1.3,
               }}
             >
-              Facturées (B2B/B2C)
+              <ProFileTextIcon size={12} color="#1e293b" />
+              <span>Facturées (B2B/B2C)</span>
             </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', margin: '6px 0 3px' }}>
+            <div className="font-mono" style={{ fontSize: '23px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+              {stats.facturees.length}
+            </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantFactureHT)} HT
               </div>
-              <div className="font-mono" style={{ fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              <div className="font-mono" style={{ fontSize: '10.5px', color: '#64748b', whiteSpace: 'nowrap' }}>
                 {formatCurrency(stats.montantFactureTTC)} TTC
               </div>
             </div>
           </div>
-          <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
-            {stats.facturees.length}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
             {stats.b2bCount} B2B • {stats.b2cCount} B2C
           </div>
         </div>
@@ -948,22 +991,34 @@ Service Client & Facturation — ANELEC GROUPE`;
             className={`segmented-btn ${activeTab === 'triage' ? 'active' : ''}`}
             onClick={() => setActiveTab('triage')}
           >
-            <span className="desktop-only-el">◆ 1. Tri Facturation : À traiter vs Non-Éligibles ({enrichedDossiers.length})</span>
-            <span className="mobile-only-flex">◆ 1. Tri ({enrichedDossiers.length})</span>
+            <span className="desktop-only-el" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <ProFilterIcon size={13} />
+              <span>1. Tri Facturation : À traiter vs Non-Éligibles ({enrichedDossiers.length})</span>
+            </span>
+            <span className="mobile-only-flex" style={{ alignItems: 'center', gap: '5px' }}>
+              <ProFilterIcon size={12} />
+              <span>1. Tri ({enrichedDossiers.length})</span>
+            </span>
           </button>
           <button
             type="button"
             className={`segmented-btn ${activeTab === 'retards_clients' ? 'active' : ''}`}
             onClick={() => setActiveTab('retards_clients')}
           >
-            <span className="desktop-only-el">⏱ 2. Pourquoi les Retards & Réponses Clients Initiaux ({stats.enRetardOuBloque.length})</span>
-            <span className="mobile-only-flex">⏱ 2. Retards ({stats.enRetardOuBloque.length})</span>
+            <span className="desktop-only-el" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <ProClockIcon size={13} />
+              <span>2. Pourquoi les Retards & Réponses Clients Initiaux ({stats.enRetardOuBloque.length})</span>
+            </span>
+            <span className="mobile-only-flex" style={{ alignItems: 'center', gap: '5px' }}>
+              <ProClockIcon size={12} />
+              <span>2. Retards ({stats.enRetardOuBloque.length})</span>
+            </span>
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: '1 1 260px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: '1 1 320px' }}>
           {/* Filtre Segment B2B / B2C */}
-          <div className="segmented-control segmented-control-fluid" style={{ flex: '1 1 auto' }}>
+          <div className="segmented-control segmented-control-fluid" style={{ flex: '0 0 auto' }}>
             <button
               type="button"
               className={`segmented-btn ${filterSegment === 'ALL' ? 'active' : ''}`}
@@ -976,21 +1031,21 @@ Service Client & Facturation — ANELEC GROUPE`;
               className={`segmented-btn ${filterSegment === 'B2B' ? 'active' : ''}`}
               onClick={() => setFilterSegment('B2B')}
             >
-              ▪ B2B ({stats.b2bCount})
+              B2B ({stats.b2bCount})
             </button>
             <button
               type="button"
               className={`segmented-btn ${filterSegment === 'B2C' ? 'active' : ''}`}
               onClick={() => setFilterSegment('B2C')}
             >
-              ▪ B2C ({stats.b2cCount})
+              B2C ({stats.b2cCount})
             </button>
           </div>
 
           <input
             type="text"
             className="input"
-            style={{ flex: '1 1 180px', minWidth: '140px' }}
+            style={{ flex: '1 1 220px', minWidth: '210px' }}
             placeholder="Rechercher client, réf, facture..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -1010,8 +1065,9 @@ Service Client & Facturation — ANELEC GROUPE`;
             borderTop: '1px solid var(--border-subtle)',
           }}
         >
-          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            ▪ Filtre Temporel :
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            <ProCalendarIcon size={13} />
+            <span>Filtre Temporel :</span>
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1234,10 +1290,11 @@ Service Client & Facturation — ANELEC GROUPE`;
                 type="button"
                 className={`btn btn-sm ${filterFlux === 'VISITE_DEVIS' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilterFlux('VISITE_DEVIS')}
-                style={{ padding: '4px 8px', fontSize: '11px' }}
+                style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                 title="Visites préalables en vue de l'établissement d'un devis (non facturables directement)"
               >
-                ⌕ Visites Devis ({stats.visiteDevisCount})
+                <ProSearchIcon size={12} />
+                <span>Visites Devis ({stats.visiteDevisCount})</span>
               </button>
             </div>
           </div>
@@ -1874,14 +1931,21 @@ Service Client & Facturation — ANELEC GROUPE`;
           ONGLET 2 : DIAGNOSTIC DES RETARDS & RÉPONSES AUX CLIENTS INITIAUX
          ===================================================================== */}
       {activeTab === 'retards_clients' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div className="glass-analytics-card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div
+            className="glass-analytics-card"
+            style={{
+              padding: '16px 20px',
+              borderLeft: stats.enRetardOuBloque.length > 0 ? '4px solid #be123c' : '4px solid #047857',
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  ⏱ Pourquoi les interventions prennent du retard & Comment répondre aux clients initiaux (B2B / B2C)
+              <div style={{ minWidth: 0, flex: '1 1 420px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'flex-start', gap: '8px', lineHeight: 1.35 }}>
+                  <ProClockIcon size={16} color={stats.enRetardOuBloque.length > 0 ? '#be123c' : '#047857'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                  <span>Pourquoi les interventions prennent du retard & Comment répondre aux clients initiaux (B2B / B2C)</span>
                 </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.45 }}>
                   Cette vue croise automatiquement la date de demande initiale, le devis lié, le planning technicien et les blocages terrain pour donner à l'agent l'explication exacte à communiquer au client.
                 </p>
               </div>
@@ -1889,165 +1953,310 @@ Service Client & Facturation — ANELEC GROUPE`;
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={onNavigateToPlanning}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}
               >
-                ▪ Ouvrir le Planning Gantt pour replanifier →
+                <ProCalendarIcon size={13} color="#ffffff" />
+                <span>Ouvrir le Planning Gantt pour replanifier →</span>
               </button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '14px' }}>
-            {(stats.enRetardOuBloque.length > 0 ? stats.enRetardOuBloque : enrichedDossiers.slice(0, 8)).map(
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 330px), 1fr))',
+              gap: '14px',
+              alignItems: 'stretch',
+            }}
+          >
+            {(stats.enRetardOuBloque.length > 0 ? stats.enRetardOuBloque : filteredDossiers.slice(0, 9)).map(
               (d) => {
                 const intv = d.intervention;
+                const hasIssue = d.isDelayed || Boolean(intv.motifBlocage) || intv.statutOperationnel === 'Suspendue';
+                const accentColor = d.isDelayed ? '#ef4444' : hasIssue ? '#f59e0b' : '#059669';
+
                 return (
                   <div
                     key={intv.id}
                     className="glass-analytics-card"
                     style={{
-                      borderLeft: d.isDelayed ? '4px solid #ef4444' : '4px solid #f59e0b',
-                      gap: '10px',
+                      borderLeft: `4px solid ${accentColor}`,
+                      padding: '16px 18px',
+                      gap: '12px',
+                      height: '100%',
+                      justifyContent: 'space-between',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span className="font-mono" style={{ fontWeight: 800, fontSize: '12.5px', color: '#2563eb' }}>
+                    {/* EN-TÊTE STRUCTURÉ À HAUTEUR HOMOGÈNE (ZÉRO DÉCALAGE ENTRE LES CARTES D'UNE MÊME LIGNE) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                      {/* Ligne 1 : Référence + Segment + Statut Retard à gauche | Technicien à droite */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#2563eb' }}>
                             {intv.reference || `INT-${intv.id}`}
                           </span>
                           <span
                             style={{
-                              padding: '1px 7px',
+                              padding: '2px 7px',
                               borderRadius: '999px',
                               fontSize: '10px',
                               fontWeight: 800,
                               background: d.segment === 'B2B' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(14, 165, 233, 0.14)',
                               color: d.segment === 'B2B' ? '#1d4ed8' : '#0369a1',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             {d.segment === 'B2B' ? 'Client B2B' : 'Client B2C'}
                           </span>
-                          <span
-                            style={{
-                              padding: '1px 6px',
-                              borderRadius: '999px',
-                              fontSize: '9.5px',
-                              fontWeight: 800,
-                              background: d.fluxBadge.bg,
-                              color: d.fluxBadge.text,
-                            }}
-                          >
-                            {d.fluxLabel}
-                          </span>
-                          {d.isDelayed && (
+                          {d.isDelayed ? (
                             <span
                               className="font-mono"
                               style={{
-                                padding: '1px 7px',
+                                padding: '2px 7px',
                                 borderRadius: '999px',
-                                fontSize: '10.5px',
+                                fontSize: '10px',
                                 fontWeight: 800,
                                 background: 'rgba(239, 68, 68, 0.14)',
                                 color: '#dc2626',
+                                whiteSpace: 'nowrap',
                               }}
                             >
-                              Retard : +{d.delayDays} jour(s)
+                              Retard : +{d.delayDays}j
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                background: 'rgba(5, 150, 105, 0.1)',
+                                color: '#047857',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              À jour
                             </span>
                           )}
                         </div>
-                        <div style={{ fontWeight: 800, fontSize: '13.5px', marginTop: '4px' }}>
-                          {intv.client} — <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{intv.chantier}</span>
+                        <span
+                          className="font-mono"
+                          style={{
+                            fontSize: '11px',
+                            color: 'var(--text-secondary)',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            background: '#f8fafc',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          Tech: <strong style={{ color: 'var(--text-primary)' }}>{intv.entreprise || 'Non affecté'}</strong>
+                        </span>
+                      </div>
+
+                      {/* Ligne 2 dédiée : Badge Typologie Flux avec icône SVG nette */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            background: d.fluxBadge.bg,
+                            color: d.fluxBadge.text,
+                            border: `1px solid ${d.fluxBadge.border}40`,
+                            maxWidth: '100%',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={d.fluxDescription}
+                        >
+                          {d.fluxType === 'VISITE_DEVIS' ? (
+                            <ProSearchIcon size={11} color={d.fluxBadge.text} />
+                          ) : d.fluxType === 'SUITE_DEVIS_AVEC_VISITE' ? (
+                            <ProExternalIcon size={11} color={d.fluxBadge.text} />
+                          ) : d.fluxType === 'SUITE_DEVIS_SANS_VISITE' ? (
+                            <ProFileTextIcon size={11} color={d.fluxBadge.text} />
+                          ) : (
+                            <ProCheckIcon size={11} color={d.fluxBadge.text} />
+                          )}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.fluxLabel}</span>
+                        </span>
+                      </div>
+
+                      {/* Ligne 3 & 4 : Client — Chantier & Corps d'état — Objet */}
+                      <div style={{ marginTop: '2px', minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontWeight: 800,
+                            fontSize: '13.5px',
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={`${intv.client || ''} — ${intv.chantier || ''}`}
+                        >
+                          {intv.client || 'Client'} — <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{intv.chantier || 'Site'}</span>
                         </div>
-                        <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                          {intv.corpsEtat} • {intv.objet}
+                        <div
+                          style={{
+                            fontSize: '11.5px',
+                            color: 'var(--text-muted)',
+                            marginTop: '2px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={`${intv.corpsEtat || 'TCE'} • ${intv.objet || ''}`}
+                        >
+                          {intv.corpsEtat || 'TCE'} • {intv.objet || 'Intervention technique'}
                         </div>
                       </div>
-                      <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        Tech: <strong>{intv.entreprise || 'Non affecté'}</strong>
-                      </span>
                     </div>
 
-                    {/* Boîte d'explication du POURQUOI */}
+                    {/* BOÎTE D'EXPLICATION DU POURQUOI (ALERTE SI RETARD/BLOCAGE, SINON SUIVI NORMAL) */}
                     <div
                       style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
                         padding: '10px 12px',
-                        borderRadius: '12px',
-                        background: 'rgba(239, 68, 68, 0.06)',
-                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: '10px',
+                        background: hasIssue ? 'rgba(239, 68, 68, 0.06)' : 'rgba(16, 185, 129, 0.06)',
+                        border: hasIssue ? '1px solid rgba(239, 68, 68, 0.22)' : '1px solid rgba(16, 185, 129, 0.22)',
                       }}
                     >
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#dc2626', textTransform: 'uppercase' }}>
-                        ⌕ Pourquoi ce retard / blocage :
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          color: hasIssue ? '#dc2626' : '#047857',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {hasIssue ? (
+                          <ProAlertIcon size={13} color="#dc2626" />
+                        ) : (
+                          <ProCheckIcon size={13} color="#047857" />
+                        )}
+                        <span>{hasIssue ? 'Pourquoi ce retard / blocage :' : 'Diagnostic délai & avancement :'}</span>
                       </div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+                      <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
                         {d.delayRootCause}
                       </div>
-                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.4 }}>
                         • <strong>Action & Réponse conseillée :</strong> {d.delayActionableAdvice}
                       </div>
                     </div>
 
-                    {/* Chronologie rapide Demande -> Devis -> Planif -> Terrain */}
+                    {/* CHRONOLOGIE RAPIDE : 1. DEMANDE -> 2. FLUX DEVIS -> 3. PLANIFIÉE -> 4. ÉCHÉANCE */}
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(4, 1fr)',
-                        gap: '6px',
+                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                        gap: '8px',
                         fontSize: '10.5px',
-                        background: 'var(--bg-elevated)',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
                         padding: '8px 10px',
-                        borderRadius: '10px',
+                        borderRadius: '8px',
                       }}
                     >
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>1. Demande</div>
-                        <div className="font-mono" style={{ fontWeight: 700 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>1. Demande</div>
+                        <div className="font-mono" style={{ fontWeight: 700, marginTop: '2px', whiteSpace: 'nowrap' }}>
                           {formatDateFR(intv.dateDemande)}
                         </div>
                       </div>
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>2. Flux Devis</div>
-                        <div className="font-mono" style={{ fontWeight: 700, color: '#7c3aed' }}>
-                          {d.linkedDevis ? d.linkedDevis.reference : '▸ Direct'}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>2. Flux Devis</div>
+                        <div className="font-mono" style={{ fontWeight: 700, color: '#7c3aed', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {d.linkedDevis ? d.linkedDevis.reference : 'Direct'}
                         </div>
                       </div>
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>3. Planifiée</div>
-                        <div className="font-mono" style={{ fontWeight: 700 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>3. Planifiée</div>
+                        <div className="font-mono" style={{ fontWeight: 700, marginTop: '2px', whiteSpace: 'nowrap' }}>
                           {formatDateFR(intv.datePlanifiee)}
                         </div>
                       </div>
-                      <div>
-                        <div style={{ color: 'var(--text-muted)' }}>4. Échéance</div>
-                        <div className="font-mono" style={{ fontWeight: 700, color: d.isDelayed ? '#dc2626' : 'inherit' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>4. Échéance</div>
+                        <div className="font-mono" style={{ fontWeight: 700, color: d.isDelayed ? '#dc2626' : 'inherit', marginTop: '2px', whiteSpace: 'nowrap' }}>
                           {formatDateFR(intv.echeance)}
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    {/* BARRE D'ACTIONS PIED DE CARTE : ZÉRO DÉBORDEMENT HORIZONTAL */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', minWidth: 0 }}>
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
+                        style={{
+                          flex: '1 1 auto',
+                          minWidth: 0,
+                          padding: '6px 9px',
+                          fontSize: '11.5px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px',
+                        }}
                         onClick={() => setClientResponseModalDossier(d)}
+                        title="Générer une réponse complète pour le client initial"
                       >
-                        • Générer Réponse au Client Initial
+                        <ProMailIcon size={12} color="#ffffff" />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Réponse Client
+                        </span>
                       </button>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={onNavigateToPlanning}
-                        >
-                          ▪ Replanifier
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => onOpenInterventionDrawer(intv)}
-                        >
-                          Fiche 23 col.
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          flexShrink: 0,
+                          padding: '6px 8px',
+                          fontSize: '11px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        onClick={onNavigateToPlanning}
+                        title="Ouvrir le Planning Gantt pour replanifier"
+                      >
+                        <ProCalendarIcon size={12} />
+                        <span>Replanifier</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          flexShrink: 0,
+                          padding: '6px 8px',
+                          fontSize: '11px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        onClick={() => onOpenInterventionDrawer(intv)}
+                        title="Ouvrir la fiche intervention complète (23 colonnes)"
+                      >
+                        <ProFileTextIcon size={12} />
+                        <span>Fiche</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -2111,8 +2320,9 @@ Service Client & Facturation — ANELEC GROUPE`;
                 <strong>Synthèse interne pour l'agent :</strong> {clientResponseModalDossier.whyTitle}
               </div>
               {clientResponseModalDossier.isDelayed && (
-                <div style={{ color: '#dc2626', marginTop: '3px', fontWeight: 700 }}>
-                  ⏱ Cause du retard ({clientResponseModalDossier.delayDays}j) : {clientResponseModalDossier.delayRootCause}
+                <div style={{ color: '#dc2626', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <ProClockIcon size={13} color="#dc2626" />
+                  <span>Cause du retard ({clientResponseModalDossier.delayDays}j) : {clientResponseModalDossier.delayRootCause}</span>
                 </div>
               )}
             </div>
@@ -2136,6 +2346,7 @@ Service Client & Facturation — ANELEC GROUPE`;
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 onClick={() => {
                   navigator.clipboard.writeText(
                     buildClientResponseText(clientResponseModalDossier)
@@ -2143,7 +2354,8 @@ Service Client & Facturation — ANELEC GROUPE`;
                   toast.success('Réponse client copiée dans le presse-papiers !');
                 }}
               >
-                ≡ Copier la réponse pour le client
+                <ProCopyIcon size={13} color="#ffffff" />
+                <span>Copier la réponse pour le client</span>
               </button>
             </div>
           </div>
