@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../stores/authStore';
+import { useTheme, THEMES } from '../stores/themeStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
@@ -55,15 +56,19 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parisTime, setParisTime] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('anelec-theme-v2');
-    return (saved === 'light' || saved === 'dark') ? saved : 'light';
-  });
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('anelec-theme-v2', theme);
-  }, [theme]);
+  // L'apparence est entièrement gérée par le ThemeProvider (défaut entreprise +
+  // préférence individuelle). On ne manipule plus directement data-theme ici,
+  // pour éviter tout conflit avec le sélecteur d'interfaces (admin + profil).
+  const { current: currentTheme, allowUserOverride, setUserPref } = useTheme();
+  const isDarkTheme = THEMES.find((t) => t.id === currentTheme)?.mood === 'dark';
+  const toggleQuickTheme = async () => {
+    try {
+      await setUserPref(isDarkTheme ? 'light' : 'dark');
+    } catch {
+      /* personnalisation désactivée par l'administrateur — on ignore */
+    }
+  };
 
   useEffect(() => {
     const updateClock = () => {
@@ -686,12 +691,13 @@ export function Layout({
 
             <button
               type="button"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              onClick={toggleQuickTheme}
               className="btn btn-secondary btn-sm"
-              title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
-              style={{ padding: '6px 9px' }}
+              title={isDarkTheme ? 'Passer en mode clair' : 'Passer en mode sombre'}
+              style={{ padding: '6px 9px', display: allowUserOverride ? undefined : 'none' }}
+              data-testid="quick-theme-toggle"
             >
-              {theme === 'dark' ? (
+              {isDarkTheme ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="5" />
                   <line x1="12" y1="1" x2="12" y2="3" />

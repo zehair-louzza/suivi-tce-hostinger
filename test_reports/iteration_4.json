@@ -1,0 +1,44 @@
+{
+  "summary": "Completed comprehensive end-to-end testing of the theme switching feature (7 design directions + ANELEC Original light/dark). All core functionality validated: admin company default theme setting, personal user theme picker, persistence across sessions, and UI integration.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Login with demo@suivi-tce.fr / demo1234 succeeds and loads dashboard",
+    "Initial html[data-theme] is 'light' (company default)",
+    "Navigation to 'Utilisateurs et accès' > 'Apparence & Thèmes' tab works",
+    "Appearance panel (data-testid='appearance-panel') renders correctly",
+    "All 7 theme cards render with correct data-testids (theme-card-light, theme-card-dark, theme-card-atlas, theme-card-craft, theme-card-signal, theme-card-swiss, theme-card-bento)",
+    "Clicking 'Atlas Clarity' theme card sets html[data-theme]='atlas' immediately",
+    "Success toast appears after theme change: 'Apparence « Atlas Clarity » définie comme défaut de l'entreprise.'",
+    "Theme card shows 'Défaut entreprise' badge after selection",
+    "Allow user override toggle (data-testid='theme-allow-override-toggle') switches on/off without errors",
+    "Profile trigger (data-testid='sidebar-profile-trigger') opens profile modal",
+    "Profile modal (data-testid='profile-menu-modal') contains personal theme picker with 7 cards",
+    "Personal theme cards have correct data-testids (theme-personal-light, theme-personal-signal, etc.)",
+    "Clicking personal theme card (theme-personal-signal) sets html[data-theme]='signal' live",
+    "Reset button (data-testid='theme-reset-user') reverts to company default theme",
+    "Theme persistence: setting company default to 'craft', logout, login → theme is 'craft' (persisted in DB)",
+    "API calls /api/admin/appearance and /api/auth/me/theme return 200 status",
+    "No critical console errors during theme switching flows",
+    "ThemeProvider is single source of truth (Layout.tsx no longer overrides data-theme)"
+  ],
+  "test_report_links": [
+    "/root/.emergent/automation_output/20261107_223044_9e14ad07db98/console_20261107_223044.log",
+    ".screenshots/theme-test-final.png"
+  ],
+  "action_item_for_main_agent": "",
+  "updated_files": [],
+  "success_percentage": {
+    "frontend": "100%",
+    "backend": "N/A (frontend-only testing as requested)"
+  },
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}

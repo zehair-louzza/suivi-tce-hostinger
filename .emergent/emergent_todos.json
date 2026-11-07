@@ -1,22 +1,22 @@
 [
   {
-    "content": "Fix login 500: make auth resilient to missing theme columns",
-    "status": "completed"
-  },
-  {
-    "content": "Verify backend fix (tsc + runtime login test + testing_agent 100% pass)",
-    "status": "completed"
-  },
-  {
-    "content": "Add auto `prisma migrate deploy` on server startup (prod)",
-    "status": "completed"
-  },
-  {
-    "content": "Gallery feature: live interface switcher (5 interfaces + ANELEC original light/dark) in Utilisateurs & accès > Apparence + profile menu",
-    "status": "completed"
-  },
-  {
-    "content": "Verify gallery feature with testing_agent on preview",
+    "content": "Inspect real-app theme integration (themes.css, themeStore, AppearancePanel, ProfileMenu, AdminWorkstation, Layout, main.tsx) + styling system",
     "status": "in_progress"
+  },
+  {
+    "content": "Define 7 interface palettes (atlas/craft/signal/swiss/bento + origin-light/origin-dark) as real-app theme tokens",
+    "status": "pending"
+  },
+  {
+    "content": "Wire admin default theme + personal theme picker to the 7 interfaces; apply live on <html>",
+    "status": "pending"
+  },
+  {
+    "content": "Verify: tsc + client build + run real app locally (Postgres) and screenshot theme switching",
+    "status": "pending"
+  },
+  {
+    "content": "Verify end-to-end with testing_agent (admin default + profile choice + persistence)",
+    "status": "pending"
   }
 ]
