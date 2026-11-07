@@ -10,6 +10,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
+    "html2canvas": "1.4.1",
+    "jspdf": "2.5.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.70.0",
     "react": "18.3.1",

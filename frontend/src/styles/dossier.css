@@ -1,0 +1,188 @@
+/* ==========================================================================
+   Dossier PDF — rendu A4 imprimable (816×1123 px ≈ A4 à 96dpi).
+   Isolé du reste : préfixe .dos-*
+   ========================================================================== */
+.dos { min-height: 100vh; background: #E9EBEF; padding: 24px 24px 56px; }
+.dos-top { max-width: 920px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.dos-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.dos-help { font-size: 12px; color: var(--g-muted); }
+.dos-spin { animation: dos-spin 1s linear infinite; }
+@keyframes dos-spin { to { transform: rotate(360deg); } }
+
+/* Feuille A4 */
+.dos-sheet { max-width: 816px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.dos-page { width: 816px; min-height: 1123px; background: #fff; box-shadow: 0 8px 28px rgba(16,24,40,.12); padding: 54px 60px 44px; position: relative; display: flex; flex-direction: column; color: #0F172A; font-family: 'Inter', system-ui, sans-serif; }
+.dos-page--cover { padding: 0; background: #FFFFFF; overflow: hidden; }
+.dos-page--dark { background: #0B1220; color: #E6EEFB; }
+.dos-page--dark h2, .dos-page--dark h3, .dos-page--dark h4 { color: #fff; }
+.dos-page--dark .dos-eyebrow { color: #8EA4C8; }
+.dos-page--dark .dos-head { border-bottom-color: #23364F; }
+.dos-page--cta { background: #0B1220; color: #E6EEFB; padding: 60px; }
+.dos-page--cta h2 { color: #fff; }
+.dos-page.is-last { margin-bottom: 0; }
+
+/* Entête de page */
+.dos-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #E5E7EB; }
+.dos-head > div { flex: 1; min-width: 0; }
+.dos-head h2 { margin: 2px 0 2px; font-size: 26px; letter-spacing: -0.02em; line-height: 1.1; font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 700; }
+.dos-eyebrow { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #6B7280; font-weight: 600; }
+.dos-dir-tag { margin: 2px 0 0; color: #6B7280; font-size: 13.5px; }
+.dos-dir-num { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; font-weight: 800; font-family: 'IBM Plex Mono', monospace; font-size: 18px; flex-shrink: 0; margin-right: 6px; }
+
+/* Bas de page */
+.dos-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid #E5E7EB; display: flex; align-items: center; justify-content: space-between; color: #6B7280; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.dos-foot--dark { border-top-color: #23364F; color: #637CA4; }
+
+/* ---------- Couverture ---------- */
+.dos-cover { height: 1123px; padding: 72px 72px 56px; background: linear-gradient(135deg, #FBFCFE 0%, #EEF2F7 100%); display: flex; flex-direction: column; gap: 32px; position: relative; overflow: hidden; }
+.dos-cover::before { content: ''; position: absolute; right: -80px; top: -80px; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #1D4ED8 0, transparent 60%); opacity: .12; pointer-events: none; }
+.dos-cover::after { content: ''; position: absolute; left: -100px; bottom: 120px; width: 360px; height: 360px; border-radius: 50%; background: radial-gradient(circle at 60% 50%, #0F766E 0, transparent 60%); opacity: .08; pointer-events: none; }
+.dos-cover-brand { display: flex; align-items: center; gap: 14px; }
+.dos-cover-brand img { height: 38px; }
+.dos-cover-brand span { font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; color: #6B7280; }
+.dos-cover-main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; max-width: 580px; position: relative; z-index: 1; }
+.dos-cover-main h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 54px; line-height: 1.02; letter-spacing: -0.03em; margin: 8px 0; color: #0B1220; }
+.dos-cover-main p { font-size: 16px; line-height: 1.6; color: #374151; margin: 0; max-width: 520px; }
+.dos-cover-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 0; background: #fff; border: 1px solid #E5E7EB; border-radius: 16px; overflow: hidden; }
+.dos-cover-facts > div { padding: 18px; border-right: 1px solid #E5E7EB; }
+.dos-cover-facts > div:last-child { border-right: 0; }
+.dos-cover-facts dt { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: #0B1220; display: flex; gap: 6px; align-items: center; min-height: 36px; }
+.dos-cover-facts dd { margin: 4px 0 0; color: #6B7280; font-size: 12.5px; }
+.dos-cover-foot { display: flex; justify-content: space-between; color: #6B7280; font-size: 11.5px; font-family: 'IBM Plex Mono', monospace; letter-spacing: .04em; text-transform: uppercase; position: relative; z-index: 1; }
+
+/* ---------- Diagnostic ---------- */
+.dos-audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.dos-audit { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.dos-audit-top { display: flex; align-items: center; gap: 8px; }
+.dos-audit h3 { margin: 0; font-size: 13.5px; color: #0B1220; }
+.dos-audit-what { margin: 0; color: #4B5563; font-size: 12px; line-height: 1.45; }
+.dos-audit-fix { display: inline-flex; gap: 6px; align-items: flex-start; margin: 0; color: #065F46; font-size: 11.5px; font-weight: 500; }
+.dos-audit-fix svg { margin-top: 1px; flex-shrink: 0; }
+.g-sev { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.g-sev--high { background: #FEF2F2; color: #991B1B; border-color: #FECACA; }
+.g-sev--mid  { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
+.g-sev--low  { background: #F1F5F9; color: #334155; border-color: #CBD5E1; }
+
+.dos-principles { background: #0B1220; color: #fff; border-radius: 14px; padding: 18px 22px; }
+.dos-principles h3 { margin: 0 0 10px; font-size: 14px; color: #fff; font-family: 'Space Grotesk', sans-serif; }
+.dos-princ-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; }
+.dos-princ span { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #94A3B8; }
+.dos-princ strong { display: block; margin: 2px 0; font-size: 12.5px; color: #fff; }
+.dos-princ em { font-style: normal; font-size: 11.5px; color: #D1D5DB; line-height: 1.4; }
+
+/* ---------- Page direction ---------- */
+.dos-dir-forwho { background: #F7F8FB; border-left: 3px solid #1D4ED8; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+.dos-page--dark .dos-dir-forwho { background: #13213A; border-left-color: #38BDF8; color: #E6EEFB; }
+.dos-dir-forwho strong { color: #1D4ED8; }
+.dos-page--dark .dos-dir-forwho strong { color: #38BDF8; }
+.dos-dir-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-bottom: 16px; }
+.dos-dir-preview { background: #F5F6F8; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; height: 240px; }
+.dos-page--dark .dos-dir-preview { background: #0F1A2E; border-color: #23364F; }
+.dos-dir-phone { display: flex; align-items: center; justify-content: center; background: #F5F6F8; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; height: 240px; }
+.dos-page--dark .dos-dir-phone { background: #0F1A2E; border-color: #23364F; }
+
+.dos-dir-sec { margin-bottom: 14px; }
+.dos-dir-sec h4 { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #6B7280; margin: 0 0 8px; font-weight: 700; }
+.dos-page--dark .dos-dir-sec h4 { color: #8EA4C8; }
+.dos-palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.dos-swatch { background: #F7F8FB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.dos-page--dark .dos-swatch { background: #13213A; border-color: #23364F; }
+.dos-swatch-color { height: 36px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); }
+.dos-swatch strong { font-size: 11px; color: #0B1220; font-weight: 600; }
+.dos-page--dark .dos-swatch strong { color: #E6EEFB; }
+.dos-swatch code { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: #6B7280; background: none; border: 0; padding: 0; }
+.dos-page--dark .dos-swatch code { color: #8EA4C8; }
+
+.dos-typo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.dos-typo-block { background: #F7F8FB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px 12px; min-height: 92px; }
+.dos-page--dark .dos-typo-block { background: #13213A; border-color: #23364F; }
+.dos-typo-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #6B7280; }
+.dos-typo-block h3 { font-size: 14px; margin: 4px 0 0; color: #0B1220; }
+.dos-page--dark .dos-typo-block h3 { color: #fff; }
+.dos-typo-block p { margin: 0; }
+.dos-page--dark .dos-typo-block p { color: #CBD5E1 !important; }
+
+.dos-dir-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; background: #F7F8FB; border-radius: 10px; padding: 10px 14px; }
+.dos-page--dark .dos-dir-meta { background: #13213A; }
+.dos-dir-meta > div { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.dos-dir-meta strong { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.dos-page--dark .dos-dir-meta strong { color: #8EA4C8; }
+.dos-dir-meta span { color: #0B1220; font-size: 12.5px; }
+.dos-page--dark .dos-dir-meta span { color: #E6EEFB; }
+
+.dos-dir-proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dos-dir-proscons ul { list-style: none; margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; line-height: 1.4; }
+.dos-dir-proscons .is-pros { background: #F0FDF4; border-color: #BBF7D0; color: #14532D; }
+.dos-dir-proscons .is-cons { background: #FFFBEB; border-color: #FDE68A; color: #78350F; }
+.dos-page--dark .dos-dir-proscons .is-pros { background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.4); color: #BBF7D0; }
+.dos-page--dark .dos-dir-proscons .is-cons { background: rgba(251,191,36,.14); border-color: rgba(251,191,36,.4); color: #FDE68A; }
+.dos-dir-proscons li { display: flex; gap: 6px; align-items: flex-start; }
+.dos-dir-proscons svg { margin-top: 1px; flex-shrink: 0; }
+
+/* ---------- Comparatif ---------- */
+.dos-compare { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; overflow: hidden; margin-bottom: 20px; font-size: 11.5px; }
+.dos-compare thead th { background: #F5F6F8; border-bottom: 1px solid #E5E7EB; padding: 10px 12px; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #6B7280; font-family: 'IBM Plex Mono', monospace; }
+.dos-compare tbody td { padding: 10px 12px; border-bottom: 1px solid #E5E7EB; vertical-align: middle; }
+.dos-compare tbody tr:last-child td { border-bottom: 0; }
+.dos-compare td:first-child { display: flex; align-items: center; gap: 8px; }
+.dos-compare td:first-child > div { display: flex; flex-direction: column; min-width: 0; }
+.dos-compare td strong { font-size: 12px; color: #0B1220; }
+.dos-compare td em { font-style: normal; font-size: 11px; color: #6B7280; }
+.dos-dot-list { display: inline-flex; gap: 3px; }
+.dos-dot-list i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.08); }
+
+.dos-screens-cover h3 { font-size: 14px; margin: 10px 0 8px; font-family: 'Space Grotesk', sans-serif; }
+.dos-screens-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.dos-screen { background: #F7F8FB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.dos-screen-group { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: #94A3B8; }
+.dos-screen strong { font-size: 12px; color: #0B1220; }
+.dos-screen-check { display: inline-flex; gap: 4px; align-items: center; color: #16A34A; font-size: 10.5px; font-weight: 600; }
+
+/* ---------- Dernière page ---------- */
+.dos-end { flex: 1; display: flex; flex-direction: column; gap: 14px; max-width: 600px; }
+.dos-end h2 { font-family: 'Space Grotesk', sans-serif; font-size: 36px; line-height: 1.05; letter-spacing: -0.02em; margin: 6px 0 4px; color: #fff; }
+.dos-end ol { margin: 10px 0; padding: 0; list-style: none; counter-reset: dosend; display: flex; flex-direction: column; gap: 12px; }
+.dos-end ol li { padding-left: 42px; position: relative; }
+.dos-end ol li::before { counter-increment: dosend; content: counter(dosend, decimal-leading-zero); position: absolute; left: 0; top: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 700; color: #38BDF8; }
+.dos-end ol li strong { font-size: 15px; color: #fff; font-family: 'Space Grotesk', sans-serif; }
+.dos-end ol li p { margin: 2px 0 0; font-size: 12.5px; color: #CBD5E1; line-height: 1.5; }
+.dos-end-contact { margin-top: 20px; background: rgba(255,255,255,.06); border: 1px solid #23364F; border-radius: 12px; padding: 16px 18px; }
+.dos-end-contact strong { font-size: 13px; color: #fff; display: block; margin-bottom: 4px; }
+.dos-end-contact p { margin: 0 0 8px; font-size: 12.5px; color: #CBD5E1; line-height: 1.5; }
+.dos-end-url { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #38BDF8; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---------- Mini visualisations de direction ---------- */
+.dos-mini { width: 100%; height: 100%; display: flex; overflow: hidden; }
+.dos-mini aside { width: 68px; display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; }
+.dos-mini .dos-mini-logo { display: block; width: 36px; height: 20px; border-radius: 4px; margin-bottom: 8px; }
+.dos-mini ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.dos-mini li { display: flex; align-items: center; gap: 4px; padding: 5px 6px; border-radius: 5px; font-size: 9px; color: #6B7280; }
+.dos-mini li i { width: 10px; height: 10px; background: currentColor; opacity: .5; border-radius: 2px; display: inline-block; }
+.dos-mini main { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dos-mini header { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.dos-mini .dos-mini-top { display: flex; gap: 6px; align-items: center; justify-content: space-between; }
+.dos-mini .dos-mini-pill { display: inline-block; height: 14px; width: 80px; border-radius: 4px; padding: 0 6px; font-size: 8px; font-weight: 700; color: #0B1220; }
+.dos-mini .dos-mini-pillrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.dos-mini h5 { font-size: 15px; margin: 2px 0 4px; letter-spacing: -0.015em; }
+.dos-mini-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.dos-mini-kpis > div { padding: 6px; display: flex; flex-direction: column; gap: 3px; min-height: 46px; border-radius: 6px; }
+.dos-mini-kpis b { display: block; width: 12px; height: 12px; border-radius: 3px; background: #1D4ED8; }
+.dos-mini-kpis span { display: block; width: 42px; height: 4px; border-radius: 2px; background: #E5E7EB; }
+.dos-mini-kpis em { display: block; width: 22px; height: 8px; border-radius: 2px; background: #CBD5E1; }
+.dos-mini-chart { flex: 1; min-height: 50px; padding: 6px 8px; border-radius: 6px; }
+.dos-mini-chart svg { width: 100%; height: 100%; }
+
+/* Phone mini */
+.dos-phone { width: 128px; height: 220px; border-radius: 18px; padding: 10px 8px; display: flex; flex-direction: column; gap: 8px; }
+.dos-phone-head { padding-bottom: 4px; display: flex; align-items: center; justify-content: center; }
+.dos-phone-body { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.dos-phone-card { display: block; height: 32px; border-radius: 6px; }
+.dos-phone-nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; justify-items: center; padding: 6px 0; margin: 0 -8px -10px; }
+
+@media print {
+  .dos-top { display: none; }
+  .dos { padding: 0; background: #fff; }
+  .dos-sheet { gap: 0; max-width: none; }
+  .dos-page { box-shadow: none; page-break-after: always; break-after: page; margin: 0; }
+  .dos-page.is-last { page-break-after: auto; break-after: auto; }
+}

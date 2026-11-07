@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Columns3, ExternalLink, Heart, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { Columns3, ExternalLink, Heart, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Info, FileDown } from 'lucide-react';
 import { DIRECTIONS, DIR_BY_ID } from '../data/directions';
 import { ALL_SCREENS, SCREEN_BY_ID, mockUrl } from '../data/screens';
 import { BrandLink, DirectionSwitcher, DeviceToggle, ScreenPicker, PhoneFrame } from './Chrome';
@@ -80,6 +80,7 @@ export default function Viewer() {
             {notes ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
           </button>
           <Link to={`/compare?screen=${screen}&device=${device}`} className="g-btn g-btn--sm" data-testid="gallery-viewer-compare-button"><Columns3 size={15} /> <span className="g-hide-sm">Comparer</span></Link>
+          <Link to="/dossier" className="g-icon-btn" title="Télécharger le dossier PDF" data-testid="gallery-viewer-dossier"><FileDown size={16} /></Link>
           <a href={src} target="_blank" rel="noreferrer" className="g-icon-btn" title="Ouvrir la maquette seule dans un nouvel onglet" data-testid="gallery-viewer-open-new-tab"><ExternalLink size={16} /></a>
         </div>
       </header>

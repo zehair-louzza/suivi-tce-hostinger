@@ -1,30 +1,26 @@
 [
   {
-    "content": "Create base.css with all m-* shared styles and token scaffolding",
+    "content": "Ajouter jspdf + html2canvas",
     "status": "completed"
   },
   {
-    "content": "Create 5 direction CSS files (dir-atlas, dir-craft, dir-signal, dir-swiss, dir-bento)",
+    "content": "Créer la route /dossier avec design A4 pro (couverture, audit, 5 directions, comparatif, prochaines étapes)",
     "status": "completed"
   },
   {
-    "content": "Create 4 missing screens (Parametres, Utilisateurs, Terrain, Vitrine)",
+    "content": "Capturer les aperçus des directions via iframes offscreen → image",
     "status": "completed"
   },
   {
-    "content": "Run yarn build and fix any errors",
+    "content": "Génération PDF 1-clic via html2canvas + jsPDF",
     "status": "completed"
   },
   {
-    "content": "Screenshot gallery home + viewer + compare to verify",
+    "content": "Ajouter CTA « Télécharger le dossier PDF » depuis la galerie",
     "status": "completed"
   },
   {
-    "content": "Call testing agent to verify flows",
-    "status": "completed"
-  },
-  {
-    "content": "Update plan.md with status COMPLETED",
+    "content": "Build + screenshots + test",
     "status": "completed"
   }
 ]

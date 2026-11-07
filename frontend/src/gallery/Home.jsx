@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Columns3, Heart, AlertTriangle, CheckCircle2, Monitor, Smartphone, Layers, ShieldCheck, Type, LayoutPanelLeft } from 'lucide-react';
+import { ArrowRight, Columns3, Heart, AlertTriangle, CheckCircle2, Monitor, Smartphone, Layers, ShieldCheck, Type, LayoutPanelLeft, FileDown } from 'lucide-react';
 import { DIRECTIONS } from '../data/directions';
 import { SCREENS, MODAL_SCREENS, mockUrl } from '../data/screens';
 import { AUDIT, PRINCIPLES } from '../data/audit';
@@ -68,6 +68,7 @@ export default function Home() {
           <a href="#directions" data-testid="gallery-nav-directions">Les 5 directions</a>
           <a href="#ecrans" data-testid="gallery-nav-screens">Écrans</a>
           <Link to="/compare?screen=tableau-de-bord&device=desktop" className="g-btn g-btn--sm" data-testid="gallery-nav-compare"><Columns3 size={15} /> Comparer</Link>
+          <Link to="/dossier" className="g-btn g-btn--sm" data-testid="gallery-nav-dossier"><FileDown size={15} /> Dossier PDF</Link>
         </nav>
       </header>
 
@@ -85,6 +86,9 @@ export default function Home() {
             </Link>
             <Link to="/compare?screen=tableau-de-bord&device=desktop" className="g-btn g-btn--lg" data-testid="gallery-home-open-compare-button">
               <Columns3 size={17} /> Comparer côte à côte
+            </Link>
+            <Link to="/dossier" className="g-btn g-btn--lg" data-testid="gallery-home-open-dossier-button">
+              <FileDown size={17} /> Télécharger le dossier PDF
             </Link>
           </div>
           {favDir && (
