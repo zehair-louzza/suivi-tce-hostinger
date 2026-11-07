@@ -52,3 +52,8 @@ prisma/migrations/.migration_lock.toml
 .netlify
 .turbo
 scratch/
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
