@@ -6,7 +6,9 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import toast, { Toaster, useToasterStore } from 'react-hot-toast';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
+import { ThemeProvider } from './stores/themeStore';
 import './styles/design-tokens.css';
+import './styles/themes.css';
 import './styles/global.css';
 import './styles/layout.css';
 import { registerServiceWorker } from './components/InstallAppButton';
@@ -108,9 +110,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
-        <EphemeralToaster />
-        <ReactQueryDevtools initialIsOpen={false} />
+        <ThemeProvider>
+          <App />
+          <EphemeralToaster />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

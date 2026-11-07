@@ -1,0 +1,381 @@
+/* ============================================================================
+   ANELEC — THÈMES ALTERNATIFS
+   Variantes d'apparence sélectionnables par l'administrateur (défaut entreprise)
+   et personnalisables par chaque utilisateur si autorisé.
+   Chaque thème ne redéfinit que les *tokens* déjà utilisés par l'application :
+   aucun composant n'est modifié, aucune régression possible.
+   ============================================================================ */
+
+/* Polices utilisées par les 5 nouvelles directions.
+   Préchargées ici pour éviter un flash au changement de thème. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Merriweather+Sans:wght@400;600;700;800&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Karla:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+
+/* ============================================================================
+   1. ATLAS CLARITY — Entreprise bleu profond, léger, moderne.
+   ============================================================================ */
+[data-theme="atlas"] {
+  --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-page: #F6F7FB;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F3F4F8;
+  --color-surface-hover: #EEF0F6;
+  --color-sidebar: #0F172A;
+  --color-sidebar-active: #1E293B;
+  --color-sidebar-text: #CBD5E1;
+  --color-sidebar-muted: #94A3B8;
+  --color-text: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748B;
+
+  --color-primary: #1D4ED8;
+  --color-primary-hover: #1E40AF;
+  --color-primary-soft: rgba(29, 78, 216, 0.10);
+  --color-info: #0EA5A4;
+  --color-info-soft: #CCFBF1;
+  --color-warning: #B45309;
+  --color-warning-soft: #FEF3C7;
+  --color-danger: #DC2626;
+  --color-danger-soft: #FEE2E2;
+  --color-border: #E5E7EB;
+  --color-border-strong: #CBD1DA;
+
+  --bg-app: var(--color-page);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-surface: var(--color-surface);
+  --bg-elevated: var(--color-surface);
+  --bg-hover: var(--color-surface-hover);
+  --bg-glass: var(--color-surface);
+  --bg-input: var(--color-surface);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border-subtle: var(--color-border);
+  --border-default: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --accent-primary: var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --brand-primary: var(--color-primary);
+  --brand-glow: rgba(29, 78, 216, 0.14);
+
+  --visite-accent: #6D28D9;
+  --visite-bg: #EDE9FE;
+  --visite-border: rgba(109, 40, 217, 0.35);
+  --travaux-accent: #1D4ED8;
+  --travaux-bg: #DBEAFE;
+  --travaux-border: rgba(29, 78, 216, 0.35);
+  --urgence-accent: #DC2626;
+  --urgence-bg: #FEE2E2;
+  --urgence-border: rgba(220, 38, 38, 0.35);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 9999px;
+  --rounded-card: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 16px 32px rgba(15, 23, 42, 0.12);
+}
+
+/* ============================================================================
+   2. CRAFT WARMTH — Chaud, teal + ocre, arrondi, artisan.
+   ============================================================================ */
+[data-theme="craft"] {
+  --font-sans: 'Work Sans', 'Inter', system-ui, sans-serif;
+  --font-primary: 'Merriweather Sans', 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-page: #FAF7F2;
+  --color-surface: #FFFDF9;
+  --color-surface-subtle: #F3EFE8;
+  --color-surface-hover: #EAE4D7;
+  --color-sidebar: #22201C;
+  --color-sidebar-active: #3B342A;
+  --color-sidebar-text: #EDE5D4;
+  --color-sidebar-muted: #B9AC93;
+  --color-text: #22201C;
+  --color-text-secondary: #5A4F3E;
+  --color-text-muted: #837260;
+
+  --color-primary: #0F766E;
+  --color-primary-hover: #115E59;
+  --color-primary-soft: rgba(15, 118, 110, 0.12);
+  --color-info: #0369A1;
+  --color-info-soft: #E0F2FE;
+  --color-warning: #D97706;
+  --color-warning-soft: #FEF3C7;
+  --color-danger: #B91C1C;
+  --color-danger-soft: #FEE2E2;
+  --color-border: #E7E0D6;
+  --color-border-strong: #CBBFAD;
+
+  --bg-app: var(--color-page);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-surface: var(--color-surface);
+  --bg-elevated: var(--color-surface);
+  --bg-hover: var(--color-surface-hover);
+  --bg-glass: var(--color-surface);
+  --bg-input: var(--color-surface);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border-subtle: var(--color-border);
+  --border-default: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --accent-primary: var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --brand-primary: var(--color-primary);
+  --brand-glow: rgba(15, 118, 110, 0.14);
+
+  --visite-accent: #B45309;
+  --visite-bg: #FEF3C7;
+  --visite-border: rgba(180, 83, 9, 0.35);
+  --travaux-accent: #0F766E;
+  --travaux-bg: #CCFBF1;
+  --travaux-border: rgba(15, 118, 110, 0.35);
+  --urgence-accent: #B91C1C;
+  --urgence-bg: #FEE2E2;
+  --urgence-border: rgba(185, 28, 28, 0.35);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+  --rounded-card: 20px;
+  --shadow-sm: 0 1px 3px rgba(60, 42, 22, 0.06);
+  --shadow-md: 0 6px 18px rgba(60, 42, 22, 0.08);
+  --shadow-lg: 0 20px 48px rgba(60, 42, 22, 0.14);
+}
+
+/* ============================================================================
+   3. SIGNAL COMMAND — Cockpit sombre, cyan vif, ambre d'alerte.
+   ============================================================================ */
+[data-theme="signal"] {
+  --font-sans: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-page: #0B1220;
+  --color-surface: #13213A;
+  --color-surface-subtle: #1A2B4A;
+  --color-surface-hover: #22365A;
+  --color-sidebar: #0A0F1D;
+  --color-sidebar-active: #13213A;
+  --color-sidebar-text: #A3B8D8;
+  --color-sidebar-muted: #637CA4;
+  --color-text: #E6EEFB;
+  --color-text-secondary: #A3B8D8;
+  --color-text-muted: #637CA4;
+
+  --color-primary: #38BDF8;
+  --color-primary-hover: #0EA5E9;
+  --color-primary-soft: rgba(56, 189, 248, 0.14);
+  --color-info: #60A5FA;
+  --color-info-soft: rgba(96, 165, 250, 0.14);
+  --color-warning: #FBBF24;
+  --color-warning-soft: rgba(251, 191, 36, 0.14);
+  --color-danger: #F87171;
+  --color-danger-soft: rgba(248, 113, 113, 0.14);
+  --color-border: #23364F;
+  --color-border-strong: #2E4568;
+
+  --bg-app: var(--color-page);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-surface: var(--color-surface);
+  --bg-elevated: var(--color-surface-subtle);
+  --bg-hover: var(--color-surface-hover);
+  --bg-glass: var(--color-surface);
+  --bg-input: #0B1424;
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border-subtle: var(--color-border);
+  --border-default: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --accent-primary: var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --brand-primary: var(--color-primary);
+  --brand-glow: rgba(56, 189, 248, 0.26);
+
+  --visite-accent: #A78BFA;
+  --visite-bg: rgba(167, 139, 250, 0.14);
+  --visite-border: rgba(167, 139, 250, 0.35);
+  --travaux-accent: #38BDF8;
+  --travaux-bg: rgba(56, 189, 248, 0.14);
+  --travaux-border: rgba(56, 189, 248, 0.35);
+  --urgence-accent: #F87171;
+  --urgence-bg: rgba(248, 113, 113, 0.14);
+  --urgence-border: rgba(248, 113, 113, 0.4);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 9999px;
+  --rounded-card: 10px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 22px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.65);
+
+  /* Alias toasts/notifications adaptés au dark */
+  --color-level3-surface: #13213A;
+  --color-primary-text: #E6EEFB;
+  --color-border-standard: #2E4568;
+  --color-inverse-text: #0B1220;
+}
+
+/* ============================================================================
+   4. EDITORIAL SWISS — Grille typographique premium, bleu royal + corail.
+   ============================================================================ */
+[data-theme="swiss"] {
+  --font-sans: 'Karla', 'Inter', system-ui, sans-serif;
+  --font-primary: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, monospace;
+
+  --color-page: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F5F5F3;
+  --color-surface-hover: #ECECE8;
+  --color-sidebar: #0B1220;
+  --color-sidebar-active: #1E293B;
+  --color-sidebar-text: #D8D8D4;
+  --color-sidebar-muted: #9A9A96;
+  --color-text: #0B1220;
+  --color-text-secondary: #4B4B48;
+  --color-text-muted: #6B6B68;
+
+  --color-primary: #0B3B8F;
+  --color-primary-hover: #0A3078;
+  --color-primary-soft: rgba(11, 59, 143, 0.10);
+  --color-info: #2A9D8F;
+  --color-info-soft: #D1F0EA;
+  --color-warning: #D97706;
+  --color-warning-soft: #FEF3C7;
+  --color-danger: #E07A5F;
+  --color-danger-soft: #FCE7DD;
+  --color-border: #D4D4D0;
+  --color-border-strong: #0B1220;
+
+  --bg-app: var(--color-page);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-surface: var(--color-surface);
+  --bg-elevated: var(--color-surface);
+  --bg-hover: var(--color-surface-hover);
+  --bg-glass: var(--color-surface);
+  --bg-input: var(--color-surface);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border-subtle: var(--color-border);
+  --border-default: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --accent-primary: var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --brand-primary: var(--color-primary);
+  --brand-glow: rgba(11, 59, 143, 0.12);
+
+  --visite-accent: #E07A5F;
+  --visite-bg: #FCE7DD;
+  --visite-border: rgba(224, 122, 95, 0.35);
+  --travaux-accent: #0B3B8F;
+  --travaux-bg: #D6E2F5;
+  --travaux-border: rgba(11, 59, 143, 0.35);
+  --urgence-accent: #B91C1C;
+  --urgence-bg: #FEE2E2;
+  --urgence-border: rgba(185, 28, 28, 0.35);
+
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-pill: 9999px;
+  --rounded-card: 2px;
+  --shadow-sm: none;
+  --shadow-md: 0 2px 8px rgba(11, 18, 32, 0.07);
+  --shadow-lg: 0 24px 50px rgba(11, 18, 32, 0.12);
+}
+
+/* ============================================================================
+   5. BENTO MODULAR — Apple/Vercel, tuiles arrondies, jaune/corail/vert.
+   ============================================================================ */
+[data-theme="bento"] {
+  --font-sans: 'Figtree', 'Inter', system-ui, sans-serif;
+  --font-primary: 'Sora', 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-page: #F2F3F5;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F2F3F5;
+  --color-surface-hover: #E8EAEE;
+  --color-sidebar: #111827;
+  --color-sidebar-active: #1F2937;
+  --color-sidebar-text: #E5E7EB;
+  --color-sidebar-muted: #9CA3AF;
+  --color-text: #0B0F19;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+
+  --color-primary: #111827;
+  --color-primary-hover: #000000;
+  --color-primary-soft: rgba(17, 24, 39, 0.08);
+  --color-info: #2563EB;
+  --color-info-soft: #DBEAFE;
+  --color-warning: #F5B400;
+  --color-warning-soft: rgba(245, 180, 0, 0.18);
+  --color-danger: #EF5B4C;
+  --color-danger-soft: rgba(239, 91, 76, 0.14);
+  --color-border: #E3E6EC;
+  --color-border-strong: #C9CFD8;
+
+  --bg-app: var(--color-page);
+  --bg-sidebar: var(--color-sidebar);
+  --bg-surface: var(--color-surface);
+  --bg-elevated: var(--color-surface);
+  --bg-hover: var(--color-surface-hover);
+  --bg-glass: var(--color-surface);
+  --bg-input: var(--color-surface);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border-subtle: var(--color-border);
+  --border-default: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --accent-primary: var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --brand-primary: var(--color-primary);
+  --brand-glow: rgba(245, 180, 0, 0.22);
+
+  --visite-accent: #8A5A05;
+  --visite-bg: rgba(245, 180, 0, 0.16);
+  --visite-border: rgba(245, 180, 0, 0.4);
+  --travaux-accent: #16A34A;
+  --travaux-bg: rgba(22, 163, 74, 0.14);
+  --travaux-border: rgba(22, 163, 74, 0.35);
+  --urgence-accent: #EF5B4C;
+  --urgence-bg: rgba(239, 91, 76, 0.14);
+  --urgence-border: rgba(239, 91, 76, 0.38);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+  --rounded-card: 18px;
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --shadow-md: 0 4px 16px rgba(17, 24, 39, 0.07);
+  --shadow-lg: 0 24px 60px rgba(17, 24, 39, 0.14);
+}
+
+/* ============================================================================
+   Transition fluide lors d'un changement de thème (sans régression animation).
+   ============================================================================ */
+html[data-theme-switching="1"],
+html[data-theme-switching="1"] *,
+html[data-theme-switching="1"] *::before,
+html[data-theme-switching="1"] *::after {
+  transition:
+    background-color 220ms ease,
+    color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease !important;
+}
