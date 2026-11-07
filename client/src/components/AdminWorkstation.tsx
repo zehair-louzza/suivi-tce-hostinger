@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast';
 import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
 import { useAuth } from '../stores/authStore';
+import { AppearancePanel } from './AppearancePanel';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -22,7 +23,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
-  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone';
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance';
   onOpenSendReportEmail?: (intv: Intervention) => void;
 }
 
@@ -109,7 +110,7 @@ export function AdminWorkstation({
   const queryClient = useQueryClient();
   const { user, logout } = useAuth();
   const [subTab, setSubTab] = useState<
-    'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone'
+    'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance'
   >(initialSubTab || 'users');
   const [showDestroyModal, setShowDestroyModal] = useState(false);
 
@@ -472,6 +473,16 @@ export function AdminWorkstation({
             >
               <span className="desktop-only-el">◈ E-mails & SMTP ({smtpStatusQuery.data?.logs?.length || 0})</span>
               <span className="mobile-only-el">◈ E-mails</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${subTab === 'appearance' ? 'active' : ''}`}
+              onClick={() => setSubTab('appearance')}
+              style={{ flexShrink: 0 }}
+              data-testid="admin-tab-appearance"
+            >
+              <span className="desktop-only-el">◆ Apparence & Thèmes</span>
+              <span className="mobile-only-el">◆ Apparence</span>
             </button>
             <button
               type="button"
@@ -1832,6 +1843,15 @@ export function AdminWorkstation({
       )}
 
       
+      {/* =====================================================================
+          SOUS-ONGLET 7 : APPARENCE & THÈMES — défaut entreprise + personnalisation
+         ===================================================================== */}
+      {subTab === 'appearance' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} data-testid="admin-appearance-section">
+          <AppearancePanel />
+        </div>
+      )}
+
       {/* =====================================================================
           SOUS-ONGLET 6 : ZONE DE DANGER - CLÔTURE DU COMPTE & SUPPRESSION BASE
          ===================================================================== */}

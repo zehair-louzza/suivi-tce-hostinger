@@ -175,7 +175,7 @@ export function AppearancePanel() {
     );
   };
 
-  const isAdmin = user?.role === 'SUPER_ADMIN_FULL_RW' || user?.permissions?.canManageUsers;
+  const isAdmin = user?.role === 'ADMIN' || Boolean(user?.permissions?.canManageUsers) || user?.id === 1;
 
   if (!isAdmin) {
     return (
@@ -323,7 +323,7 @@ export function AppearancePanel() {
  * permet à chacun de choisir son thème personnel ou de revenir au défaut.
  */
 export function PersonalThemePicker() {
-  const { current, companyDefault, userPref, allowUserOverride, setUserPref } = useTheme();
+  const { companyDefault, userPref, allowUserOverride, setUserPref } = useTheme();
   if (!allowUserOverride) {
     return (
       <div style={{ padding: 14, borderRadius: 'var(--rounded-card, 10px)', background: 'var(--color-surface-subtle)', border: '1px solid var(--color-border)', fontSize: 13, color: 'var(--color-text-secondary)' }}>

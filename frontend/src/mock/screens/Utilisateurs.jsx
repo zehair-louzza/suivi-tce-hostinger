@@ -192,7 +192,7 @@ export default function Utilisateurs() {
       testid="mock-screen-utilisateurs"
       eyebrow="Console administrateur"
       title="Utilisateurs & accès"
-      subtitle="Collaborateurs, droits, pointages, rapports terrain et diagnostic e-mail."
+      subtitle="Collaborateurs, droits, pointages, rapports terrain, apparence et diagnostic e-mail."
     >
       <Tabs
         testid="mock-utilisateurs-tabs"
@@ -203,6 +203,7 @@ export default function Utilisateurs() {
           { id: 'droits', label: 'Matrice des droits' },
           { id: 'pointages', label: 'Pointages', count: 6 },
           { id: 'rapports', label: 'Rapports à valider', count: 2 },
+          { id: 'apparence', label: 'Apparence' },
           { id: 'smtp', label: 'Diagnostic e-mail' },
         ]}
       />
@@ -210,7 +211,116 @@ export default function Utilisateurs() {
       {tab === 'droits' && <DroitsMatriceTab />}
       {tab === 'pointages' && <PointagesTab />}
       {tab === 'rapports' && <RapportsTab />}
+      {tab === 'apparence' && <ApparenceTab />}
       {tab === 'smtp' && <DiagnosticTab />}
     </Page>
+  );
+}
+
+function ApparenceTab() {
+  const [defaultTheme, setDefaultTheme] = useState('atlas');
+  const [allowOverride, setAllowOverride] = useState(true);
+  const [preview, setPreview] = useState(null);
+  const toast = useToast();
+
+  const themes = [
+    { id: 'light', name: 'ANELEC Original — Clair', tag: "L'apparence actuelle en mode clair.", dark: false, isOrig: true, sw: ['#047857', '#142536', '#f6f8fa', '#ffffff', '#b91c1c'] },
+    { id: 'dark', name: 'ANELEC Original — Sombre', tag: "Mode sombre de l'apparence actuelle.", dark: true, isOrig: true, sw: ['#10b981', '#0a1017', '#0b111a', '#111a26', '#ef4444'] },
+    { id: 'atlas', name: 'Atlas Clarity', tag: 'Entreprise moderne, bleu profond.', dark: false, sw: ['#1D4ED8', '#0EA5A4', '#0F172A', '#F6F7FB', '#F59E0B'] },
+    { id: 'craft', name: 'Craft Warmth', tag: 'Chaleureux, arrondi, artisan.', dark: false, sw: ['#0F766E', '#D97706', '#22201C', '#FAF7F2', '#B91C1C'] },
+    { id: 'signal', name: 'Signal Command', tag: 'Cockpit sombre, cyan vif.', dark: true, sw: ['#38BDF8', '#F59E0B', '#0B1220', '#13213A', '#34D399'] },
+    { id: 'swiss', name: 'Editorial Swiss', tag: 'Grille suisse premium.', dark: false, sw: ['#0B3B8F', '#E07A5F', '#0B1220', '#FFFFFF', '#2A9D8F'] },
+    { id: 'bento', name: 'Bento Modular', tag: 'Marque ANELEC, tuiles bento.', dark: false, sw: ['#111827', '#F5B400', '#EF5B4C', '#16A34A', '#F2F3F5'] },
+  ];
+
+  const current = preview || defaultTheme;
+
+  return (
+    <>
+      <Card title="Apparence de la plateforme" subtitle="Choisissez l'apparence par défaut qui s'applique à toute l'entreprise. Vos collaborateurs peuvent personnaliser la leur si vous l'autorisez." icon={Settings} testid="mock-appearance-admin">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13, flexWrap: 'wrap' }}>
+          <span><span className="m-muted">Défaut actuel : </span><strong>{themes.find((t) => t.id === defaultTheme)?.name}</strong></span>
+          <span style={{ flex: 1 }} />
+          <Switch testid="mock-appearance-allow-override" checked={allowOverride} onChange={(v) => { setAllowOverride(v); toast(v ? 'Collaborateurs autorisés à personnaliser leur apparence.' : 'Personnalisation individuelle désactivée.'); }} />
+          <span style={{ fontSize: 13 }}>Autoriser la personnalisation individuelle</span>
+        </div>
+      </Card>
+      <Card title="Thèmes disponibles" subtitle={`${themes.length} apparences — survolez pour prévisualiser, cliquez pour appliquer à toute l'entreprise.`} icon={Shield} testid="mock-appearance-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+          {themes.map((t) => {
+            const isDefault = t.id === defaultTheme;
+            const isCurrent = t.id === current;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onMouseEnter={() => setPreview(t.id)}
+                onMouseLeave={() => setPreview(null)}
+                onClick={() => { setDefaultTheme(t.id); setPreview(null); toast(`Apparence « ${t.name} » appliquée à toute l'entreprise.`, 'success'); }}
+                data-testid={`mock-appearance-theme-${t.id}`}
+                style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, border: `2px solid ${isDefault ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', background: 'var(--surface)', boxShadow: isDefault ? '0 0 0 3px var(--primary-soft)' : 'var(--shadow-sm)' }}
+              >
+                <div aria-hidden="true" style={{ height: 94, borderRadius: 8, display: 'grid', gridTemplateColumns: '38px 1fr', overflow: 'hidden', background: t.dark ? '#0B1220' : '#F4F5F8', border: `1px solid ${t.dark ? '#23364F' : '#E5E7EB'}` }}>
+                  <div style={{ background: t.sw[2], display: 'flex', flexDirection: 'column', padding: 5, gap: 3 }}>
+                    <span style={{ height: 14, background: t.sw[0], borderRadius: 3 }} />
+                    <span style={{ height: 5, background: 'rgba(255,255,255,.35)', borderRadius: 2 }} />
+                    <span style={{ height: 5, background: 'rgba(255,255,255,.2)', borderRadius: 2 }} />
+                    <span style={{ height: 5, background: 'rgba(255,255,255,.2)', borderRadius: 2 }} />
+                  </div>
+                  <div style={{ padding: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} style={{ height: 24, background: t.dark ? '#13213A' : '#fff', border: `1px solid ${t.dark ? '#23364F' : '#E5E7EB'}`, borderRadius: 5, padding: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: t.sw[i % t.sw.length] }} />
+                          <span style={{ width: '70%', height: 3, borderRadius: 1, background: t.dark ? '#2E4568' : '#CBD5E1' }} />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ flex: 1, background: t.dark ? '#13213A' : '#fff', border: `1px solid ${t.dark ? '#23364F' : '#E5E7EB'}`, borderRadius: 5, padding: 4, display: 'flex', alignItems: 'flex-end' }}>
+                      <svg viewBox="0 0 100 22" preserveAspectRatio="none" width="100%" height="22"><polyline points="0,18 15,16 30,13 45,9 60,7 75,4 90,5 100,2" fill="none" stroke={t.sw[0]} strokeWidth="1.8" /></svg>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {t.sw.map((c) => <span key={c} style={{ width: 14, height: 14, borderRadius: 3, background: c, border: '1px solid rgba(0,0,0,.08)' }} />)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 13.5, color: 'var(--text-strong)' }}>{t.name}</strong>
+                    {t.isOrig && <Pill tone="slate">Original</Pill>}
+                    {t.dark && <Pill tone="indigo">Sombre</Pill>}
+                  </div>
+                  <span className="m-muted m-small">{t.tag}</span>
+                </div>
+                <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {isDefault && <Pill tone="blue">★ Défaut entreprise</Pill>}
+                  {isCurrent && !isDefault && <Pill tone="teal">Aperçu actif</Pill>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+      <Card title="Mon apparence (côté utilisateur)" subtitle={allowOverride ? 'Aperçu de ce que chaque collaborateur verra sur son profil pour choisir son apparence personnelle.' : 'La personnalisation individuelle a été désactivée — les collaborateurs ne voient pas cet écran.'} icon={Users} testid="mock-appearance-personal-preview">
+        {allowOverride ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {themes.map((t) => (
+              <div key={t.id} style={{ padding: 10, borderRadius: 10, border: `2px solid ${t.id === defaultTheme ? 'var(--primary)' : 'var(--border)'}`, background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 32, borderRadius: 6, background: `linear-gradient(135deg, ${t.sw[0]} 0%, ${t.sw[2]} 100%)`, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong style={{ fontSize: 13, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</strong>
+                  <span className="m-muted" style={{ fontSize: 11 }}>{t.dark ? 'Sombre' : 'Clair'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="m-callout m-callout--note">
+            <strong>Désactivée par l'administrateur</strong>
+            <p style={{ margin: 0 }}>Tous les collaborateurs utilisent le thème « {themes.find((t) => t.id === defaultTheme)?.name} » sans possibilité de le modifier.</p>
+          </div>
+        )}
+      </Card>
+    </>
   );
 }

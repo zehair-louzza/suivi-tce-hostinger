@@ -236,7 +236,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setUserPref,
     setAllowUserOverride,
     themes: THEMES,
-    previewFor: (id) => THEMES.find((t) => t.id === id),
+    previewFor: (id: ThemeId) => THEMES.find((t) => t.id === id),
   }), [current, companyDefault, userPref, allowUserOverride, setCompanyDefault, setUserPref, setAllowUserOverride]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
