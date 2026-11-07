@@ -54,6 +54,7 @@ function Gantt({ blocks, techs, onPick, selected }) {
         <div className="m-gantt-corner">Équipe <small>charge / 8 h</small></div>
         <div className="m-gantt-hours">
           {HOURS.map((h) => <span key={h} style={{ left: `${((h - START) / SPAN) * 100}%` }}>{String(h).padStart(2, '0')}:00</span>)}
+          <i className="m-gantt-now-head" style={{ left: `${((NOW_HOUR - START) / SPAN) * 100}%` }}><em>{hhmm(NOW_HOUR)}</em></i>
         </div>
       </div>
       {techs.map((t) => {
