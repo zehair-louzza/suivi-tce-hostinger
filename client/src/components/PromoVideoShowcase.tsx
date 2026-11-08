@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ProGlyph, ProGlyphName } from './ProIcons';
 
 interface SlideItem {
   id: string;
@@ -21,7 +22,7 @@ interface SlideItem {
 const SLIDES: SlideItem[] = [
   {
     id: 'kpis',
-    tag: '⚡ COCKPIT OPÉRATIONNEL & FINANCIER',
+    tag: 'COCKPIT OPÉRATIONNEL & FINANCIER',
     headerTitle: 'CENTRE DE PILOTAGE & KPIS',
     title: 'Pilotage Stratégique en Temps Réel',
     subtitle: 'Suivi instantané de vos marges, de vos volumes et de vos équipes.',
@@ -29,25 +30,25 @@ const SLIDES: SlideItem[] = [
     screenshotUrl: '/screenshots/kpis.png', // https://suivi.anelecgroupe.com/app/kpis
     cards: [
       {
-        icon: '📈',
+        icon: 'chart',
         title: "Chiffre d'Affaires & Marges Réelles",
         desc: 'Calcul instantané HT & TTC depuis les missions terminées',
         color: '#10b981',
       },
       {
-        icon: '🏢',
+        icon: 'building',
         title: "Ventilation Donneurs d'Ordre",
         desc: 'Part de volume B2B / B2C et paniers moyens en direct',
         color: '#06b6d4',
       },
       {
-        icon: '⚠️',
+        icon: 'alert',
         title: "Compteurs d'Urgences & Blocages",
         desc: 'Missions critiques identifiées en direct sur le cockpit',
         color: '#f59e0b',
       },
       {
-        icon: '📊',
+        icon: 'chart',
         title: 'Export Situation Travaux Excel', // Faute "Travax" corrigée
         desc: 'Génération automatique hebdomadaire et situations mensuelles',
         color: '#3b82f6',
@@ -56,7 +57,7 @@ const SLIDES: SlideItem[] = [
   },
   {
     id: 'devis',
-    tag: '✨ CYCLE COMMERCIAL COMPLET',
+    tag: 'CYCLE COMMERCIAL COMPLET',
     headerTitle: 'PIPELINE COMMERCIAL & CHIFFRAGE DEVIS',
     title: 'Pipeline Devis 22 Colonnes',
     subtitle: 'Du premier contact jusqu’à la signature finale et la mise en chantier.',
@@ -65,19 +66,19 @@ const SLIDES: SlideItem[] = [
     secondaryScreenshotUrl: '/screenshots/devis-modal.png',
     cards: [
       {
-        icon: '📋',
+        icon: 'clipboard',
         title: 'Visites Devis Préalables (VIS-DEV)',
         desc: 'Relevés techniques et chiffrage intégrés aux tournées techniciens',
         color: '#10b981',
       },
       {
-        icon: '⚡',
+        icon: 'zap',
         title: 'Conversion en Intervention 1-Clic', // Formulation "Reconversion" corrigée
         desc: 'Basculez un devis signé en intervention planifiée en 1 clic',
         color: '#06b6d4',
       },
       {
-        icon: '🎯',
+        icon: 'target',
         title: 'Suivi du Taux de Concrétisation',
         desc: 'Visualisation en temps réel du potentiel commercial brut',
         color: '#8b5cf6',
@@ -86,7 +87,7 @@ const SLIDES: SlideItem[] = [
   },
   {
     id: 'dispatch',
-    tag: '⚡ PERFORMANCE & RÉACTIVITÉ 60 FPS',
+    tag: 'PERFORMANCE & RÉACTIVITÉ 60 FPS',
     headerTitle: 'DISPATCHING MULTI-RESSOURCES & PLANNING GANTT',
     title: 'Planning Gantt Ultra-Fluide',
     subtitle: 'Planifiez vos équipes sans latence avec détection automatique des conflits.',
@@ -94,25 +95,25 @@ const SLIDES: SlideItem[] = [
     screenshotUrl: '/screenshots/dispatch.png', // https://suivi.anelecgroupe.com/app/dispatch
     cards: [
       {
-        icon: '🖱️',
+        icon: 'cursor',
         title: 'Glisser-Déposer Instantané',
         desc: 'Fluidité native 60 images/seconde sur tout le planning',
         color: '#10b981',
       },
       {
-        icon: '🚀',
+        icon: 'rocket',
         title: 'Bourse de Dispatch Rapide',
         desc: 'Affectez les urgences aux techniciens disponibles en un éclair',
         color: '#f59e0b',
       },
       {
-        icon: '🛡️',
+        icon: 'shield',
         title: 'Contrôle Anti-Chevauchement',
         desc: 'Alertes visuelles en cas de double réservation d’un technicien',
         color: '#06b6d4',
       },
       {
-        icon: '👷',
+        icon: 'user',
         title: 'Gestion Sous-Traitants & Équipes',
         desc: 'Affectation par corps d’état (Électricité, Plomberie, CVC, Peinture)',
         color: '#8b5cf6',
@@ -121,7 +122,7 @@ const SLIDES: SlideItem[] = [
   },
   {
     id: 'tsp',
-    tag: '📍 ALGORITHME TSP & TEMPS RÉEL',
+    tag: 'ALGORITHME TSP & TEMPS RÉEL',
     headerTitle: 'CARTOGRAPHIE INTERACTIVE & OPTIMISATION TSP',
     title: 'Tournées Intelligentes TSP',
     subtitle: 'Optimisation kilométrique et réduction drastique des temps de trajet.', // Phrase coupée corrigée
@@ -129,19 +130,19 @@ const SLIDES: SlideItem[] = [
     screenshotUrl: '/screenshots/map-tsp.png',
     cards: [
       {
-        icon: '🗺️',
+        icon: 'map',
         title: 'Départ Siège Social & Trajets Optimisés',
         desc: 'Calcul d’itinéraire TSP optimal minimisant le temps sur route',
         color: '#10b981',
       },
       {
-        icon: '✅',
+        icon: 'check',
         title: 'Retrait Automatique en Direct',
         desc: 'Les missions validées sur mobile disparaissent instantanément de la carte',
         color: '#06b6d4',
       },
       {
-        icon: '🖥️',
+        icon: 'monitor',
         title: 'Mode Cockpit Plein Écran PC',
         desc: 'Bascule plein écran pour affichage mural en salle de supervision',
         color: '#f59e0b',
@@ -150,7 +151,7 @@ const SLIDES: SlideItem[] = [
   },
   {
     id: 'mobile',
-    tag: '📱 APPLICATION TERRAIN PWA SÉCURISÉE',
+    tag: 'APPLICATION TERRAIN PWA SÉCURISÉE',
     headerTitle: 'APPLICATION MOBILE TECHNICIEN PWA',
     title: "L'Application Mobile Technicien",
     subtitle: 'Fiabilité juridique, horodatage certifié et zéro saisie inutile.',
@@ -159,25 +160,25 @@ const SLIDES: SlideItem[] = [
     secondaryScreenshotUrl: '/screenshots/mobile-missions.png',
     cards: [
       {
-        icon: '🕒',
+        icon: 'clock',
         title: 'Pointage Matin Biométrique / Horodaté',
         desc: 'Heure d’embauche inviolable et suivi de présence en temps réel',
         color: '#10b981',
       },
       {
-        icon: '📍',
+        icon: 'pin',
         title: 'Clôture avec Position GPS Obligatoire',
         desc: 'Transmission certifiée des coordonnées GPS précises au bureau',
         color: '#f59e0b',
       },
       {
-        icon: '📸',
+        icon: 'camera',
         title: 'Photos Avant / Après & Signature Client',
         desc: 'Génération automatique du rapport PDF prêt pour facturation',
         color: '#8b5cf6',
       },
       {
-        icon: '💬',
+        icon: 'chat',
         title: 'Messages Éphémères Professionnels',
         desc: 'Alertes bureau → équipe rédigées sans polluer l’historique dossier',
         color: '#06b6d4',
@@ -186,7 +187,7 @@ const SLIDES: SlideItem[] = [
   },
   {
     id: 'facturation',
-    tag: '💶 FINANCE & RELATION CLIENT',
+    tag: 'FINANCE & RELATION CLIENT',
     headerTitle: 'FACTURATION & DIAGNOSTIC DES RETARDS',
     title: 'Studio Facturation 5 Bacs',
     subtitle: 'Accélérez vos encaissements et désamorcez les litiges clients.',
@@ -195,25 +196,25 @@ const SLIDES: SlideItem[] = [
     secondaryScreenshotUrl: '/screenshots/facturation-bottom.png',
     cards: [
       {
-        icon: '⚖️',
+        icon: 'scale',
         title: 'Arbitrage Automatique B2B / B2C',
         desc: 'Gestion distincte des règles fiscales HT, autoliquidation et TTC',
         color: '#10b981',
       },
       {
-        icon: '🔍',
+        icon: 'search',
         title: 'Diagnostic 1-Clic des Retards',
         desc: 'Identification instantanée de la cause exacte du blocage de paiement',
         color: '#06b6d4',
       },
       {
-        icon: '✉️',
+        icon: 'mail',
         title: 'Courriers Clients Prêts à l’Envoi',
         desc: 'Génération 1-clic des relances selon l’historique réel du chantier',
         color: '#f59e0b',
       },
       {
-        icon: '🔒',
+        icon: 'lock',
         title: 'Dossier de Preuves Complet (PV & Photos)',
         desc: 'Vérification automatique des pièces justificatives avant envoi',
         color: '#3b82f6',
@@ -384,7 +385,7 @@ export const PromoVideoShowcase: React.FC = () => {
               gap: '6px',
             }}
           >
-            {isAudioActive ? '🔊 Musique active' : '🔇 Activer musique'}
+            {isAudioActive ? 'Musique active' : 'Activer la musique'}
           </button>
 
           <button
@@ -404,7 +405,7 @@ export const PromoVideoShowcase: React.FC = () => {
               gap: '6px',
             }}
           >
-            🎬 Vidéo Full HD (1080p)
+            Vidéo Full HD (1080p)
           </button>
 
           <div
@@ -440,7 +441,7 @@ export const PromoVideoShowcase: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            ✕ Quitter
+            Quitter
           </button>
         </div>
       </header>
@@ -542,7 +543,7 @@ export const PromoVideoShowcase: React.FC = () => {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  ● {b.label}
+                  {b.label}
                 </div>
               ))}
             </div>
@@ -564,7 +565,7 @@ export const PromoVideoShowcase: React.FC = () => {
                   boxShadow: '0 0 25px rgba(16, 185, 129, 0.4)',
                 }}
               >
-                ▶ Lancer la Visite Interactive
+                Lancer la Visite Interactive
               </button>
 
               <button
@@ -581,7 +582,7 @@ export const PromoVideoShowcase: React.FC = () => {
                   cursor: 'pointer',
                 }}
               >
-                🎬 Voir le Clip Vidéo MP4 (44s)
+                Voir le Clip Vidéo MP4 (44s)
               </button>
             </div>
           </div>
@@ -691,7 +692,7 @@ export const PromoVideoShowcase: React.FC = () => {
                   width: 'fit-content',
                 }}
               >
-                ● DÉPLOIEMENT INSTANTANÉ
+                DÉPLOIEMENT INSTANTANÉ
               </div>
 
               <h2 style={{ fontSize: '42px', fontWeight: 900, color: '#ffffff', margin: 0, lineHeight: 1.15 }}>
@@ -705,19 +706,19 @@ export const PromoVideoShowcase: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
                   {
-                    icon: '🚀',
+                    icon: 'rocket',
                     title: 'Connexion Google 1-Clic',
                     desc: 'Vos identifiants et e-mail entreprise pré-remplis automatiquement',
                     color: '#10b981',
                   },
                   {
-                    icon: '🔒',
+                    icon: 'lock',
                     title: 'Base Dédiée Supabase PostgreSQL 17',
                     desc: 'Isolation stricte multi-tenant et sauvegardes automatiques',
                     color: '#06b6d4',
                   },
                   {
-                    icon: '📱',
+                    icon: 'phone',
                     title: 'Accessible Ordinateur & Smartphone',
                     desc: 'Application PWA installable sans passer par les stores d’applications',
                     color: '#8b5cf6',
@@ -736,7 +737,7 @@ export const PromoVideoShowcase: React.FC = () => {
                       borderLeft: `5px solid ${c.color}`,
                     }}
                   >
-                    <span style={{ fontSize: '24px' }}>{c.icon}</span>
+                    <ProGlyph name={c.icon as ProGlyphName} size={24} />
                     <div>
                       <div style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>{c.title}</div>
                       <div style={{ fontSize: '13px', color: '#94a3b8' }}>{c.desc}</div>
@@ -802,7 +803,7 @@ export const PromoVideoShowcase: React.FC = () => {
               fontWeight: 700,
             }}
           >
-            ◀ Préc.
+            ‹ Préc.
           </button>
 
           <button
@@ -818,7 +819,7 @@ export const PromoVideoShowcase: React.FC = () => {
               fontWeight: 700,
             }}
           >
-            {isPlaying ? '⏸ Pause' : '▶ Lecture'}
+            {isPlaying ? 'Pause' : 'Lecture'}
           </button>
 
           <button
@@ -834,7 +835,7 @@ export const PromoVideoShowcase: React.FC = () => {
               fontWeight: 700,
             }}
           >
-            Suiv. ▶
+            Suiv. ›
           </button>
         </div>
 
@@ -911,7 +912,7 @@ export const PromoVideoShowcase: React.FC = () => {
               gap: '6px',
             }}
           >
-            📥 Télécharger MP4
+            Télécharger MP4
           </a>
         </div>
       </footer>
@@ -956,7 +957,7 @@ export const PromoVideoShowcase: React.FC = () => {
               }}
             >
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🎬</span> ANELEC GROUPE TCE — Vidéo Publicitaire Officielle (Full HD 1080p, 44s)
+                ANELEC GROUPE TCE — Vidéo Publicitaire Officielle (Full HD 1080p, 44s)
               </div>
               <button
                 type="button"
@@ -1008,7 +1009,7 @@ function SlideTextBlock({ slide }: { slide: SlideItem }) {
           width: 'fit-content',
         }}
       >
-        ● {slide.tag}
+        {slide.tag}
       </div>
 
       <h2 style={{ fontSize: '38px', fontWeight: 900, color: '#ffffff', margin: 0, lineHeight: 1.15 }}>
@@ -1036,7 +1037,7 @@ function SlideTextBlock({ slide }: { slide: SlideItem }) {
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
             }}
           >
-            <span style={{ fontSize: '22px' }}>{card.icon}</span>
+            <ProGlyph name={card.icon as ProGlyphName} size={22} />
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>{card.title}</div>
               <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '2px' }}>{card.desc}</div>

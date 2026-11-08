@@ -288,7 +288,6 @@ export function SituationReportModal({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '16px' }}>▪</span>
               <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
                 Période d'extraction du rapport (Jour / Mois / Année)
               </span>
@@ -311,7 +310,7 @@ export function SituationReportModal({
                   padding: 0,
                 }}
               >
-                ↺ Réinitialiser tous les filtres
+                Réinitialiser tous les filtres
               </button>
             )}
           </div>
@@ -474,10 +473,10 @@ export function SituationReportModal({
             </div>
             <div style={{ display: 'flex', gap: '14px', color: '#475569', fontWeight: 600 }}>
               <span style={{ color: '#0284c7' }}>
-                ❖ {filteredData.filteredIntvs.length} chantiers ({formatCurrency(filteredData.totalIntvMontant)})
+                {filteredData.filteredIntvs.length} chantiers ({formatCurrency(filteredData.totalIntvMontant)})
               </span>
               <span style={{ color: '#7c3aed' }}>
-                ▪ {filteredData.filteredDevis.length} devis ({formatCurrency(filteredData.totalDevisMontant)})
+                {filteredData.filteredDevis.length} devis ({formatCurrency(filteredData.totalDevisMontant)})
               </span>
             </div>
           </div>
@@ -568,7 +567,6 @@ export function SituationReportModal({
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '18px' }}>❖</span>
                   <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
                     Situation Interventions Seules
                   </h3>
@@ -633,7 +631,6 @@ export function SituationReportModal({
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '18px' }}>▪</span>
                   <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
                     Situation Devis Seuls
                   </h3>

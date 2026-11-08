@@ -195,7 +195,7 @@ export function LegalTermsModal({
                   color: 'var(--text-primary, #0f172a)',
                 }}
               >
-                ◈ <strong>Principe Fondamental d'Absence de Traitement des Données Métier :</strong>
+                <strong>Principe Fondamental d'Absence de Traitement des Données Métier :</strong>
                 <br />
                 Notre entreprise et le créateur de cette solution logicielle <strong>NE TRAITENT, N'EXPLOITENT, NE CONSULTENT, NE REVENDENT ET NE PROFILENT AUCUNE DONNÉE MÉTIER</strong> saisie sur la plateforme par les entreprises utilisatrices. Toutes les données appartiennent exclusivement et strictement à chaque entreprise cliente (tenant).
               </div>

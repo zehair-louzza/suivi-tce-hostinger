@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ClientProfile, ClientProfileType, ClientServiceContact } from '../lib/api';
 import toast from 'react-hot-toast';
+import { ProMailIcon } from './ProIcons';
 
 interface ClientsDirectoryViewProps {
   clientProfiles: ClientProfile[];
@@ -442,7 +443,7 @@ export function ClientsDirectoryView({
                     title="Modifier la fiche technique"
                     style={{ fontSize: '11.5px', padding: '4px 10px' }}
                   >
-                    ✎ Modifier
+                    Modifier
                   </button>
                 </div>
 
@@ -450,7 +451,7 @@ export function ClientsDirectoryView({
                 <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12.5px' }}>
                   {p.contactNom && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#334155' }}>
-                      <span style={{ color: '#64748b' }}>▪ Interlocuteur :</span>
+                      <span style={{ color: '#64748b' }}>Interlocuteur :</span>
                       <strong>{p.contactNom}</strong>
                       {p.contactRole && <span style={{ color: '#94a3b8', fontSize: '11px' }}>({p.contactRole})</span>}
                     </div>
@@ -470,7 +471,7 @@ export function ClientsDirectoryView({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                      <span>◈</span>
+                      <ProMailIcon size={14} />
                       {p.email ? (
                         <a
                           href={`mailto:${p.email}`}
@@ -510,7 +511,7 @@ export function ClientsDirectoryView({
 
                   {(p.adresse || p.ville) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
-                      <span>⌖ Adresse :</span>
+                      <span>Adresse :</span>
                       <span>
                         {p.adresse ? `${p.adresse}, ` : ''}
                         {p.codePostal ? `${p.codePostal} ` : ''}
@@ -531,7 +532,7 @@ export function ClientsDirectoryView({
                     <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          ▪ Services & Contacts Rattachés ({p.services.length})
+                          Services & Contacts Rattachés ({p.services.length})
                         </span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -552,7 +553,7 @@ export function ClientsDirectoryView({
                           >
                             <div style={{ minWidth: 0, overflow: 'hidden' }}>
                               <div style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '€' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '❖' : srv.nomService.toLowerCase().includes('gestion') ? '▪' : '≡'}</span>
+                                <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '€' : ''}</span>
                                 <span>{srv.nomService}</span>
                                 {srv.contactNom && <span style={{ color: '#64748b', fontWeight: 500 }}>• {srv.contactNom}</span>}
                               </div>
@@ -570,7 +571,7 @@ export function ClientsDirectoryView({
                                     whiteSpace: 'nowrap',
                                   }}
                                 >
-                                  ◈ {srv.email}
+                                  {srv.email}
                                 </a>
                               )}
                             </div>
@@ -668,7 +669,7 @@ export function ClientsDirectoryView({
                       textDecoration: 'none',
                     }}
                   >
-                    ◈ Écrire
+                    Écrire
                   </a>
                 )}
               </div>
@@ -844,7 +845,6 @@ export function ClientsDirectoryView({
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>▪</span>
                         <span>Services de l'Entreprise & Adresses E-mail Dédiées</span>
                       </h4>
                       <span style={{ fontSize: '11px', background: '#e2e8f0', color: '#334155', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
@@ -864,7 +864,7 @@ export function ClientsDirectoryView({
                       style={{ fontSize: '11px', padding: '3px 8px' }}
                       onClick={() => handleAddService('travaux')}
                     >
-                      + ❖ Travaux / Technique
+                      + Travaux / Technique
                     </button>
                     <button
                       type="button"
@@ -880,7 +880,7 @@ export function ClientsDirectoryView({
                       style={{ fontSize: '11px', padding: '3px 8px' }}
                       onClick={() => handleAddService('gestion')}
                     >
-                      + ▪ Gestion / Syndic
+                      + Gestion / Syndic
                     </button>
                     <button
                       type="button"

@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
 import { useAuth } from '../stores/authStore';
 import { AppearancePanel } from './AppearancePanel';
+import { ProAlertIcon, ProFileTextIcon, ProMailIcon } from './ProIcons';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -140,7 +141,7 @@ export function AdminWorkstation({
     if (checked) {
       toast.success(
         'Option activée : Les devis peuvent exceptionnellement être facturés directement.',
-        { icon: '▲' }
+        { duration: 4000 }
       );
     } else {
       toast.success(
@@ -462,8 +463,8 @@ export function AdminWorkstation({
               onClick={() => setSubTab('billing_rules')}
               style={{ flexShrink: 0 }}
             >
-              <span className="desktop-only-el">❖ Règles Facturation</span>
-              <span className="mobile-only-el">❖ Règles</span>
+              <span className="desktop-only-el">Règles Facturation</span>
+              <span className="mobile-only-el">Règles</span>
             </button>
             <button
               type="button"
@@ -471,8 +472,8 @@ export function AdminWorkstation({
               onClick={() => setSubTab('emails_smtp')}
               style={{ flexShrink: 0 }}
             >
-              <span className="desktop-only-el">◈ E-mails & SMTP ({smtpStatusQuery.data?.logs?.length || 0})</span>
-              <span className="mobile-only-el">◈ E-mails</span>
+              <span className="desktop-only-el">E-mails & SMTP ({smtpStatusQuery.data?.logs?.length || 0})</span>
+              <span className="mobile-only-el">E-mails</span>
             </button>
             <button
               type="button"
@@ -481,8 +482,8 @@ export function AdminWorkstation({
               style={{ flexShrink: 0 }}
               data-testid="admin-tab-appearance"
             >
-              <span className="desktop-only-el">◆ Apparence & Thèmes</span>
-              <span className="mobile-only-el">◆ Apparence</span>
+              <span className="desktop-only-el">Apparence & Thèmes</span>
+              <span className="mobile-only-el">Apparence</span>
             </button>
             <button
               type="button"
@@ -495,8 +496,8 @@ export function AdminWorkstation({
                 flexShrink: 0,
               }}
             >
-              <span className="desktop-only-el">▲ Zone Danger & Clôture</span>
-              <span className="mobile-only-el">▲ Danger</span>
+              <span className="desktop-only-el">Zone Danger & Clôture</span>
+              <span className="mobile-only-el">Danger</span>
             </button>
           </div>
 
@@ -572,7 +573,7 @@ export function AdminWorkstation({
                               style={{ padding: '1px 5px', fontSize: '10px' }}
                               onClick={() => onSwitchToMobilePreview(u.technicienNom!)}
                             >
-                              ▪ Mobile
+                              Mobile
                             </button>
                           </div>
                         ) : (
@@ -710,7 +711,7 @@ export function AdminWorkstation({
                     <span>{activePermCount} droit(s) actif(s)</span>
                     {u.technicienNom && (
                       <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
-                        ▪ {u.technicienNom}
+                        {u.technicienNom}
                       </span>
                     )}
                   </div>
@@ -753,7 +754,7 @@ export function AdminWorkstation({
                       style={{ flex: 1, padding: '6px 10px', fontSize: '11.5px' }}
                       onClick={() => openEditUserModal(u)}
                     >
-                      ✎ Paramètres Complets
+                      Paramètres Complets
                     </button>
                     {u.id !== 1 && (
                       confirmDeleteUserId === u.id ? (
@@ -949,10 +950,10 @@ export function AdminWorkstation({
                       }`}
                     >
                       {isEnService
-                        ? '● En service'
+                        ? 'En service'
                         : isTerminee
-                        ? '◆ Journée clôturée'
-                        : '○ Non pointé'}
+                        ? 'Journée clôturée'
+                        : 'Non pointé'}
                     </span>
                   </div>
 
@@ -1036,7 +1037,7 @@ export function AdminWorkstation({
                       style={{ marginLeft: 'auto' }}
                       onClick={() => onSwitchToMobilePreview(tech)}
                     >
-                      ▪ Ouvrir Mobile de {tech}
+                      Ouvrir Mobile de {tech}
                     </button>
                   </div>
                 </div>
@@ -1095,7 +1096,7 @@ export function AdminWorkstation({
                             {intv.reference || `INT-${intv.id}`}
                           </div>
                           <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
-                            {intv.isVisiteDevis ? '◈ Visite' : intv.typeIntervention || 'Travaux'}
+                            {intv.isVisiteDevis ? 'Visite' : intv.typeIntervention || 'Travaux'}
                           </span>
                         </td>
                         <td style={{ maxWidth: '160px' }}>
@@ -1134,7 +1135,7 @@ export function AdminWorkstation({
                           )}
                           {intv.elementsChiffrage && (
                             <div style={{ fontSize: '10.5px', color: '#7c3aed', fontWeight: 600 }}>
-                              ◈ Chiffrage : {intv.elementsChiffrage}
+                              Chiffrage : {intv.elementsChiffrage}
                             </div>
                           )}
                           {intv.compteRendu && (
@@ -1217,7 +1218,7 @@ export function AdminWorkstation({
                                 setDraftStatutRapport('Validé & Clôturé');
                               }}
                             >
-                              ✎ Valider
+                              Valider
                             </button>
                             {parentDevis && (
                               <button
@@ -1289,7 +1290,7 @@ export function AdminWorkstation({
                           {intv.reference || `INT-${intv.id}`}
                         </span>
                         <span className={`badge ${intv.isVisiteDevis ? 'badge-purple' : 'badge-info'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
-                          {intv.isVisiteDevis ? '⌕ Visite' : '❖ Travaux'}
+                          {intv.isVisiteDevis ? 'Visite' : 'Travaux'}
                         </span>
                       </div>
                       {intv.rapportFinal ? (
@@ -1304,7 +1305,7 @@ export function AdminWorkstation({
                         {intv.client || '—'}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        ⌖ {intv.chantier || 'Site client'} • ▪ {intv.entreprise || 'Non assigné'}
+                        {intv.chantier || 'Site client'} • {intv.entreprise || 'Non assigné'}
                       </div>
                     </div>
 
@@ -1325,7 +1326,7 @@ export function AdminWorkstation({
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
                       <span>⊞ Preuves : <strong>{intv.photos?.length || 0} photo(s)</strong></span>
-                      <span className="font-mono">▪ {intv.datePlanifiee || 'Non fixée'}</span>
+                      <span className="font-mono">{intv.datePlanifiee || 'Non fixée'}</span>
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', marginTop: '4px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
@@ -1344,7 +1345,7 @@ export function AdminWorkstation({
                           setDraftStatutRapport('Validé & Clôturé');
                         }}
                       >
-                        ✎ {intv.rapportFinal ? 'Modifier' : 'Rédiger'}
+                        {intv.rapportFinal ? 'Modifier' : 'Rédiger'}
                       </button>
                       {parentDevis && (
                         <button
@@ -1417,7 +1418,7 @@ export function AdminWorkstation({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>◆</span>
+                <ProFileTextIcon size={20} />
                 <strong style={{ fontSize: '14px', color: '#1d4ed8' }}>
                   Principe Fondamental : « On ne facture pas les devis, on facture uniquement les interventions. »
                 </strong>
@@ -1459,7 +1460,7 @@ export function AdminWorkstation({
                       color: allowDirectDevisBilling ? '#dc2626' : '#059669',
                     }}
                   >
-                    {allowDirectDevisBilling ? '▲ Activé (Exception)' : '✓ Auto-décochée par défaut (Règle stricte active)'}
+                    {allowDirectDevisBilling ? 'Activé (Exception)' : '✓ Auto-décochée par défaut (Règle stricte active)'}
                   </span>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.4 }}>
@@ -1668,7 +1669,7 @@ export function AdminWorkstation({
                     }}
                     onClick={() => setTestRecipientEmail(addr)}
                   >
-                    ◆ {addr}
+                    {addr}
                   </button>
                 ))}
               </div>
@@ -1700,7 +1701,7 @@ export function AdminWorkstation({
                     }
                   }}
                 >
-                  {isTestingSmtp ? '◷ Test...' : '→ Envoyer un E-mail Test'}
+                  {isTestingSmtp ? 'Test...' : '→ Envoyer un E-mail Test'}
                 </button>
               </div>
 
@@ -1720,7 +1721,7 @@ export function AdminWorkstation({
                   </div>
                   {lastSmtpTestResult.previewUrl && (
                     <div style={{ marginTop: '4px' }}>
-                      ◈{' '}
+                      <ProMailIcon size={14} style={{ marginRight: 6 }} />
                       <a
                         href={lastSmtpTestResult.previewUrl}
                         target="_blank"
@@ -1741,7 +1742,7 @@ export function AdminWorkstation({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
                 <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0 }}>
-                  ◈ Journal d'Audit des E-mails Envoyés ({smtpStatusQuery.data?.logs?.length || 0})
+                  Journal d'Audit des E-mails Envoyés ({smtpStatusQuery.data?.logs?.length || 0})
                 </h3>
                 <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
                   Traçabilité complète des confirmations de comptes, réinitialisations, créations collaborateurs, rapports d'interventions et devis.
@@ -1867,7 +1868,7 @@ export function AdminWorkstation({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <span style={{ fontSize: '28px' }}>▲</span>
+              <ProAlertIcon size={28} />
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626', margin: 0 }}>
                   Zone de Danger : Clôture du Compte et Effacement Intégral de la Base de Données
@@ -1888,7 +1889,7 @@ export function AdminWorkstation({
               }}
             >
               <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#b91c1c', marginBottom: '10px' }}>
-                ▲ Avertissement Légal & Engagement RGPD (Action Définitive et Non Réversible)
+                Avertissement Légal & Engagement RGPD (Action Définitive et Non Réversible)
               </h4>
               <p style={{ fontSize: '12.5px', color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: '12px' }}>
                 Conformément aux réglementations RGPD et à nos engagements de stricte confidentialité (données cloisonnées hébergées en France sur Supabase / Hostinger), la demande de suppression de compte entraîne la <strong>destruction immédiate, complète et irréversible</strong> de toutes vos données sans possibilité de récupération :
@@ -1916,7 +1917,7 @@ export function AdminWorkstation({
                   lineHeight: 1.5,
                 }}
               >
-                ◈ <strong>Protection Espace Fondateur ANELEC GROUPE (ID 1) :</strong> Pour sécuriser l'espace racine contre toute fausse manipulation, une phrase d'authentification stricte est exigée en complément du mot de passe administrateur.
+                <strong>Protection Espace Fondateur ANELEC GROUPE (ID 1) :</strong> Pour sécuriser l'espace racine contre toute fausse manipulation, une phrase d'authentification stricte est exigée en complément du mot de passe administrateur.
               </div>
             )}
 
@@ -2301,7 +2302,7 @@ export function AdminWorkstation({
                     Photos prises par le technicien ({selectedReportIntv.photos.length}) :
                   </div>
                   <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>
-                    ⌕ Cliquez sur une photo pour l'agrandir / la télécharger
+                    Cliquez sur une photo pour l'agrandir / la télécharger
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
@@ -2410,7 +2411,7 @@ export function AdminWorkstation({
                         });
                       }}
                     >
-                      ◈ Envoyer au Client par Email
+                      Envoyer au Client par Email
                     </button>
                   )}
                   <button
@@ -2458,7 +2459,7 @@ export function AdminWorkstation({
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <span style={{ fontSize: '26px' }}>▲</span>
+              <ProAlertIcon size={26} />
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#dc2626' }}>
                 Confirmation Obligatoire : Destruction Définitive
               </h3>

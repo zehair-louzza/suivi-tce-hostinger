@@ -7,6 +7,7 @@ import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
 import { ProfileMenu } from './ProfileMenu';
 import { isUserMobileOnly, canUserAccessSection } from '../../../shared/types';
+import { ProGlyph } from './ProIcons';
 
 export type AppSection =
   | 'aujourdhui'
@@ -524,7 +525,7 @@ export function Layout({
             zIndex: 100,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '15px' }}>📱</span>
+              <ProGlyph name="phone" size={16} />
               <span style={{ fontWeight: 700 }}>Mode Mobile Technicien</span>
               <span style={{
                 fontSize: '10.5px',
@@ -874,7 +875,7 @@ export function Layout({
                     >
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                          🎨 Direction Artistique
+                          <ProGlyph name="palette" size={14} style={{ marginRight: 6 }} />Direction Artistique
                         </div>
                         <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
                           Choisissez votre design préféré en direct

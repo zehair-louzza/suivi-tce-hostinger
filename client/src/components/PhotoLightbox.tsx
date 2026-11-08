@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ProGlyph } from './ProIcons';
 
 export interface PhotoItem {
   id: string;
@@ -130,7 +131,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
             title="Zoomer"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}
           >
-            ⌕+
+            <ProGlyph name="zoomIn" size={18} />
           </button>
           {/* Zoom Out */}
           <button
@@ -140,7 +141,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
             title="Dézoomer"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}
           >
-            ⌕-
+            <ProGlyph name="zoomOut" size={18} />
           </button>
           {zoom !== 1 && (
             <button
@@ -160,7 +161,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
             onClick={handleDownload}
             style={{ background: '#2563eb', color: '#fff', border: 'none', fontWeight: 600 }}
           >
-            ⬇ Télécharger
+            <ProGlyph name="download" size={16} style={{ marginRight: 6 }} />Télécharger
           </button>
 
           {/* Close */}

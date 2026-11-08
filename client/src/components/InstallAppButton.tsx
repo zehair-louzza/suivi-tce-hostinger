@@ -164,11 +164,11 @@ export function InstallAppButton({ variant = 'compact' }: InstallAppButtonProps)
                 <ol style={{ paddingLeft: '20px', fontSize: '13.5px', lineHeight: 1.7 }}>
                   <li>Sur iPhone, l’installation se fait depuis <strong>Safari</strong>.</li>
                   <li>Copiez l’adresse <strong>suivi.anelecgroupe.com</strong> et ouvrez-la dans Safari.</li>
-                  <li>Puis suivez : <strong>Partager ⬆ → « Sur l’écran d’accueil »</strong>.</li>
+                  <li>Puis suivez : <strong>Partager (carré avec une flèche vers le haut) → « Sur l’écran d’accueil »</strong>.</li>
                 </ol>
               ) : (
                 <ol style={{ paddingLeft: '20px', fontSize: '13.5px', lineHeight: 1.7 }}>
-                  <li>Touchez le bouton <strong>Partager</strong> ⬆ en bas de Safari.</li>
+                  <li>Touchez le bouton <strong>Partager</strong> (carré avec une flèche vers le haut) en bas de Safari.</li>
                   <li>Faites défiler et choisissez <strong>« Sur l’écran d’accueil »</strong> +.</li>
                   <li>Touchez <strong>« Ajouter »</strong> en haut à droite.</li>
                 </ol>

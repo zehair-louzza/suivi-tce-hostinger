@@ -9,14 +9,7 @@ import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
 import { LegalTermsModal } from '../components/LegalTermsModal';
-import {
-  ProCheckIcon,
-  ProMailIcon,
-  ProRefreshIcon,
-  ProExternalIcon,
-  ProShieldIcon,
-  ProLockIcon,
-} from '../components/ProIcons';
+import { ProCheckIcon, ProExternalIcon, ProGlyph, ProLockIcon, ProMailIcon, ProRefreshIcon, ProShieldIcon } from '../components/ProIcons';
 
 const loginSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -1513,7 +1506,7 @@ export function LoginPage() {
                 cursor: 'pointer',
               }}
             >
-              <span>🎬</span>
+              <ProGlyph name="film" size={16} />
               <span>Découvrir la Démo Interactive & Vidéo Publicitaire</span>
             </button>
           </div>

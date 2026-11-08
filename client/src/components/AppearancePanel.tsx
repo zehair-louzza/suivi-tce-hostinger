@@ -13,6 +13,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
+import { ProGlyph } from './ProIcons';
 
 interface ThemeCardProps {
   theme: ThemeDescriptor;
@@ -138,7 +139,7 @@ function ThemeCard({ theme, isDefault, isCurrent, onSelect, onHover }: ThemeCard
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
         {isDefault && (
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'var(--color-primary)', color: 'var(--color-inverse-text, #fff)' }}>
-            ★ Défaut entreprise
+            Défaut entreprise
           </span>
         )}
         {isCurrent && !isDefault && (
@@ -171,7 +172,7 @@ export function AppearancePanel() {
       setHover(null);
       toast.success(
         `Apparence « ${THEMES.find((t) => t.id === id)?.name} » définie comme défaut de l'entreprise.`,
-        { icon: '◆', duration: 3000 },
+        { duration: 3000 },
       );
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Impossible d'enregistrer le thème. Réessayez.");
@@ -223,7 +224,7 @@ export function AppearancePanel() {
             flexShrink: 0,
           }}
         >
-          ◆
+          <ProGlyph name="palette" size={22} />
         </span>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <strong style={{ fontSize: 16, color: 'var(--color-text)' }}>Apparence de la plateforme</strong>
@@ -273,7 +274,7 @@ export function AppearancePanel() {
                       next
                         ? 'Les collaborateurs peuvent désormais personnaliser leur apparence.'
                         : 'Personnalisation personnelle désactivée — tous reviennent au défaut.',
-                      { icon: next ? '✓' : '○', duration: 2500 },
+                      { duration: 2500 },
                     );
                   } catch (err: any) {
                     toast.error(err?.response?.data?.error || "Modification impossible.");
@@ -358,7 +359,7 @@ export function PersonalThemePicker() {
             onClick={async () => {
               try {
                 await setUserPref(null);
-                toast.success("Apparence personnelle réinitialisée — retour au défaut de l'entreprise.", { icon: '↺', duration: 2500 });
+                toast.success("Apparence personnelle réinitialisée — retour au défaut de l'entreprise.", { duration: 2500 });
               } catch (err: any) {
                 toast.error(err?.response?.data?.error || 'Impossible de réinitialiser.');
               }
@@ -376,7 +377,7 @@ export function PersonalThemePicker() {
               opacity: isPending ? 0.6 : 1,
             }}
           >
-            ↺ Revenir au défaut entreprise
+            Revenir au défaut entreprise
           </button>
         )}
       </div>
@@ -391,7 +392,7 @@ export function PersonalThemePicker() {
               onClick={async () => {
                 try {
                   await setUserPref(t.id);
-                  toast.success(`Votre apparence est désormais « ${t.name} ».`, { icon: '◆', duration: 2200 });
+                  toast.success(`Votre apparence est désormais « ${t.name} ».`, { duration: 2200 });
                 } catch (err: any) {
                   toast.error(err?.response?.data?.error || 'Impossible de changer de thème.');
                 }

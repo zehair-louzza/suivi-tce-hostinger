@@ -21,7 +21,7 @@ interface TipProps{active?:boolean;label?:string|number;payload?:ReadonlyArray<{
 export function ActivityTooltip({active,label,payload,items,volume,rowsByDate}:TipProps){
   if(!active||typeof label!=='string'||!payload?.length)return null;
   const row=rowsByDate.get(label);const week=isoWeek(label);
-  return <div className="activity-tooltip"><strong>{row&&row.endDate!==label?`${shortDate(label)}–${shortDate(row.endDate)}`:fullDate(label)}</strong><small>{row&&row.endDate!==label?'Période agrégée':`Semaine ${week.week} · ${week.year}`}</small>{items.map(s=>{const p=payload.find(v=>v.dataKey===s.key);const v=typeof p?.value==='number'?p.value:null;return <div key={s.key}><span style={{color:s.color}}>● {s.label}</span><span>{v===null?'Indisponible':volume?v:money(v)}</span></div>;})}</div>;
+  return <div className="activity-tooltip"><strong>{row&&row.endDate!==label?`${shortDate(label)}–${shortDate(row.endDate)}`:fullDate(label)}</strong><small>{row&&row.endDate!==label?'Période agrégée':`Semaine ${week.week} · ${week.year}`}</small>{items.map(s=>{const p=payload.find(v=>v.dataKey===s.key);const v=typeof p?.value==='number'?p.value:null;return <div key={s.key}><span style={{color:s.color}}>{s.label}</span><span>{v===null?'Indisponible':volume?v:money(v)}</span></div>;})}</div>;
 }
 const ActivityChart=memo(function ActivityChart({rows,items,relief,compact,granularity,cumulative=false,volume=false,syncId}:ChartProps){
   const unique=useId();const id='activity-shadow-'+unique.replace(/[^a-zA-Z0-9_-]/g,'');

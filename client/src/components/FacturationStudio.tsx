@@ -1174,7 +1174,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                     letterSpacing: '0.04em',
                   }}
                 >
-                  ◆ SECTION PRIORITÉ DES INTERVENTIONS & FLUX
+                  SECTION PRIORITÉ DES INTERVENTIONS & FLUX
                 </span>
                 <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '3px' }}>
                   Filtrer & Privilégier les Interventions : Directes vs Suite à Devis (Visite ou Sans déplacement)
@@ -1183,7 +1183,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                   <span>Règle standard ANELEC : on ne facture que les interventions.</span>
                   {allowDirectDevisBilling ? (
                     <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 800, background: 'rgba(239,68,68,0.14)', color: '#dc2626' }}>
-                      ▲ Dérogation Admin Active : Devis facturables
+                      Dérogation Admin Active : Devis facturables
                     </span>
                   ) : (
                     <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, background: 'rgba(16,185,129,0.12)', color: '#059669' }}>
@@ -1314,9 +1314,9 @@ Service Client & Facturation — ANELEC GROUPE`;
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               {[
                 { id: 'ALL', label: `Tous statuts (${enrichedDossiers.length})` },
-                { id: 'A_FACTURER', label: `● À traiter maintenant (${stats.aFacturer.length})` },
-                { id: 'A_VERIFIER', label: `◈ À vérifier (${stats.aVerifier.length})` },
-                { id: 'NE_PAS_FACTURER', label: `■ Ne pas facturer (${stats.nePasFacturer.length})` },
+                { id: 'A_FACTURER', label: `À traiter maintenant (${stats.aFacturer.length})` },
+                { id: 'A_VERIFIER', label: `À vérifier (${stats.aVerifier.length})` },
+                { id: 'NE_PAS_FACTURER', label: `Ne pas facturer (${stats.nePasFacturer.length})` },
                 { id: 'FACTUREE', label: `✓ Facturées (${stats.facturees.length})` },
               ].map((f) => (
                 <button
@@ -1342,7 +1342,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                   style={{ padding: '2px 8px', fontSize: '11px' }}
                   onClick={handleBatchEmitB2BInvoices}
                 >
-                  ▪ Facturer en lot (Bordereau B2B)
+                  Facturer en lot (Bordereau B2B)
                 </button>
                 <button
                   type="button"
@@ -1523,7 +1523,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                           </button>
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          ⌖ {intv.chantier} • <strong>{intv.corpsEtat || 'TCE'}</strong>
+                          {intv.chantier} • <strong>{intv.corpsEtat || 'TCE'}</strong>
                         </div>
                         <div
                           style={{
@@ -1586,7 +1586,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                             }}
                             title="Générer immédiatement la réponse client pour expliquer le retard"
                           >
-                            ▲ Retard (+{d.delayDays}j) : Répondre au client →
+                            Retard (+{d.delayDays}j) : Répondre au client →
                           </div>
                         )}
                       </td>
@@ -1594,7 +1594,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                       {/* COLONNE 5 : TERRAIN & PREUVES */}
                       <td>
                         <div style={{ fontSize: '11.5px', fontWeight: 700 }}>
-                          ▪ {intv.entreprise || 'Non affecté'}
+                          {intv.entreprise || 'Non affecté'}
                         </div>
                         <div className="font-mono" style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
                           Planifié : {formatDateFR(intv.datePlanifiee)} ({d.plannedHours}h)
@@ -1816,7 +1816,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                       {intv.client || 'Client non précisé'}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      ⌖ {intv.chantier || 'Chantier non précisé'} • • {intv.corpsEtat || 'TCE'}
+                      {intv.chantier || 'Chantier non précisé'} • • {intv.corpsEtat || 'TCE'}
                     </div>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span
@@ -1894,7 +1894,7 @@ Service Client & Facturation — ANELEC GROUPE`;
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      ▪ {intv.entreprise || 'Non assigné'}
+                      {intv.entreprise || 'Non assigné'}
                     </div>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button

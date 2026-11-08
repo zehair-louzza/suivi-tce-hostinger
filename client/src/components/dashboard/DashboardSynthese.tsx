@@ -691,7 +691,7 @@ export function DashboardSynthese({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                  ❖ {row.label}
+                  {row.label}
                 </span>
                 <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: '#047857' }}>
                   {formatCurrency(row.caTrade)}

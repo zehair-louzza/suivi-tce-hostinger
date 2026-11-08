@@ -47,6 +47,7 @@ import {
   canUserAccessSection,
   getDefaultAuthorizedSection,
 } from '../../../shared/types';
+import { ProAlertIcon, ProLockIcon } from '../components/ProIcons';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -1196,7 +1197,7 @@ export function DashboardPage() {
                       {d.client || 'Client non précisé'}
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                      ⌖ {d.site || 'Site non précisé'} • • {d.corpsEtat || 'Tous corps d’état'}
+                      {d.site || 'Site non précisé'} • • {d.corpsEtat || 'Tous corps d’état'}
                     </div>
                     {d.objet && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1547,7 +1548,7 @@ export function DashboardPage() {
                               title="Envoyer le rapport officiel par email au donneur d'ordre"
                               onClick={() => setReportEmailIntv(i)}
                             >
-                              ◈ Rapport
+                              Rapport
                             </button>
                           )}
                           <button
@@ -1560,7 +1561,7 @@ export function DashboardPage() {
                               setIntvTab('terrain');
                             }}
                           >
-                            ✎ Fiche
+                            Fiche
                           </button>
                           <button
                             type="button"
@@ -1601,7 +1602,7 @@ export function DashboardPage() {
                       {i.client || 'Client non précisé'}
                     </div>
                     <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                      ⌖ {i.chantier || 'Chantier non précisé'} • • {i.corpsEtat || i.typeIntervention || 'Tous corps d’état'}
+                      {i.chantier || 'Chantier non précisé'} • • {i.corpsEtat || i.typeIntervention || 'Tous corps d’état'}
                     </div>
                     {i.objet && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1613,10 +1614,10 @@ export function DashboardPage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)', fontSize: '11.5px' }}>
                     <div>
                       <span style={{ color: 'var(--text-secondary)' }}>Tech : </span>
-                      <strong>▪ {i.entreprise || 'Non assigné'}</strong>
+                      <strong>{i.entreprise || 'Non assigné'}</strong>
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      ▪ {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'À planifier'} {i.heureDebut ? `(${i.heureDebut})` : ''}
+                      {i.datePlanifiee ? formatDateFR(i.datePlanifiee) : 'À planifier'} {i.heureDebut ? `(${i.heureDebut})` : ''}
                     </div>
                   </div>
                 </div>
@@ -1701,7 +1702,7 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-header__actions">
-              <span className="badge badge--primary">⌖ GPS Live & Optimiseur Routier</span>
+              <span className="badge badge--primary">GPS Live & Optimiseur Routier</span>
             </div>
           </div>
           <TourneeMapOptimizer
@@ -2323,7 +2324,7 @@ export function DashboardPage() {
          ===================================================================== */}
       {!canUserAccessSection(activeSection, user) && (
         <div className="dashboard-container" style={{ padding: '60px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+          <div style={{ marginBottom: '16px' }}><ProLockIcon size={48} /></div>
           <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
             Accès non autorisé à ce service
           </h2>
@@ -3248,7 +3249,7 @@ export function DashboardPage() {
                       }}
                     >
                       <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#7c3aed', marginBottom: '4px' }}>
-                        ◈ Éléments relevés par le technicien pour chiffrage / devis :
+                        Éléments relevés par le technicien pour chiffrage / devis :
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
                         {selectedIntv.elementsChiffrage}
@@ -3391,7 +3392,7 @@ export function DashboardPage() {
                             setReportEmailIntv(selectedIntv as Intervention);
                           }}
                         >
-                          ◈ Envoyer le Rapport par Email
+                          Envoyer le Rapport par Email
                         </button>
                       )}
                     </div>
@@ -3679,7 +3680,7 @@ export function DashboardPage() {
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '18px' }}>▲</span>
+                  <ProAlertIcon size={20} />
                   <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', margin: 0 }}>
                     Ce devis a déjà été transformé en intervention
                   </h3>
@@ -3719,7 +3720,7 @@ export function DashboardPage() {
                 {[
                   {
                     id: 'SAV',
-                    title: '❖ Service Après-Vente (SAV / Garantie)',
+                    title: 'Service Après-Vente (SAV / Garantie)',
                     badge: 'Garantie / Réserve',
                     color: '#dc2626',
                     bg: '#fef2f2',
@@ -3743,7 +3744,7 @@ export function DashboardPage() {
                   },
                   {
                     id: 'PHASE2',
-                    title: '▪ 2ème Phase / Tranche de Chantier',
+                    title: '2ème Phase / Tranche de Chantier',
                     badge: 'Étape 2 prévue',
                     color: '#0f172a',
                     bg: '#f1f5f9',

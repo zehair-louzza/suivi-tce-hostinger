@@ -16,6 +16,7 @@ import {
   cleanAddressString,
 } from '../lib/geocoding';
 import { Intervention, Devis, GpsPositionPayload, referentielsApi } from '../lib/api';
+import { ProGlyph } from './ProIcons';
 
 interface TourneeMapOptimizerProps {
   interventions: Intervention[];
@@ -436,7 +437,7 @@ export function TourneeMapOptimizer({
           lat: depotPoint.lat + idx * 0.0008,
           lng: depotPoint.lng + idx * 0.0008,
         };
-        let statusLabel = '▪ Au bureau / Prêt au départ';
+        let statusLabel = 'Au bureau / Prêt au départ';
         let statusColor = '#475569';
         let sourceLabel = 'Siège ANELEC';
         let lastTimestamp: string | undefined;
@@ -446,36 +447,36 @@ export function TourneeMapOptimizer({
           coords = { lat: liveGps.lat, lng: liveGps.lng };
           lastTimestamp = liveGps.timestamp;
           accuracy = liveGps.accuracy;
-          sourceLabel = liveGps.source === 'GPS_MOBILE' ? '⌖ GPS Téléphone' : '⌖ Position Certifiée';
+          sourceLabel = liveGps.source === 'GPS_MOBILE' ? 'GPS Téléphone' : 'Position Certifiée';
           if (liveGps.statut === 'CLOTUREE') {
             statusLabel = `✓ Dernière position transmise (Clôture ${liveGps.missionRef || ''})`;
             statusColor = '#059669';
           } else if (liveGps.statut === 'EN_COURS') {
-            statusLabel = `❖ En intervention (${liveGps.missionRef || ''})`;
+            statusLabel = `En intervention (${liveGps.missionRef || ''})`;
             statusColor = '#0284c7';
           } else {
-            statusLabel = '⌖ Position actuelle en direct';
+            statusLabel = 'Position actuelle en direct';
             statusColor = '#0284c7';
           }
         } else if (runningMission?.coordinates) {
           coords = runningMission.coordinates;
-          statusLabel = `❖ En intervention sur site (${runningMission.reference})`;
+          statusLabel = `En intervention sur site (${runningMission.reference})`;
           statusColor = '#0284c7';
-          sourceLabel = '⌖ Chantier en cours';
+          sourceLabel = 'Chantier en cours';
         } else if (lastDone?.gpsCloture && typeof lastDone.gpsCloture.lat === 'number') {
           coords = { lat: lastDone.gpsCloture.lat, lng: lastDone.gpsCloture.lng };
           lastTimestamp = lastDone.gpsCloture.timestamp;
           accuracy = lastDone.gpsCloture.accuracy;
           statusLabel = `✓ Clôturée à ${lastDone.heureFinReelle || formatTimeFromISO(lastDone.gpsCloture.timestamp)} (${lastDone.reference})`;
           statusColor = '#059669';
-          sourceLabel = '⌖ GPS de Clôture';
+          sourceLabel = 'GPS de Clôture';
         } else if (lastDone?.coordinates) {
           coords = lastDone.coordinates;
           statusLabel = `✓ Dernier chantier terminé (${lastDone.reference})`;
           statusColor = '#059669';
-          sourceLabel = '⌖ Dernier chantier fini';
+          sourceLabel = 'Dernier chantier fini';
         } else if (nextPending?.coordinates) {
-          statusLabel = `◷ Prochain départ : ${nextPending.reference} (${nextPending.heurePrevue})`;
+          statusLabel = `Prochain départ : ${nextPending.reference} (${nextPending.heurePrevue})`;
           statusColor = '#d97706';
         }
 
@@ -612,8 +613,8 @@ export function TourneeMapOptimizer({
       L.control
         .layers(
           {
-            '⌖ Plan Rues (ESRI)': esriLayer,
-            '🇫🇷 OSM France': osmFrLayer,
+            'Plan Rues (ESRI)': esriLayer,
+            'OSM France': osmFrLayer,
           },
           undefined,
           { position: 'topright' }
@@ -676,7 +677,7 @@ export function TourneeMapOptimizer({
           background: #0a0f1d; border: 3px solid #ffcc00;
           color: #ffcc00; display: flex; align-items: center; justify-content: center;
           font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        ">▪</div>
+        "><span style="display:block;width:12px;height:12px;background:#ffcc00;border-radius:2px;"></span></div>
       `,
       iconSize: [36, 36],
       iconAnchor: [18, 18],
@@ -688,13 +689,13 @@ export function TourneeMapOptimizer({
     depotMarker.bindPopup(`
       <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 200px;">
         <div style="font-weight: 800; font-size: 13px; color: #0a0f1d; margin-bottom: 2px;">
-          ▪ Bureau ANELEC GROUPE
+          Bureau ANELEC GROUPE
         </div>
         <div style="color: #64748b; font-size: 11.5px; margin-bottom: 6px;">
           ${officeAddress}
         </div>
         <div style="background: #f1f5f9; padding: 4px 8px; border-radius: 6px; font-weight: 700; color: #0f172a; font-size: 11px;">
-          ◈ Point officiel de départ et retour de tournée
+          Point officiel de départ et retour de tournée
         </div>
       </div>
     `);
@@ -720,7 +721,7 @@ export function TourneeMapOptimizer({
                 margin-bottom: 3px; display: flex; align-items: center; gap: 4px;
               ">
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;"></span>
-                <span>▪ ${tm.technicien} (${tm.completedMissionsCount}/${tm.totalMissionsCount})</span>
+                <span>${tm.technicien} (${tm.completedMissionsCount}/${tm.totalMissionsCount})</span>
               </div>
               <div style="
                 width: 38px; height: 38px; border-radius: 50%;
@@ -743,7 +744,7 @@ export function TourneeMapOptimizer({
           <div style="font-family: inherit; font-size: 12px; line-height: 1.45; min-width: 250px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
               <span style="background: ${color}; color: #fff; padding: 3px 8px; border-radius: 6px; font-weight: 800; font-size: 11.5px;">
-                ▪ ${tm.technicien}
+                ${tm.technicien}
               </span>
               <span style="font-weight: 700; color: #059669; font-size: 11px;">
                 ${tm.sourceLabel}${timeStr ? ` • ${timeStr}` : ''}
@@ -817,7 +818,7 @@ export function TourneeMapOptimizer({
           <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 230px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
               <span style="background: ${bgColor}; color: #fff; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-size: 11px;">
-                Étape ${stop.sequenceNumber} • ${isDevis ? '◈ Visite Devis' : '● Restant à faire'}
+                Étape ${stop.sequenceNumber} • ${isDevis ? 'Visite Devis' : 'Restant à faire'}
               </span>
               <span style="font-weight: 700; color: #64748b; font-size: 11px;">
                 ${stop.heurePrevue}
@@ -827,14 +828,14 @@ export function TourneeMapOptimizer({
               ${stop.client}
             </div>
             <div style="color: #475569; font-size: 11.5px; margin: 3px 0;">
-              ⌖ ${cleanAddressString(stop.address || stop.chantierOrSite)}
+              ${cleanAddressString(stop.address || stop.chantierOrSite)}
             </div>
             <div style="color: #059669; font-size: 11px; font-weight: 600; margin-bottom: 8px;">
               • ${stop.corpsEtat || 'Tous corps d’état'}
             </div>
             <div style="display: flex; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 6px;">
               <a href="${navUrls.googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #00bf63; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
-                ⌖ Google Maps
+                Google Maps
               </a>
               <a href="${navUrls.wazeUrl}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #0284c7; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
                 → Waze
@@ -892,10 +893,10 @@ export function TourneeMapOptimizer({
               ${doneStop.reference} — ${doneStop.client}
             </div>
             <div style="color: #475569; font-size: 11.5px; margin: 3px 0;">
-              ⌖ ${cleanAddressString(doneStop.address || doneStop.chantierOrSite)}
+              ${cleanAddressString(doneStop.address || doneStop.chantierOrSite)}
             </div>
             <div style="color: #059669; font-size: 11px; font-weight: 700;">
-              ▪ ${doneStop.technicien || 'Technicien'} • Retirée du trajet restant
+              ${doneStop.technicien || 'Technicien'} • Retirée du trajet restant
             </div>
           </div>
         `);
@@ -977,7 +978,7 @@ export function TourneeMapOptimizer({
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '18px' }}>⌖</span>
+              <ProGlyph name="target" size={20} />
               <h2 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                 Supervision GPS Techniciens & Trajet des Interventions Restantes
               </h2>
@@ -1011,7 +1012,7 @@ export function TourneeMapOptimizer({
               }}
               title="Agrandir la carte pour couvrir tout l'écran PC"
             >
-              <span>⛶</span>
+              <ProGlyph name="expand" size={16} />
               <span>Plein Écran PC</span>
             </button>
 
@@ -1024,10 +1025,10 @@ export function TourneeMapOptimizer({
                 onSelectTechnicien?.(e.target.value);
               }}
             >
-              <option value="TOUS">▪ Tous techniciens</option>
+              <option value="TOUS">Tous techniciens</option>
               {techniciensList.map((t) => (
                 <option key={t} value={t}>
-                  ▪ {t}
+                  {t}
                 </option>
               ))}
             </select>
@@ -1038,9 +1039,9 @@ export function TourneeMapOptimizer({
               value={dateFilterMode}
               onChange={(e) => setDateFilterMode(e.target.value as any)}
             >
-              <option value="all">▪ Toutes les dates</option>
-              <option value="today">▪ Aujourd'hui ({todayStr})</option>
-              <option value="custom">▪ Date personnalisée</option>
+              <option value="all">Toutes les dates</option>
+              <option value="today">Aujourd'hui ({todayStr})</option>
+              <option value="custom">Date personnalisée</option>
             </select>
 
             {dateFilterMode === 'custom' && (
@@ -1091,8 +1092,8 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'positions' ? '#ffffff' : '#334155',
               }}
             >
-              <span className="desktop-only-inline">⌖ Positions Actuelles Techniciens</span>
-              <span className="mobile-only-inline">⌖ Positions</span>
+              <span className="desktop-only-inline">Positions Actuelles Techniciens</span>
+              <span className="mobile-only-inline">Positions</span>
             </button>
 
             <button
@@ -1110,8 +1111,8 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'trajet' ? '#ffffff' : '#334155',
               }}
             >
-              <span className="desktop-only-inline">⌖ Afficher le Trajet Restant ({remainingCount})</span>
-              <span className="mobile-only-inline">⌖ Trajet ({remainingCount})</span>
+              <span className="desktop-only-inline">Afficher le Trajet Restant ({remainingCount})</span>
+              <span className="mobile-only-inline">Trajet ({remainingCount})</span>
             </button>
 
             <button
@@ -1129,8 +1130,8 @@ export function TourneeMapOptimizer({
                 color: displayMode === 'both' ? '#ffffff' : '#334155',
               }}
             >
-              <span className="desktop-only-inline">⌖ Les Deux (Positions + Trajet)</span>
-              <span className="mobile-only-inline">⌖ Les Deux</span>
+              <span className="desktop-only-inline">Les Deux (Positions + Trajet)</span>
+              <span className="mobile-only-inline">Les Deux</span>
             </button>
           </div>
 
@@ -1247,9 +1248,9 @@ export function TourneeMapOptimizer({
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-secondary)' }}>
                 <span>
-                  ⌖ {tm.coords.lat.toFixed(4)}, {tm.coords.lng.toFixed(4)}
+                  {tm.coords.lat.toFixed(4)}, {tm.coords.lng.toFixed(4)}
                 </span>
-                <span style={{ fontWeight: 700, color: '#0284c7' }}>◆ Voir sur carte →</span>
+                <span style={{ fontWeight: 700, color: '#0284c7' }}>Voir sur carte →</span>
               </div>
             </div>
           );
@@ -1341,7 +1342,7 @@ export function TourneeMapOptimizer({
               textOverflow: 'ellipsis',
             }}
           >
-            <span>⌖</span>
+            <ProGlyph name="target" size={16} />
             <span>Lancer GPS Restant</span>
           </a>
         </div>
@@ -1401,7 +1402,7 @@ export function TourneeMapOptimizer({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '18px' }}>⌖</span>
+              <ProGlyph name="target" size={20} />
               <div>
                 <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#ffffff' }}>
                   Cockpit Grand Écran — Positions Techniciens & Avancement
@@ -1431,10 +1432,10 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                <option value="TOUS">▪ Tous les techniciens</option>
+                <option value="TOUS">Tous les techniciens</option>
                 {techniciensList.map((t) => (
                   <option key={t} value={t}>
-                    ▪ {t}
+                    {t}
                   </option>
                 ))}
               </select>
@@ -1453,7 +1454,7 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                ⌖ Positions Actuelles
+                Positions Actuelles
               </button>
               <button
                 type="button"
@@ -1469,7 +1470,7 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                ⌖ Trajet Restant ({remainingCount})
+                Trajet Restant ({remainingCount})
               </button>
               <button
                 type="button"
@@ -1485,7 +1486,7 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                ⌖ Positions + Trajet
+                Positions + Trajet
               </button>
 
               <button
@@ -1502,7 +1503,7 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                ◆ Recadrer
+                Recadrer
               </button>
 
               <button
@@ -1519,7 +1520,7 @@ export function TourneeMapOptimizer({
                   color: '#ffffff',
                 }}
               >
-                {showFullscreenSidebar ? '◀ Masquer panneau' : '▸ Panneau'}
+                {showFullscreenSidebar ? '‹ Masquer panneau' : '› Panneau'}
               </button>
 
               <button
@@ -1567,7 +1568,7 @@ export function TourneeMapOptimizer({
             }}
           >
             <div style={{ fontWeight: 800, fontSize: '13px', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: '8px' }}>
-              ▪ Positions & Avancement par Technicien
+              Positions & Avancement par Technicien
             </div>
 
             {technicienMarkers.map((tm, idx) => {
@@ -1588,7 +1589,7 @@ export function TourneeMapOptimizer({
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '13px', color: '#ffffff' }}>▪ {tm.technicien}</strong>
+                    <strong style={{ fontSize: '13px', color: '#ffffff' }}>{tm.technicien}</strong>
                     <span
                       style={{
                         fontSize: '10.5px',
@@ -1624,7 +1625,7 @@ export function TourneeMapOptimizer({
                   )}
 
                   <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-                    ⌖ {tm.coords.lat.toFixed(5)}, {tm.coords.lng.toFixed(5)} • Cliquer pour zoomer
+                    {tm.coords.lat.toFixed(5)}, {tm.coords.lng.toFixed(5)} • Cliquer pour zoomer
                   </div>
                 </div>
               );
@@ -1656,7 +1657,7 @@ export function TourneeMapOptimizer({
               boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             }}
           >
-            <span>⛶</span>
+            <ProGlyph name="expand" size={16} />
             <span>Agrandir la carte (Tout l'écran)</span>
           </button>
         )}
@@ -1739,7 +1740,7 @@ export function TourneeMapOptimizer({
                   flexShrink: 0,
                 }}
               >
-                ▪
+                <ProGlyph name="square" size={12} />
               </span>
               <div style={{ minWidth: 0 }}>
                 <div
@@ -1835,7 +1836,7 @@ export function TourneeMapOptimizer({
                     {stop.client}
                   </div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '1px' }}>
-                    ⌖ {cleanAddressString(stop.address || stop.chantierOrSite)}
+                    {cleanAddressString(stop.address || stop.chantierOrSite)}
                   </div>
                   <div style={{ fontSize: '10.5px', color: '#00bf63', fontWeight: 600, marginTop: '1px' }}>
                     • {stop.corpsEtat || 'Tous corps d’état'}
@@ -1871,7 +1872,7 @@ export function TourneeMapOptimizer({
                       height: '30px',
                     }}
                   >
-                    ⌖ Google Maps
+                    Google Maps
                   </a>
 
                   <a
@@ -1909,7 +1910,7 @@ export function TourneeMapOptimizer({
                         }
                       }}
                     >
-                      ✎ Fiche
+                      Fiche
                     </button>
                   )}
                 </div>
