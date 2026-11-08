@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { geocodeAddress } from '../lib/geocoding';
 import toast from 'react-hot-toast';
+import { useTheme, THEMES } from '../stores/themeStore';
 
 interface TechnicianMobileViewProps {
   techniciens: string[];
@@ -24,7 +25,7 @@ interface TechnicianMobileViewProps {
   devisList: Devis[];
 }
 
-type MobileStepTab = 'missions' | 'pointage' | 'compte_rendu' | 'trajet' | 'tout';
+type MobileStepTab = 'missions' | 'pointage' | 'compte_rendu' | 'trajet' | 'tout' | 'apparence';
 
 function getNowHHMM(): string {
   try {
@@ -52,6 +53,7 @@ export function TechnicianMobileView({
   devisList,
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
+  const { current: currentTheme, setUserPref, isPending: isThemePending } = useTheme();
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayISO);
   const [filterMode, setFilterMode] = useState<'jour' | 'toutes'>('jour');
@@ -986,7 +988,11 @@ export function TechnicianMobileView({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+          <div
+            onClick={() => setActiveTab('apparence')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, cursor: 'pointer' }}
+            title="Appuyez pour personnaliser votre thème ou direction artistique"
+          >
             <div
               style={{
                 width: '36px',
@@ -1019,8 +1025,30 @@ export function TechnicianMobileView({
             </div>
           </div>
 
-          {/* Badges d'état du pointage & transmission GPS en direct */}
+          {/* Badges d'état du pointage, GPS et Thème en direct */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('apparence')}
+              className="badge"
+              style={{
+                fontSize: '11px',
+                padding: '5px 8px',
+                cursor: 'pointer',
+                border: '1px solid var(--border-subtle, #cbd5e1)',
+                background: activeTab === 'apparence' ? 'rgba(0, 191, 99, 0.15)' : 'var(--bg-elevated, #f8fafc)',
+                color: 'var(--text-primary)',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+              }}
+              title="Personnaliser mon thème / direction artistique"
+            >
+              <span>🎨</span>
+              <span>Thème</span>
+            </button>
             <button
               type="button"
               onClick={handleBroadcastLiveGps}
@@ -1104,11 +1132,11 @@ export function TechnicianMobileView({
           </div>
         )}
 
-        {/* Barre d'onglets principale : 3 volets épurés (Missions en premier volet !) */}
+        {/* Barre d'onglets principale : 4 volets épurés (Missions en premier volet !) */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '4px',
             background: 'var(--bg-app)',
             padding: '3px',
@@ -1201,13 +1229,216 @@ export function TechnicianMobileView({
               Rapport
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('apparence')}
+            className="tech-nav-tab-btn"
+            style={{
+              padding: '8px 2px',
+              borderRadius: '7px',
+              border: 'none',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeTab === 'apparence' ? '#00bf63' : 'transparent',
+              color: activeTab === 'apparence' ? '#ffffff' : 'var(--text-secondary)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '2px',
+              minWidth: 0,
+              minHeight: '44px',
+            }}
+          >
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>🎨</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Thème
+            </span>
+          </button>
         </div>
       </div>
+
+      {/* =====================================================================
+          VOLET 4 : CHOIX DE DIRECTION ARTISTIQUE & THÈMES (SUR MOBILE)
+         ===================================================================== */}
+      {activeTab === 'apparence' && (
+        <div
+          className="tech-mobile-card"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxSizing: 'border-box',
+            width: '100%',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '12px',
+            padding: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                🎨 Direction Artistique & Thème
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Choisissez votre design préféré en direct. Votre choix est sauvegardé pour vos prochaines visites.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setActiveTab('missions')}
+              style={{ fontSize: '11px', padding: '4px 8px', flexShrink: 0 }}
+            >
+              Fermer ✕
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            {THEMES.map((t) => {
+              const isSelected = t.id === currentTheme;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={isThemePending}
+                  onClick={async () => {
+                    try {
+                      await setUserPref(t.id);
+                      toast.success(`Design "${t.name}" appliqué !`);
+                    } catch {
+                      toast.error('Impossible d’appliquer ce thème');
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: isSelected
+                      ? '2px solid var(--accent-primary, #00bf63)'
+                      : '1px solid var(--border-subtle, #e2e8f0)',
+                    background: isSelected
+                      ? 'var(--color-primary-soft, rgba(0, 191, 99, 0.08))'
+                      : 'var(--bg-elevated, #ffffff)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    {/* Swatches pill */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '2px',
+                        padding: '4px',
+                        background: 'rgba(0,0,0,0.08)',
+                        borderRadius: '6px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {t.swatches.slice(0, 3).map((c, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            width: '10px',
+                            height: '18px',
+                            borderRadius: '3px',
+                            background: c,
+                            display: 'inline-block',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
+                          {t.name}
+                        </span>
+                        {t.isOriginal && (
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              background: 'rgba(0,0,0,0.06)',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            Classique
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {t.tagline}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ flexShrink: 0 }}>
+                    {isSelected ? (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: '#00bf63',
+                          color: '#ffffff',
+                        }}
+                      >
+                        ✓ Actif
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Choisir
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '8px',
+              background: 'rgba(0, 191, 99, 0.06)',
+              border: '1px solid rgba(0, 191, 99, 0.2)',
+              fontSize: '11.5px',
+              color: 'var(--text-secondary)',
+              marginTop: '4px',
+            }}
+          >
+            💡 <strong>Astuce :</strong> Le changement de thème applique instantanément la typographie et la palette de couleurs adaptées pour le travail de jour comme de nuit.
+          </div>
+        </div>
+      )}
 
       {/* =====================================================================
           SUIVI JOURNALIER PAR SEMAINE AVEC DÉFILEMENT DE TOUS LES MOIS
           (CENTRALISÉ, ZERO DÉBORDEMENT, DÉFILEMENT VERTICAL UNIQUEMENT)
          ===================================================================== */}
+      {activeTab !== 'apparence' && (
       <div
         className="tech-mobile-card"
         style={{
@@ -1436,6 +1667,7 @@ export function TechnicianMobileView({
           })}
         </div>
       </div>
+      )}
 
       {/* =====================================================================
           BANNIÈRE DISCRÈTE POINTAGE MATIN (SI NON POINTÉ ET SUR MISSIONS)

@@ -692,7 +692,7 @@ export function Layout({
             <button
               type="button"
               onClick={toggleQuickTheme}
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm desktop-only-el"
               title={isDarkTheme ? 'Passer en mode clair' : 'Passer en mode sombre'}
               style={{ padding: '6px 9px', display: allowUserOverride ? undefined : 'none' }}
               data-testid="quick-theme-toggle"
@@ -791,7 +791,7 @@ export function Layout({
                       position: 'fixed',
                       inset: 0,
                       zIndex: 999,
-                      background: 'transparent',
+                      background: 'rgba(0,0,0,0.18)',
                     }}
                   />
                   <div
@@ -801,7 +801,7 @@ export function Layout({
                       top: 'calc(100% + 8px)',
                       zIndex: 1000,
                       width: '320px',
-                      maxWidth: '92vw',
+                      maxWidth: 'calc(100vw - 20px)',
                       background: 'var(--bg-surface, #ffffff)',
                       border: '1px solid var(--border-subtle, #e2e8f0)',
                       borderRadius: '14px',
