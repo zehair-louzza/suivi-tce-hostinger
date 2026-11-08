@@ -10,7 +10,6 @@ import {
   formatDateFR,
 } from '../lib/api';
 import toast from 'react-hot-toast';
-import { useTheme, THEMES, ThemeId } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
 import { compressAndOptimizeImage } from '../lib/imageOptimizer';
 import { TourneeMapOptimizer } from './TourneeMapOptimizer';
@@ -29,6 +28,9 @@ interface TechnicianMobileViewProps {
   devisList: Devis[];
 }
 
+/* ============================================================================
+   UTILITAIRES
+   ============================================================================ */
 function getNowHHMM(): string {
   try {
     return new Intl.DateTimeFormat('fr-FR', {
@@ -43,108 +45,215 @@ function getNowHHMM(): string {
   }
 }
 
+/** Date du jour (AAAA-MM-JJ) au fuseau de Paris, pas en UTC. */
+function getParisTodayISO(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function shiftISODate(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + days, 12, 0, 0);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+function toMinutes(hhmm?: string | null): number | null {
+  if (!hhmm) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** Durée prévue lisible ("2 h 30", "45 min") à partir du créneau, ou null si inconnue. */
+function formatDuration(start?: string | null, end?: string | null): string | null {
+  const a = toMinutes(start);
+  const b = toMinutes(end);
+  if (a === null || b === null || b <= a) return null;
+  const diff = b - a;
+  const h = Math.floor(diff / 60);
+  const min = diff % 60;
+  if (h === 0) return `${min} min`;
+  return min === 0 ? `${h} h` : `${h} h ${String(min).padStart(2, '0')}`;
+}
+
+const DONE_STATUSES = ['Clôturée', 'Terminée', 'Terminée - à valider', 'Effectuée'];
+const isDoneStatus = (s?: string | null) => DONE_STATUSES.includes((s || '').trim());
+
+/** Numéro de téléphone français trouvé dans les notes de la mission (consignes d'accès). */
+function findPhone(text?: string | null): string | null {
+  if (!text) return null;
+  const m = /(?:\+33\s?|0)[1-9](?:[\s.]?\d{2}){4}/.exec(text);
+  return m ? m[0].replace(/[\s.]/g, '') : null;
+}
+
 /* ============================================================================
-   STATUS BAR MOBILE (Horloge, Réseau, Batterie)
+   HOOKS D'INTERFACE : TABLETTE & APPARENCE
    ============================================================================ */
-function StatusBar({ time }: { time: string }) {
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState<boolean>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(query).matches
+      : false
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
+type TerrainSkin = 'clarte' | 'chrono';
+const SKIN_KEY = 'anelec-terrain-skin';
+
+function useTerrainSkin(): [TerrainSkin, (s: TerrainSkin) => void] {
+  const [skin, setSkinState] = useState<TerrainSkin>(() => {
+    try {
+      const v = window.localStorage.getItem(SKIN_KEY);
+      return v === 'chrono' ? 'chrono' : 'clarte';
+    } catch {
+      return 'clarte';
+    }
+  });
+  const setSkin = (s: TerrainSkin) => {
+    setSkinState(s);
+    try {
+      window.localStorage.setItem(SKIN_KEY, s);
+    } catch {
+      // stockage indisponible : l'apparence reste valable pour la session
+    }
+  };
+  return [skin, setSkin];
+}
+
+/* ============================================================================
+   ICÔNES (jeu unique, trait net, rendu identique sur tous les téléphones)
+   ============================================================================ */
+type IconName =
+  | 'pin' | 'nav' | 'phone' | 'camera' | 'clock' | 'check' | 'checkCircle' | 'play'
+  | 'stop' | 'pause' | 'calendar' | 'left' | 'right' | 'alert' | 'file' | 'user'
+  | 'history' | 'missions' | 'target' | 'plus' | 'logout' | 'close';
+
+const ICONS: Record<IconName, React.ReactNode> = {
+  pin: (<><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></>),
+  nav: (<polygon points="3 11 22 2 13 21 11 13 3 11" />),
+  phone: (<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />),
+  camera: (<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></>),
+  clock: (<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>),
+  check: (<path d="m5 12 5 5L20 7" />),
+  checkCircle: (<><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></>),
+  play: (<polygon points="6 4 20 12 6 20 6 4" />),
+  stop: (<rect x="6" y="6" width="12" height="12" rx="2" />),
+  pause: (<><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></>),
+  calendar: (<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>),
+  left: (<path d="m15 18-6-6 6-6" />),
+  right: (<path d="m9 18 6-6-6-6" />),
+  alert: (<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z" /><path d="M12 9v4M12 17h.01" /></>),
+  file: (<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></>),
+  user: (<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>),
+  history: (<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2" />),
+  missions: (<><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01" /></>),
+  target: (<><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></>),
+  plus: (<path d="M12 5v14M5 12h14" />),
+  logout: (<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />),
+  close: (<path d="M18 6 6 18M6 6l12 12" />),
+};
+
+function Ic({ n, size = 20 }: { n: IconName; size?: number }) {
   return (
-    <div className="t-sbar" aria-hidden="true">
-      <span>{time || '10:36'}</span>
-      <span className="t-sbar-mid" />
-      {/* Signal */}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-        <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V4" />
-      </svg>
-      {/* Wifi */}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-        <path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01" />
-      </svg>
-      {/* Battery */}
-      <span className="t-sbar-bat">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect width="16" height="10" x="2" y="7" rx="2" />
-          <line x1="22" x2="22" y1="11" y2="13" />
-        </svg>
-        <span>78%</span>
-      </span>
-    </div>
+    <svg
+      className="t-ic"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {ICONS[n]}
+    </svg>
   );
 }
 
 /* ============================================================================
-   HEADER MOBILE
+   EN-TÊTE MOBILE
    ============================================================================ */
 function Header({
   title,
+  subtitle,
   onBack,
-  liveTime,
 }: {
   title: string;
+  subtitle?: string;
   onBack?: () => void;
-  liveTime: string;
 }) {
   return (
     <header className="t-head">
       {onBack ? (
-        <button
-          type="button"
-          onClick={onBack}
-          className="m-btn m-btn--sm m-btn--ghost"
-          style={{ padding: '4px 8px', height: '32px' }}
-          title="Retour"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          <span style={{ fontSize: '13px', fontWeight: 700 }}>Retour</span>
+        <button type="button" onClick={onBack} className="t-back" aria-label="Retour à la liste">
+          <Ic n="left" size={24} />
+          <span>Retour</span>
         </button>
       ) : (
-        <img
-          src="/brand/anelec-mark.png"
-          alt="ANELEC"
-          style={{ width: '28px', height: '28px', objectFit: 'contain', flexShrink: 0 }}
-        />
+        <img src="/brand/anelec-mark.png" alt="ANELEC" className="t-head-logo" />
       )}
-      <h1>{title}</h1>
-      <span className="t-head-time">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-        <span>{liveTime || '10:36'}</span>
-      </span>
+      <div className="t-head-text">
+        <h1>{title}</h1>
+        {subtitle && <span>{subtitle}</span>}
+      </div>
     </header>
   );
 }
 
 /* ============================================================================
-   STATUS PILL HELPER
+   PASTILLE DE STATUT (icône + texte : jamais la couleur seule)
    ============================================================================ */
 function StatusPill({ status }: { status: string }) {
   const norm = (status || '').toLowerCase();
   let tone = 'slate';
-  let label = status || 'Prévu';
+  let label = status || 'Planifiée';
+  let icon: IconName = 'calendar';
 
   if (norm.includes('cours')) {
-    tone = 'indigo';
+    tone = 'blue';
     label = 'En cours';
+    icon = 'clock';
   } else if (norm.includes('clôtur') || norm.includes('termin') || norm.includes('effectu')) {
     tone = 'green';
     label = 'Clôturée';
+    icon = 'check';
   } else if (norm.includes('planifi')) {
-    tone = 'blue';
+    tone = 'slate';
     label = 'Planifiée';
+    icon = 'calendar';
   } else if (norm.includes('urg') || norm.includes('bloqu')) {
     tone = 'red';
     label = 'Urgence';
+    icon = 'alert';
   } else if (norm.includes('suiv')) {
-    tone = 'blue';
+    tone = 'slate';
     label = 'Suivant';
+    icon = 'right';
   }
 
   return (
-    <span className={`m-pill m-tone-${tone}`}>
-      <i className="m-pill-dot" />
+    <span className={`t-pill t-pill--${tone}`}>
+      <Ic n={icon} size={14} />
       <span>{label}</span>
     </span>
   );
@@ -162,20 +271,9 @@ function UserAvatar({ name, size = 44 }: { name: string; size?: number }) {
     .toUpperCase();
   return (
     <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: 'var(--color-primary, #1D4ED8)',
-        color: '#ffffff',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 800,
-        fontSize: size * 0.38,
-        flexShrink: 0,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-      }}
+      className="t-avatar"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
+      aria-hidden="true"
     >
       {initials}
     </div>
@@ -334,9 +432,9 @@ function MobileRouteMap({
 
     L.marker([DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng], { icon: techPinIcon })
       .bindPopup(`
-        <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
-          <strong style="color: #1D4ED8; font-size: 13px;">🏢 Point de départ tournée</strong>
-          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">${DEFAULT_DEPOT_ADDRESS}</div>
+        <div style="font-family: inherit; font-size: 14px; line-height: 1.4;">
+          <strong style="color: #1D4ED8; font-size: 15px;">Point de départ tournée</strong>
+          <div style="color: #475569; font-size: 13px; margin-top: 2px;">${DEFAULT_DEPOT_ADDRESS}</div>
         </div>
       `)
       .addTo(lg);
@@ -374,33 +472,33 @@ function MobileRouteMap({
 
       const marker = L.marker(latLng, { icon: stopPinIcon }).addTo(lg);
       marker.bindPopup(`
-        <div style="font-family: inherit; font-size: 12px; line-height: 1.45; min-width: 210px;">
+        <div style="font-family: inherit; font-size: 14px; line-height: 1.45; min-width: 230px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <span style="background: ${bgColor}; color: ${textColor}; font-weight: 800; font-size: 11px; padding: 2px 7px; border-radius: 999px;">
+            <span style="background: ${bgColor}; color: ${textColor}; font-weight: 800; font-size: 13px; padding: 3px 9px; border-radius: 999px;">
               Étape ${stopNum}
             </span>
-            <span style="font-weight: 700; color: #1D4ED8; font-size: 11px;">
+            <span style="font-weight: 700; color: #1D4ED8; font-size: 13px;">
               ${m.heureDebut || '09:00'}
             </span>
           </div>
-          <strong style="font-size: 13px; color: #0f172a; display: block; margin-top: 2px;">
+          <strong style="font-size: 15px; color: #0f172a; display: block; margin-top: 2px;">
             ${m.client || 'Client TCE'}
           </strong>
-          <div style="color: #64748b; font-size: 11px; margin: 2px 0 8px 0;">
+          <div style="color: #475569; font-size: 13px; margin: 2px 0 10px 0;">
             ${(m.chantier || 'Paris').split(',')[0]}
           </div>
           <div style="display: flex; gap: 6px;">
             <button
               type="button"
               onclick="window.__openMobileMission(${m.id})"
-              style="flex: 1; padding: 6px 10px; background: #1D4ED8; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 11.5px; cursor: pointer;"
+              style="flex: 1; padding: 12px 12px; min-height: 44px; background: #1D4ED8; color: #fff; border: none; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;"
             >
               Ouvrir la mission
             </button>
             <button
               type="button"
               onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m.chantier || 'Paris')}', '_blank')"
-              style="padding: 6px 10px; background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 700; font-size: 11.5px; cursor: pointer;"
+              style="padding: 12px 14px; min-height: 44px; background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;"
             >
               GPS
             </button>
@@ -444,7 +542,8 @@ export function TechnicianMobileView({
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
   const { logout } = useAuth();
-  const { current: currentTheme, setUserPref, isPending: isThemePending } = useTheme();
+  const [skin, setSkin] = useTerrainSkin();
+  const isTablet = useMediaQuery('(min-width: 768px)');
 
   const [tab, setTab] = useState<'home' | 'map' | 'hist' | 'prof'>('home');
   const [openMissionId, setOpenMissionId] = useState<number | null>(null);
@@ -456,41 +555,8 @@ export function TechnicianMobileView({
   const [missionReports, setMissionReports] = useState<Record<number, string>>({});
   const [runningMissions, setRunningMissions] = useState<Record<number, boolean>>({});
 
-  const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-
-  // Horloge en direct au fuseau officiel Paris
-  const [liveParisTime, setLiveParisTime] = useState<string>(() => {
-    try {
-      return new Intl.DateTimeFormat('fr-FR', {
-        timeZone: 'Europe/Paris',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(new Date());
-    } catch {
-      const d = new Date();
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    }
-  });
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      try {
-        setLiveParisTime(
-          new Intl.DateTimeFormat('fr-FR', {
-            timeZone: 'Europe/Paris',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }).format(new Date())
-        );
-      } catch {
-        // ignore
-      }
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
+  const todayISO = useMemo(() => getParisTodayISO(), []);
+  const [selectedDate, setSelectedDate] = useState<string>(() => getParisTodayISO());
 
   // Pointages Query pour la date sélectionnée
   const pointagesQuery = useQuery({
@@ -716,25 +782,8 @@ export function TechnicianMobileView({
     }
   }, [selectedDate]);
 
-  const handlePrevMonth = () => {
-    try {
-      const [y, m] = selectedDate.split('-').map(Number);
-      const prev = new Date(y, m - 2, 1, 12, 0, 0);
-      setSelectedDate(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`);
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleNextMonth = () => {
-    try {
-      const [y, m] = selectedDate.split('-').map(Number);
-      const next = new Date(y, m, 1, 12, 0, 0);
-      setSelectedDate(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`);
-    } catch {
-      // ignore
-    }
-  };
+  const handlePrevWeek = () => setSelectedDate((d) => shiftISODate(d, -7));
+  const handleNextWeek = () => setSelectedDate((d) => shiftISODate(d, 7));
 
   const handleTodayShortcut = () => {
     setSelectedDate(todayISO);
@@ -872,953 +921,724 @@ export function TechnicianMobileView({
     }
   };
 
-  return (
-    <div className="t-app" data-testid="real-terrain-mobile-app">
-      <StatusBar time={liveParisTime} />
+  // ==========================================================================
+  // DÉRIVÉS D'AFFICHAGE (calculs simples, sans hooks)
+  // ==========================================================================
+  const statusOf = (m: Intervention) =>
+    runningMissions[m.id] ? 'En cours' : m.statutOperationnel || 'Planifiée';
+  const isLiveMission = (m: Intervention) =>
+    Boolean(runningMissions[m.id]) || /cours/i.test(m.statutOperationnel || '');
+  const slotOf = (m: Intervention) =>
+    m.heureDebut ? `${m.heureDebut}${m.heureFin ? ` – ${m.heureFin}` : ''}` : 'Horaire à confirmer';
+  const firstName = (currentTechnicien || 'Technicien').split(' ')[0];
 
-      {/* =====================================================================
-          1. VUE DÉTAILLÉE D'UNE MISSION OUVERTE
-         ===================================================================== */}
-      {activeMission ? (
-        <main className="t-main t-main--mission" data-testid="terrain-mission-detail">
-          <Header
-            title="Mission en cours"
-            onBack={() => setOpenMissionId(null)}
-            liveTime={liveParisTime}
-          />
+  const defaultMission: Intervention | null =
+    selectedDateMissions.find((m) => isLiveMission(m)) ||
+    selectedDateMissions.find((m) => !isDoneStatus(m.statutOperationnel)) ||
+    selectedDateMissions[0] ||
+    null;
 
-          <div className="t-mission-top">
-            <span className="m-mono m-small" style={{ fontWeight: 800, color: 'var(--color-primary, #1D4ED8)' }}>
-              {activeMission.reference}
+  // Sur tablette, la mission choisie s'affiche à côté de la liste (jamais en plein écran).
+  const shownMission: Intervention | null =
+    activeMission || (isTablet && tab === 'home' ? defaultMission : null);
+  const showFullDetail = Boolean(activeMission) && !isTablet;
+
+  const openMission = (id: number) => {
+    setOpenMissionId(id);
+    if (isTablet) setTab('home');
+  };
+
+  const monthKey = selectedDate.slice(0, 7);
+  const monthMissions = allTechMissionsCombined.filter((m) => (m.datePlanifiee || '').startsWith(monthKey));
+  const monthDone = monthMissions.filter((m) => isDoneStatus(m.statutOperationnel));
+  const gpsRate = monthDone.length
+    ? Math.round((monthDone.filter((m) => m.gpsCloture).length / monthDone.length) * 100)
+    : null;
+  const specialities = Array.from(
+    new Set(allTechMissionsCombined.map((m) => (m.corpsEtat || '').trim()).filter(Boolean))
+  ).slice(0, 4);
+
+  const formatEUR = (v: number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+
+  // Fermeture de la modale GPS avec la touche Échap
+  useEffect(() => {
+    if (!gpsModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setGpsModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gpsModalOpen]);
+
+  // ==========================================================================
+  // BLOCS D'INTERFACE
+  // ==========================================================================
+  const renderPointage = () => (
+    <section className="t-pointage" data-testid="terrain-pointage">
+      {!isPointed ? (
+        <>
+          <div className="t-pointage-info">
+            <span className="t-pointage-ic t-pointage-ic--warn">
+              <Ic n="clock" size={24} />
             </span>
-            <StatusPill status={runningMissions[activeMission.id] ? 'En cours' : activeMission.statutOperationnel || 'Planifiée'} />
-          </div>
-
-          <h2 className="t-mission-title">{activeMission.client || 'Client TCE'}</h2>
-          <p className="t-mission-sub">
-            {activeMission.corpsEtat || 'Tous Corps d’État'} · {activeMission.objet || 'Prestation sur site'}
-          </p>
-
-          <div className="t-mission-amounts">
             <div>
-              <span>Créneau</span>
-              <strong>{activeMission.heureDebut || '08:30'}–{activeMission.heureFin || '12:00'}</strong>
-            </div>
-            <div>
-              <span>Montant</span>
-              <strong>{activeMission.amount ? `${activeMission.amount} €` : '450 €'}</strong>
-            </div>
-            <div>
-              <span>Durée</span>
-              <strong>3.5 h</strong>
+              <strong>Prêt à démarrer ?</strong>
+              <span>Pointez votre arrivée pour commencer la journée.</span>
             </div>
           </div>
+          <button
+            type="button"
+            className="t-btn t-btn--primary t-btn--xl t-btn--block"
+            disabled={clockInMut.isPending}
+            onClick={handleStartDay}
+          >
+            <Ic n="play" size={22} />
+            <span>{clockInMut.isPending ? 'Enregistrement…' : 'Commencer ma journée'}</span>
+          </button>
+        </>
+      ) : (
+        <div className="t-pointage-row">
+          <span className="t-pointage-ic t-pointage-ic--ok">
+            <Ic n="checkCircle" size={24} />
+          </span>
+          <div className="t-pointage-text">
+            <strong>{isTerminee ? 'Journée terminée' : 'Journée commencée'}</strong>
+            <span>
+              Arrivée pointée à {currentPointage?.heureArriveeBureau}
+              {isTerminee && currentPointage?.heureFinJournee ? ` · fin ${currentPointage.heureFinJournee}` : ''}
+            </span>
+          </div>
+          {!isTerminee && (
+            <button
+              type="button"
+              className="t-btn t-btn--danger-outline"
+              disabled={clockOutMut.isPending}
+              onClick={handleEndDay}
+            >
+              <Ic n="stop" size={16} />
+              <span>{clockOutMut.isPending ? '…' : 'Finir'}</span>
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
 
-          {/* Section Adresse & Guidage */}
-          <div className="t-mission-section">
-            <div className="t-section-head">
-              <strong>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
-                Adresse
-              </strong>
-            </div>
-            <p className="t-addr">{activeMission.chantier || 'Paris, Île-de-France'}</p>
-            <div className="t-row-actions">
+  const renderDatePicker = () => (
+    <section className="t-date-picker" data-testid="terrain-date-picker">
+      <div className="t-month-row">
+        <h2 className="t-month-label">{monthTitle}</h2>
+        <div className="t-month-nav-btns">
+          <button type="button" className="t-icon-btn" onClick={handlePrevWeek} aria-label="Semaine précédente">
+            <Ic n="left" />
+          </button>
+          <button type="button" className="t-today-btn" onClick={handleTodayShortcut}>
+            Aujourd’hui
+          </button>
+          <button type="button" className="t-icon-btn" onClick={handleNextWeek} aria-label="Semaine suivante">
+            <Ic n="right" />
+          </button>
+        </div>
+      </div>
+
+      <div className="t-week-strip">
+        {weekDays.map((day) => {
+          const isSelected = day.iso === selectedDate;
+          const missionCount = countByDate[day.iso] || 0;
+          return (
+            <button
+              key={day.iso}
+              type="button"
+              onClick={() => setSelectedDate(day.iso)}
+              className={`t-day-pill ${isSelected ? 'is-selected' : ''} ${day.isToday ? 'is-today' : ''}`}
+              aria-pressed={isSelected}
+              aria-label={`${day.dayLabel} ${day.dayNum}, ${missionCount} mission${missionCount > 1 ? 's' : ''}`}
+            >
+              <span className="t-day-name">{day.dayLabel}</span>
+              <span className="t-day-num">{day.dayNum}</span>
+              <span className="t-day-count">{missionCount > 0 ? missionCount : '–'}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+
+  const renderProgress = () => (
+    <section className="t-progress" aria-label="Avancement de la journée">
+      <div className="t-progress-head">
+        <strong>
+          {doneCount} sur {selectedDateMissions.length} terminée{doneCount > 1 ? 's' : ''}
+        </strong>
+        {selectedDateMissions.length > 0 && doneCount < selectedDateMissions.length && (
+          <span>
+            Reste {selectedDateMissions.length - doneCount} mission
+            {selectedDateMissions.length - doneCount > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+      <div className="t-segments" aria-hidden="true">
+        {selectedDateMissions.map((m) => (
+          <span
+            key={m.id}
+            className={`t-seg ${isDoneStatus(m.statutOperationnel) ? 'is-done' : isLiveMission(m) ? 'is-live' : ''}`}
+          />
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderMissionList = () => {
+    const rows: React.ReactNode[] = [];
+    selectedDateMissions.forEach((m, idx) => {
+      const done = isDoneStatus(m.statutOperationnel);
+      const live = isLiveMission(m);
+      const selected = isTablet && shownMission?.id === m.id;
+      const prev = selectedDateMissions[idx - 1];
+      const prevEnd = toMinutes(prev?.heureFin);
+      const curStart = toMinutes(m.heureDebut);
+      if (prev && prevEnd !== null && curStart !== null && curStart - prevEnd >= 45) {
+        rows.push(
+          <li key={`gap-${m.id}`} className="t-gap" aria-hidden="true">
+            <span className="t-item-time">{prev.heureFin}</span>
+            <span className="t-gap-box">Pause · jusqu’à {m.heureDebut}</span>
+          </li>
+        );
+      }
+      rows.push(
+        <li
+          key={m.id}
+          className={`t-item ${done ? 'is-done' : ''} ${live ? 'is-live' : ''} ${selected ? 'is-selected' : ''}`}
+        >
+          <span className="t-item-time" aria-hidden="true">
+            {m.heureDebut || '–'}
+          </span>
+          <span className="t-item-dot" aria-hidden="true" />
+          <div className="t-item-body">
+            <button type="button" className="t-card" onClick={() => openMission(m.id)}>
+              <span className="t-card-top">
+                <span className="t-card-time">{slotOf(m)}</span>
+                <StatusPill status={statusOf(m)} />
+              </span>
+              <strong className="t-card-client">{m.client || 'Client'}</strong>
+              <span className="t-card-objet">
+                {m.corpsEtat || 'Tous corps d’état'} · {m.objet || 'Prestation sur site'}
+              </span>
+              <span className="t-card-foot">
+                <Ic n="pin" size={18} />
+                <span className="t-card-addr">{(m.chantier || 'Adresse non renseignée').split(',')[0]}</span>
+                <Ic n="right" size={18} />
+              </span>
+            </button>
+
+            {!done && !live && (
               <button
                 type="button"
-                className="m-btn m-btn--secondary"
+                className="t-btn t-btn--primary t-btn--lg t-btn--block"
                 onClick={() => {
-                  const addr = encodeURIComponent(activeMission.chantier || 'Paris');
-                  window.open(`https://www.google.com/maps/dir/?api=1&destination=${addr}`, '_blank');
+                  handleStartMission(m);
+                  openMission(m.id);
                 }}
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                </svg>
-                <span>Itinéraire</span>
+                <Ic n="play" size={20} />
+                <span>Commencer l’intervention</span>
               </button>
-              <button
-                type="button"
-                className="m-btn m-btn--secondary"
-                onClick={() => {
-                  window.open('tel:0140000000');
-                }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                </svg>
-                <span>Appeler</span>
-              </button>
-            </div>
+            )}
+          </div>
+        </li>
+      );
+    });
+
+    return (
+      <ul className="t-list" data-testid="terrain-missions-list">
+        {rows}
+        {selectedDateMissions.length === 0 && (
+          <li className="t-empty">Aucune mission planifiée pour le {formattedSelectedDate}.</li>
+        )}
+      </ul>
+    );
+  };
+
+  const renderHomeColumn = () => (
+    <>
+      {canSwitchTechnicien && (
+        <div className="t-supervisor">
+          <label htmlFor="t-supervisor-select">Superviseur : technicien affiché</label>
+          <select
+            id="t-supervisor-select"
+            className="t-select"
+            value={currentTechnicien}
+            onChange={(e) => onSelectTechnicien(e.target.value)}
+          >
+            {techniciens.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <section className="t-hello">
+        <h2>Bonjour {firstName}</h2>
+        <p>
+          {formattedSelectedDate} · {selectedDateMissions.length} mission
+          {selectedDateMissions.length > 1 ? 's' : ''}
+        </p>
+      </section>
+
+      {renderPointage()}
+      {renderDatePicker()}
+      {renderProgress()}
+      {renderMissionList()}
+    </>
+  );
+
+  const renderMissionDetail = (m: Intervention, embedded: boolean) => {
+    const live = isLiveMission(m);
+    const done = isDoneStatus(m.statutOperationnel);
+    const photos = missionPhotos[m.id] || [];
+    const duration = formatDuration(m.heureDebut, m.heureFin);
+    const phone = findPhone(m.notes);
+    const addr = m.chantier || '';
+    const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr || 'Paris')}`;
+
+    return (
+      <section className="t-detail" data-testid="terrain-mission-detail">
+        {!embedded && <Header title="Mission" subtitle={m.reference || undefined} onBack={() => setOpenMissionId(null)} />}
+
+        <div className="t-detail-body">
+          <div className="t-mission-top">
+            <span className="t-ref">{m.reference}</span>
+            <StatusPill status={statusOf(m)} />
           </div>
 
-          {/* Section Consignes */}
-          <div className="t-mission-section">
-            <div className="t-section-head">
-              <strong>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                Consignes
-              </strong>
-            </div>
-            <p className="t-callout">
-              {activeMission.notes || 'Se présenter au gardien d’immeuble à l’arrivée pour remise des badges d’accès.'}
+          <div>
+            <h2 className="t-mission-title">{m.client || 'Client'}</h2>
+            <p className="t-mission-sub">
+              {m.corpsEtat || 'Tous corps d’état'} · {m.objet || 'Prestation sur site'}
             </p>
           </div>
 
-          {/* Section Photos avant / après */}
-          <div className="t-mission-section">
-            <div className="t-section-head">
-              <strong>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-                Photos avant / après
-              </strong>
-              <span className="m-muted m-small">
-                {(missionPhotos[activeMission.id] || []).length} prises
-              </span>
+          <div className="t-facts">
+            <div>
+              <span>Créneau</span>
+              <strong>{m.heureDebut ? `${m.heureDebut}–${m.heureFin || '?'}` : 'À confirmer'}</strong>
             </div>
+            {typeof m.amount === 'number' && (
+              <div>
+                <span>Montant HT</span>
+                <strong>{formatEUR(m.amount)}</strong>
+              </div>
+            )}
+            {duration && (
+              <div>
+                <span>Durée</span>
+                <strong>{duration}</strong>
+              </div>
+            )}
+          </div>
 
+          <div className="t-block">
+            <h3 className="t-block-title">
+              <Ic n="pin" size={18} />
+              Adresse
+            </h3>
+            <p className="t-addr">{addr || 'Adresse non renseignée'}</p>
+            <div className="t-row-actions">
+              <a className="t-btn t-btn--outline t-btn--lg" href={mapsHref} target="_blank" rel="noopener noreferrer">
+                <Ic n="nav" />
+                <span>Itinéraire</span>
+              </a>
+              {phone && (
+                <a className="t-btn t-btn--outline t-btn--lg" href={`tel:${phone}`}>
+                  <Ic n="phone" />
+                  <span>Appeler</span>
+                </a>
+              )}
+            </div>
+          </div>
+
+          {m.notes && (
+            <div className="t-callout" role="note">
+              <Ic n="alert" size={22} />
+              <div>
+                <strong>Consignes d’accès</strong>
+                <p>{m.notes}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="t-block">
+            <h3 className="t-block-title">
+              <Ic n="camera" size={18} />
+              Photos avant / après
+              <span className="t-block-count">
+                {photos.length} prise{photos.length > 1 ? 's' : ''}
+              </span>
+            </h3>
             <div className="t-photos">
-              {(missionPhotos[activeMission.id] || []).map((p, i) => (
-                <figure key={i} className={`t-photo t-photo--${i % 3}`}>
+              {photos.map((p, i) => (
+                <figure key={i} className="t-photo">
                   <img src={p.url} alt={p.label} />
                   <figcaption>{p.label}</figcaption>
                 </figure>
               ))}
-
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
-                style={{ display: 'none' }}
+                className="t-file-input"
+                aria-label="Ajouter une photo"
                 onChange={handleAddPhoto}
               />
-
-              <button
-                type="button"
-                className="t-photo t-photo--add"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
+              <button type="button" className="t-photo t-photo--add" onClick={() => fileInputRef.current?.click()}>
+                <Ic n="plus" size={26} />
                 <span>Ajouter</span>
               </button>
             </div>
           </div>
 
-          {/* Section Compte-rendu */}
-          <div className="t-mission-section">
-            <div className="t-section-head">
-              <strong>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
-                Compte-rendu
-              </strong>
-            </div>
+          <div className="t-block">
+            <label className="t-block-title" htmlFor={`t-report-${m.id}`}>
+              <Ic n="file" size={18} />
+              Compte-rendu
+            </label>
             <textarea
-              className="m-textarea"
+              id={`t-report-${m.id}`}
+              className="t-textarea"
               rows={3}
               placeholder="Travaux réalisés, matériel posé, mesures prises…"
-              value={missionReports[activeMission.id] ?? 'Remplacement du disjoncteur différentiel 63 A — test de déclenchement OK.'}
-              onChange={(e) => {
+              value={missionReports[m.id] ?? ''}
+              onChange={(e) =>
                 setMissionReports((prev) => ({
                   ...prev,
-                  [activeMission.id]: e.target.value,
-                }));
-              }}
+                  [m.id]: e.target.value,
+                }))
+              }
             />
           </div>
+        </div>
 
-          {/* Actions dans la zone du pouce */}
-          <div className="t-actions">
-            {!runningMissions[activeMission.id] && (
-              <button
-                type="button"
-                className="m-btn m-btn--primary m-btn--lg m-btn--block"
-                onClick={() => handleStartMission(activeMission)}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <polygon points="10 8 16 12 10 16 10 8" />
-                </svg>
-                <span>Démarrer sur site</span>
+        <div className="t-actions">
+          {done && (
+            <p className="t-done-note">
+              <Ic n="checkCircle" size={22} />
+              Mission clôturée
+            </p>
+          )}
+          {!done && !live && (
+            <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--block" onClick={() => handleStartMission(m)}>
+              <Ic n="play" size={22} />
+              <span>Démarrer sur site</span>
+            </button>
+          )}
+          {!done && live && (
+            <>
+              <button type="button" className="t-btn t-btn--outline t-btn--xl" onClick={() => toast('Pause enregistrée')}>
+                <Ic n="pause" size={20} />
+                <span>Pause</span>
               </button>
-            )}
+              <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--grow" onClick={() => setGpsModalOpen(true)}>
+                <Ic n="target" size={22} />
+                <span>Clôturer avec GPS</span>
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  };
 
-            {runningMissions[activeMission.id] && (
-              <>
-                <button
-                  type="button"
-                  className="m-btn m-btn--ghost m-btn--lg"
-                  onClick={() => toast('Pause enregistrée', { icon: '⏸' })}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                  <span>Pause</span>
-                </button>
-                <button
-                  type="button"
-                  className="m-btn m-btn--primary m-btn--lg m-btn--block"
-                  onClick={() => setGpsModalOpen(true)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="m9 12 2 2 4-4" />
-                  </svg>
-                  <span>Clôturer avec GPS</span>
-                </button>
-              </>
-            )}
-          </div>
-        </main>
+  const navItems: { id: 'home' | 'map' | 'hist' | 'prof'; label: string; icon: IconName; testId: string }[] = [
+    { id: 'home', label: 'Missions', icon: 'missions', testId: 'terrain-tab-missions' },
+    { id: 'map', label: 'Tournée', icon: 'nav', testId: 'terrain-tab-map' },
+    { id: 'hist', label: 'Historique', icon: 'history', testId: 'terrain-tab-hist' },
+    { id: 'prof', label: 'Profil', icon: 'user', testId: 'terrain-tab-prof' },
+  ];
+
+  // ==========================================================================
+  // RENDU
+  // ==========================================================================
+  return (
+    <div className="t-app" data-skin={skin} data-layout={isTablet ? 'tablet' : 'phone'} data-testid="real-terrain-mobile-app">
+      {/* =====================================================================
+          1. MISSION OUVERTE EN PLEIN ÉCRAN (TÉLÉPHONE UNIQUEMENT)
+         ===================================================================== */}
+      {showFullDetail && activeMission ? (
+        <main className="t-main t-main--mission">{renderMissionDetail(activeMission, false)}</main>
       ) : (
         <>
-          {/* =====================================================================
-              2. ÉCRAN 1 : MISSIONS (HOME)
-             ===================================================================== */}
+          {/* ===================================================================
+              2. ÉCRAN MISSIONS
+             =================================================================== */}
           {tab === 'home' && (
-            <main className="t-main" data-testid="terrain-home">
-              <Header
-                title={`Bonjour ${(currentTechnicien || 'Technicien').split(' ')[0]}`}
-                liveTime={liveParisTime}
-              />
-
-              {/* Mode Superviseur : bascule rapide de technicien */}
-              {canSwitchTechnicien && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--color-text-secondary, #64748b)' }}>
-                    Superviseur :
-                  </span>
-                  <select
-                    className="select"
-                    style={{ flex: 1, minHeight: '34px', fontSize: '12.5px', fontWeight: 700 }}
-                    value={currentTechnicien}
-                    onChange={(e) => onSelectTechnicien(e.target.value)}
-                  >
-                    {techniciens.map((t) => (
-                      <option key={t} value={t}>
-                        ▪ {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <main className={`t-main ${isTablet ? 't-main--split' : ''}`} data-testid="terrain-home">
+              {isTablet ? (
+                <>
+                  <div className="t-col t-col--list">
+                    <Header title="ANELEC Terrain" />
+                    <div className="t-col-body">{renderHomeColumn()}</div>
+                  </div>
+                  <div className="t-col t-col--detail">
+                    {shownMission ? (
+                      renderMissionDetail(shownMission, true)
+                    ) : (
+                      <p className="t-empty">Sélectionnez une mission pour voir son détail.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Header title="ANELEC Terrain" />
+                  <div className="t-col-body">{renderHomeColumn()}</div>
+                </>
               )}
-
-              {/* Carte de bienvenue avec avatar & pointage séparé (Commencer / Finir la journée) */}
-              <section className="t-welcome">
-                <UserAvatar name={currentTechnicien} size={44} />
-                <div>
-                  <strong>Bonjour {currentTechnicien}</strong>
-                  <span>{formattedSelectedDate} · {selectedDateMissions.length} mission{selectedDateMissions.length > 1 ? 's' : ''}</span>
-                  <div className="t-pointage-actions">
-                    {!isPointed ? (
-                      <button
-                        type="button"
-                        className="t-btn-pointage-start"
-                        disabled={clockInMut.isPending}
-                        onClick={handleStartDay}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polygon points="5 3 19 12 5 21 5 3" />
-                        </svg>
-                        <span>{clockInMut.isPending ? 'Enregistrement...' : 'Commencer la journée'}</span>
-                      </button>
-                    ) : (
-                      <span className="m-pill m-tone-green" title="Heure de commencement">
-                        <i className="m-pill-dot" />
-                        <span>Début : {currentPointage?.heureArriveeBureau || '07:52'}</span>
-                      </span>
-                    )}
-
-                    {isPointed && !isTerminee ? (
-                      <button
-                        type="button"
-                        className="t-btn-pointage-end"
-                        disabled={clockOutMut.isPending}
-                        onClick={handleEndDay}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <rect x="6" y="6" width="12" height="12" rx="2" />
-                        </svg>
-                        <span>{clockOutMut.isPending ? 'Enregistrement...' : 'Finir la journée'}</span>
-                      </button>
-                    ) : isTerminee ? (
-                      <span className="m-pill m-tone-indigo" title="Heure de fin">
-                        <i className="m-pill-dot" />
-                        <span>Fin : {currentPointage?.heureFinJournee || '18:00'}</span>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="t-btn-pointage-end"
-                        disabled
-                        style={{ opacity: 0.45, cursor: 'not-allowed' }}
-                        title="Commencez d'abord votre journée"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <rect x="6" y="6" width="12" height="12" rx="2" />
-                        </svg>
-                        <span>Finir la journée</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Sélecteur de date : Filtre Mois & Bandeau Semaine (Lun à Dim) */}
-              <section className="t-date-picker" data-testid="terrain-date-picker">
-                <div className="t-month-row">
-                  <div className="t-month-label">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                    <span>{monthTitle}</span>
-                  </div>
-                  <div className="t-month-nav-btns">
-                    <button
-                      type="button"
-                      className="t-month-nav-btn"
-                      onClick={handlePrevMonth}
-                      title="Mois précédent"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      type="button"
-                      className="t-today-btn"
-                      onClick={handleTodayShortcut}
-                      title="Revenir à aujourd'hui"
-                    >
-                      Aujourd'hui
-                    </button>
-                    <button
-                      type="button"
-                      className="t-month-nav-btn"
-                      onClick={handleNextMonth}
-                      title="Mois suivant"
-                    >
-                      ›
-                    </button>
-                  </div>
-                </div>
-
-                <div className="t-week-strip">
-                  {weekDays.map((day) => {
-                    const isSelected = day.iso === selectedDate;
-                    const missionCount = countByDate[day.iso] || 0;
-                    return (
-                      <button
-                        key={day.iso}
-                        type="button"
-                        onClick={() => setSelectedDate(day.iso)}
-                        className={`t-day-pill ${isSelected ? 'is-selected' : ''} ${day.isToday ? 'is-today' : ''}`}
-                        title={`${day.dayLabel} ${day.dayNum} (${missionCount} mission${missionCount > 1 ? 's' : ''})`}
-                      >
-                        <span className="t-day-name">{day.dayLabel}</span>
-                        <span className="t-day-num">{day.dayNum}</span>
-                        {missionCount > 0 && (
-                          <span className="t-day-badge">{missionCount}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* Barre de progression des missions de la date */}
-              <section className="t-progress">
-                <strong>{doneCount}/{selectedDateMissions.length} missions terminées</strong>
-                <div className="m-progress">
-                  <span
-                    className="m-progress-bar"
-                    style={{
-                      width: `${selectedDateMissions.length > 0 ? (doneCount / selectedDateMissions.length) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-              </section>
-
-              <h2 className="t-h2">Missions du jour ({formattedSelectedDate})</h2>
-
-              {/* Liste des cartes de missions */}
-              <ul className="t-list" data-testid="terrain-missions-list">
-                {selectedDateMissions.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      className="t-card"
-                      onClick={() => setOpenMissionId(m.id)}
-                    >
-                      <div className="t-card-top">
-                        <span className="m-mono m-small" style={{ fontWeight: 700 }}>
-                          {m.heureDebut || '08:30'}
-                        </span>
-                        <StatusPill status={runningMissions[m.id] ? 'En cours' : m.statutOperationnel || 'Planifiée'} />
-                      </div>
-                      <strong>{m.client || 'Client TCE'}</strong>
-                      <span className="t-card-objet">
-                        {m.corpsEtat || 'TCE'} · {m.objet || 'Prestation maintenance'}
-                      </span>
-                      <div className="t-card-foot">
-                        <span className="t-card-addr">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                            <circle cx="12" cy="10" r="3" />
-                          </svg>
-                          <span>{(m.chantier || 'Paris').split(',')[0]}</span>
-                        </span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                      </div>
-                    </button>
-
-                    {/* Bouton direct "Commencer" si mission planifiée */}
-                    {(!m.statutOperationnel || m.statutOperationnel === 'Planifiée') && !runningMissions[m.id] && (
-                      <div style={{ marginTop: '4px' }}>
-                        <button
-                          type="button"
-                          className="m-btn m-btn--primary m-btn--lg m-btn--block"
-                          onClick={() => {
-                            handleStartMission(m);
-                            setOpenMissionId(m.id);
-                          }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <polygon points="10 8 16 12 10 16 10 8" />
-                          </svg>
-                          <span>Commencer l’intervention</span>
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-
-                {selectedDateMissions.length === 0 && (
-                  <li className="t-empty">
-                    Aucune mission planifiée pour le {formattedSelectedDate}.
-                  </li>
-                )}
-              </ul>
             </main>
           )}
 
-          {/* =====================================================================
-              3. ÉCRAN 2 : MA TOURNÉE (MAP & ORDRE DES PASSAGES)
-             ===================================================================== */}
+          {/* ===================================================================
+              3. ÉCRAN TOURNÉE
+             =================================================================== */}
           {tab === 'map' && (
-            <main className="t-main" data-testid="terrain-mapview">
-              <Header title="Ma tournée" liveTime={liveParisTime} />
+            <main className="t-main t-main--page" data-testid="terrain-mapview">
+              <Header title="Ma tournée" subtitle={formattedSelectedDate} />
+              <div className="t-col-body">
+                <MobileRouteMap
+                  technicien={currentTechnicien}
+                  missions={selectedDateMissions}
+                  selectedDate={selectedDate}
+                  onOpenMission={openMission}
+                />
 
-              {/* VRAIE CARTE LEAFLET INTERACTIVE MOBILE */}
-              <MobileRouteMap
-                technicien={currentTechnicien}
-                missions={selectedDateMissions}
-                selectedDate={selectedDate}
-                onOpenMission={(id) => setOpenMissionId(id)}
-              />
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-                <h2 className="t-h2" style={{ margin: 0 }}>
-                  Ma tournée · {selectedDateMissions.length} étape{selectedDateMissions.length > 1 ? 's' : ''}
-                </h2>
-                <button
-                  type="button"
-                  className="m-btn m-btn--sm m-btn--secondary"
-                  onClick={() => setIsInteractiveMapOpen((o) => !o)}
-                >
-                  {isInteractiveMapOpen ? 'Masquer optimisation' : 'Optimisation multi-agents'}
-                </button>
-              </div>
-
-              {isInteractiveMapOpen && (
-                <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-                  <TourneeMapOptimizer
-                    interventions={interventionsList}
-                    devis={devisList}
-                    selectedDate={selectedDate}
-                    currentTechnicien={currentTechnicien}
-                    techniciensList={techniciens}
-                    onSelectTechnicien={onSelectTechnicien}
-                    onOpenIntervention={(i) => setOpenMissionId(i.id)}
-                    onOpenDevis={(d) => setOpenMissionId(-d.id)}
-                  />
+                <div className="t-route-head">
+                  <h2 className="t-h2">
+                    {selectedDateMissions.length} étape{selectedDateMissions.length > 1 ? 's' : ''}
+                  </h2>
+                  <button type="button" className="t-btn t-btn--outline" onClick={() => setIsInteractiveMapOpen((o) => !o)}>
+                    {isInteractiveMapOpen ? 'Masquer l’optimisation' : 'Optimiser la tournée'}
+                  </button>
                 </div>
-              )}
 
-              <ul className="t-list t-list--route" data-testid="terrain-route-list">
-                {selectedDateMissions.map((m, index) => (
-                  <li key={m.id} onClick={() => setOpenMissionId(m.id)}>
-                    <span className="t-stop-num">{index + 1}</span>
-                    <div>
-                      <strong>{m.client || 'Client TCE'}</strong>
-                      <span>{(m.chantier || 'Paris').split(',')[0]} · {m.heureDebut || '09:00'}</span>
-                    </div>
-                    <StatusPill
-                      status={
-                        runningMissions[m.id]
-                          ? 'En cours'
-                          : m.statutOperationnel ||
-                            (index === 0 ? 'En cours' : index === 1 ? 'Suivant' : 'Prévu')
-                      }
+                {isInteractiveMapOpen && (
+                  <div className="t-optimizer">
+                    <TourneeMapOptimizer
+                      interventions={interventionsList}
+                      devis={devisList}
+                      selectedDate={selectedDate}
+                      currentTechnicien={currentTechnicien}
+                      techniciensList={techniciens}
+                      onSelectTechnicien={onSelectTechnicien}
+                      onOpenIntervention={(i) => openMission(i.id)}
+                      onOpenDevis={(d) => openMission(-d.id)}
                     />
-                  </li>
-                ))}
-
-                {selectedDateMissions.length === 0 && (
-                  <li className="t-empty">Aucun itinéraire à afficher pour cette date.</li>
-                )}
-              </ul>
-            </main>
-          )}
-
-          {/* =====================================================================
-              4. ÉCRAN 3 : HISTORIQUE
-             ===================================================================== */}
-          {tab === 'hist' && (
-            <main className="t-main" data-testid="terrain-history">
-              <Header title="Historique" liveTime={liveParisTime} />
-              <h2 className="t-h2">Mes interventions passées</h2>
-              <ul className="t-list">
-                {pastMissions.map((m) => (
-                  <li key={m.id}>
-                    <div className="t-card" onClick={() => setOpenMissionId(m.id)}>
-                      <div className="t-card-top">
-                        <span className="m-mono m-small">{m.reference}</span>
-                        <StatusPill status="Clôturée" />
-                      </div>
-                      <strong>{m.client || 'Client TCE'}</strong>
-                      <span className="t-card-objet">
-                        {m.objet || 'Prestation terminée'}
-                      </span>
-                      <div className="t-card-foot">
-                        <span className="m-muted m-small">
-                          {m.datePlanifiee ? formatDateFR(m.datePlanifiee) : 'Récemment'}
-                        </span>
-                        <span className="m-mono m-small">
-                          {(missionPhotos[m.id] || []).length || 5} photos
-                        </span>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-
-                {pastMissions.length === 0 && (
-                  <li className="t-empty">Pas encore d’interventions terminées enregistrées.</li>
-                )}
-              </ul>
-            </main>
-          )}
-
-          {/* =====================================================================
-              5. ÉCRAN 4 : PROFIL & CHOIX DE DIRECTION ARTISTIQUE / THÈMES
-             ===================================================================== */}
-          {tab === 'prof' && (
-            <main className="t-main" data-testid="terrain-profile">
-              <Header title="Profil" liveTime={liveParisTime} />
-
-              <section className="t-profile">
-                <UserAvatar name={currentTechnicien} size={64} />
-                <strong>{currentTechnicien}</strong>
-                <span className="m-muted m-small">
-                  Électricité · Plomberie · Serrurerie · TCE
-                </span>
-              </section>
-
-              <ul className="t-prof-list">
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="10" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  <span>
-                    Semaine : <strong>36,8 h</strong> <span className="m-mono m-muted">(sur 35 h)</span>
-                  </span>
-                </li>
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                  </svg>
-                  <span>
-                    Missions ce mois : <strong>{allTechMissionsCombined.length || 18}</strong>
-                  </span>
-                </li>
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
-                  </svg>
-                  <span>
-                    Photos envoyées : <strong>94</strong>
-                  </span>
-                </li>
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  <span>
-                    Taux de clôture GPS : <strong>100 %</strong>
-                  </span>
-                </li>
-              </ul>
-
-              {/* SÉLECTEUR INTERACTIF DES 7 DIRECTIONS ARTISTIQUES & THÈMES */}
-              <div
-                style={{
-                  background: 'var(--bg-surface, var(--color-surface, #ffffff))',
-                  border: '1px solid var(--color-border, #e2e8f0)',
-                  borderRadius: 'var(--rounded-card, 12px)',
-                  padding: '14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--color-text, #0f172a)' }}>
-                      🎨 Direction Artistique & Thème
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748b)' }}>
-                      Choisissez l’apparence qui vous plaît, sauvegardée sur votre compte.
-                    </div>
                   </div>
-                  <span
-                    style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      padding: '2px 7px',
-                      borderRadius: '999px',
-                      background: 'rgba(29, 78, 216, 0.1)',
-                      color: 'var(--color-primary, #1D4ED8)',
-                    }}
-                  >
-                    7 thèmes
-                  </span>
-                </div>
+                )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {THEMES.map((t) => {
-                    const isSelected = t.id === currentTheme;
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        disabled={isThemePending}
-                        onClick={async () => {
-                          try {
-                            await setUserPref(t.id as ThemeId);
-                            toast.success(`Design "${t.name}" appliqué !`);
-                          } catch {
-                            toast.error('Impossible d’appliquer ce thème');
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px',
-                          padding: '10px 12px',
-                          borderRadius: '10px',
-                          border: isSelected
-                            ? '2px solid var(--color-primary, #1D4ED8)'
-                            : '1px solid var(--color-border, #e2e8f0)',
-                          background: isSelected
-                            ? 'rgba(29, 78, 216, 0.08)'
-                            : 'var(--color-surface-subtle, #f8fafc)',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '2px',
-                              padding: '4px',
-                              background: 'rgba(0,0,0,0.06)',
-                              borderRadius: '6px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {t.swatches.slice(0, 3).map((c, i) => (
-                              <span
-                                key={i}
-                                style={{
-                                  width: '10px',
-                                  height: '18px',
-                                  borderRadius: '3px',
-                                  background: c,
-                                  display: 'inline-block',
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--color-text, #0f172a)' }}>
-                                {t.name}
-                              </span>
-                              {t.isOriginal && (
-                                <span
-                                  style={{
-                                    fontSize: '9px',
-                                    fontWeight: 700,
-                                    padding: '1px 5px',
-                                    borderRadius: '4px',
-                                    background: 'rgba(0,0,0,0.06)',
-                                    color: 'var(--color-text-secondary, #64748b)',
-                                  }}
-                                >
-                                  Classique
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: '11px',
-                                color: 'var(--color-text-secondary, #64748b)',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {t.tagline}
-                            </div>
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <span style={{ color: 'var(--color-primary, #1D4ED8)', fontWeight: 800, fontSize: '14px' }}>
-                            ✓
+                <ul className="t-list t-list--route" data-testid="terrain-route-list">
+                  {selectedDateMissions.map((m, index) => (
+                    <li key={m.id}>
+                      <button type="button" className="t-route-row" onClick={() => openMission(m.id)}>
+                        <span className="t-stop-num">{index + 1}</span>
+                        <span className="t-route-text">
+                          <strong>{m.client || 'Client'}</strong>
+                          <span>
+                            {(m.chantier || 'Adresse non renseignée').split(',')[0]} · {m.heureDebut || 'horaire à confirmer'}
                           </span>
-                        )}
+                        </span>
+                        <StatusPill status={statusOf(m)} />
                       </button>
-                    );
-                  })}
-                </div>
+                    </li>
+                  ))}
+                  {selectedDateMissions.length === 0 && (
+                    <li className="t-empty">Aucun itinéraire à afficher pour cette date.</li>
+                  )}
+                </ul>
               </div>
+            </main>
+          )}
 
-              {/* Bouton de déconnexion */}
-              <div style={{ marginTop: '12px' }}>
+          {/* ===================================================================
+              4. ÉCRAN HISTORIQUE
+             =================================================================== */}
+          {tab === 'hist' && (
+            <main className="t-main t-main--page" data-testid="terrain-history">
+              <Header title="Historique" subtitle="Mes interventions clôturées" />
+              <div className="t-col-body">
+                <ul className="t-list">
+                  {pastMissions.map((m) => (
+                    <li key={m.id}>
+                      <button type="button" className="t-card" onClick={() => openMission(m.id)}>
+                        <span className="t-card-top">
+                          <span className="t-ref">{m.reference}</span>
+                          <StatusPill status="Clôturée" />
+                        </span>
+                        <strong className="t-card-client">{m.client || 'Client'}</strong>
+                        <span className="t-card-objet">{m.objet || 'Prestation terminée'}</span>
+                        <span className="t-card-foot t-card-foot--plain">
+                          <span>{m.datePlanifiee ? formatDateFR(m.datePlanifiee) : 'Date non renseignée'}</span>
+                          {(missionPhotos[m.id] || []).length > 0 && (
+                            <span>
+                              {(missionPhotos[m.id] || []).length} photo{(missionPhotos[m.id] || []).length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {pastMissions.length === 0 && (
+                    <li className="t-empty">Pas encore d’interventions terminées enregistrées.</li>
+                  )}
+                </ul>
+              </div>
+            </main>
+          )}
+
+          {/* ===================================================================
+              5. ÉCRAN PROFIL & APPARENCE
+             =================================================================== */}
+          {tab === 'prof' && (
+            <main className="t-main t-main--page" data-testid="terrain-profile">
+              <Header title="Profil" />
+              <div className="t-col-body">
+                <section className="t-profile">
+                  <UserAvatar name={currentTechnicien} size={64} />
+                  <strong>{currentTechnicien}</strong>
+                  {specialities.length > 0 && <span>{specialities.join(' · ')}</span>}
+                </section>
+
+                <ul className="t-prof-list">
+                  <li>
+                    <Ic n="missions" />
+                    <span>
+                      Missions ce mois : <strong>{monthMissions.length}</strong>
+                    </span>
+                  </li>
+                  <li>
+                    <Ic n="checkCircle" />
+                    <span>
+                      Clôturées ce mois : <strong>{monthDone.length}</strong>
+                    </span>
+                  </li>
+                  <li>
+                    <Ic n="target" />
+                    <span>
+                      Clôtures avec position GPS : <strong>{gpsRate === null ? '—' : `${gpsRate} %`}</strong>
+                    </span>
+                  </li>
+                </ul>
+
+                <section className="t-skin" aria-labelledby="t-skin-title">
+                  <h3 id="t-skin-title">Apparence de l’écran terrain</h3>
+                  <div className="t-skin-opts" role="radiogroup" aria-labelledby="t-skin-title">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={skin === 'clarte'}
+                      className={`t-skin-opt ${skin === 'clarte' ? 'is-selected' : ''}`}
+                      onClick={() => setSkin('clarte')}
+                    >
+                      <strong>Clarté</strong>
+                      <span>Cartes claires, pointage en tête</span>
+                      {skin === 'clarte' && <Ic n="check" size={20} />}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={skin === 'chrono'}
+                      className={`t-skin-opt ${skin === 'chrono' ? 'is-selected' : ''}`}
+                      onClick={() => setSkin('chrono')}
+                    >
+                      <strong>Chronologie</strong>
+                      <span>La journée en frise horaire</span>
+                      {skin === 'chrono' && <Ic n="check" size={20} />}
+                    </button>
+                  </div>
+                </section>
+
                 <button
                   type="button"
-                  className="m-btn m-btn--danger m-btn--lg m-btn--block"
+                  className="t-btn t-btn--danger-outline t-btn--lg t-btn--block"
                   onClick={async () => {
                     await logout();
                     toast.success('Déconnexion réussie');
                   }}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
+                  <Ic n="logout" />
                   <span>Se déconnecter</span>
                 </button>
               </div>
             </main>
           )}
 
-          {/* =====================================================================
-              6. BARRE DE NAVIGATION INFÉRIEURE MOBILE (POUCE)
-             ===================================================================== */}
-          <nav className="t-bnav" aria-label="Navigation principale">
-            <button
-              type="button"
-              className={tab === 'home' && !activeMission ? 'is-active' : ''}
-              onClick={() => {
-                setTab('home');
-                setOpenMissionId(null);
-              }}
-              data-testid="terrain-tab-missions"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span>Missions</span>
-            </button>
-
-            <button
-              type="button"
-              className={tab === 'map' && !activeMission ? 'is-active' : ''}
-              onClick={() => {
-                setTab('map');
-                setOpenMissionId(null);
-              }}
-              data-testid="terrain-tab-map"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="3 11 22 2 13 21 11 13 3 11" />
-              </svg>
-              <span>Tournée</span>
-            </button>
-
-            <button
-              type="button"
-              className={tab === 'hist' && !activeMission ? 'is-active' : ''}
-              onClick={() => {
-                setTab('hist');
-                setOpenMissionId(null);
-              }}
-              data-testid="terrain-tab-hist"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-                <polyline points="12 7 12 12 15 15" />
-              </svg>
-              <span>Historique</span>
-            </button>
-
-            <button
-              type="button"
-              className={tab === 'prof' && !activeMission ? 'is-active' : ''}
-              onClick={() => {
-                setTab('prof');
-                setOpenMissionId(null);
-              }}
-              data-testid="terrain-tab-prof"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              <span>Profil</span>
-            </button>
+          {/* ===================================================================
+              6. NAVIGATION PRINCIPALE (barre basse sur téléphone, rail sur tablette)
+             =================================================================== */}
+          <nav className="t-nav" aria-label="Navigation principale">
+            {isTablet && <img src="/brand/anelec-mark.png" alt="" className="t-nav-logo" />}
+            {navItems.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                className={tab === it.id ? 'is-active' : ''}
+                aria-current={tab === it.id ? 'page' : undefined}
+                onClick={() => {
+                  setTab(it.id);
+                  setOpenMissionId(null);
+                }}
+                data-testid={it.testId}
+              >
+                <Ic n={it.icon} size={24} />
+                <span>{it.label}</span>
+              </button>
+            ))}
           </nav>
         </>
       )}
 
       {/* =====================================================================
-          7. MODALE DE CLÔTURE GPS (FIDÈLE À LA MAQUETTE VIEWER)
+          7. MODALE DE CLÔTURE GPS
          ===================================================================== */}
       {gpsModalOpen && activeMission && (
-        <div
-          className="cmd-palette-backdrop"
-          onClick={() => setGpsModalOpen(false)}
-          style={{ zIndex: 9999, background: 'rgba(15, 23, 42, 0.65)' }}
-        >
+        <div className="t-modal-backdrop" onClick={() => setGpsModalOpen(false)}>
           <div
-            className="cmd-palette-modal"
-            style={{
-              maxWidth: '440px',
-              padding: '20px',
-              borderRadius: '18px',
-              width: 'min(440px, calc(100vw - 24px))',
-              margin: 'auto',
-              boxSizing: 'border-box',
-              background: 'var(--bg-surface, var(--color-surface, #ffffff))',
-            }}
+            className="t-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="t-gps-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  background: 'rgba(29, 78, 216, 0.1)',
-                  color: 'var(--color-primary, #1D4ED8)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
+            <div className="t-modal-head">
+              <span className="t-modal-ic">
+                <Ic n="target" size={24} />
+              </span>
+              <div>
+                <h3 id="t-gps-title">Clôturer avec la position GPS</h3>
+                <p>Votre position est relevée au moment de la clôture, comme preuve d’exécution.</p>
               </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--color-text, #0f172a)' }}>
-                  Clôturer avec la position GPS
-                </h3>
-                <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #64748b)', margin: '2px 0 0 0' }}>
-                  Nous enregistrons votre position actuelle comme preuve d’exécution.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGpsModalOpen(false)}
-                className="m-btn m-btn--sm m-btn--ghost"
-                style={{ padding: '4px', height: '28px' }}
-              >
-                ✕
+              <button type="button" className="t-icon-btn" onClick={() => setGpsModalOpen(false)} aria-label="Fermer">
+                <Ic n="close" />
               </button>
             </div>
 
-            <div className="t-gps-map" aria-hidden="true">
-              <div className="t-gps-pin">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
-              </div>
-              <span className="t-gps-accuracy">± 6 m</span>
+            <div className="t-modal-site">
+              <Ic n="pin" size={20} />
+              <span>{activeMission.chantier || 'Adresse non renseignée'}</span>
             </div>
 
-            <div className="m-callout">
-              <strong>Position verrouillée</strong>
-              <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.45 }}>
-                {activeMission.chantier || 'Paris, Île-de-France'}
-                <br />
-                Lat 48.87260 · Lon 2.31650 · Précision ± 6 m
-              </p>
-            </div>
-
-            <p className="m-muted m-small" style={{ margin: '0 0 16px 0', fontSize: '11px' }}>
-              En confirmant, le rapport part automatiquement à l’équipe bureau pour validation.
+            <p className="t-modal-note">
+              Le navigateur peut vous demander l’autorisation d’accéder à votre position. Le rapport part ensuite à
+              l’équipe bureau pour validation.
             </p>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                className="m-btn m-btn--ghost m-btn--lg"
-                style={{ flex: 1 }}
-                onClick={() => setGpsModalOpen(false)}
-              >
+            <div className="t-modal-actions">
+              <button type="button" className="t-btn t-btn--outline t-btn--xl" onClick={() => setGpsModalOpen(false)}>
                 Annuler
               </button>
-              <button
-                type="button"
-                className="m-btn m-btn--primary m-btn--lg"
-                style={{ flex: 2 }}
-                onClick={handleGpsConfirm}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="m9 12 2 2 4-4" />
-                </svg>
+              <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--grow" onClick={handleGpsConfirm}>
+                <Ic n="checkCircle" size={22} />
                 <span>Clôturer l’intervention</span>
               </button>
             </div>
