@@ -689,6 +689,7 @@ export function TechnicianMobileView({
           objet: d.objet || 'Relevé de côtes et visite préparatoire',
           devisId: d.id,
           gpsCloture: d.gpsCloture || null,
+          photos: (d as any).photos || [],
         } as unknown as Intervention;
       });
 
@@ -877,11 +878,6 @@ export function TechnicianMobileView({
     const file = input.files?.[0];
     if (!file || !activeMission) return;
     const m = activeMission;
-    if (isDevisVisit(m)) {
-      toast.error('Les photos d’une visite devis ne sont pas encore enregistrées par le bureau.');
-      input.value = '';
-      return;
-    }
     const current = photosOf(m);
     if (current.length >= 10) {
       toast.error('10 photos maximum par mission.');
@@ -893,10 +889,15 @@ export function TechnicianMobileView({
       const label = `Photo ${current.length + 1} · ${getNowHHMM()}`;
       const next = [...current, { url: optimized.dataUrl, label }];
       markSync(m.id, 'saving');
-      await updateMissionMut.mutateAsync({
-        id: m.id,
-        data: { photos: toServerPhotos(next), statutRapport: 'Déclaré par technicien' },
-      });
+      if (isDevisVisit(m)) {
+        await devisApi.update(-m.id, { photos: toServerPhotos(next) });
+        queryClient.invalidateQueries({ queryKey: ['devis'] });
+      } else {
+        await updateMissionMut.mutateAsync({
+          id: m.id,
+          data: { photos: toServerPhotos(next), statutRapport: 'Déclaré par technicien' },
+        });
+      }
       setMissionPhotos((prev) => ({ ...prev, [m.id]: next }));
       markSync(m.id, 'saved');
       toast.success(`Photo envoyée au bureau : ${label}`);
@@ -942,10 +943,12 @@ export function TechnicianMobileView({
     const report = reportOf(m).trim();
     try {
       if (isDevisVisit(m)) {
+        const visitPhotos = photosOf(m);
         await devisApi.update(-m.id, {
           visiteStatut: 'Terminée',
           ...(gps ? { gpsCloture: gps } : {}),
           ...(report ? { compteRendu: report } : {}),
+          ...(visitPhotos.length > 0 ? { photos: toServerPhotos(visitPhotos) } : {}),
         });
         queryClient.invalidateQueries({ queryKey: ['devis'] });
       } else {
@@ -1381,16 +1384,13 @@ export function TechnicianMobileView({
               <button
                 type="button"
                 className="t-photo t-photo--add"
-                disabled={sync === 'saving' || isDevisVisit(m)}
+                disabled={sync === 'saving'}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Ic n="plus" size={26} />
                 <span>{sync === 'saving' ? 'Envoi…' : 'Ajouter'}</span>
               </button>
             </div>
-            {isDevisVisit(m) && (
-              <p className="t-sync t-sync--error">Photos non disponibles pour une visite devis (pas encore enregistrées).</p>
-            )}
           </div>
 
           <div className="t-block">

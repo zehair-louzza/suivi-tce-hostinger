@@ -95,6 +95,7 @@ model Devis {
   visiteHeureDebut     String?
   visiteHeureFin       String?
   visiteStatut         String?
+  visitePhotosJson     String?
   historiqueJson       String?
 
   @@index([userId])

@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
 import { convertKeepingQuote } from '../services/linkedConversion.js';
 import { saveTechnicienGpsPosition } from './referentiels.js';
+import { parsePhotosJson, sanitizePhotosJson } from '../lib/terrainPhotos.js';
 import { sendDevisProposalEmail } from '../services/emailService.js';
 import {
   computeDevisCalculations,
@@ -184,6 +185,7 @@ export function transformDevis(d: any) {
       }
       return null;
     })(),
+    photos: parsePhotosJson(d.visitePhotosJson),
     historique: parseHistorique(d.historiqueJson),
     interventions: linkedInterventions,
     interventionsCount: countLinked,
@@ -727,6 +729,7 @@ devisRouter.patch(
     if (b.visiteHeureDebut !== undefined) updateData.visiteHeureDebut = b.visiteHeureDebut || null;
     if (b.visiteHeureFin !== undefined) updateData.visiteHeureFin = b.visiteHeureFin || null;
     if (b.visiteStatut !== undefined) updateData.visiteStatut = b.visiteStatut || null;
+    if (b.photos !== undefined) updateData.visitePhotosJson = sanitizePhotosJson(b.photos);
 
     const updated = await prisma.devis.update({
       where: { id },

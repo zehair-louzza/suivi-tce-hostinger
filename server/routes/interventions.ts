@@ -15,6 +15,8 @@ import {
   getEffectivePermissions,
 } from '../../shared/types.js';
 
+import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
+
 export const interventionRouter = Router();
 
 function parseJsonArray<T = any>(json?: string | null): T[] {
@@ -181,23 +183,6 @@ export function transformIntervention(i: any) {
     createdAt: i.createdAt ? new Date(i.createdAt).getTime() : Date.now(),
     updatedAt: i.updatedAt ? new Date(i.updatedAt).getTime() : Date.now(),
   };
-}
-
-function sanitizePhotosJson(rawPhotos: any): string | null {
-  if (!Array.isArray(rawPhotos) || rawPhotos.length === 0) return null;
-  // Limite stricte : 10 photos max par mission pour éviter toute saturation de stockage
-  const capped = rawPhotos.slice(0, 10);
-  const sanitized = capped
-    .map((p, idx) => ({
-      id: p.id ? String(p.id).slice(0, 50) : `ph-${Date.now()}-${idx}`,
-      url: typeof p.url === 'string' ? p.url : '',
-      category: typeof p.category === 'string' ? p.category.slice(0, 60) : 'Terrain',
-      caption: typeof p.caption === 'string' ? p.caption.slice(0, 200) : '',
-      takenAt: typeof p.takenAt === 'string' ? p.takenAt : new Date().toISOString(),
-      auteur: typeof p.auteur === 'string' ? p.auteur.slice(0, 60) : '',
-    }))
-    .filter((p) => Boolean(p.url));
-  return sanitized.length > 0 ? JSON.stringify(sanitized) : null;
 }
 
 interventionRouter.get(
