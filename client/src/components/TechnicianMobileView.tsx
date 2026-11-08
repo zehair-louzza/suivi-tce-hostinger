@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   adminApi,
+  devisApi,
   interventionApi,
   Intervention,
   Devis,
@@ -282,17 +283,8 @@ function MobileRouteMap({
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
 
-  const PARIS_FALLBACKS: [number, number][] = useMemo(() => [
-    [48.8719, 2.3096], // 8 rue de Ponthieu, 75008
-    [48.8741, 2.3168], // 18 rue de Miromesnil, 75008
-    [48.8782, 2.3244], // 5 rue de Rome, 75008
-    [48.8685, 2.3325], // Opéra / 2e
-    [48.8566, 2.3522], // Châtelet
-    [48.8833, 2.3267], // Place de Clichy
-    [48.8421, 2.3219], // Montparnasse
-  ], []);
-
   const [stopsCoords, setStopsCoords] = useState<{ id: number; coords: [number, number] }[]>([]);
+  const [resolved, setResolved] = useState(false);
 
   // Résolution géocodée des adresses
   useEffect(() => {
@@ -319,23 +311,21 @@ function MobileRouteMap({
           if (geo?.lat && geo?.lng) {
             lat = geo.lat;
             lng = geo.lng;
-          } else {
-            const fb = PARIS_FALLBACKS[i % PARIS_FALLBACKS.length];
-            lat = fb[0];
-            lng = fb[1];
           }
         }
-        results.push({ id: m.id, coords: [lat, lng] });
+        // Adresse introuvable : on n'invente jamais de position, l'étape est simplement omise.
+        if (lat && lng) results.push({ id: m.id, coords: [lat, lng] });
       }
       if (!cancelled) {
         setStopsCoords(results);
+        setResolved(true);
       }
     }
     resolveCoords();
     return () => {
       cancelled = true;
     };
-  }, [missions, PARIS_FALLBACKS]);
+  }, [missions]);
 
   // Initialisation Map Leaflet
   useEffect(() => {
@@ -428,7 +418,8 @@ function MobileRouteMap({
     // 2. Marqueurs numérotés 1, 2, 3...
     missions.forEach((m, idx) => {
       const stopCoord = stopsCoords.find((s) => s.id === m.id);
-      const latLng: [number, number] = stopCoord?.coords || PARIS_FALLBACKS[idx % PARIS_FALLBACKS.length];
+      if (!stopCoord) return; // adresse non localisée : pas de repère inventé
+      const latLng: [number, number] = stopCoord.coords;
       routePoints.push(latLng);
       bounds.extend(latLng);
 
@@ -504,11 +495,18 @@ function MobileRouteMap({
     if (missions.length > 0) {
       map.fitBounds(bounds, { padding: [35, 35], maxZoom: 15 });
     }
-  }, [missions, stopsCoords, technicien, onOpenMission, PARIS_FALLBACKS]);
+  }, [missions, stopsCoords, technicien, onOpenMission]);
+
+  const unlocated = resolved ? missions.length - stopsCoords.length : 0;
 
   return (
     <div className="t-leaflet-map-container" data-testid="mobile-route-leaflet-map">
       <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+      {unlocated > 0 && (
+        <p className="t-map-note" role="status">
+          {unlocated} étape{unlocated > 1 ? 's' : ''} sans position : adresse introuvable ou incomplète.
+        </p>
+      )}
     </div>
   );
 }
@@ -536,8 +534,12 @@ export function TechnicianMobileView({
   const [isInteractiveMapOpen, setIsInteractiveMapOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Brouillons locaux ; la référence reste le serveur (photos et compte-rendu de la mission).
   const [missionPhotos, setMissionPhotos] = useState<Record<number, { url: string; label: string }[]>>({});
   const [missionReports, setMissionReports] = useState<Record<number, string>>({});
+  const [syncState, setSyncState] = useState<Record<number, 'saving' | 'saved' | 'error'>>({});
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
   const [runningMissions, setRunningMissions] = useState<Record<number, boolean>>({});
 
   const todayISO = useMemo(() => getParisTodayISO(), []);
@@ -590,9 +592,7 @@ export function TechnicianMobileView({
       queryClient.invalidateQueries({ queryKey: ['interventions'] });
       queryClient.invalidateQueries({ queryKey: ['devis'] });
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Erreur de sauvegarde terrain');
-    },
+    // Les erreurs sont traitées par chaque action (photo, compte-rendu, clôture) : message précis + nouvelle tentative.
   });
 
   // Missions pour ce technicien
@@ -827,83 +827,180 @@ export function TechnicianMobileView({
     });
   };
 
+  /** Une « mission » d'id négatif est une visite devis (id réel = -id). */
+  const isDevisVisit = (m: Intervention) => m.id < 0;
+
+  const photosOf = (m: Intervention): { url: string; label: string }[] => {
+    if (missionPhotos[m.id]) return missionPhotos[m.id];
+    const fromServer = ((m as any).photos || []) as { url?: string; caption?: string; category?: string }[];
+    return fromServer
+      .filter((p) => Boolean(p.url))
+      .map((p, i) => ({ url: p.url as string, label: p.caption || `Photo ${i + 1}` }));
+  };
+  const reportOf = (m: Intervention): string => missionReports[m.id] ?? m.compteRendu ?? '';
+
+  const toServerPhotos = (photos: { url: string; label: string }[]) =>
+    photos.map((p, i) => ({
+      id: `ph-${Date.now()}-${i}`,
+      url: p.url,
+      category: 'Terrain',
+      caption: p.label,
+      takenAt: new Date().toISOString(),
+      auteur: currentTechnicien,
+    }));
+
+  const markSync = (id: number, state: 'saving' | 'saved' | 'error') =>
+    setSyncState((prev) => ({ ...prev, [id]: state }));
+
   const handleStartMission = (m: Intervention) => {
     setRunningMissions((prev) => ({ ...prev, [m.id]: true }));
-    if (m.id > 0) {
-      updateMissionMut.mutate({
-        id: m.id,
-        data: {
-          statutOperationnel: 'En cours',
-          heureDebutEffectif: getNowHHMM(),
-        },
-      });
+    const onFail = () => {
+      setRunningMissions((prev) => ({ ...prev, [m.id]: false }));
+      toast.error('Démarrage non enregistré : vérifiez votre connexion et réessayez.');
+    };
+    if (isDevisVisit(m)) {
+      devisApi
+        .update(-m.id, { visiteStatut: 'En cours' })
+        .then(() => queryClient.invalidateQueries({ queryKey: ['devis'] }))
+        .catch(onFail);
+    } else {
+      updateMissionMut
+        .mutateAsync({ id: m.id, data: { statutOperationnel: 'En cours', heureDebutReelle: getNowHHMM() } })
+        .catch(onFail);
     }
     toast.success(`Intervention ${m.reference} démarrée sur site`);
   };
 
+  /** Envoie la liste complète des photos de la mission ; l'ajout n'est validé qu'une fois reçu par le serveur. */
   const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file || !activeMission) return;
+    const m = activeMission;
+    if (isDevisVisit(m)) {
+      toast.error('Les photos d’une visite devis ne sont pas encore enregistrées par le bureau.');
+      input.value = '';
+      return;
+    }
+    const current = photosOf(m);
+    if (current.length >= 10) {
+      toast.error('10 photos maximum par mission.');
+      input.value = '';
+      return;
+    }
     try {
       const optimized = await compressAndOptimizeImage(file);
-      const url = optimized.dataUrl;
-      const label = `Photo ${((missionPhotos[activeMission.id] || []).length + 1)} · ${getNowHHMM()}`;
-      setMissionPhotos((prev) => ({
-        ...prev,
-        [activeMission.id]: [...(prev[activeMission.id] || []), { url, label }],
-      }));
-      toast.success(`Photo ajoutée : ${label}`);
+      const label = `Photo ${current.length + 1} · ${getNowHHMM()}`;
+      const next = [...current, { url: optimized.dataUrl, label }];
+      markSync(m.id, 'saving');
+      await updateMissionMut.mutateAsync({
+        id: m.id,
+        data: { photos: toServerPhotos(next), statutRapport: 'Déclaré par technicien' },
+      });
+      setMissionPhotos((prev) => ({ ...prev, [m.id]: next }));
+      markSync(m.id, 'saved');
+      toast.success(`Photo envoyée au bureau : ${label}`);
     } catch {
-      toast.error('Erreur lors du traitement de la photo');
+      markSync(m.id, 'error');
+      toast.error('Photo non envoyée : elle n’a pas été enregistrée. Réessayez avec du réseau.');
+    } finally {
+      input.value = '';
     }
   };
 
-  const handleGpsConfirm = () => {
+  /** Enregistre le compte-rendu (à la sortie du champ et à la clôture). */
+  const saveReport = async (m: Intervention) => {
+    const text = reportOf(m).trim();
+    if (text === (m.compteRendu || '').trim()) return;
+    markSync(m.id, 'saving');
+    try {
+      if (isDevisVisit(m)) {
+        await devisApi.update(-m.id, { compteRendu: text });
+      } else {
+        await updateMissionMut.mutateAsync({
+          id: m.id,
+          data: { compteRendu: text, statutRapport: text ? 'Déclaré par technicien' : null },
+        });
+      }
+      markSync(m.id, 'saved');
+    } catch {
+      markSync(m.id, 'error');
+    }
+  };
+
+  type GpsFix = { lat: number; lng: number; accuracy: number };
+
+  /** Clôture la mission ; ne ferme la fenêtre et n'annonce « envoyé » qu'une fois le serveur d'accord. */
+  const closeMission = async (fix: GpsFix | null) => {
     if (!activeMission) return;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const coords = {
-            lat: Number(pos.coords.latitude.toFixed(5)),
-            lng: Number(pos.coords.longitude.toFixed(5)),
-            accuracy: Math.round(pos.coords.accuracy),
-          };
-          if (activeMission.id > 0) {
-            updateMissionMut.mutate({
-              id: activeMission.id,
-              data: {
-                statutOperationnel: 'Clôturée',
-                heureFinEffectif: getNowHHMM(),
-                gpsCloture: JSON.stringify(coords),
-              },
-            });
-          }
-          setGpsModalOpen(false);
-          setOpenMissionId(null);
-          toast.success('Intervention clôturée · rapport envoyé au bureau');
-        },
-        () => {
-          if (activeMission.id > 0) {
-            updateMissionMut.mutate({
-              id: activeMission.id,
-              data: {
-                statutOperationnel: 'Clôturée',
-                heureFinEffectif: getNowHHMM(),
-                gpsCloture: JSON.stringify({ lat: 48.8726, lng: 2.3165, accuracy: 8 }),
-              },
-            });
-          }
-          setGpsModalOpen(false);
-          setOpenMissionId(null);
-          toast.success('Intervention clôturée · rapport envoyé au bureau');
-        },
-        { enableHighAccuracy: true, timeout: 6000 }
-      );
-    } else {
+    const m = activeMission;
+    setClosing(true);
+    setGpsError(null);
+    const gps = fix
+      ? { ...fix, timestamp: new Date().toISOString(), source: 'GPS_MOBILE', technicien: currentTechnicien }
+      : undefined;
+    const report = reportOf(m).trim();
+    try {
+      if (isDevisVisit(m)) {
+        await devisApi.update(-m.id, {
+          visiteStatut: 'Terminée',
+          ...(gps ? { gpsCloture: gps } : {}),
+          ...(report ? { compteRendu: report } : {}),
+        });
+        queryClient.invalidateQueries({ queryKey: ['devis'] });
+      } else {
+        const photos = photosOf(m);
+        await updateMissionMut.mutateAsync({
+          id: m.id,
+          data: {
+            statutOperationnel: 'Clôturée',
+            heureFinReelle: getNowHHMM(),
+            ...(gps ? { gpsCloture: gps } : {}),
+            ...(report ? { compteRendu: report } : {}),
+            ...(photos.length > 0 ? { photos: toServerPhotos(photos) } : {}),
+            ...(report || photos.length > 0 ? { statutRapport: 'Déclaré par technicien' } : {}),
+          },
+        });
+      }
       setGpsModalOpen(false);
       setOpenMissionId(null);
-      toast.success('Intervention clôturée · rapport envoyé au bureau');
+      toast.success(
+        gps ? 'Intervention clôturée · envoyée au bureau' : 'Intervention clôturée sans position GPS · envoyée au bureau'
+      );
+    } catch {
+      setGpsError('La clôture n’a pas pu être envoyée. Rien n’est perdu : vérifiez le réseau puis réessayez.');
+    } finally {
+      setClosing(false);
     }
+  };
+
+  /** Relève la position réelle. En cas d'échec : aucune position inventée, le technicien choisit. */
+  const handleGpsConfirm = () => {
+    if (!activeMission || closing) return;
+    setGpsError(null);
+    if (!navigator.geolocation) {
+      setGpsError('La position GPS n’est pas disponible sur cet appareil.');
+      return;
+    }
+    setClosing(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        void closeMission({
+          lat: Number(pos.coords.latitude.toFixed(5)),
+          lng: Number(pos.coords.longitude.toFixed(5)),
+          accuracy: Math.round(pos.coords.accuracy),
+        });
+      },
+      (err) => {
+        setClosing(false);
+        setGpsError(
+          err.code === err.PERMISSION_DENIED
+            ? 'La position est refusée pour ce site : autorisez la localisation dans le navigateur.'
+            : 'Position introuvable pour le moment (signal GPS faible ou délai dépassé).'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   // ==========================================================================
@@ -949,6 +1046,7 @@ export function TechnicianMobileView({
   // Fermeture de la modale GPS avec la touche Échap
   useEffect(() => {
     if (!gpsModalOpen) return;
+    setGpsError(null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setGpsModalOpen(false);
     };
@@ -1183,7 +1281,8 @@ export function TechnicianMobileView({
   const renderMissionDetail = (m: Intervention, embedded: boolean) => {
     const live = isLiveMission(m);
     const done = isDoneStatus(m.statutOperationnel);
-    const photos = missionPhotos[m.id] || [];
+    const photos = photosOf(m);
+    const sync = syncState[m.id];
     const duration = formatDuration(m.heureDebut, m.heureFin);
     const phone = findPhone(m.notes);
     const addr = m.chantier || '';
@@ -1279,11 +1378,19 @@ export function TechnicianMobileView({
                 aria-label="Ajouter une photo"
                 onChange={handleAddPhoto}
               />
-              <button type="button" className="t-photo t-photo--add" onClick={() => fileInputRef.current?.click()}>
+              <button
+                type="button"
+                className="t-photo t-photo--add"
+                disabled={sync === 'saving' || isDevisVisit(m)}
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <Ic n="plus" size={26} />
-                <span>Ajouter</span>
+                <span>{sync === 'saving' ? 'Envoi…' : 'Ajouter'}</span>
               </button>
             </div>
+            {isDevisVisit(m) && (
+              <p className="t-sync t-sync--error">Photos non disponibles pour une visite devis (pas encore enregistrées).</p>
+            )}
           </div>
 
           <div className="t-block">
@@ -1296,14 +1403,35 @@ export function TechnicianMobileView({
               className="t-textarea"
               rows={3}
               placeholder="Travaux réalisés, matériel posé, mesures prises…"
-              value={missionReports[m.id] ?? ''}
+              value={reportOf(m)}
+              maxLength={4000}
               onChange={(e) =>
                 setMissionReports((prev) => ({
                   ...prev,
                   [m.id]: e.target.value,
                 }))
               }
+              onBlur={() => {
+                void saveReport(m);
+              }}
             />
+            <p
+              className={`t-sync ${sync === 'error' ? 't-sync--error' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              {sync === 'saving' && 'Envoi au bureau…'}
+              {sync === 'saved' && 'Enregistré et envoyé au bureau.'}
+              {sync === 'error' && (
+                <>
+                  Non envoyé.{' '}
+                  <button type="button" className="t-sync-retry" onClick={() => void saveReport(m)}>
+                    Réessayer
+                  </button>
+                </>
+              )}
+              {!sync && 'Enregistré automatiquement quand vous quittez le champ.'}
+            </p>
           </div>
         </div>
 
@@ -1464,9 +1592,9 @@ export function TechnicianMobileView({
                         <span className="t-card-objet">{m.objet || 'Prestation terminée'}</span>
                         <span className="t-card-foot t-card-foot--plain">
                           <span>{m.datePlanifiee ? formatDateFR(m.datePlanifiee) : 'Date non renseignée'}</span>
-                          {(missionPhotos[m.id] || []).length > 0 && (
+                          {photosOf(m).length > 0 && (
                             <span>
-                              {(missionPhotos[m.id] || []).length} photo{(missionPhotos[m.id] || []).length > 1 ? 's' : ''}
+                              {photosOf(m).length} photo{photosOf(m).length > 1 ? 's' : ''}
                             </span>
                           )}
                         </span>
@@ -1618,15 +1746,48 @@ export function TechnicianMobileView({
               l’équipe bureau pour validation.
             </p>
 
+            {gpsError && (
+              <div className="t-callout" role="alert">
+                <Ic n="alert" size={22} />
+                <div>
+                  <strong>{gpsError}</strong>
+                  <p>Vous pouvez réessayer, ou clôturer sans position : le bureau verra « sans position GPS ».</p>
+                </div>
+              </div>
+            )}
+
             <div className="t-modal-actions">
-              <button type="button" className="t-btn t-btn--outline t-btn--xl" onClick={() => setGpsModalOpen(false)}>
+              <button
+                type="button"
+                className="t-btn t-btn--outline t-btn--xl"
+                disabled={closing}
+                onClick={() => {
+                  setGpsError(null);
+                  setGpsModalOpen(false);
+                }}
+              >
                 Annuler
               </button>
-              <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--grow" onClick={handleGpsConfirm}>
+              <button
+                type="button"
+                className="t-btn t-btn--primary t-btn--xl t-btn--grow"
+                disabled={closing}
+                onClick={handleGpsConfirm}
+              >
                 <Ic n="checkCircle" size={22} />
-                <span>Clôturer l’intervention</span>
+                <span>{closing ? 'Envoi en cours…' : gpsError ? 'Réessayer la position' : 'Clôturer l’intervention'}</span>
               </button>
             </div>
+            {gpsError && (
+              <button
+                type="button"
+                className="t-btn t-btn--danger-outline t-btn--lg t-btn--block"
+                disabled={closing}
+                onClick={() => void closeMission(null)}
+              >
+                <span>Clôturer sans position GPS</span>
+              </button>
+            )}
           </div>
         </div>
       )}

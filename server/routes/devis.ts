@@ -662,6 +662,16 @@ devisRouter.patch(
       }
     }
 
+    // Compte-rendu d'une visite technique saisi sur le terrain : conservé dans l'historique du devis
+    if (typeof b.compteRendu === 'string' && b.compteRendu.trim()) {
+      historiqueJson = addHistoriqueEvent(
+        historiqueJson,
+        auteur,
+        'COMPTE_RENDU_VISITE',
+        b.compteRendu.trim().slice(0, 4000)
+      );
+    }
+
     const updateData: any = {
       historiqueJson,
       version: { increment: 1 },
