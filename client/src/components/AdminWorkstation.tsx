@@ -116,12 +116,20 @@ export function AdminWorkstation({
   const [showDestroyModal, setShowDestroyModal] = useState(false);
 
   // États Configuration & Diagnostic E-mails / SMTP
-  const [smtpHost, setSmtpHost] = useState('smtppro.zoho.eu');
+  const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState(465);
-  const [smtpUser, setSmtpUser] = useState('zehair@anelecgroupe.com');
+  const [smtpUser, setSmtpUser] = useState('');
   const [smtpPass, setSmtpPass] = useState('');
-  const [smtpFromName, setSmtpFromName] = useState('ANELEC GROUPE');
-  const [testRecipientEmail, setTestRecipientEmail] = useState('lewislouza@gmail.com');
+  const [smtpFromName, setSmtpFromName] = useState('');
+  const [smtpReplyTo, setSmtpReplyTo] = useState('');
+  const [testRecipientEmail, setTestRecipientEmail] = useState(user?.email || '');
+
+  // Invitations par e-mail
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<string>('CONDUCTEUR_TRAVAUX');
+  const [inviteTechNom, setInviteTechNom] = useState('');
+  const [lastInviteLink, setLastInviteLink] = useState<{ email: string; link: string; error: string | null } | null>(null);
   const [isSavingSmtp, setIsSavingSmtp] = useState(false);
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
   const [lastSmtpTestResult, setLastSmtpTestResult] = useState<any>(null);
@@ -221,8 +229,65 @@ export function AdminWorkstation({
       if (c.port) setSmtpPort(c.port);
       if (c.user) setSmtpUser(c.user);
       if (c.fromName) setSmtpFromName(c.fromName);
+      setSmtpReplyTo(c.replyTo || '');
     }
   }, [smtpStatusQuery.data]);
+
+  const invitationsQuery = useQuery({
+    queryKey: ['admin-invitations'],
+    queryFn: async () => {
+      const res = await adminApi.listInvitations();
+      return res.data.data;
+    },
+  });
+
+  const afterInvitationSent = (res: { data: import('../lib/api').InvitationSendResult }) => {
+    queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-smtp-status'] });
+    if (res.data.emailSent) {
+      toast.success(
+        res.data.fromAddress ? `${res.data.message} (depuis ${res.data.fromAddress})` : res.data.message
+      );
+      setLastInviteLink(null);
+    } else {
+      toast.error(res.data.message);
+      if (res.data.inviteLink) {
+        setLastInviteLink({ email: res.data.data.email, link: res.data.inviteLink, error: res.data.deliveryError });
+      }
+    }
+  };
+
+  const createInvitationMut = useMutation({
+    mutationFn: adminApi.createInvitation,
+    onSuccess: (res) => {
+      afterInvitationSent(res);
+      setShowInviteModal(false);
+      setInviteEmail('');
+      setInviteTechNom('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Invitation impossible');
+    },
+  });
+
+  const resendInvitationMut = useMutation({
+    mutationFn: adminApi.resendInvitation,
+    onSuccess: afterInvitationSent,
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Renvoi impossible');
+    },
+  });
+
+  const revokeInvitationMut = useMutation({
+    mutationFn: adminApi.revokeInvitation,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
+      toast.success(res.data.message);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Révocation impossible');
+    },
+  });
 
   const createUserMut = useMutation({
     mutationFn: adminApi.createUser,
@@ -501,17 +566,28 @@ export function AdminWorkstation({
             </button>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            style={{ flexShrink: 0 }}
-            onClick={() => {
-              handleSelectRoleForCreate('CHIFFRAGE_DEVIS');
-              setShowCreateModal(true);
-            }}
-          >
-            + Désigner un Utilisateur
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ flexShrink: 0 }}
+              onClick={() => setShowInviteModal(true)}
+              data-testid="invite-user-open"
+            >
+              ✉ Inviter par e-mail
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{ flexShrink: 0 }}
+              onClick={() => {
+                handleSelectRoleForCreate('CHIFFRAGE_DEVIS');
+                setShowCreateModal(true);
+              }}
+            >
+              + Désigner un Utilisateur
+            </button>
+          </div>
         </div>
       </div>
 
@@ -794,6 +870,118 @@ export function AdminWorkstation({
                 </div>
               );
             })}
+          </div>
+
+          {/* Invitations par e-mail */}
+          <div className="pro-table-container" style={{ padding: '16px' }} data-testid="invitations-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0 }}>
+                  Invitations par e-mail ({(invitationsQuery.data || []).filter((i) => i.status === 'EN_ATTENTE').length} en attente)
+                </h3>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                  Le collaborateur reçoit un lien personnel (valable 7 jours) pour créer son accès dans votre entreprise.
+                  {smtpStatusQuery.data?.config?.ownMailbox && smtpStatusQuery.data.config.user
+                    ? ` Envoi depuis ${smtpStatusQuery.data.config.user}.`
+                    : ' Envoi via l’expéditeur plateforme (configurez votre boîte dans « E-mails & SMTP »).'}
+                </p>
+              </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowInviteModal(true)}>
+                ✉ Nouvelle invitation
+              </button>
+            </div>
+
+            {lastInviteLink && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  fontSize: '12px',
+                  marginBottom: '10px',
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong>L’e-mail à {lastInviteLink.email} n’a pas pu partir</strong>
+                {lastInviteLink.error ? ` (${lastInviteLink.error})` : ''}. Transmettez-lui ce lien vous-même :
+                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                  <input className="input" readOnly value={lastInviteLink.link} style={{ flex: 1, fontSize: '11px' }} onFocus={(e) => e.currentTarget.select()} />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(lastInviteLink.link).then(
+                        () => toast.success('Lien copié'),
+                        () => toast.error('Copie impossible : sélectionnez le lien')
+                      );
+                    }}
+                  >
+                    Copier
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(invitationsQuery.data || []).length === 0 ? (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Aucune invitation pour le moment.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {(invitationsQuery.data || []).map((inv) => {
+                  const statusLabel =
+                    inv.status === 'EN_ATTENTE' ? 'En attente' : inv.status === 'ACCEPTEE' ? 'Acceptée' : inv.status === 'EXPIREE' ? 'Expirée' : 'Révoquée';
+                  const statusColor = inv.status === 'EN_ATTENTE' ? '#d97706' : inv.status === 'ACCEPTEE' ? '#059669' : '#64748b';
+                  return (
+                    <div
+                      key={inv.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        padding: '8px 10px',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div className="font-mono" style={{ fontSize: '12px', fontWeight: 700, overflowWrap: 'anywhere' }}>{inv.email}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          {inv.roleLabel}
+                          {inv.invitedByName ? ` · invité par ${inv.invitedByName}` : ''}
+                          {inv.status === 'EN_ATTENTE' ? ` · expire le ${new Date(inv.expiresAt).toLocaleDateString('fr-FR')}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: statusColor }}>{statusLabel}</span>
+                        {inv.status === 'EN_ATTENTE' && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              disabled={resendInvitationMut.isPending}
+                              onClick={() => resendInvitationMut.mutate(inv.id)}
+                            >
+                              Renvoyer
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                              disabled={revokeInvitationMut.isPending}
+                              onClick={() => revokeInvitationMut.mutate(inv.id)}
+                            >
+                              Révoquer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1518,13 +1706,47 @@ export function AdminWorkstation({
                   EXPÉDITEUR OFFICIEL & SERVEUR SMTP
                 </span>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '4px 0 4px 0' }}>
-                  Configuration SMTP (Zoho Pro EU / Hostinger)
+                  Boîte d’envoi de {smtpStatusQuery.data?.config?.companyName || 'votre entreprise'}
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
-                  Pour un domaine personnalisé Zoho (<code>@anelecgroupe.com</code>), utilisez{' '}
-                  <strong>smtppro.zoho.eu</strong> (port 465 SSL ou 587 STARTTLS) avec un{' '}
-                  <strong>Mot de passe d'application Zoho</strong>.
+                  Renseignez le serveur SMTP de la messagerie de votre entreprise (Zoho, Microsoft 365, Google Workspace, OVH…) avec un{' '}
+                  <strong>mot de passe d’application</strong>. Vos rapports, devis et invitations partiront alors de votre propre adresse.
+                  Le mot de passe est chiffré et n’est jamais affiché.
                 </p>
+              </div>
+
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  lineHeight: 1.5,
+                  background: smtpStatusQuery.data?.config?.ownMailbox ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.1)',
+                  border: smtpStatusQuery.data?.config?.ownMailbox ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.4)',
+                }}
+                data-testid="mail-sender-banner"
+              >
+                {smtpStatusQuery.data?.config?.ownMailbox ? (
+                  <>
+                    <strong>Envoi depuis votre boîte :</strong> {smtpStatusQuery.data.config.user || '—'}
+                    {smtpStatusQuery.data.config.lastTestAt && (
+                      <>
+                        {' '}
+                        · dernier test {smtpStatusQuery.data.config.lastTestOk ? 'réussi' : 'en échec'} le{' '}
+                        {new Date(smtpStatusQuery.data.config.lastTestAt).toLocaleString('fr-FR')}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <strong>Expéditeur plateforme actif.</strong> Vos e-mails partent « au nom de {smtpStatusQuery.data?.config?.companyName || 'votre entreprise'} via ANELEC TCE »,
+                    les réponses arrivant sur <strong>{smtpStatusQuery.data?.config?.replyTo || smtpStatusQuery.data?.config?.mainEmail || 'l’adresse de votre administrateur'}</strong>.
+                    Renseignez votre boîte ci-dessous pour envoyer depuis votre propre adresse.
+                  </>
+                )}
+                {smtpStatusQuery.data?.config?.lastError && !smtpStatusQuery.data.config.lastTestOk && (
+                  <div style={{ marginTop: '4px', color: '#b45309' }}>Dernière erreur : {smtpStatusQuery.data.config.lastError}</div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
@@ -1535,7 +1757,7 @@ export function AdminWorkstation({
                     className="input"
                     value={smtpHost}
                     onChange={(e) => setSmtpHost(e.target.value)}
-                    placeholder="smtppro.zoho.eu"
+                    placeholder="smtp.votre-domaine.fr"
                   />
                 </div>
                 <div>
@@ -1557,7 +1779,7 @@ export function AdminWorkstation({
                     className="input"
                     value={smtpUser}
                     onChange={(e) => setSmtpUser(e.target.value)}
-                    placeholder="zehair@anelecgroupe.com"
+                    placeholder="contact@votre-entreprise.fr"
                   />
                 </div>
                 <div>
@@ -1567,14 +1789,25 @@ export function AdminWorkstation({
                     className="input"
                     value={smtpFromName}
                     onChange={(e) => setSmtpFromName(e.target.value)}
-                    placeholder="ANELEC GROUPE"
+                    placeholder={smtpStatusQuery.data?.config?.companyName || 'Nom de votre entreprise'}
                   />
                 </div>
               </div>
 
               <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Répondre à (facultatif)</label>
+                <input
+                  type="email"
+                  className="input"
+                  value={smtpReplyTo}
+                  onChange={(e) => setSmtpReplyTo(e.target.value)}
+                  placeholder={smtpStatusQuery.data?.config?.mainEmail || smtpUser || 'adresse principale de l’entreprise'}
+                />
+              </div>
+
+              <div>
                 <label style={{ fontSize: '11.5px', fontWeight: 700 }}>
-                  Mot de passe SMTP / Mot de passe d'application Zoho{' '}
+                  Mot de passe SMTP / mot de passe d'application{' '}
                   {smtpStatusQuery.data?.config?.hasPassword && (
                     <span style={{ color: '#059669', fontWeight: 800 }}>(✓ Configuré)</span>
                   )}
@@ -1587,12 +1820,35 @@ export function AdminWorkstation({
                   placeholder={
                     smtpStatusQuery.data?.config?.hasPassword
                       ? '•••••••••••• (Laisser vide pour conserver l’actuel)'
-                      : 'Saisir le mot de passe d’application Zoho'
+                      : 'Saisir le mot de passe d’application de la messagerie'
                   }
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+                {smtpStatusQuery.data?.config?.configured && smtpStatusQuery.data.config.ownMailbox && user?.companyId !== 1 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={async () => {
+                      if (!window.confirm('Supprimer votre boîte d’envoi ? Les e-mails repartiront via l’expéditeur plateforme.')) return;
+                      try {
+                        const res = await adminApi.resetSmtpConfig();
+                        setSmtpPass('');
+                        setSmtpHost('');
+                        setSmtpUser('');
+                        setSmtpFromName('');
+                        setSmtpReplyTo('');
+                        await smtpStatusQuery.refetch();
+                        toast.success(res.data.message);
+                      } catch (err: any) {
+                        toast.error(err.response?.data?.error || 'Suppression impossible');
+                      }
+                    }}
+                  >
+                    Revenir à l’expéditeur plateforme
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -1606,11 +1862,12 @@ export function AdminWorkstation({
                         secure: smtpPort === 465,
                         user: smtpUser,
                         fromName: smtpFromName,
+                        replyTo: smtpReplyTo.trim(),
                         ...(smtpPass.trim() ? { pass: smtpPass.trim() } : {}),
                       });
                       setSmtpPass('');
                       await smtpStatusQuery.refetch();
-                      toast.success('Configuration SMTP enregistrée en base de données');
+                      toast.success('Boîte d’envoi enregistrée : envoyez un e-mail de test pour la valider');
                     } catch (err: any) {
                       toast.error(err.response?.data?.error || 'Erreur sauvegarde SMTP');
                     } finally {
@@ -1651,12 +1908,12 @@ export function AdminWorkstation({
                   Tester l'envoi d'e-mail vers une adresse cible
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-                  Sélectionnez une adresse fournie ou saisissez n'importe quel e-mail pour tester l'acheminement complet.
+                  Envoyez-vous un e-mail pour vérifier que votre boîte d’envoi fonctionne, ou saisissez une autre adresse.
                 </p>
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {['lewislouza@gmail.com', 'lzgame2020@gmail.com', 'louzza.zehair@gmail.com'].map((addr) => (
+                {[user?.email].filter((a): a is string => Boolean(a)).map((addr) => (
                   <button
                     key={addr}
                     type="button"
@@ -1710,14 +1967,17 @@ export function AdminWorkstation({
                   style={{
                     padding: '12px',
                     borderRadius: '10px',
-                    background: 'rgba(16, 185, 129, 0.08)',
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    background: lastSmtpTestResult.sent ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: lastSmtpTestResult.sent ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
                     fontSize: '12px',
                     lineHeight: 1.5,
                   }}
                 >
-                  <div style={{ fontWeight: 800, color: '#065f46' }}>
-                    ✓ Résultat du test : Canal {lastSmtpTestResult.channel} ({lastSmtpTestResult.hostUsed})
+                  <div style={{ fontWeight: 800, color: lastSmtpTestResult.sent ? '#065f46' : '#991b1b' }}>
+                    {lastSmtpTestResult.sent ? '✓' : '✕'} Résultat du test :{' '}
+                    {lastSmtpTestResult.sent
+                      ? `envoyé depuis ${lastSmtpTestResult.fromAddress || 'la boîte configurée'} (${lastSmtpTestResult.hostUsed})`
+                      : lastSmtpTestResult.error || 'échec de l’envoi'}
                   </div>
                   {lastSmtpTestResult.previewUrl && (
                     <div style={{ marginTop: '4px' }}>
@@ -1953,6 +2213,75 @@ export function AdminWorkstation({
       {/* =====================================================================
           MODALE : CRÉATION D'UN UTILISATEUR AVEC DROITS PERSONNALISÉS
          ===================================================================== */}
+      {showInviteModal && (
+        <div className="inspector-backdrop" onClick={() => setShowInviteModal(false)}>
+          <div
+            className="pro-table-container"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '520px', maxWidth: '95vw', margin: '8vh auto', padding: '20px', background: 'var(--bg-surface)' }}
+            data-testid="invite-user-modal"
+          >
+            <h3 style={{ fontSize: '15px', fontWeight: 800, marginBottom: '4px' }}>Inviter un collaborateur par e-mail</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+              Il recevra un lien personnel pour créer son accès dans <strong>{user?.companyName || 'votre entreprise'}</strong>, avec le profil choisi.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                createInvitationMut.mutate({
+                  email: inviteEmail.trim(),
+                  role: inviteRole,
+                  technicienNom: inviteRole === 'TECHNICIEN' ? inviteTechNom.trim() || null : null,
+                });
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Adresse e-mail du collaborateur</label>
+                <input
+                  type="email"
+                  className="input"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="prenom.nom@exemple.fr"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Profil</label>
+                <select className="input" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                  {Object.values(ROLE_DEFINITIONS)
+                    .filter((r) => r.code !== 'ADMIN' || user?.role === 'ADMIN')
+                    .map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.label}
+                      </option>
+                    ))}
+                </select>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                  {ROLE_DEFINITIONS[inviteRole]?.summary}
+                </p>
+              </div>
+              {inviteRole === 'TECHNICIEN' && (
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Nom du technicien (tel qu’affiché au planning)</label>
+                  <input className="input" value={inviteTechNom} onChange={(e) => setInviteTechNom(e.target.value)} placeholder="Laisser vide pour reprendre son nom" />
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={createInvitationMut.isPending || !inviteEmail.trim()}>
+                  {createInvitationMut.isPending ? 'Envoi…' : 'Envoyer l’invitation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showCreateModal && (
         <div className="inspector-backdrop" onClick={() => setShowCreateModal(false)}>
           <div

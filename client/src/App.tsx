@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './stores/authStore';
 import { LoginPage } from './pages/LoginPage';
+import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PromoVideoShowcase } from './components/PromoVideoShowcase';
@@ -71,6 +72,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/invitation" element={<AcceptInvitationPage />} />
       <Route path="/showcase" element={<PromoVideoShowcase />} />
       <Route path="/video" element={<PromoVideoShowcase />} />
       <Route path="/promo" element={<PromoVideoShowcase />} />

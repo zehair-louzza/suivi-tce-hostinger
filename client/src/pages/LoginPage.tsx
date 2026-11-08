@@ -435,11 +435,7 @@ export function LoginPage() {
     try {
       const res = await authApi.forgotPassword(forgotEmail.trim());
       toast.success(res.data.message);
-      if (res.data.previewUrl) {
-        setForgotPreviewUrl(res.data.previewUrl);
-      } else {
-        setShowForgotModal(false);
-      }
+      setShowForgotModal(false);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Erreur lors de la demande de réinitialisation');
     } finally {

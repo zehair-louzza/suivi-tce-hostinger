@@ -830,6 +830,7 @@ interventionRouter.post(
 
     // Envoi sécurisé via emailService (Zoho Mail multi-hôtes ou prévisualisation secours)
     const delivery = await sendInterventionReportEmail({
+      companyId,
       toEmail: validEmails.join(', '),
       ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
       subject: subject || `[RAPPORT INTERVENTION] ${transformed.reference} • ${transformed.client} • ${transformed.chantier}`,

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -8,9 +9,12 @@ import { formatPublicUser } from './auth.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
 import {
+  APP_URL,
   sendWelcomeUserEmail,
-  getActiveSmtpConfig,
-  saveSmtpConfigToDb,
+  sendInvitationEmail,
+  getPublicMailConfig,
+  saveCompanyMailSettings,
+  deleteCompanyMailSettings,
   getEmailLogs,
   verifyAndTestSmtpConfig,
 } from '../services/emailService.js';
@@ -69,6 +73,11 @@ async function getCallerUser(req: Request) {
   const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
   const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
   return { ...u, effectiveRole, isAdmin, perms };
+}
+
+/** Entreprise sur laquelle l'appelant agit : toujours la sienne, jamais une valeur fournie par le client. */
+function tenantOf(caller: { companyId?: number | null }): number {
+  return caller.companyId ?? 1;
 }
 
 // ============================================================================
@@ -133,6 +142,7 @@ adminRouter.post(
     const pubUser = formatPublicUser(created);
     const roleLabel = (ROLE_DEFINITIONS as any)[pubUser.role]?.label || pubUser.role;
     const delivery = await sendWelcomeUserEmail({
+      companyId: tenantOf(caller),
       toEmail: cleanEmail,
       recipientName: created.name,
       roleLabel,
@@ -165,7 +175,7 @@ adminRouter.put(
     if (!existing) {
       throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
     }
-    if (caller.id !== 1 && caller.companyId && existing.companyId && existing.companyId !== caller.companyId) {
+    if (caller.id !== 1 && (existing.companyId ?? 1) !== tenantOf(caller)) {
       throw new AppError(403, 'Accès non autorisé à cet utilisateur', 'FORBIDDEN');
     }
 
@@ -215,7 +225,7 @@ adminRouter.delete(
     if (!existing) {
       throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
     }
-    if (caller.id !== 1 && caller.companyId && existing.companyId && existing.companyId !== caller.companyId) {
+    if (caller.id !== 1 && (existing.companyId ?? 1) !== tenantOf(caller)) {
       throw new AppError(403, 'Accès non autorisé à cet utilisateur', 'FORBIDDEN');
     }
     await prisma.user.delete({ where: { id } });
@@ -588,20 +598,9 @@ adminRouter.get(
     if (!caller.isAdmin) {
       throw new AppError(403, 'Accès réservé aux administrateurs', 'FORBIDDEN');
     }
-    const cfg = await getActiveSmtpConfig();
-    const logs = await getEmailLogs();
-    res.json({
-      config: {
-        host: cfg.host,
-        port: cfg.port,
-        secure: cfg.secure,
-        user: cfg.user,
-        fromName: cfg.fromName,
-        hasPassword: Boolean(cfg.pass && cfg.pass.trim().length > 0),
-        updatedAt: cfg.updatedAt,
-      },
-      logs,
-    });
+    const companyId = tenantOf(caller);
+    const [config, logs] = await Promise.all([getPublicMailConfig(companyId), getEmailLogs(companyId)]);
+    res.json({ config, logs });
   })
 );
 
@@ -612,18 +611,32 @@ adminRouter.put(
     if (!caller.isAdmin) {
       throw new AppError(403, 'Modification SMTP réservée aux administrateurs', 'FORBIDDEN');
     }
-    const saved = await saveSmtpConfigToDb(req.body || {});
+    const companyId = tenantOf(caller);
+    try {
+      await saveCompanyMailSettings(companyId, req.body || {});
+    } catch (e: any) {
+      throw new AppError(400, e?.message || 'Configuration SMTP invalide', 'INVALID_SMTP_CONFIG');
+    }
     res.json({
-      config: {
-        host: saved.host,
-        port: saved.port,
-        secure: saved.secure,
-        user: saved.user,
-        fromName: saved.fromName,
-        hasPassword: Boolean(saved.pass && saved.pass.trim().length > 0),
-        updatedAt: saved.updatedAt,
-      },
-      message: 'Configuration SMTP enregistrée avec succès',
+      config: await getPublicMailConfig(companyId),
+      message: 'Boîte d’envoi de votre entreprise enregistrée. Envoyez un e-mail de test pour la valider.',
+    });
+  })
+);
+
+// Retour à l'expéditeur plateforme
+adminRouter.delete(
+  '/smtp-config',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Modification SMTP réservée aux administrateurs', 'FORBIDDEN');
+    }
+    const companyId = tenantOf(caller);
+    await deleteCompanyMailSettings(companyId);
+    res.json({
+      config: await getPublicMailConfig(companyId),
+      message: 'Boîte d’envoi propre supprimée : les e-mails repartent via l’expéditeur plateforme.',
     });
   })
 );
@@ -639,16 +652,254 @@ adminRouter.post(
     if (!toEmail || !toEmail.includes('@')) {
       throw new AppError(400, 'Adresse e-mail de test valide requise', 'VALIDATION_ERROR');
     }
-    const result = await verifyAndTestSmtpConfig(toEmail);
-    const logs = await getEmailLogs();
+    const companyId = tenantOf(caller);
+    const result = await verifyAndTestSmtpConfig(companyId, toEmail);
+    const logs = await getEmailLogs(companyId);
     res.json({
       ...result,
       logs,
-      message:
-        result.delivery.channel === 'SMTP_PRODUCTION'
-          ? `E-mail de test envoyé avec succès via ${result.delivery.hostUsed} à ${toEmail}`
-          : `E-mail de test généré via le relais de prévisualisation pour ${toEmail}`,
+      message: result.delivery.sent
+        ? `E-mail de test envoyé depuis ${result.delivery.fromAddress || 'la boîte configurée'} à ${toEmail}`
+        : `Échec de l'envoi : ${result.delivery.error || 'erreur inconnue'}`,
     });
+  })
+);
+
+// ============================================================================
+// 5. INVITATIONS PAR E-MAIL (profils habilités à gérer les utilisateurs uniquement)
+// ============================================================================
+
+const INVITATION_TTL_DAYS = 7;
+const INVITATION_RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_PENDING_INVITATIONS = 50;
+
+const InvitationSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Adresse e-mail invalide').max(254),
+  role: z.string().trim().min(1),
+  technicienNom: z.string().trim().max(100).optional().nullable(),
+  permissions: z.record(z.boolean()).optional().nullable(),
+});
+
+function hashInvitationToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function publicInvitation(i: {
+  id: number;
+  email: string;
+  role: string;
+  technicienNom: string | null;
+  invitedByName: string | null;
+  expiresAt: Date;
+  lastSentAt: Date | null;
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}) {
+  const status = i.acceptedAt ? 'ACCEPTEE' : i.revokedAt ? 'REVOQUEE' : i.expiresAt.getTime() < Date.now() ? 'EXPIREE' : 'EN_ATTENTE';
+  return {
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    roleLabel: (ROLE_DEFINITIONS as any)[i.role]?.label || i.role,
+    technicienNom: i.technicienNom,
+    invitedByName: i.invitedByName,
+    expiresAt: i.expiresAt.toISOString(),
+    lastSentAt: i.lastSentAt ? i.lastSentAt.toISOString() : null,
+    acceptedAt: i.acceptedAt ? i.acceptedAt.toISOString() : null,
+    revokedAt: i.revokedAt ? i.revokedAt.toISOString() : null,
+    createdAt: i.createdAt.toISOString(),
+    status,
+  };
+}
+
+/** Émet un nouveau jeton, met à jour l'invitation et envoie l'e-mail depuis la boîte de l'entreprise. */
+async function issueAndSendInvitation(
+  caller: Awaited<ReturnType<typeof getCallerUser>>,
+  invitationId: number
+) {
+  const companyId = tenantOf(caller);
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const updated = await prisma.companyInvitation.update({
+    where: { id: invitationId },
+    data: { tokenHash: hashInvitationToken(token), expiresAt, lastSentAt: new Date() },
+  });
+  const company = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
+  const inviteLink = `${APP_URL}/invitation?token=${encodeURIComponent(token)}`;
+  const delivery = await sendInvitationEmail({
+    companyId,
+    companyName: company?.name || 'votre entreprise',
+    toEmail: updated.email,
+    inviterName: caller.name,
+    inviterEmail: caller.email,
+    roleLabel: (ROLE_DEFINITIONS as any)[updated.role]?.label || updated.role,
+    inviteLink,
+    expiresAt,
+  });
+  return { invitation: updated, delivery, inviteLink };
+}
+
+adminRouter.get(
+  '/invitations',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Accès réservé aux profils habilités à gérer les utilisateurs', 'FORBIDDEN');
+    }
+    const rows = await prisma.companyInvitation.findMany({
+      where: { companyId: tenantOf(caller) },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json({ data: rows.map(publicInvitation) });
+  })
+);
+
+adminRouter.post(
+  '/invitations',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Seuls les profils habilités à gérer les utilisateurs peuvent inviter', 'FORBIDDEN');
+    }
+    const parsed = InvitationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError(400, parsed.error.issues[0]?.message || 'Invitation invalide', 'VALIDATION_ERROR');
+    }
+    const { email, technicienNom, permissions } = parsed.data;
+    const role = parsed.data.role.toUpperCase();
+    const roleDef = (ROLE_DEFINITIONS as any)[role];
+    if (!roleDef) {
+      throw new AppError(400, 'Profil inconnu', 'INVALID_ROLE');
+    }
+    // Pas d'escalade : seul un administrateur peut inviter un autre administrateur
+    if (role === 'ADMIN' && caller.effectiveRole !== 'ADMIN') {
+      throw new AppError(403, 'Seul un administrateur peut inviter un autre administrateur', 'FORBIDDEN');
+    }
+
+    // Droits personnalisés : uniquement des booléens sur des droits existants ; canManageUsers réservé aux administrateurs
+    let permissionsJson: string | null = null;
+    if (permissions) {
+      const allowed = Object.keys(roleDef.defaultPermissions);
+      const clean: Record<string, boolean> = {};
+      for (const k of allowed) {
+        if (typeof permissions[k] === 'boolean') clean[k] = permissions[k];
+      }
+      if (caller.effectiveRole !== 'ADMIN') delete clean.canManageUsers;
+      permissionsJson = Object.keys(clean).length ? JSON.stringify(clean) : null;
+    }
+
+    const companyId = tenantOf(caller);
+    const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existingUser) {
+      throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail', 'EMAIL_EXISTS');
+    }
+
+    const pending = await prisma.companyInvitation.findMany({
+      where: { companyId, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true, email: true },
+    });
+    let target = pending.find((p) => p.email.toLowerCase() === email);
+    if (!target && pending.length >= MAX_PENDING_INVITATIONS) {
+      throw new AppError(429, 'Trop d’invitations en attente : révoquez-en avant d’en créer de nouvelles', 'TOO_MANY_INVITATIONS');
+    }
+
+    // Une invitation expirée occupe l'index d'unicité : on la remplace
+    await prisma.companyInvitation.updateMany({
+      where: { companyId, email, acceptedAt: null, revokedAt: null, expiresAt: { lte: new Date() } },
+      data: { revokedAt: new Date() },
+    });
+
+    let invitationId: number;
+    if (target) {
+      invitationId = target.id;
+      await prisma.companyInvitation.update({
+        where: { id: target.id },
+        data: {
+          role,
+          technicienNom: technicienNom ? technicienNom.trim() : null,
+          permissionsJson,
+          invitedById: caller.id,
+          invitedByName: caller.name,
+        },
+      });
+    } else {
+      const created = await prisma.companyInvitation.create({
+        data: {
+          companyId,
+          email,
+          role,
+          technicienNom: technicienNom ? technicienNom.trim() : null,
+          permissionsJson,
+          tokenHash: hashInvitationToken(crypto.randomBytes(32).toString('base64url')),
+          invitedById: caller.id,
+          invitedByName: caller.name,
+          expiresAt: new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000),
+        },
+      });
+      invitationId = created.id;
+    }
+
+    const { invitation, delivery, inviteLink } = await issueAndSendInvitation(caller, invitationId);
+    res.status(201).json({
+      data: publicInvitation(invitation),
+      emailSent: delivery.sent,
+      senderMode: delivery.senderMode || null,
+      fromAddress: delivery.fromAddress || null,
+      // Lien à transmettre à la main uniquement si l'e-mail n'a pas pu partir (réponse réservée à l'administrateur authentifié)
+      inviteLink: delivery.sent ? null : inviteLink,
+      deliveryError: delivery.sent ? null : delivery.error || null,
+      message: delivery.sent
+        ? `Invitation envoyée à ${email}`
+        : `L'e-mail n'a pas pu partir. Copiez le lien d'invitation et transmettez-le vous-même à ${email}.`,
+    });
+  })
+);
+
+adminRouter.post(
+  '/invitations/:id/resend',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Action réservée aux profils habilités', 'FORBIDDEN');
+    }
+    const id = parseInt(req.params.id, 10);
+    const inv = await prisma.companyInvitation.findFirst({ where: { id, companyId: tenantOf(caller) } });
+    if (!inv) throw new AppError(404, 'Invitation introuvable', 'NOT_FOUND');
+    if (inv.acceptedAt || inv.revokedAt) {
+      throw new AppError(409, 'Cette invitation n’est plus active', 'INVITATION_CLOSED');
+    }
+    if (inv.lastSentAt && Date.now() - inv.lastSentAt.getTime() < INVITATION_RESEND_COOLDOWN_MS) {
+      throw new AppError(429, 'Invitation envoyée à l’instant : patientez une minute avant de la renvoyer', 'RESEND_COOLDOWN');
+    }
+    const { invitation, delivery, inviteLink } = await issueAndSendInvitation(caller, inv.id);
+    res.json({
+      data: publicInvitation(invitation),
+      emailSent: delivery.sent,
+      senderMode: delivery.senderMode || null,
+      fromAddress: delivery.fromAddress || null,
+      inviteLink: delivery.sent ? null : inviteLink,
+      deliveryError: delivery.sent ? null : delivery.error || null,
+      message: delivery.sent ? `Invitation renvoyée à ${inv.email}` : 'L’e-mail n’a pas pu partir : transmettez le lien manuellement.',
+    });
+  })
+);
+
+adminRouter.delete(
+  '/invitations/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, 'Action réservée aux profils habilités', 'FORBIDDEN');
+    }
+    const id = parseInt(req.params.id, 10);
+    const result = await prisma.companyInvitation.updateMany({
+      where: { id, companyId: tenantOf(caller), acceptedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count === 0) throw new AppError(404, 'Invitation introuvable ou déjà clôturée', 'NOT_FOUND');
+    res.json({ message: 'Invitation révoquée : le lien ne fonctionne plus.' });
   })
 );
 

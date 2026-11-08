@@ -70,6 +70,8 @@ app.set('io', io);
 
 // Application des limiteurs ciblés
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/invitations', authLimiter);
 app.use('/api', apiLimiter);
 
 app.use('/api/health', healthRouter);

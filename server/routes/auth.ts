@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { getEffectivePermissions } from '../../shared/types.js';
+import { getEffectivePermissions, ROLE_DEFINITIONS } from '../../shared/types.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
@@ -297,6 +297,7 @@ authRouter.post(
     // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com (avec multi-découverte SMTP + relais Supabase + prévisualisation secours)
     const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
     const delivery = await sendConfirmationEmail({
+      companyId,
       toEmail: data.email,
       recipientName: data.name,
       companyName: compName,
@@ -358,6 +359,7 @@ authRouter.post(
 
     const compName = user.company?.name || 'ANELEC GROUPE';
     const delivery = await sendConfirmationEmail({
+      companyId: user.companyId,
       toEmail: user.email,
       recipientName: user.name,
       companyName: compName,
@@ -406,6 +408,7 @@ authRouter.post(
     });
 
     await sendPasswordResetEmail({
+      companyId: user.companyId,
       toEmail: user.email,
       recipientName: user.name,
       resetToken,
@@ -680,6 +683,118 @@ authRouter.post(
   })
 );
 
+
+// ============================================================================
+// INVITATIONS PAR E-MAIL (acceptation publique, jeton à usage unique)
+// ============================================================================
+
+function hashInvitationToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+const INVALID_INVITATION = new AppError(404, 'Invitation invalide, expirée ou déjà utilisée', 'INVALID_INVITATION');
+
+async function findPendingInvitation(rawToken: unknown) {
+  const token = String(rawToken || '').trim();
+  if (token.length < 20 || token.length > 200) return null;
+  const inv = await prisma.companyInvitation.findUnique({
+    where: { tokenHash: hashInvitationToken(token) },
+    include: { company: { select: { id: true, name: true, active: true } } },
+  });
+  if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt.getTime() < Date.now()) return null;
+  if (inv.company.active === false) return null;
+  return inv;
+}
+
+authRouter.get(
+  '/invitations/:token',
+  asyncHandler(async (req: Request, res: Response) => {
+    const inv = await findPendingInvitation(req.params.token);
+    if (!inv) throw INVALID_INVITATION;
+    res.json({
+      email: inv.email,
+      companyName: inv.company.name,
+      role: inv.role,
+      roleLabel: (ROLE_DEFINITIONS as any)[inv.role]?.label || inv.role,
+      invitedByName: inv.invitedByName,
+      expiresAt: inv.expiresAt.toISOString(),
+    });
+  })
+);
+
+const AcceptInvitationSchema = z.object({
+  token: z.string().min(20).max(200),
+  name: z.string().trim().min(1, 'Votre nom est requis').max(100),
+  password: z.string().min(8, 'Mot de passe trop court (min 8 caractères)').max(200),
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Vous devez accepter les conditions d’utilisation' }) }),
+});
+
+authRouter.post(
+  '/invitations/accept',
+  asyncHandler(async (req: Request, res: Response) => {
+    const parsed = AcceptInvitationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError(400, parsed.error.issues[0]?.message || 'Données invalides', 'VALIDATION_ERROR');
+    }
+    const { token, name, password } = parsed.data;
+
+    const inv = await findPendingInvitation(token);
+    if (!inv) throw INVALID_INVITATION;
+
+    const email = inv.email.trim().toLowerCase();
+    const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (taken) {
+      throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous.', 'EMAIL_EXISTS');
+    }
+
+    const role = (ROLE_DEFINITIONS as any)[inv.role] ? inv.role : 'CONDUCTEUR_TRAVAUX';
+    const hashed = await bcrypt.hash(password, 12);
+
+    let created;
+    try {
+      created = await prisma.$transaction(async (tx) => {
+        // Le jeton ne peut servir qu'une fois, même en cas de clics simultanés
+        const claimed = await tx.companyInvitation.updateMany({
+          where: { id: inv.id, acceptedAt: null, revokedAt: null },
+          data: { acceptedAt: new Date() },
+        });
+        if (claimed.count !== 1) throw INVALID_INVITATION;
+        return tx.user.create({
+          data: {
+            email,
+            password: hashed,
+            name,
+            role,
+            technicienNom: role === 'TECHNICIEN' ? inv.technicienNom || name : inv.technicienNom,
+            permissionsJson: inv.permissionsJson,
+            // Rattachement = celui de l'invitation, jamais une valeur fournie par le client
+            companyId: inv.companyId,
+            active: true,
+            // L'invitation est arrivée sur cette boîte mail : l'adresse est prouvée
+            emailConfirmed: true,
+            termsAcceptedAt: new Date(),
+            termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
+          },
+          select: publicUserSelect,
+        });
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous.', 'EMAIL_EXISTS');
+      }
+      throw e;
+    }
+
+    const pub = formatPublicUser(created);
+    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    res.status(201).json({
+      user: pub,
+      accessToken: tokens.accessToken,
+      message: `Bienvenue dans l'espace ${inv.company.name} !`,
+    });
+  })
+);
 
 // ============================================================================
 // CONFIGURATION D'AUTHENTIFICATION PUBLIQUE (GOOGLE CLIENT ID)

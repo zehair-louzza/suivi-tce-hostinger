@@ -956,6 +956,7 @@ devisRouter.post(
     const companyName = devis.company?.name || 'ANELEC GROUPE';
 
     const delivery = await sendDevisProposalEmail({
+      companyId,
       toEmail: validEmails.join(', '),
       ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
       subject,

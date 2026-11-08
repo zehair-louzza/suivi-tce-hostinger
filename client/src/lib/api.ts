@@ -285,7 +285,62 @@ export const referentielsApi = {
     }>('/referentiels/gps-position', payload),
 };
 
+export interface CompanyInvitationItem {
+  id: number;
+  email: string;
+  role: string;
+  roleLabel: string;
+  technicienNom: string | null;
+  invitedByName: string | null;
+  expiresAt: string;
+  lastSentAt: string | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  status: 'EN_ATTENTE' | 'ACCEPTEE' | 'REVOQUEE' | 'EXPIREE';
+}
+
+export interface InvitationSendResult {
+  data: CompanyInvitationItem;
+  emailSent: boolean;
+  senderMode: 'COMPANY_MAILBOX' | 'PLATFORM' | null;
+  fromAddress: string | null;
+  inviteLink: string | null;
+  deliveryError: string | null;
+  message: string;
+}
+
+export interface MailConfigView {
+  configured: boolean;
+  enabled: boolean;
+  ownMailbox: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  fromName: string;
+  replyTo: string;
+  hasPassword: boolean;
+  lastTestAt: string | null;
+  lastTestOk: boolean | null;
+  lastError: string | null;
+  updatedAt?: string;
+  mainEmail: string | null;
+  companyName: string;
+}
+
 export const authApi = {
+  getInvitation: (token: string) =>
+    api.get<{
+      email: string;
+      companyName: string;
+      role: string;
+      roleLabel: string;
+      invitedByName: string | null;
+      expiresAt: string;
+    }>(`/auth/invitations/${encodeURIComponent(token)}`),
+  acceptInvitation: (payload: { token: string; name: string; password: string; acceptTerms: true }) =>
+    api.post<{ user: User; accessToken: string; message: string }>('/auth/invitations/accept', payload),
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
   register: (name: string, email: string, password: string) =>
     api.post('/auth/register', { name, email, password }),
@@ -302,9 +357,6 @@ export const authApi = {
     api.post<{
       message: string;
       emailSent?: boolean;
-      deliveryChannel?: string;
-      previewUrl?: string | null;
-      resetLink?: string | null;
     }>('/auth/forgot-password', { email }),
   resetPassword: (token: string, password: string) =>
     api.post<{ user: User; accessToken: string; message: string }>('/auth/reset-password', {
@@ -382,19 +434,7 @@ export const adminApi = {
   }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-out', payload),
   destroyCompany: (payload: { password: string; confirmPhrase?: string }) =>
     api.delete<{ message: string; destroyedCompanyId: number }>('/admin/company/destroy', { data: payload }),
-  getSmtpStatus: () =>
-    api.get<{
-      config: {
-        host: string;
-        port: number;
-        secure: boolean;
-        user: string;
-        fromName: string;
-        hasPassword: boolean;
-        updatedAt?: string;
-      };
-      logs: any[];
-    }>('/admin/smtp-status'),
+  getSmtpStatus: () => api.get<{ config: MailConfigView; logs: any[] }>('/admin/smtp-status'),
   updateSmtpConfig: (payload: {
     host: string;
     port: number;
@@ -402,21 +442,34 @@ export const adminApi = {
     user: string;
     pass?: string;
     fromName?: string;
-  }) => api.put<{ config: any; message: string }>('/admin/smtp-config', payload),
+    replyTo?: string;
+    enabled?: boolean;
+  }) => api.put<{ config: MailConfigView; message: string }>('/admin/smtp-config', payload),
+  resetSmtpConfig: () => api.delete<{ config: MailConfigView; message: string }>('/admin/smtp-config'),
   testSmtpEmail: (toEmail: string) =>
     api.post<{
-      config: any;
+      config: MailConfigView;
       delivery: {
         sent: boolean;
         channel: string;
+        senderMode?: 'COMPANY_MAILBOX' | 'PLATFORM';
+        fromAddress?: string;
         hostUsed?: string;
-        previewUrl?: string;
         error?: string;
         timestamp: string;
       };
       logs: any[];
       message: string;
     }>('/admin/smtp-test', { toEmail }),
+  listInvitations: () => api.get<{ data: CompanyInvitationItem[] }>('/admin/invitations'),
+  createInvitation: (payload: {
+    email: string;
+    role: string;
+    technicienNom?: string | null;
+    permissions?: Partial<UserPermissions> | null;
+  }) => api.post<InvitationSendResult>('/admin/invitations', payload),
+  resendInvitation: (id: number) => api.post<InvitationSendResult>(`/admin/invitations/${id}/resend`),
+  revokeInvitation: (id: number) => api.delete<{ message: string }>(`/admin/invitations/${id}`),
 };
 
 export const healthApi = {
