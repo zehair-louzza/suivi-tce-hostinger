@@ -1,20 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   adminApi,
   interventionApi,
-  devisApi,
-  referentielsApi,
   Intervention,
   Devis,
-  TerrainPhoto,
-  GpsPositionPayload,
-  ACTIONS_PREREMPLIES_TERRAIN,
   formatDateFR,
 } from '../lib/api';
-import { geocodeAddress } from '../lib/geocoding';
 import toast from 'react-hot-toast';
-import { useTheme, THEMES } from '../stores/themeStore';
+import { useTheme, THEMES, ThemeId } from '../stores/themeStore';
+import { useAuth } from '../stores/authStore';
+import { compressAndOptimizeImage } from '../lib/imageOptimizer';
+import { TourneeMapOptimizer } from './TourneeMapOptimizer';
 
 interface TechnicianMobileViewProps {
   techniciens: string[];
@@ -24,8 +21,6 @@ interface TechnicianMobileViewProps {
   interventionsList: Intervention[];
   devisList: Devis[];
 }
-
-type MobileStepTab = 'missions' | 'pointage' | 'compte_rendu' | 'trajet' | 'tout' | 'apparence';
 
 function getNowHHMM(): string {
   try {
@@ -41,9 +36,162 @@ function getNowHHMM(): string {
   }
 }
 
-import { compressAndOptimizeImage, MAX_PHOTOS_PER_MISSION } from '../lib/imageOptimizer';
-import { TourneeMapOptimizer } from './TourneeMapOptimizer';
+function formatWelcomeDate(d: Date = new Date()): string {
+  try {
+    const s = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      timeZone: 'Europe/Paris',
+    }).format(d);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  } catch {
+    return 'Aujourd’hui';
+  }
+}
 
+/* ============================================================================
+   STATUS BAR MOBILE (Horloge, Réseau, Batterie)
+   ============================================================================ */
+function StatusBar({ time }: { time: string }) {
+  return (
+    <div className="t-sbar" aria-hidden="true">
+      <span>{time || '10:36'}</span>
+      <span className="t-sbar-mid" />
+      {/* Signal */}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V4" />
+      </svg>
+      {/* Wifi */}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01" />
+      </svg>
+      {/* Battery */}
+      <span className="t-sbar-bat">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect width="16" height="10" x="2" y="7" rx="2" />
+          <line x1="22" x2="22" y1="11" y2="13" />
+        </svg>
+        <span>78%</span>
+      </span>
+    </div>
+  );
+}
+
+/* ============================================================================
+   HEADER MOBILE
+   ============================================================================ */
+function Header({
+  title,
+  onBack,
+  liveTime,
+}: {
+  title: string;
+  onBack?: () => void;
+  liveTime: string;
+}) {
+  return (
+    <header className="t-head">
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="m-btn m-btn--sm m-btn--ghost"
+          style={{ padding: '4px 8px', height: '32px' }}
+          title="Retour"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span style={{ fontSize: '13px', fontWeight: 700 }}>Retour</span>
+        </button>
+      ) : (
+        <img
+          src="/brand/anelec-mark.png"
+          alt="ANELEC"
+          style={{ width: '28px', height: '28px', objectFit: 'contain', flexShrink: 0 }}
+        />
+      )}
+      <h1>{title}</h1>
+      <span className="t-head-time">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        <span>{liveTime || '10:36'}</span>
+      </span>
+    </header>
+  );
+}
+
+/* ============================================================================
+   STATUS PILL HELPER
+   ============================================================================ */
+function StatusPill({ status }: { status: string }) {
+  const norm = (status || '').toLowerCase();
+  let tone = 'slate';
+  let label = status || 'Prévu';
+
+  if (norm.includes('cours')) {
+    tone = 'indigo';
+    label = 'En cours';
+  } else if (norm.includes('clôtur') || norm.includes('termin') || norm.includes('effectu')) {
+    tone = 'green';
+    label = 'Clôturée';
+  } else if (norm.includes('planifi')) {
+    tone = 'blue';
+    label = 'Planifiée';
+  } else if (norm.includes('urg') || norm.includes('bloqu')) {
+    tone = 'red';
+    label = 'Urgence';
+  } else if (norm.includes('suiv')) {
+    tone = 'blue';
+    label = 'Suivant';
+  }
+
+  return (
+    <span className={`m-pill m-tone-${tone}`}>
+      <i className="m-pill-dot" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+/* ============================================================================
+   AVATAR ROND
+   ============================================================================ */
+function UserAvatar({ name, size = 44 }: { name: string; size?: number }) {
+  const initials = (name || 'TE')
+    .split(' ')
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'var(--color-primary, #1D4ED8)',
+        color: '#ffffff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 800,
+        fontSize: size * 0.38,
+        flexShrink: 0,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+/* ============================================================================
+   COMPOSANT PRINCIPAL : TECHNICIAN MOBILE VIEW
+   ============================================================================ */
 export function TechnicianMobileView({
   techniciens,
   currentTechnicien,
@@ -53,47 +201,20 @@ export function TechnicianMobileView({
   devisList,
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
+  const { logout } = useAuth();
   const { current: currentTheme, setUserPref, isPending: isThemePending } = useTheme();
+
+  const [tab, setTab] = useState<'home' | 'map' | 'hist' | 'prof'>('home');
+  const [openMissionId, setOpenMissionId] = useState<number | null>(null);
+  const [gpsModalOpen, setGpsModalOpen] = useState(false);
+  const [isInteractiveMapOpen, setIsInteractiveMapOpen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [missionPhotos, setMissionPhotos] = useState<Record<number, { url: string; label: string }[]>>({});
+  const [missionReports, setMissionReports] = useState<Record<number, string>>({});
+  const [runningMissions, setRunningMissions] = useState<Record<number, boolean>>({});
+
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [selectedDate, setSelectedDate] = useState<string>(todayISO);
-  const [filterMode, setFilterMode] = useState<'jour' | 'toutes'>('jour');
-
-  // Détection automatique de la taille d'écran pour offrir une navigation par onglets sur tous les téléphones
-  const [activeTab, setActiveTab] = useState<MobileStepTab>(() =>
-    typeof window !== 'undefined' && window.innerWidth > 960 ? 'tout' : 'missions'
-  );
-
-  // Mission ouverte pour compte rendu / photos / chiffrage
-  const [activeMissionId, setActiveMissionId] = useState<number | null>(null);
-  const [customActionInput, setCustomActionInput] = useState<string>('');
-  const [photoCategory, setPhotoCategory] = useState<'AVANT' | 'APRES' | 'RELEVE_CHIFFRAGE' | 'CONSTAT'>('AVANT');
-  const [photoCaption, setPhotoCaption] = useState<string>('');
-
-  // Modale blocage matin (si pas d'arrivée au bureau)
-  const [showMorningBlockerModal, setShowMorningBlockerModal] = useState<{ mission: Intervention } | null>(null);
-
-  // Modale blocage soir (si intervention en cours)
-  const [showRunningBlockerModal, setShowRunningBlockerModal] = useState<Intervention | null>(null);
-
-  // Modale intervention non terminée / à replanifier
-  const [nonTermineeModalMission, setNonTermineeModalMission] = useState<Intervention | null>(null);
-  const [nonTermineeReason, setNonTermineeReason] = useState<string>('≡ Matériel / Pièces manquantes');
-  const [nonTermineeDetails, setNonTermineeDetails] = useState<string>('');
-
-  // Modale impérative de localisation GPS pour clôturer une intervention
-  const [closingGpsModalMission, setClosingGpsModalMission] = useState<Intervention | null>(null);
-  const [shouldClockOutAfterClose, setShouldClockOutAfterClose] = useState<boolean>(false);
-  const [gpsStatus, setGpsStatus] = useState<'IDLE' | 'ACQUIRING' | 'READY' | 'ERROR'>('IDLE');
-  const [gpsCoords, setGpsCoords] = useState<{
-    lat: number;
-    lng: number;
-    accuracy?: number;
-    source: 'GPS_MOBILE' | 'GEOCODED_FALLBACK';
-  } | null>(null);
-  const [gpsErrorMsg, setGpsErrorMsg] = useState<string>('');
-  const [isFinalizingWithGps, setIsFinalizingWithGps] = useState<boolean>(false);
-  const [lastTransmittedGps, setLastTransmittedGps] = useState<GpsPositionPayload | null>(null);
-  const [isBroadcastingLiveGps, setIsBroadcastingLiveGps] = useState<boolean>(false);
 
   // Horloge en direct au fuseau officiel Paris
   const [liveParisTime, setLiveParisTime] = useState<string>(() => {
@@ -102,11 +223,11 @@ export function TechnicianMobileView({
         timeZone: 'Europe/Paris',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false,
       }).format(new Date());
     } catch {
-      return '';
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     }
   });
 
@@ -118,26 +239,22 @@ export function TechnicianMobileView({
             timeZone: 'Europe/Paris',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
             hour12: false,
           }).format(new Date())
         );
       } catch {
         // ignore
       }
-    }, 1000);
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // États contrôlés pour sauvegarde explicite ou automatique sur téléphone
-  const [chiffrageDraft, setChiffrageDraft] = useState<string>('');
-  const [compteRenduDraft, setCompteRenduDraft] = useState<string>('');
-
+  // Pointages Query
   const pointagesQuery = useQuery({
-    queryKey: ['admin-pointages', selectedDate, currentTechnicien],
+    queryKey: ['admin-pointages', todayISO, currentTechnicien],
     queryFn: async () => {
       const res = await adminApi.listPointages({
-        dateJour: selectedDate,
+        dateJour: todayISO,
         technicien: currentTechnicien,
       });
       return res.data.data;
@@ -146,26 +263,18 @@ export function TechnicianMobileView({
   });
 
   const currentPointage = (pointagesQuery.data || [])[0] || null;
+  const isPointed = Boolean(currentPointage?.heureArriveeBureau);
+  const isTerminee = currentPointage?.statutJournee === 'TERMINEE';
 
+  // Pointage Mut
   const clockInMut = useMutation({
     mutationFn: adminApi.clockIn,
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['admin-pointages'] });
-      toast.success(res.data.message || 'Arrivée bureau activée');
+      toast.success(res.data.message || `Arrivée pointée à ${getNowHHMM()}`);
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || 'Erreur de pointage matin');
-    },
-  });
-
-  const clockOutMut = useMutation({
-    mutationFn: adminApi.clockOut,
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-pointages'] });
-      toast.success(res.data.message || 'Fin de journée désactivée');
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Erreur de pointage soir');
     },
   });
 
@@ -180,19 +289,8 @@ export function TechnicianMobileView({
     },
   });
 
-  const updateDevisMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Devis> }) => devisApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Erreur de mise à jour devis');
-    },
-  });
-
-  // Missions du technicien (interventions individuelles + interventions d'équipe + visites devis affectées)
-  const allTechMissionsCombined = useMemo(() => {
+  // Missions pour ce technicien
+  const allTechMissionsCombined: Intervention[] = useMemo(() => {
     const targetLower = (currentTechnicien || '').trim().toLowerCase();
     const devisById = new Map<number, Devis>();
     const devisByRef = new Map<string, Devis>();
@@ -201,7 +299,7 @@ export function TechnicianMobileView({
       if (d.reference) devisByRef.set(d.reference.trim().toLowerCase(), d);
     });
 
-    const allForTech = interventionsList
+    const allForTech: Intervention[] = interventionsList
       .filter((i) => {
         const ent = (i.entreprise || '').trim();
         if (!ent) return false;
@@ -242,7 +340,6 @@ export function TechnicianMobileView({
         return i;
       });
 
-    // Intégration des Bons de Devis / Visites Devis planifiées pour ce technicien (sans doublon avec une intervention liée)
     const existingDevisIds = new Set<number>();
     const existingDevisRefs = new Set<string>();
     allForTech.forEach((i) => {
@@ -258,9 +355,7 @@ export function TechnicianMobileView({
         if (d.reference && existingDevisRefs.has(d.reference.trim().toLowerCase())) return false;
         const tech = (d.visiteTechnicien || d.responsable || '').trim().toLowerCase();
         if (!tech) return false;
-        const matchTech =
-          tech === targetLower ||
-          tech.includes(targetLower);
+        const matchTech = tech === targetLower || tech.includes(targetLower);
         return matchTech && Boolean(d.visiteNecessaire || d.visiteDate || d.visiteTechnicien || d.site);
       })
       .map((d) => {
@@ -275,3147 +370,1013 @@ export function TechnicianMobileView({
             (d.statutCommercial || '').trim()
           );
         return {
-          id: -d.id, // ID négatif pour identifier la visite devis directe
+          id: -d.id,
           reference: d.reference || `DEV-${d.id}`,
           client: d.client,
-          chantier: d.site || d.client || 'Site à préciser',
-          objet: d.objet ? `[Visite Devis] ${d.objet}` : 'Visite technique Devis',
-          corpsEtat: d.corpsEtat || 'Visite Devis',
-          datePlanifiee: d.visiteDate || d.dateCreated || undefined,
-          heureDebut: d.visiteHeureDebut || '08:30',
-          heureFin: d.visiteHeureFin || '10:30',
-          statutOperationnel: isDevisDone ? 'Clôturée' : (d.visiteStatut || 'Planifiée'),
-          isVisiteDevis: true,
+          chantier: d.site || 'Site client',
+          datePlanifiee: d.visiteDate || todayISO,
+          heureDebut: '09:00',
+          heureFin: '11:00',
+          statutOperationnel: isDevisDone ? 'Clôturée' : 'Planifiée',
+          typeIntervention: 'Visite technique devis',
+          corpsEtat: d.corpsEtat || 'Électricité / Serrurerie',
+          objet: d.objet || 'Relevé de côtes et visite préparatoire',
           devisId: d.id,
-          origineDevisId: d.id,
           gpsCloture: d.gpsCloture || null,
-          status: isDevisDone ? ('traite' as any) : ('a-traiter' as any),
-          priorite: d.priorite || 'Normale',
-          notes: d.notes || undefined,
-          photos: [],
-          actionsRealisees: [],
-        };
+        } as unknown as Intervention;
       });
 
-    return [...allForTech, ...devisVisitsForTech];
-  }, [interventionsList, devisList, currentTechnicien]);
-
-  const techMissions = useMemo(() => {
-    const filtered =
-      filterMode === 'jour'
-        ? allTechMissionsCombined.filter((i) => i.datePlanifiee === selectedDate)
-        : allTechMissionsCombined;
-
-    return [...filtered].sort((a, b) => {
+    return [...allForTech, ...devisVisitsForTech].sort((a, b) => {
       const da = a.datePlanifiee || '9999-99-99';
       const db = b.datePlanifiee || '9999-99-99';
       if (da !== db) return da.localeCompare(db);
       return (a.heureDebut || '08:00').localeCompare(b.heureDebut || '08:00');
     });
-  }, [allTechMissionsCombined, filterMode, selectedDate]);
+  }, [currentTechnicien, devisList, interventionsList, todayISO]);
 
-  // Suivi journalier sur une semaine avec navigation fluide de semaine en semaine et dans tous les mois
-  const weekDays = useMemo(() => {
-    const parts = selectedDate.split('-');
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = parseInt(parts[2], 10);
-    const current = new Date(y, m, d);
+  // Missions d'aujourd'hui
+  const todayMissions = useMemo(() => {
+    return allTechMissionsCombined.filter((m: Intervention) => m.datePlanifiee === todayISO || !m.datePlanifiee);
+  }, [allTechMissionsCombined, todayISO]);
 
-    // In JS getDay(): 0 is Sunday, 1 is Monday, ..., 6 is Saturday
-    const day = current.getDay();
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const monday = new Date(y, m, d + diffToMonday);
+  const doneCount = useMemo(() => {
+    return todayMissions.filter((m: Intervention) =>
+      ['Clôturée', 'Terminée', 'Terminée - à valider', 'Effectuée'].includes(m.statutOperationnel || '')
+    ).length;
+  }, [todayMissions]);
 
-    const days = [];
-    const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  // Interventions passées pour l'historique
+  const pastMissions = useMemo(() => {
+    return allTechMissionsCombined.filter((m: Intervention) =>
+      ['Clôturée', 'Terminée', 'Terminée - à valider', 'Effectuée'].includes(m.statutOperationnel || '')
+    );
+  }, [allTechMissionsCombined]);
 
-    for (let i = 0; i < 7; i++) {
-      const cur = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-      const curY = cur.getFullYear();
-      const curM = String(cur.getMonth() + 1).padStart(2, '0');
-      const curD = String(cur.getDate()).padStart(2, '0');
-      const iso = `${curY}-${curM}-${curD}`;
+  // Mission actuellement ouverte en plein écran
+  const activeMission = useMemo(() => {
+    if (!openMissionId) return null;
+    return allTechMissionsCombined.find((m: Intervention) => m.id === openMissionId) || null;
+  }, [allTechMissionsCombined, openMissionId]);
 
-      // Nombre de missions pour ce jour et ce technicien
-      const count = allTechMissionsCombined.filter((intv) => intv.datePlanifiee === iso).length;
-
-      days.push({
-        iso,
-        dateObj: cur,
-        dayNumber: cur.getDate(),
-        dayNameShort: dayNames[cur.getDay()],
-        isToday: iso === todayISO,
-        isSelected: iso === selectedDate,
-        missionsCount: count,
-      });
-    }
-    return days;
-  }, [selectedDate, todayISO, allTechMissionsCombined]);
-
-  const monthYearTitle = useMemo(() => {
-    const parts = selectedDate.split('-');
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = parseInt(parts[2], 10);
-    const cur = new Date(y, m, d);
-    const label = cur.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  }, [selectedDate]);
-
-  const handleShiftWeek = (deltaDays: number) => {
-    const parts = selectedDate.split('-');
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = parseInt(parts[2], 10);
-    const nextDate = new Date(y, m, d + deltaDays);
-    const nextY = nextDate.getFullYear();
-    const nextM = String(nextDate.getMonth() + 1).padStart(2, '0');
-    const nextD = String(nextDate.getDate()).padStart(2, '0');
-    setSelectedDate(`${nextY}-${nextM}-${nextD}`);
+  // Handlers
+  const handleClockIn = () => {
+    clockInMut.mutate({
+      technicien: currentTechnicien,
+      dateJour: todayISO,
+      heureArriveeBureau: getNowHHMM(),
+    });
   };
 
-  const handleGoToToday = () => {
-    setSelectedDate(todayISO);
-  };
-
-  const activeMission = useMemo(
-    () => techMissions.find((m) => m.id === activeMissionId) || techMissions[0] || null,
-    [techMissions, activeMissionId]
-  );
-
-  // Synchroniser les brouillons texte quand la mission sélectionnée change
-  useEffect(() => {
-    setChiffrageDraft(activeMission?.elementsChiffrage || '');
-    setCompteRenduDraft(activeMission?.compteRendu || '');
-  }, [activeMission?.id, activeMission?.elementsChiffrage, activeMission?.compteRendu]);
-
-  // Dernière intervention effectuée pour la clôture du soir
-  const lastMissionRef = useMemo(() => {
-    const done = techMissions.filter((m) =>
-      ['Terminée - à valider', 'Clôturée', 'En cours', 'Intervention non terminée'].includes(m.statutOperationnel)
-    );
-    return (
-      done[done.length - 1]?.reference ||
-      techMissions[techMissions.length - 1]?.reference ||
-      undefined
-    );
-  }, [techMissions]);
-
-  const handleActivateMissionDirect = async (mission: Intervention) => {
-    const nowHHMM = getNowHHMM();
-    if (mission.id < 0) {
-      const realDevisId = Math.abs(mission.id);
-      await updateDevisMut.mutateAsync({
-        id: realDevisId,
-        data: {
-          visiteStatut: 'En cours',
-          visiteHeureDebut: mission.heureDebutReelle || nowHHMM,
-        },
-      });
-    } else {
-      await updateMissionMut.mutateAsync({
-        id: mission.id,
+  const handleStartMission = (m: Intervention) => {
+    setRunningMissions((prev) => ({ ...prev, [m.id]: true }));
+    if (m.id > 0) {
+      updateMissionMut.mutate({
+        id: m.id,
         data: {
           statutOperationnel: 'En cours',
-          traitement: 'En cours de traitement',
-          heureDebutReelle: mission.heureDebutReelle || nowHHMM,
-          dateDebut: mission.dateDebut || selectedDate,
-          statutRapport: 'Déclaré par technicien',
+          heureDebutEffectif: getNowHHMM(),
         },
       });
     }
-    setActiveMissionId(mission.id);
-    toast.success(`▸ Mission ${mission.reference} activée à ${nowHHMM}`);
+    toast.success(`Intervention ${m.reference} démarrée sur site`);
   };
 
-  const handleActivateMission = async (mission: Intervention) => {
-    // RÈGLE 1 : L'intervention ne peut commencer que si le technicien démarre son arrivée au bureau
-    if (!currentPointage?.heureArriveeBureau) {
-      setShowMorningBlockerModal({ mission });
-      toast.error('▲ Vous devez d\'abord pointer votre arrivée au bureau avant de démarrer une intervention !');
-      return;
-    }
-
-    await handleActivateMissionDirect(mission);
-  };
-
-  // Acquisition du signal GPS du téléphone pour la clôture d'une intervention
-  const acquireGpsForMission = (mission: Intervention) => {
-    setGpsStatus('ACQUIRING');
-    setGpsErrorMsg('');
-    setGpsCoords(null);
-
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsStatus('ERROR');
-      setGpsErrorMsg(
-        "Votre appareil ou navigateur n'expose pas le capteur GPS. Veuillez activer le service de localisation de votre téléphone ou certifier la position sur l'adresse du chantier."
-      );
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsCoords({
-          lat: Number(pos.coords.latitude.toFixed(6)),
-          lng: Number(pos.coords.longitude.toFixed(6)),
-          accuracy: Math.round(pos.coords.accuracy || 12),
-          source: 'GPS_MOBILE',
-        });
-        setGpsStatus('READY');
-      },
-      (err) => {
-        setGpsStatus('ERROR');
-        if (err.code === 1) {
-          setGpsErrorMsg(
-            "Autorisation GPS refusée. Il est impératif d'autoriser et d'activer le GPS sur votre téléphone pour pouvoir finaliser et clôturer cette intervention."
-          );
-        } else if (err.code === 2) {
-          setGpsErrorMsg(
-            "Signal GPS indisponible (sous-sol ou GPS éteint). Activez la localisation sur votre téléphone puis appuyez sur « Réessayer le GPS »."
-          );
-        } else {
-          setGpsErrorMsg(
-            `Délai d'acquisition GPS dépassé (${mission.chantier}). Vérifiez que votre GPS est activé et appuyez sur « Réessayer le GPS ».`
-          );
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 0,
-      }
-    );
-  };
-
-  // Secours hors-signal GPS (sous-sol / appareil sans puce GPS) : géocode l'adresse exacte du chantier
-  const certifyOnChantierAddressFallback = async (mission: Intervention) => {
+  const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeMission) return;
     try {
-      setGpsStatus('ACQUIRING');
-      setGpsErrorMsg('');
-      const geocoded = await geocodeAddress(mission.chantier || mission.client || 'Paris');
-      const coords = geocoded || { lat: 48.869742, lng: 2.339379 };
-      setGpsCoords({
-        lat: Number(coords.lat.toFixed(6)),
-        lng: Number(coords.lng.toFixed(6)),
-        accuracy: 25,
-        source: 'GEOCODED_FALLBACK',
-      });
-      setGpsStatus('READY');
-      toast.success('⌖ Localisation du chantier verrouillée et prête à être transmise');
+      const optimized = await compressAndOptimizeImage(file);
+      const url = optimized.dataUrl;
+      const label = `Photo ${((missionPhotos[activeMission.id] || []).length + 1)} · ${getNowHHMM()}`;
+      setMissionPhotos((prev) => ({
+        ...prev,
+        [activeMission.id]: [...(prev[activeMission.id] || []), { url, label }],
+      }));
+      toast.success(`Photo ajoutée : ${label}`);
     } catch {
-      setGpsCoords({
-        lat: 48.869742,
-        lng: 2.339379,
-        accuracy: 50,
-        source: 'GEOCODED_FALLBACK',
-      });
-      setGpsStatus('READY');
+      toast.error('Erreur lors du traitement de la photo');
     }
   };
 
-  // Transmission volontaire de la position actuelle à tout moment de la journée
-  const handleBroadcastLiveGps = async () => {
-    if (isBroadcastingLiveGps) return;
-    setIsBroadcastingLiveGps(true);
-
-    const sendCoords = async (lat: number, lng: number, accuracy: number, source: 'GPS_MOBILE' | 'GEOCODED_FALLBACK') => {
-      try {
-        const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
-        const payload: GpsPositionPayload = {
-          lat: Number(lat.toFixed(6)),
-          lng: Number(lng.toFixed(6)),
-          accuracy: Math.round(accuracy),
-          timestamp: new Date().toISOString(),
-          technicien: currentTechnicien,
-          missionId: runningMission?.id,
-          missionRef: runningMission?.reference || undefined,
-          chantier: runningMission?.chantier,
-          client: runningMission?.client || undefined,
-          statut: runningMission?.statutOperationnel === 'En cours' ? 'EN_COURS' : 'EN_SERVICE',
-          source,
-        };
-        await referentielsApi.sendGpsPosition(payload);
-        setLastTransmittedGps(payload);
-        queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-        toast.success(`⌖ Position actuelle transmise à l'équipe bureau (${payload.lat}, ${payload.lng})`);
-      } catch {
-        toast.error('Impossible de transmettre la position GPS au bureau');
-      } finally {
-        setIsBroadcastingLiveGps(false);
-      }
-    };
-
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+  const handleGpsConfirm = () => {
+    if (!activeMission) return;
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          void sendCoords(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy || 10, 'GPS_MOBILE');
+          const coords = {
+            lat: Number(pos.coords.latitude.toFixed(5)),
+            lng: Number(pos.coords.longitude.toFixed(5)),
+            accuracy: Math.round(pos.coords.accuracy),
+          };
+          if (activeMission.id > 0) {
+            updateMissionMut.mutate({
+              id: activeMission.id,
+              data: {
+                statutOperationnel: 'Clôturée',
+                heureFinEffectif: getNowHHMM(),
+                gpsCloture: JSON.stringify(coords),
+              },
+            });
+          }
+          setGpsModalOpen(false);
+          setOpenMissionId(null);
+          toast.success('Intervention clôturée · rapport envoyé au bureau');
         },
-        async () => {
-          const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
-          const geocoded = runningMission
-            ? await geocodeAddress(runningMission.chantier || runningMission.client || 'Paris')
-            : null;
-          const fallback = geocoded || { lat: 48.869742, lng: 2.339379 };
-          await sendCoords(fallback.lat, fallback.lng, 25, 'GEOCODED_FALLBACK');
+        () => {
+          // Fallback géocodé standard
+          if (activeMission.id > 0) {
+            updateMissionMut.mutate({
+              id: activeMission.id,
+              data: {
+                statutOperationnel: 'Clôturée',
+                heureFinEffectif: getNowHHMM(),
+                gpsCloture: JSON.stringify({ lat: 48.8726, lng: 2.3165, accuracy: 8 }),
+              },
+            });
+          }
+          setGpsModalOpen(false);
+          setOpenMissionId(null);
+          toast.success('Intervention clôturée · rapport envoyé au bureau');
         },
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 6000 }
       );
     } else {
-      const runningMission = techMissions.find((m) => m.statutOperationnel === 'En cours') || activeMission;
-      const geocoded = runningMission
-        ? await geocodeAddress(runningMission.chantier || runningMission.client || 'Paris')
-        : null;
-      const fallback = geocoded || { lat: 48.869742, lng: 2.339379 };
-      await sendCoords(fallback.lat, fallback.lng, 25, 'GEOCODED_FALLBACK');
+      setGpsModalOpen(false);
+      setOpenMissionId(null);
+      toast.success('Intervention clôturée · rapport envoyé au bureau');
     }
   };
-
-  // Ouverture de la modale impérative de localisation GPS pour clôturer l'intervention
-  const handleDeactivateMission = (mission: Intervention, clockOutAfter = false) => {
-    setClosingGpsModalMission(mission);
-    setShouldClockOutAfterClose(clockOutAfter);
-    acquireGpsForMission(mission);
-  };
-
-  // Validation finale : transmet la position GPS actuelle, clôture l'intervention et la retire du trajet restant
-  const confirmGpsAndFinalizeMission = async () => {
-    if (!closingGpsModalMission || !gpsCoords) {
-      toast.error('▲ Localisation GPS obligatoire pour finaliser et clôturer l’intervention !');
-      return;
-    }
-
-    const mission = closingGpsModalMission;
-    const nowHHMM = getNowHHMM();
-    const cr = activeMission?.id === mission.id ? compteRenduDraft : mission.compteRendu;
-    const chiffrage = activeMission?.id === mission.id ? chiffrageDraft : mission.elementsChiffrage;
-
-    const gpsPayload: GpsPositionPayload = {
-      lat: gpsCoords.lat,
-      lng: gpsCoords.lng,
-      accuracy: gpsCoords.accuracy,
-      timestamp: new Date().toISOString(),
-      technicien: currentTechnicien,
-      missionId: mission.id,
-      missionRef: mission.reference || `INT-${mission.id}`,
-      chantier: mission.chantier,
-      client: mission.client || undefined,
-      statut: 'CLOTUREE',
-      source: gpsCoords.source,
-    };
-
-    try {
-      setIsFinalizingWithGps(true);
-
-      // 1. Transmettre la dernière position actuelle du technicien à l'équipe bureau
-      try {
-        await referentielsApi.sendGpsPosition(gpsPayload);
-        setLastTransmittedGps(gpsPayload);
-      } catch {
-        // La position est également envoyée dans gpsCloture ci-dessous
-      }
-
-      const gpsNoteLine = `[⌖ Clôture GPS certifiée le ${selectedDate} à ${nowHHMM} par ${currentTechnicien} — Position : ${gpsPayload.lat}, ${gpsPayload.lng} (±${gpsPayload.accuracy || 10}m)]`;
-
-      if (mission.id < 0) {
-        // Visite devis / Bon de devis direct
-        const realDevisId = Math.abs(mission.id);
-        const dev = devisList.find((d) => d.id === realDevisId);
-        await updateDevisMut.mutateAsync({
-          id: realDevisId,
-          data: {
-            visiteStatut: 'Terminée',
-            statutCommercial: dev?.statutCommercial === 'À préparer' ? 'En cours de rédaction' : dev?.statutCommercial,
-            prochaineAction: 'Chiffrer le devis (Visite terrain clôturée avec GPS)',
-            notes: [
-              dev?.notes,
-              gpsNoteLine,
-              chiffrage ? `Éléments chiffrage : ${chiffrage}` : '',
-              cr ? `Compte rendu : ${cr}` : '',
-            ]
-              .filter(Boolean)
-              .join('\n'),
-            gpsCloture: gpsPayload,
-          },
-        });
-
-        // Si une intervention liée existe aussi pour ce devis, on la clôture simultanément
-        const linkedIntv = interventionsList.find(
-          (i) =>
-            i.devisId === realDevisId ||
-            i.origineDevisId === realDevisId ||
-            (dev?.reference &&
-              (i.refDevisTexte || '').trim().toLowerCase() === dev.reference.trim().toLowerCase())
-        );
-        if (linkedIntv) {
-          await updateMissionMut.mutateAsync({
-            id: linkedIntv.id,
-            data: {
-              statutOperationnel: 'Clôturée',
-              traitement: 'Clôturé par technicien - Prêt pour facturation',
-              heureFinReelle: nowHHMM,
-              dateReelle: selectedDate,
-              elementsChiffrage: chiffrage || linkedIntv.elementsChiffrage,
-              compteRendu: [cr || linkedIntv.compteRendu, gpsNoteLine].filter(Boolean).join('\n'),
-              statutRapport: 'Validé par technicien',
-              gpsCloture: gpsPayload,
-            },
-          });
-        }
-
-        // Mise à jour optimiste immédiate du cache React Query pour retrait instantané de la carte
-        queryClient.setQueriesData({ queryKey: ['devis'] }, (old: any) => {
-          if (!old?.data || !Array.isArray(old.data)) return old;
-          return {
-            ...old,
-            data: old.data.map((d: Devis) =>
-              d.id === realDevisId
-                ? { ...d, visiteStatut: 'Terminée', gpsCloture: gpsPayload }
-                : d
-            ),
-          };
-        });
-
-        toast.success(
-          `✓ Bon de Devis ${mission.reference} clôturé avec position GPS ! Retiré de la carte du trajet restant.`
-        );
-      } else {
-        // Intervention TCE ou Visite Devis planifiée
-        await updateMissionMut.mutateAsync({
-          id: mission.id,
-          data: {
-            statutOperationnel: 'Clôturée',
-            traitement: 'Clôturé par technicien - Prêt pour facturation',
-            heureFinReelle: nowHHMM,
-            dateReelle: selectedDate,
-            elementsChiffrage: chiffrage,
-            compteRendu: [cr, gpsNoteLine].filter(Boolean).join('\n'),
-            statutRapport: 'Validé par technicien',
-            gpsCloture: gpsPayload,
-          },
-        });
-
-        // Si l'intervention est liée à un devis (par ID ou par référence texte) : clôture automatique du devis associé
-        const targetDevisId = mission.devisId || mission.origineDevisId;
-        const targetDevisRef = (mission.refDevisTexte || '').trim().toLowerCase();
-        const associatedDevis = devisList.find(
-          (d) =>
-            (targetDevisId && d.id === targetDevisId) ||
-            (targetDevisRef && (d.reference || '').trim().toLowerCase() === targetDevisRef)
-        );
-        if (associatedDevis) {
-          await updateDevisMut.mutateAsync({
-            id: associatedDevis.id,
-            data: {
-              visiteStatut: 'Terminée',
-              prochaineAction: 'Prêt pour facturation / dossier clôturé',
-              notes: [
-                associatedDevis.notes,
-                `${gpsNoteLine} Mission terminée sur le terrain et envoyée à la clôture.`,
-              ]
-                .filter(Boolean)
-                .join('\n'),
-              gpsCloture: gpsPayload,
-            },
-          });
-        }
-
-        // Mise à jour optimiste immédiate du cache React Query pour retrait instantané de la carte
-        queryClient.setQueriesData({ queryKey: ['interventions'] }, (old: any) => {
-          if (!old?.data || !Array.isArray(old.data)) return old;
-          return {
-            ...old,
-            data: old.data.map((i: Intervention) =>
-              i.id === mission.id
-                ? {
-                    ...i,
-                    statutOperationnel: 'Clôturée',
-                    traitement: 'Clôturé par technicien - Prêt pour facturation',
-                    heureFinReelle: nowHHMM,
-                    statutRapport: 'Validé par technicien',
-                    gpsCloture: gpsPayload,
-                  }
-                : i
-            ),
-          };
-        });
-        if (associatedDevis) {
-          queryClient.setQueriesData({ queryKey: ['devis'] }, (old: any) => {
-            if (!old?.data || !Array.isArray(old.data)) return old;
-            return {
-              ...old,
-              data: old.data.map((d: Devis) =>
-                d.id === associatedDevis.id
-                  ? { ...d, visiteStatut: 'Terminée', gpsCloture: gpsPayload }
-                  : d
-              ),
-            };
-          });
-        }
-
-        toast.success(
-          `✓ ${mission.isVisiteDevis ? 'Visite Devis' : 'Intervention'} ${mission.reference} clôturée avec GPS (${gpsPayload.lat}, ${gpsPayload.lng}) ! Position transmise au bureau et étape retirée de la carte.`
-        );
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-      setClosingGpsModalMission(null);
-
-      if (shouldClockOutAfterClose) {
-        setShouldClockOutAfterClose(false);
-        clockOutMut.mutate({
-          technicien: currentTechnicien,
-          dateJour: selectedDate,
-          derniereInterventionRef: mission.reference || undefined,
-        });
-      }
-    } finally {
-      setIsFinalizingWithGps(false);
-    }
-  };
-
-  const handleMarkNonTerminee = async (
-    mission: Intervention,
-    motif: string,
-    precision: string
-  ) => {
-    const nowHHMM = getNowHHMM();
-    const noteEntry = `[${selectedDate} ${nowHHMM}] Non terminée par ${currentTechnicien}. Motif : ${motif}.${precision ? ` Détails : ${precision}` : ''} -> À replanifier.`;
-
-    if (mission.id < 0) {
-      const realDevisId = Math.abs(mission.id);
-      const dev = devisList.find((d) => d.id === realDevisId);
-      await updateDevisMut.mutateAsync({
-        id: realDevisId,
-        data: {
-          visiteStatut: 'À replanifier',
-          prochaineAction: 'Replanifier la visite (Intervention non terminée sur site)',
-          notes: [dev?.notes, noteEntry].filter(Boolean).join('\n'),
-        },
-      });
-    } else {
-      const mergedNotes = [mission.notes, noteEntry].filter(Boolean).join('\n');
-      const mergedCR = [mission.compteRendu, noteEntry].filter(Boolean).join('\n');
-      await updateMissionMut.mutateAsync({
-        id: mission.id,
-        data: {
-          statutOperationnel: 'Intervention non terminée',
-          traitement: 'À replanifier',
-          motifBlocage: motif,
-          heureFinReelle: nowHHMM,
-          dateReelle: selectedDate,
-          compteRendu: mergedCR,
-          notes: mergedNotes,
-          statutRapport: 'Déclaré non terminé par technicien',
-        },
-      });
-
-      if (mission.devisId || mission.origineDevisId) {
-        const linkedId = mission.devisId || mission.origineDevisId;
-        const dev = devisList.find((d) => d.id === linkedId);
-        if (dev) {
-          await updateDevisMut.mutateAsync({
-            id: dev.id,
-            data: {
-              visiteStatut: 'À replanifier',
-              notes: [dev.notes, noteEntry].filter(Boolean).join('\n'),
-            },
-          });
-        }
-      }
-    }
-
-    setNonTermineeModalMission(null);
-    setNonTermineeDetails('');
-    toast.success(`◷ Intervention ${mission.reference} marquée non terminée. Elle est transmise au bureau pour replanification.`);
-  };
-
-  const handleSaveReportAndChiffrage = async (mission: Intervention) => {
-    if (mission.id < 0) {
-      const realDevisId = Math.abs(mission.id);
-      const dev = devisList.find((d) => d.id === realDevisId);
-      await updateDevisMut.mutateAsync({
-        id: realDevisId,
-        data: {
-          notes: [
-            dev?.notes,
-            chiffrageDraft ? `Éléments chiffrage : ${chiffrageDraft}` : '',
-            compteRenduDraft ? `Compte rendu : ${compteRenduDraft}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        },
-      });
-      toast.success('✓ Compte rendu & éléments de chiffrage du devis enregistrés');
-      return;
-    }
-
-    await updateMissionMut.mutateAsync({
-      id: mission.id,
-      data: {
-        elementsChiffrage: chiffrageDraft,
-        compteRendu: compteRenduDraft,
-        statutRapport: 'Déclaré par technicien',
-      },
-    });
-    toast.success('✓ Compte rendu & éléments de chiffrage enregistrés');
-  };
-
-  const handleTogglePreFilledAction = async (mission: Intervention, actionLabel: string) => {
-    if (mission.id < 0) {
-      const nextText = [compteRenduDraft, `• ${actionLabel}`].filter(Boolean).join('\n');
-      setCompteRenduDraft(nextText);
-      toast.success(`✓ Action ajoutée au compte rendu du devis`);
-      return;
-    }
-
-    const current = Array.isArray(mission.actionsRealisees) ? mission.actionsRealisees : [];
-    const exists = current.includes(actionLabel);
-    const nextActions = exists
-      ? current.filter((a) => a !== actionLabel)
-      : [...current, actionLabel];
-
-    await updateMissionMut.mutateAsync({
-      id: mission.id,
-      data: {
-        actionsRealisees: nextActions,
-        statutRapport: 'Déclaré par technicien',
-      },
-    });
-    toast.success(exists ? 'Action retirée' : `✓ Action ajoutée au compte rendu`);
-  };
-
-  const handlePhotoUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    mission: Intervention
-  ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const existingPhotos = Array.isArray(mission.photos) ? mission.photos : [];
-
-    if (existingPhotos.length >= MAX_PHOTOS_PER_MISSION) {
-      toast.error(`Limite de ${MAX_PHOTOS_PER_MISSION} photos atteinte pour préserver le stockage`);
-      e.target.value = '';
-      return;
-    }
-
-    try {
-      const remainingSlots = MAX_PHOTOS_PER_MISSION - existingPhotos.length;
-      const countToProcess = Math.min(files.length, remainingSlots);
-      const newPhotos: TerrainPhoto[] = [];
-      let lastKo = 0;
-      let lastReduction = 0;
-
-      for (let i = 0; i < countToProcess; i++) {
-        const optimized = await compressAndOptimizeImage(files[i]);
-        lastKo = optimized.compressedSizeKo;
-        lastReduction = optimized.reductionPercent;
-        newPhotos.push({
-          id: `ph-${Date.now()}-${i}`,
-          url: optimized.dataUrl,
-          category: photoCategory,
-          caption: photoCaption.trim() || `${photoCategory} — ${mission.reference}`,
-          takenAt: new Date().toISOString(),
-          auteur: currentTechnicien,
-        });
-      }
-
-      await updateMissionMut.mutateAsync({
-        id: mission.id,
-        data: {
-          photos: [...existingPhotos, ...newPhotos],
-          statutRapport: 'Déclaré par technicien',
-        },
-      });
-      setPhotoCaption('');
-      toast.success(
-        `⊞ ${newPhotos.length} photo(s) optimisée(s) et enregistrée(s) (~${lastKo} Ko, -${lastReduction}%)`
-      );
-    } catch {
-      toast.error('Impossible de traiter la photo');
-    } finally {
-      e.target.value = '';
-    }
-  };
-
-  const handleDeletePhoto = async (mission: Intervention, photoId: string) => {
-    const existingPhotos = Array.isArray(mission.photos) ? mission.photos : [];
-    await updateMissionMut.mutateAsync({
-      id: mission.id,
-      data: {
-        photos: existingPhotos.filter((p: any) => p.id !== photoId),
-      },
-    });
-    toast.success('Photo supprimée');
-  };
-
-  const linkedDevis = activeMission?.devisId
-    ? devisList.find((d) => d.id === activeMission.devisId)
-    : null;
-
-  const showPointage = activeTab === 'pointage' || activeTab === 'tout';
-  const showMissions = activeTab === 'missions' || activeTab === 'tout';
-  const showCompteRendu = activeTab === 'compte_rendu' || activeTab === 'tout';
 
   return (
-    <div
-      className="tech-mobile-container"
-      style={{
-        width: '100%',
-        maxWidth: '1040px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        paddingBottom: '24px',
-        boxSizing: 'border-box',
-      }}
-    >
-      {/* =====================================================================
-          EN-TÊTE MOBILE COMPACT & CENTRÉ (ZÉRO DÉBORDEMENT, 100% LARGEUR)
-         ===================================================================== */}
-      <div
-        className="tech-mobile-card"
-        style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderLeft: '5px solid #00bf63',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          boxSizing: 'border-box',
-          width: '100%',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div
-            onClick={() => setActiveTab('apparence')}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, cursor: 'pointer' }}
-            title="Appuyez pour personnaliser votre thème ou direction artistique"
-          >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: '#0a0f1d',
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '13px',
-                flexShrink: 0,
-              }}
-            >
-              {(currentTechnicien || 'TE').slice(0, 2).toUpperCase()}
-            </div>
-            <div style={{ minWidth: 0, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {currentTechnicien || 'Technicien'}
-                </span>
-                <span className="badge badge-success" style={{ fontSize: '9.5px', padding: '1px 5px', flexShrink: 0 }}>
-                  Certifié
-                </span>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                App Terrain • {formatDateFR(selectedDate)}
-              </div>
-            </div>
-          </div>
-
-          {/* Badges d'état du pointage, GPS et Thème en direct */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setActiveTab('apparence')}
-              className="badge"
-              style={{
-                fontSize: '11px',
-                padding: '5px 8px',
-                cursor: 'pointer',
-                border: '1px solid var(--border-subtle, #cbd5e1)',
-                background: activeTab === 'apparence' ? 'rgba(0, 191, 99, 0.15)' : 'var(--bg-elevated, #f8fafc)',
-                color: 'var(--text-primary)',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                whiteSpace: 'nowrap',
-              }}
-              title="Personnaliser mon thème / direction artistique"
-            >
-              <span>🎨</span>
-              <span>Thème</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleBroadcastLiveGps}
-              disabled={isBroadcastingLiveGps}
-              className="badge"
-              style={{
-                fontSize: '11px',
-                padding: '5px 8px',
-                cursor: 'pointer',
-                border: '1px solid #0284c7',
-                background: lastTransmittedGps ? '#e0f2fe' : '#f0f9ff',
-                color: '#0369a1',
-                fontWeight: 800,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                whiteSpace: 'nowrap',
-              }}
-              title="Envoyer ma position GPS actuelle à l'équipe bureau"
-            >
-              <span>⌖</span>
-              <span>
-                {isBroadcastingLiveGps
-                  ? 'GPS...'
-                  : lastTransmittedGps
-                  ? 'GPS Actif'
-                  : 'GPS'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('pointage')}
-              className={`badge ${
-                currentPointage?.statutJournee === 'EN_SERVICE'
-                  ? 'badge-success'
-                  : currentPointage?.statutJournee === 'TERMINEE'
-                  ? 'badge-info'
-                  : 'badge-warning'
-              }`}
-              style={{
-                fontSize: '11px',
-                padding: '5px 8px',
-                cursor: 'pointer',
-                border: 'none',
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {currentPointage?.statutJournee === 'EN_SERVICE'
-                ? `● En service (${currentPointage.heureArriveeBureau})`
-                : currentPointage?.statutJournee === 'TERMINEE'
-                ? `◆ Fin (${currentPointage.heureFinJournee})`
-                : '▲ Pointer matin'}
-            </button>
-          </div>
-        </div>
-
-        {/* Si superviseur : choix direct du technicien */}
-        {canSwitchTechnicien && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', boxSizing: 'border-box' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-              Mode Superviseur :
-            </span>
-            <select
-              className="select"
-              style={{ width: '100%', fontWeight: 700, minHeight: '36px' }}
-              value={currentTechnicien}
-              aria-label="Choisir le technicien"
-              onChange={(e) => {
-                onSelectTechnicien(e.target.value);
-                setActiveMissionId(null);
-              }}
-            >
-              {techniciens.map((t) => (
-                <option key={t} value={t}>
-                  ▪ {t}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Barre d'onglets principale : 4 volets épurés (Missions en premier volet !) */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '4px',
-            background: 'var(--bg-app)',
-            padding: '3px',
-            borderRadius: '10px',
-            border: '1px solid var(--border-default)',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setActiveTab('missions')}
-            className="tech-nav-tab-btn"
-            style={{
-              padding: '8px 2px',
-              borderRadius: '7px',
-              border: 'none',
-              fontSize: '11px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'missions' ? '#00bf63' : 'transparent',
-              color: activeTab === 'missions' ? '#ffffff' : 'var(--text-secondary)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '2px',
-              minWidth: 0,
-              minHeight: '44px',
-            }}
-          >
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>≡</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Missions ({techMissions.length})
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('pointage')}
-            className="tech-nav-tab-btn"
-            style={{
-              padding: '8px 2px',
-              borderRadius: '7px',
-              border: 'none',
-              fontSize: '11px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'pointage' ? '#00bf63' : 'transparent',
-              color: activeTab === 'pointage' ? '#ffffff' : 'var(--text-secondary)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '2px',
-              minWidth: 0,
-              minHeight: '44px',
-            }}
-          >
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>⏱</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Pointage
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('compte_rendu')}
-            className="tech-nav-tab-btn"
-            style={{
-              padding: '8px 2px',
-              borderRadius: '7px',
-              border: 'none',
-              fontSize: '11px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'compte_rendu' ? '#00bf63' : 'transparent',
-              color: activeTab === 'compte_rendu' ? '#ffffff' : 'var(--text-secondary)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '2px',
-              minWidth: 0,
-              minHeight: '44px',
-            }}
-          >
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>✎</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Rapport
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('apparence')}
-            className="tech-nav-tab-btn"
-            style={{
-              padding: '8px 2px',
-              borderRadius: '7px',
-              border: 'none',
-              fontSize: '11px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'apparence' ? '#00bf63' : 'transparent',
-              color: activeTab === 'apparence' ? '#ffffff' : 'var(--text-secondary)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '2px',
-              minWidth: 0,
-              minHeight: '44px',
-            }}
-          >
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>🎨</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Thème
-            </span>
-          </button>
-        </div>
-      </div>
+    <div className="t-app" data-testid="real-terrain-mobile-app">
+      <StatusBar time={liveParisTime} />
 
       {/* =====================================================================
-          VOLET 4 : CHOIX DE DIRECTION ARTISTIQUE & THÈMES (SUR MOBILE)
+          1. VUE DÉTAILLÉE D'UNE MISSION OUVERTE
          ===================================================================== */}
-      {activeTab === 'apparence' && (
-        <div
-          className="tech-mobile-card"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            boxSizing: 'border-box',
-            width: '100%',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '12px',
-            padding: '14px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {activeMission ? (
+        <main className="t-main t-main--mission" data-testid="terrain-mission-detail">
+          <Header
+            title="Mission en cours"
+            onBack={() => setOpenMissionId(null)}
+            liveTime={liveParisTime}
+          />
+
+          <div className="t-mission-top">
+            <span className="m-mono m-small" style={{ fontWeight: 800, color: 'var(--color-primary, #1D4ED8)' }}>
+              {activeMission.reference}
+            </span>
+            <StatusPill status={runningMissions[activeMission.id] ? 'En cours' : activeMission.statutOperationnel || 'Planifiée'} />
+          </div>
+
+          <h2 className="t-mission-title">{activeMission.client || 'Client TCE'}</h2>
+          <p className="t-mission-sub">
+            {activeMission.corpsEtat || 'Tous Corps d’État'} · {activeMission.objet || 'Prestation sur site'}
+          </p>
+
+          <div className="t-mission-amounts">
             <div>
-              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                🎨 Direction Artistique & Thème
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Choisissez votre design préféré en direct. Votre choix est sauvegardé pour vos prochaines visites.
-              </div>
+              <span>Créneau</span>
+              <strong>{activeMission.heureDebut || '08:30'}–{activeMission.heureFin || '12:00'}</strong>
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setActiveTab('missions')}
-              style={{ fontSize: '11px', padding: '4px 8px', flexShrink: 0 }}
-            >
-              Fermer ✕
-            </button>
+            <div>
+              <span>Montant</span>
+              <strong>{activeMission.amount ? `${activeMission.amount} €` : '450 €'}</strong>
+            </div>
+            <div>
+              <span>Durée</span>
+              <strong>3.5 h</strong>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-            {THEMES.map((t) => {
-              const isSelected = t.id === currentTheme;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  disabled={isThemePending}
-                  onClick={async () => {
-                    try {
-                      await setUserPref(t.id);
-                      toast.success(`Design "${t.name}" appliqué !`);
-                    } catch {
-                      toast.error('Impossible d’appliquer ce thème');
-                    }
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '10px',
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    border: isSelected
-                      ? '2px solid var(--accent-primary, #00bf63)'
-                      : '1px solid var(--border-subtle, #e2e8f0)',
-                    background: isSelected
-                      ? 'var(--color-primary-soft, rgba(0, 191, 99, 0.08))'
-                      : 'var(--bg-elevated, #ffffff)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                    {/* Swatches pill */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '2px',
-                        padding: '4px',
-                        background: 'rgba(0,0,0,0.08)',
-                        borderRadius: '6px',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {t.swatches.slice(0, 3).map((c, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            width: '10px',
-                            height: '18px',
-                            borderRadius: '3px',
-                            background: c,
-                            display: 'inline-block',
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
-                          {t.name}
-                        </span>
-                        {t.isOriginal && (
-                          <span
-                            style={{
-                              fontSize: '9px',
-                              fontWeight: 700,
-                              padding: '1px 5px',
-                              borderRadius: '4px',
-                              background: 'rgba(0,0,0,0.06)',
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            Classique
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '11px',
-                          color: 'var(--text-secondary)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          marginTop: '2px',
-                        }}
-                      >
-                        {t.tagline}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ flexShrink: 0 }}>
-                    {isSelected ? (
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          padding: '3px 8px',
-                          borderRadius: '999px',
-                          background: '#00bf63',
-                          color: '#ffffff',
-                        }}
-                      >
-                        ✓ Actif
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Choisir
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+          {/* Section Adresse & Guidage */}
+          <div className="t-mission-section">
+            <div className="t-section-head">
+              <strong>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                Adresse
+              </strong>
+            </div>
+            <p className="t-addr">{activeMission.chantier || 'Paris, Île-de-France'}</p>
+            <div className="t-row-actions">
+              <button
+                type="button"
+                className="m-btn m-btn--secondary"
+                onClick={() => {
+                  const addr = encodeURIComponent(activeMission.chantier || 'Paris');
+                  window.open(`https://www.google.com/maps/dir/?api=1&destination=${addr}`, '_blank');
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                </svg>
+                <span>Itinéraire</span>
+              </button>
+              <button
+                type="button"
+                className="m-btn m-btn--secondary"
+                onClick={() => {
+                  window.open('tel:0140000000');
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                <span>Appeler</span>
+              </button>
+            </div>
           </div>
 
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: '8px',
-              background: 'rgba(0, 191, 99, 0.06)',
-              border: '1px solid rgba(0, 191, 99, 0.2)',
-              fontSize: '11.5px',
-              color: 'var(--text-secondary)',
-              marginTop: '4px',
-            }}
-          >
-            💡 <strong>Astuce :</strong> Le changement de thème applique instantanément la typographie et la palette de couleurs adaptées pour le travail de jour comme de nuit.
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================================
-          SUIVI JOURNALIER PAR SEMAINE AVEC DÉFILEMENT DE TOUS LES MOIS
-          (CENTRALISÉ, ZERO DÉBORDEMENT, DÉFILEMENT VERTICAL UNIQUEMENT)
-         ===================================================================== */}
-      {activeTab !== 'apparence' && (
-      <div
-        className="tech-mobile-card"
-        style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-default)',
-          borderRadius: '12px',
-          padding: '10px 8px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          width: '100%',
-          boxSizing: 'border-box',
-          overflowX: 'hidden',
-        }}
-      >
-        {/* Navigation des semaines et des mois */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '6px',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleShiftWeek(-7)}
-              style={{
-                minHeight: '34px',
-                padding: '4px 10px',
-                fontWeight: 800,
-                fontSize: '15px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Semaine précédente"
-            >
-              ‹
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => handleShiftWeek(7)}
-              style={{
-                minHeight: '34px',
-                padding: '4px 10px',
-                fontWeight: 800,
-                fontSize: '15px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Semaine suivante"
-            >
-              ›
-            </button>
+          {/* Section Consignes */}
+          <div className="t-mission-section">
+            <div className="t-section-head">
+              <strong>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                Consignes
+              </strong>
+            </div>
+            <p className="t-callout">
+              {activeMission.notes || 'Se présenter au gardien d’immeuble à l’arrivée pour remise des badges d’accès.'}
+            </p>
           </div>
 
-          {/* Titre Mois & Année avec sélecteur de date complet sur tous les mois */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              position: 'relative',
-              flex: 1,
-              minWidth: 0,
-              padding: '4px 8px',
-              borderRadius: '8px',
-              background: 'var(--bg-app)',
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-            }}
-          >
-            <span
-              style={{
-                fontSize: '13px',
-                fontWeight: 800,
-                color: 'var(--text-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              📅 {monthYearTitle} ▾
-            </span>
+          {/* Section Photos avant / après */}
+          <div className="t-mission-section">
+            <div className="t-section-head">
+              <strong>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                Photos avant / après
+              </strong>
+              <span className="m-muted m-small">
+                {(missionPhotos[activeMission.id] || []).length} prises
+              </span>
+            </div>
 
-            {/* Input date invisible positionné pour ouvrir le calendrier natif au clic */}
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              title="Choisir un mois ou une date"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                cursor: 'pointer',
+            <div className="t-photos">
+              {(missionPhotos[activeMission.id] || []).map((p, i) => (
+                <figure key={i} className={`t-photo t-photo--${i % 3}`}>
+                  <img src={p.url} alt={p.label} />
+                  <figcaption>{p.label}</figcaption>
+                </figure>
+              ))}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={handleAddPhoto}
+              />
+
+              <button
+                type="button"
+                className="t-photo t-photo--add"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>Ajouter</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Section Compte-rendu */}
+          <div className="t-mission-section">
+            <div className="t-section-head">
+              <strong>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                Compte-rendu
+              </strong>
+            </div>
+            <textarea
+              className="m-textarea"
+              rows={3}
+              placeholder="Travaux réalisés, matériel posé, mesures prises…"
+              value={missionReports[activeMission.id] ?? 'Remplacement du disjoncteur différentiel 63 A — test de déclenchement OK.'}
+              onChange={(e) => {
+                setMissionReports((prev) => ({
+                  ...prev,
+                  [activeMission.id]: e.target.value,
+                }));
               }}
             />
           </div>
 
-          {/* Raccourci Aujourd'hui */}
-          {selectedDate !== todayISO && (
-            <button
-              type="button"
-              className="badge badge-success"
-              onClick={handleGoToToday}
-              style={{
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              Aujourd'hui
-            </button>
-          )}
-        </div>
-
-        {/* Grille des 7 jours de la semaine (100% sans débordement, 7 colonnes égales) */}
-        <div
-          className="tech-week-strip"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, 1fr)',
-            gap: '3px',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
-          {weekDays.map((d) => {
-            const isSelected = d.isSelected;
-            const isToday = d.isToday;
-            return (
+          {/* Actions dans la zone du pouce */}
+          <div className="t-actions">
+            {!runningMissions[activeMission.id] && (
               <button
-                key={d.iso}
                 type="button"
-                onClick={() => setSelectedDate(d.iso)}
-                style={{
-                  border: isSelected
-                    ? '2px solid #00bf63'
-                    : isToday
-                    ? '1.5px solid #0284c7'
-                    : '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '6px 2px',
-                  background: isSelected
-                    ? '#00bf63'
-                    : isToday
-                    ? '#f0f9ff'
-                    : 'var(--bg-app)',
-                  color: isSelected ? '#ffffff' : 'var(--text-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '2px',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  transition: 'all 0.15s ease',
-                }}
+                className="m-btn m-btn--primary m-btn--lg m-btn--block"
+                onClick={() => handleStartMission(activeMission)}
               >
-                <span
-                  style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: isSelected
-                      ? '#ffffff'
-                      : isToday
-                      ? '#0369a1'
-                      : 'var(--text-secondary)',
-                  }}
-                >
-                  {d.dayNameShort}
-                </span>
-                <span
-                  style={{
-                    fontSize: '14.5px',
-                    fontWeight: 900,
-                    fontFamily: 'monospace',
-                    lineHeight: 1.1,
-                    color: isSelected ? '#ffffff' : 'var(--text-primary)',
-                  }}
-                >
-                  {d.dayNumber}
-                </span>
-
-                {/* Pastille indiquant le nombre de missions pour ce jour */}
-                <div style={{ height: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {d.missionsCount > 0 ? (
-                    <span
-                      style={{
-                        fontSize: '9.5px',
-                        fontWeight: 800,
-                        padding: '1px 4px',
-                        borderRadius: '6px',
-                        background: isSelected ? '#ffffff' : '#00bf63',
-                        color: isSelected ? '#00bf63' : '#ffffff',
-                        lineHeight: 1,
-                      }}
-                    >
-                      {d.missionsCount}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '10px', opacity: 0.25 }}>•</span>
-                  )}
-                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polygon points="10 8 16 12 10 16 10 8" />
+                </svg>
+                <span>Démarrer sur site</span>
               </button>
-            );
-          })}
-        </div>
-      </div>
-      )}
-
-      {/* =====================================================================
-          BANNIÈRE DISCRÈTE POINTAGE MATIN (SI NON POINTÉ ET SUR MISSIONS)
-         ===================================================================== */}
-      {activeTab === 'missions' && !currentPointage?.heureArriveeBureau && (
-        <div
-          style={{
-            padding: '10px 12px',
-            borderRadius: '10px',
-            background: 'rgba(245, 158, 11, 0.1)',
-            border: '1.5px solid rgba(245, 158, 11, 0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '8px',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#b45309' }}>
-              ▲ Arrivée bureau non pointée
-            </div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
-              {liveParisTime || getNowHHMM()} • Requis avant 1ère mission
-            </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{
-              background: '#00bf63',
-              borderColor: '#00994f',
-              fontWeight: 800,
-              minHeight: '36px',
-              fontSize: '11.5px',
-              padding: '6px 12px',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-            disabled={clockInMut.isPending}
-            onClick={() => {
-              clockInMut.mutate({
-                technicien: currentTechnicien,
-                dateJour: selectedDate,
-              });
-            }}
-          >
-            {clockInMut.isPending ? '◷...' : 'Pointer'}
-          </button>
-        </div>
-      )}
-
-      {/* =====================================================================
-          BLOC 1 : BADGEUSE MATIN (ARRIVÉE BUREAU) & SOIR (FIN DERNIÈRE INTV.)
-          HORODATAGE INVIOLABLE NON MODIFIABLE À LA MAIN
-         ===================================================================== */}
-      {showPointage && (
-        <div
-          className="tech-mobile-card"
-          style={{
-            borderTop:
-              currentPointage?.statutJournee === 'EN_SERVICE'
-                ? '4px solid #10b981'
-                : currentPointage?.statutJournee === 'TERMINEE'
-                ? '4px solid #2563eb'
-                : '4px solid #f59e0b',
-            boxSizing: 'border-box',
-            width: '100%',
-          }}
-        >
-          {/* Horloge numérique en direct */}
-          <div
-            style={{
-              padding: '10px 12px',
-              borderRadius: '10px',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '12px',
-              flexWrap: 'wrap',
-              gap: '6px',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 800 }}>
-                ⏱ Pointage Quotidien Certifié ({formatDateFR(selectedDate)})
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Horodatage certifié au clic. Zéro saisie manuelle.
-              </div>
-            </div>
-
-            <div
-              className="font-mono"
-              style={{
-                fontSize: '14px',
-                fontWeight: 800,
-                color: 'var(--accent-primary)',
-                background: 'var(--bg-surface)',
-                padding: '4px 10px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-default)',
-                letterSpacing: '0.04em',
-                flexShrink: 0,
-              }}
-            >
-              ◷ {liveParisTime || getNowHHMM()}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
-              gap: '10px',
-              width: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
-            {/* Carte Matin : Arrivée au bureau */}
-            <div
-              style={{
-                padding: '14px',
-                borderRadius: '12px',
-                background: currentPointage?.heureArriveeBureau
-                  ? 'rgba(16, 185, 129, 0.08)'
-                  : 'var(--bg-elevated)',
-                border: currentPointage?.heureArriveeBureau
-                  ? '1.5px solid rgba(16, 185, 129, 0.5)'
-                  : '1.5px solid var(--border-default)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                <span style={{ fontWeight: 800, fontSize: '13px', color: '#059669' }}>
-                  • 1. MATIN — Arrivée Bureau
-                </span>
-                {currentPointage?.heureArriveeBureau ? (
-                  <span className="badge badge-success font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
-                    ✓ {currentPointage.heureArriveeBureau}
-                  </span>
-                ) : (
-                  <span className="badge badge-warning" style={{ fontSize: '11px' }}>À pointer</span>
-                )}
-              </div>
-
-              {!currentPointage?.heureArriveeBureau ? (
-                <>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                    Appuyez à votre arrivée au bureau. L'heure officielle sera certifiée.
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={clockInMut.isPending}
-                    style={{
-                      width: '100%',
-                      minHeight: '46px',
-                      background: '#00bf63',
-                      borderColor: '#00994f',
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
-                      boxSizing: 'border-box',
-                    }}
-                    onClick={() => {
-                      clockInMut.mutate({
-                        technicien: currentTechnicien,
-                        dateJour: selectedDate,
-                      });
-                    }}
-                  >
-                    {clockInMut.isPending ? '◷ Enregistrement...' : `• Pointer mon arrivée au bureau`}
-                  </button>
-                </>
-              ) : (
-                <div
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    background: '#ecfdf5',
-                    fontSize: '11.5px',
-                    color: '#047857',
-                    fontWeight: 700,
-                    border: '1px solid #a7f3d0',
-                  }}
-                >
-                  ◈ Horodatage certifié à {currentPointage.heureArriveeBureau}. Heure verrouillée.
-                </div>
-              )}
-            </div>
-
-            {/* Carte Soir : Fin de dernière intervention */}
-            <div
-              style={{
-                padding: '14px',
-                borderRadius: '12px',
-                background: currentPointage?.heureFinJournee
-                  ? '#ecfdf5'
-                  : 'var(--bg-elevated)',
-                border: currentPointage?.heureFinJournee
-                  ? '1.5px solid #00bf63'
-                  : '1.5px solid var(--border-default)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                <span style={{ fontWeight: 800, fontSize: '13px', color: '#0a0f1d' }}>
-                  • 2. SOIR — Fin Dernière Intv.
-                </span>
-                {currentPointage?.heureFinJournee ? (
-                  <span className="badge badge-success font-mono" style={{ fontSize: '13px', fontWeight: 800 }}>
-                    ✓ {currentPointage.heureFinJournee}
-                  </span>
-                ) : currentPointage?.heureArriveeBureau ? (
-                  <span className="badge badge-info" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', fontSize: '11px' }}>En service</span>
-                ) : (
-                  <span className="badge badge-neutral" style={{ fontSize: '11px' }}>En attente</span>
-                )}
-              </div>
-
-              {!currentPointage?.heureArriveeBureau ? (
-                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                  Activez d'abord votre arrivée au bureau le matin pour pointer la fin le soir.
-                </div>
-              ) : !currentPointage?.heureFinJournee ? (
-                <>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                    Appuyez à la fin de votre dernière mission.
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    disabled={clockOutMut.isPending}
-                    style={{
-                      width: '100%',
-                      minHeight: '46px',
-                      background: '#0a0f1d',
-                      borderColor: '#1e293b',
-                      color: '#ffffff',
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      boxShadow: '0 4px 14px rgba(10, 15, 29, 0.25)',
-                      boxSizing: 'border-box',
-                    }}
-                    onClick={() => {
-                      // RÈGLE 2 : Vérification stricte qu'aucune intervention n'est encore en cours
-                      const runningMission = techMissions.find(
-                        (m) => m.statutOperationnel === 'En cours'
-                      );
-                      if (runningMission) {
-                        setShowRunningBlockerModal(runningMission);
-                        toast.error(
-                          `⊘ Impossible de clôturer la journée : la mission ${runningMission.reference} est encore en cours !`
-                        );
-                        return;
-                      }
-
-                      clockOutMut.mutate({
-                        technicien: currentTechnicien,
-                        dateJour: selectedDate,
-                        derniereInterventionRef: lastMissionRef,
-                      });
-                    }}
-                  >
-                    {clockOutMut.isPending ? '◷ Enregistrement...' : `• Pointer ma fin de journée`}
-                  </button>
-                </>
-              ) : (
-                <div
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    background: 'rgba(37, 99, 235, 0.12)',
-                    fontSize: '11.5px',
-                    color: '#2563eb',
-                    fontWeight: 700,
-                  }}
-                >
-                  ◈ Fin de journée certifiée à {currentPointage.heureFinJournee}.
-                  {currentPointage.dureeMinutes ? ` Amplitude : ${Math.floor(currentPointage.dureeMinutes / 60)}h${String(currentPointage.dureeMinutes % 60).padStart(2, '0')}.` : ''}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {activeTab === 'pointage' && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ width: '100%', marginTop: '12px', minHeight: '44px', fontWeight: 700 }}
-              onClick={() => setActiveTab('missions')}
-            >
-              ≡ Aller à mes missions ({techMissions.length}) →
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* =====================================================================
-          ONGLET TRAJET & OPTIMISATION DE TOURNÉE AUTOMATIQUE (GPS)
-         ===================================================================== */}
-      {activeTab === 'trajet' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setActiveTab('missions')}
-            style={{
-              width: '100%',
-              minHeight: '42px',
-              fontWeight: 800,
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-            }}
-          >
-            ← Retour à mes missions ({techMissions.length})
-          </button>
-          <TourneeMapOptimizer
-            interventions={interventionsList}
-            devis={devisList}
-            selectedDate={selectedDate}
-            currentTechnicien={currentTechnicien}
-            techniciensList={techniciens}
-            onSelectTechnicien={onSelectTechnicien}
-            onOpenIntervention={(i) => {
-              setActiveMissionId(i.id);
-              setActiveTab('missions');
-            }}
-            onOpenDevis={(d) => {
-              const linkedIntv = interventionsList.find(
-                (i) => i.devisId === d.id || i.origineDevisId === d.id || i.refDevisTexte === d.reference
-              );
-              setActiveMissionId(linkedIntv ? linkedIntv.id : -d.id);
-              setActiveTab('missions');
-            }}
-          />
-        </div>
-      )}
-
-      {/* =====================================================================
-          BLOC 2 & 3 : MISSIONS ET COMPTE-RENDU / PHOTOS
-         ===================================================================== */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            activeTab === 'tout' ? 'repeat(auto-fit, minmax(310px, 1fr))' : '1fr',
-          gap: '12px',
-        }}
-      >
-        {/* LISTE DES INTERVENTIONS & VISITES DEVIS (PREMIER VOLET PAR DÉFAUT) */}
-        {showMissions && (
-          <div
-            className="tech-mobile-card"
-            style={{ display: 'flex', flexDirection: 'column', gap: '10px', boxSizing: 'border-box', width: '100%' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '14px' }}>
-                ≡ Mes Missions ({techMissions.length})
-              </div>
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={`segmented-btn ${filterMode === 'jour' ? 'active' : ''}`}
-                  onClick={() => setFilterMode('jour')}
-                >
-                  Du jour
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-btn ${filterMode === 'toutes' ? 'active' : ''}`}
-                  onClick={() => setFilterMode('toutes')}
-                >
-                  Toutes mes missions
-                </button>
-              </div>
-            </div>
-
-            {/* Option pour accéder à la carte (proposée comme option, non imposée dès le départ) */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('trajet')}
-              style={{
-                width: '100%',
-                minHeight: '40px',
-                padding: '8px 12px',
-                borderRadius: '10px',
-                background: 'var(--bg-elevated)',
-                border: '1.5px dashed var(--border-default)',
-                color: 'var(--text-primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                fontWeight: 700,
-                fontSize: '12px',
-                cursor: 'pointer',
-                boxSizing: 'border-box',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>🗺️</span>
-              <span>Option : Consulter la Carte & Tournée GPS</span>
-              <span className="badge badge-info" style={{ fontSize: '10px', padding: '1px 6px' }}>
-                {techMissions.length} étape(s)
-              </span>
-            </button>
-
-            {techMissions.length === 0 ? (
-              <div
-                style={{
-                  padding: '28px 14px',
-                  textAlign: 'center',
-                  color: 'var(--text-muted)',
-                  fontSize: '13px',
-                  background: 'var(--bg-elevated)',
-                  borderRadius: '10px',
-                }}
-              >
-                Aucune mission planifiée pour <strong>{currentTechnicien}</strong> le {formatDateFR(selectedDate)}.
-                <div style={{ marginTop: '10px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ width: '100%', maxWidth: '280px' }}
-                    onClick={() => setFilterMode('toutes')}
-                  >
-                    Voir toutes les missions de {currentTechnicien}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {techMissions.map((m) => {
-                  const isSelected = activeMission?.id === m.id;
-                  const isRunning = m.statutOperationnel === 'En cours';
-                  const isDone = ['Terminée - à valider', 'Clôturée'].includes(m.statutOperationnel);
-                  const nbActions = (m.actionsRealisees || []).length;
-                  const nbPhotos = (m.photos || []).length;
-
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => setActiveMissionId(m.id)}
-                      style={{
-                        padding: '11px',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        background: isSelected ? 'var(--accent-glow)' : 'var(--bg-elevated)',
-                        border: isSelected
-                          ? '2px solid var(--accent-primary)'
-                          : '1px solid var(--border-default)',
-                        borderLeft: m.isVisiteDevis ? '5px solid #9333ea' : '5px solid #2563eb',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        boxSizing: 'border-box',
-                        width: '100%',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span className={`badge ${m.isVisiteDevis ? 'badge-purple' : 'badge-info'}`}>
-                            {m.isVisiteDevis ? '◈ VISITE DEVIS' : '❖ TRAVAUX'}
-                          </span>
-                          <span className="font-mono" style={{ fontWeight: 800, fontSize: '12px' }}>
-                            {m.reference}
-                          </span>
-                        </div>
-
-                        <span
-                          className={`badge ${
-                            isRunning
-                              ? 'badge-warning'
-                              : isDone
-                              ? 'badge-success'
-                              : m.statutOperationnel === 'Intervention non terminée'
-                              ? 'badge-danger'
-                              : 'badge-neutral'
-                          }`}
-                        >
-                          {isRunning
-                            ? `● EN COURS (${m.heureDebutReelle || ''})`
-                            : isDone
-                            ? `✓ CLÔTURÉE (${m.heureDebutReelle || ''}→${m.heureFinReelle || ''})`
-                            : m.statutOperationnel === 'Intervention non terminée'
-                            ? `◷ NON TERMINÉE`
-                            : m.statutOperationnel}
-                        </span>
-                      </div>
-
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: '14.5px', color: 'var(--text-primary)' }}>
-                          {m.client || 'Client ANELEC'}
-                        </div>
-                        <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px', wordBreak: 'break-word' }}>
-                          ⌖ {m.chantier}
-                        </div>
-                        {m.objet && (
-                          <div style={{ fontSize: '12px', color: 'var(--text-primary)', marginTop: '4px', fontWeight: 600 }}>
-                            Objet : {m.objet}
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '6px' }}>
-                        <span className="font-mono" style={{ fontWeight: 700 }}>
-                          ▪ {formatDateFR(m.datePlanifiee)} • ◷ {m.heureDebut || '08:30'}-{m.heureFin || '10:30'}
-                        </span>
-                        <span className="badge badge-neutral" style={{ fontSize: '10.5px' }}>{m.corpsEtat || 'Tous corps d’état'}</span>
-                      </div>
-
-                      {/* Boutons Tactiles Pleine Largeur adaptés à tous les téléphones */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          marginTop: '4px',
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Ligne 1 : Activer / Démarrer ou Déclarer terminé / Clôturer avec GPS */}
-                        {!isRunning && !isDone && m.statutOperationnel !== 'Intervention non terminée' && (
-                          <div className="tech-btn-grid-2">
-                            <button
-                              type="button"
-                              className="btn btn-primary tech-action-btn"
-                              style={{
-                                width: '100%',
-                                minHeight: '42px',
-                                background: '#059669',
-                                borderColor: '#059669',
-                                fontWeight: 800,
-                                fontSize: '12px',
-                              }}
-                              onClick={() => handleActivateMission(m)}
-                            >
-                              ▸ Démarrer {m.isVisiteDevis ? 'Devis' : 'Intv.'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-primary tech-action-btn"
-                              style={{
-                                width: '100%',
-                                minHeight: '42px',
-                                background: '#dc2626',
-                                borderColor: '#dc2626',
-                                fontWeight: 800,
-                                fontSize: '12px',
-                              }}
-                              onClick={() => handleDeactivateMission(m)}
-                            >
-                              ⌖✓ Déclarer terminé
-                            </button>
-                          </div>
-                        )}
-
-                        {isRunning && (
-                          <div className="tech-btn-grid-2">
-                            <button
-                              type="button"
-                              className="btn btn-primary tech-action-btn"
-                              style={{
-                                minHeight: '42px',
-                                background: '#dc2626',
-                                borderColor: '#dc2626',
-                                fontWeight: 800,
-                                fontSize: '12px',
-                              }}
-                              onClick={() => handleDeactivateMission(m)}
-                            >
-                              ⌖ Clôturer (GPS)
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary tech-action-btn"
-                              style={{
-                                minHeight: '42px',
-                                color: '#d97706',
-                                borderColor: 'rgba(217, 119, 6, 0.4)',
-                                fontWeight: 800,
-                                fontSize: '11.5px',
-                              }}
-                              onClick={() => setNonTermineeModalMission(m)}
-                            >
-                              ◷ Non terminée
-                            </button>
-                          </div>
-                        )}
-
-                        {m.statutOperationnel === 'Intervention non terminée' && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
-                                background: 'rgba(245, 158, 11, 0.12)',
-                                border: '1px solid rgba(245, 158, 11, 0.35)',
-                                color: '#d97706',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                              }}
-                            >
-                              ◷ Non terminée • Replanification requise ({m.motifBlocage || 'Blocage'})
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ width: '100%', fontWeight: 700, minHeight: '40px' }}
-                              onClick={() => handleActivateMission(m)}
-                            >
-                              ↻ Reprendre cette intervention
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Ligne 2 : Ouvrir Compte Rendu & Photos + GPS */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary tech-action-btn"
-                            style={{
-                              minHeight: '42px',
-                              fontWeight: 800,
-                              fontSize: '12px',
-                              borderColor: 'var(--accent-primary)',
-                              color: 'var(--accent-primary)',
-                              padding: '0 8px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                            onClick={() => {
-                              setActiveMissionId(m.id);
-                              setActiveTab('compte_rendu');
-                            }}
-                          >
-                            ✎ Compte-Rendu ({nbActions} act. • {nbPhotos} ph.)
-                          </button>
-
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                              m.chantier || m.client || ''
-                            )}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn btn-secondary"
-                            style={{
-                              minHeight: '42px',
-                              padding: '0 12px',
-                              textDecoration: 'none',
-                              fontWeight: 700,
-                              fontSize: '12px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            ⌖ GPS
-                          </a>
-                        </div>
-
-                        {isDone && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ width: '100%', minHeight: '38px', fontWeight: 600 }}
-                            onClick={() => handleActivateMission(m)}
-                          >
-                            ↻ Ré-activer cette mission si besoin
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ===================================================================
-            BLOC 3 : COMPTE RENDU PRÉ-REMPLI, ÉLÉMENTS DE CHIFFRAGE & PHOTOS
-           =================================================================== */}
-        {showCompteRendu && (
-          <div
-            className="tech-mobile-card"
-            style={{ display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box', width: '100%' }}
-          >
-            {/* Barre supérieure de retour rapide sur téléphone */}
-            {activeTab === 'compte_rendu' && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveTab('missions')}
-                  style={{ fontWeight: 700, minHeight: '38px' }}
-                >
-                  ← Missions ({techMissions.length})
-                </button>
-
-                {techMissions.length > 1 && (
-                  <select
-                    className="select"
-                    style={{ flex: 1, minWidth: '140px', fontWeight: 700, minHeight: '38px' }}
-                    value={activeMission?.id || ''}
-                    onChange={(e) => setActiveMissionId(Number(e.target.value))}
-                  >
-                    {techMissions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.reference} — {m.client}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
             )}
 
-            {!activeMission ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Sélectionnez d’abord une mission dans l’onglet <strong>≡ Missions</strong> pour remplir son compte rendu et ajouter des photos.
-                <div style={{ marginTop: '12px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => setActiveTab('missions')}
-                  >
-                    ≡ Choisir une mission
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {runningMissions[activeMission.id] && (
               <>
-                <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                    <span className="font-mono" style={{ fontWeight: 800, fontSize: '13px', color: 'var(--accent-primary)' }}>
-                      {activeMission.reference} • {activeMission.corpsEtat}
-                    </span>
-                    <span className="badge badge-info">
-                      {activeMission.isVisiteDevis ? '◈ Chiffrage Devis' : '❖ Déclaration Travaux'}
-                    </span>
-                  </div>
-                  <h3 style={{ fontSize: '14.5px', fontWeight: 800, marginTop: '4px', wordBreak: 'break-word', color: 'var(--text-primary)' }}>
-                    {activeMission.client} — {activeMission.chantier}
-                  </h3>
-
-                  {/* Boutons rapides Activer / Clôturer / Non terminée directement depuis la fiche Compte Rendu */}
-                  <div className="tech-btn-grid-2" style={{ marginTop: '8px' }}>
-                    {activeMission.statutOperationnel !== 'En cours' ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm tech-action-btn"
-                          style={{ background: '#059669', borderColor: '#059669', minHeight: '40px', fontWeight: 800 }}
-                          onClick={() => handleActivateMission(activeMission)}
-                        >
-                          ▸ {activeMission.statutOperationnel === 'Intervention non terminée' ? 'Reprendre mission' : 'Démarrer mission'}
-                        </button>
-                        {!['Terminée - à valider', 'Clôturée'].includes(activeMission.statutOperationnel) && (
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm tech-action-btn"
-                            style={{ background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
-                            onClick={() => handleDeactivateMission(activeMission)}
-                          >
-                            ⌖✓ Déclarer terminé
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm tech-action-btn"
-                          style={{ background: '#dc2626', borderColor: '#dc2626', minHeight: '40px', fontWeight: 800 }}
-                          onClick={() => handleDeactivateMission(activeMission)}
-                        >
-                          ⏹ Clôturer (GPS)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm tech-action-btn"
-                          style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', minHeight: '40px', fontWeight: 800 }}
-                          onClick={() => setNonTermineeModalMission(activeMission)}
-                        >
-                          ◷ Non terminée
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {activeMission.notes && (
-                    <div
-                      style={{
-                        marginTop: '8px',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        background: 'var(--bg-elevated)',
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      <strong>Consignes bureau :</strong> {activeMission.notes}
-                    </div>
-                  )}
-                  {linkedDevis && (
-                    <div
-                      style={{
-                        marginTop: '8px',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        background: 'rgba(147, 51, 234, 0.08)',
-                        border: '1px solid rgba(147, 51, 234, 0.25)',
-                        fontSize: '12px',
-                      }}
-                    >
-                      <strong>◈ Devis associé : {linkedDevis.reference}</strong> — Objet :{' '}
-                      {linkedDevis.objet || 'Relevé technique pour chiffrage'}
-                    </div>
-                  )}
-                </div>
-
-                {/* 1. Actions pré-remplies à cocher en 1 tap */}
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>
-                    1. Actions Pré-remplies (Touchez pour cocher / décocher) :
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {Object.entries(ACTIONS_PREREMPLIES_TERRAIN).map(([catName, actions]) => (
-                      <div
-                        key={catName}
-                        style={{
-                          padding: '10px',
-                          borderRadius: '10px',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border-subtle)',
-                        }}
-                      >
-                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                          {catName}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {actions.map((act) => {
-                            const checked = (activeMission.actionsRealisees || []).includes(act);
-                            return (
-                              <button
-                                key={act}
-                                type="button"
-                                onClick={() => handleTogglePreFilledAction(activeMission, act)}
-                                style={{
-                                  padding: '8px 10px',
-                                  minHeight: '38px',
-                                  borderRadius: '8px',
-                                  fontSize: '12px',
-                                  fontWeight: checked ? 800 : 500,
-                                  textAlign: 'left',
-                                  cursor: 'pointer',
-                                  border: checked
-                                    ? '1.5px solid #059669'
-                                    : '1px solid var(--border-default)',
-                                  background: checked
-                                    ? 'rgba(16, 185, 129, 0.15)'
-                                    : 'var(--bg-surface)',
-                                  color: checked ? '#059669' : 'var(--text-primary)',
-                                }}
-                              >
-                                {checked ? '✓ ' : '+ '}
-                                {act}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Ajout d'une action personnalisée */}
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!customActionInput.trim()) return;
-                      await handleTogglePreFilledAction(activeMission, customActionInput.trim());
-                      setCustomActionInput('');
-                    }}
-                    style={{ display: 'flex', gap: '6px', marginTop: '8px' }}
-                  >
-                    <input
-                      type="text"
-                      className="input"
-                      style={{ flex: 1 }}
-                      placeholder="+ Ajouter une autre action..."
-                      value={customActionInput}
-                      onChange={(e) => setCustomActionInput(e.target.value)}
-                    />
-                    <button type="submit" className="btn btn-secondary" style={{ fontWeight: 700 }}>
-                      Ajouter
-                    </button>
-                  </form>
-                </div>
-
-                {/* 2. Informations importantes pour le Chiffrage du Devis */}
-                <div>
-                  <label style={{ fontSize: '13px', fontWeight: 800, display: 'block', marginBottom: '6px', color: '#7c3aed' }}>
-                    2. Éléments pour Chiffrage Devis (Métrés, Matériel à prévoir, Durée estimée) :
-                  </label>
-                  <textarea
-                    className="input"
-                    rows={3}
-                    placeholder="Ex: Prévoir 15m câble 3G2.5, 1 disjoncteur diff 30mA, hauteur 3m20, durée estimée 4h..."
-                    value={chiffrageDraft}
-                    onChange={(e) => setChiffrageDraft(e.target.value)}
-                  />
-                </div>
-
-                {/* 3. Petit Compte Rendu & Observations Terrain */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 800 }}>
-                      3. Petit Compte Rendu & Observations :
-                    </label>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '11.5px', fontWeight: 700 }}
-                      onClick={() => {
-                        const acts = activeMission.actionsRealisees || [];
-                        if (acts.length === 0) {
-                          toast.error('Cochez d’abord des actions pré-remplies ci-dessus');
-                          return;
-                        }
-                        const merged = [
-                          compteRenduDraft,
-                          `Actions effectuées : ${acts.join(' ; ')}.`,
-                        ]
-                          .filter(Boolean)
-                          .join('\n');
-                        setCompteRenduDraft(merged);
-                        updateMissionMut.mutate({
-                          id: activeMission.id,
-                          data: {
-                            compteRendu: merged,
-                            elementsChiffrage: chiffrageDraft,
-                            statutRapport: 'Déclaré par technicien',
-                          },
-                        });
-                        toast.success('Actions insérées dans le compte rendu');
-                      }}
-                    >
-                      + Insérer actions cochées
-                    </button>
-                  </div>
-                  <textarea
-                    className="input"
-                    rows={3}
-                    placeholder="Observations terrain, état des lieux, validation client/gardien..."
-                    value={compteRenduDraft}
-                    onChange={(e) => setCompteRenduDraft(e.target.value)}
-                  />
-
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ width: '100%', marginTop: '8px', minHeight: '44px', fontWeight: 800 }}
-                    onClick={() => handleSaveReportAndChiffrage(activeMission)}
-                  >
-                    ✓ Enregistrer le Compte Rendu & Chiffrage
-                  </button>
-
-                  {!['Terminée - à valider', 'Clôturée'].includes(activeMission.statutOperationnel) && (
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{
-                        width: '100%',
-                        marginTop: '8px',
-                        minHeight: '46px',
-                        fontWeight: 800,
-                        background: '#dc2626',
-                        borderColor: '#dc2626',
-                        boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
-                      }}
-                      onClick={() => handleDeactivateMission(activeMission)}
-                    >
-                      ⌖✓ Enregistrer, Déclarer Terminé & Retirer de la Carte (GPS)
-                    </button>
-                  )}
-                </div>
-
-                {/* 4. Prise de Photos (Caméra Mobile + Galerie) */}
-                <div
-                  style={{
-                    padding: '12px',
-                    borderRadius: '12px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                  }}
+                <button
+                  type="button"
+                  className="m-btn m-btn--ghost m-btn--lg"
+                  onClick={() => toast('Pause enregistrée', { icon: '⏸' })}
                 >
-                  <div style={{ fontSize: '13px', fontWeight: 800 }}>
-                    4. ⊞ Photos Terrain & Relevés ({(activeMission.photos || []).length}) :
-                  </div>
-
-                  <div className="tech-meta-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
-                    <select
-                      className="select"
-                      style={{ width: '100%', fontWeight: 700, minHeight: '40px' }}
-                      value={photoCategory}
-                      onChange={(e) => setPhotoCategory(e.target.value as any)}
-                    >
-                      <option value="AVANT">⊞ Photo AVANT travaux</option>
-                      <option value="APRES">✓ Photo APRÈS travaux</option>
-                      <option value="RELEVE_CHIFFRAGE">◈ Relevé / Chiffrage Devis</option>
-                      <option value="CONSTAT">▲ Constat / Anomalie</option>
-                    </select>
-
-                    <input
-                      type="text"
-                      className="input"
-                      style={{ width: '100%', minHeight: '40px' }}
-                      placeholder="Légende photo (optionnel)..."
-                      value={photoCaption}
-                      onChange={(e) => setPhotoCaption(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Deux boutons grands formats adaptés iOS et Android : Appareil Photo direct + Galerie */}
-                  <div className="tech-btn-grid-2">
-                    <label
-                      className="btn btn-primary tech-action-btn"
-                      style={{
-                        cursor: 'pointer',
-                        minHeight: '44px',
-                        fontWeight: 800,
-                        justifyContent: 'center',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <span>⊞ Prendre Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        style={{ display: 'none' }}
-                        onChange={(e) => handlePhotoUpload(e, activeMission)}
-                      />
-                    </label>
-
-                    <label
-                      className="btn btn-secondary tech-action-btn"
-                      style={{
-                        cursor: 'pointer',
-                        minHeight: '44px',
-                        fontWeight: 800,
-                        justifyContent: 'center',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <span>⊞ Choisir Galerie</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        style={{ display: 'none' }}
-                        onChange={(e) => handlePhotoUpload(e, activeMission)}
-                      />
-                    </label>
-                  </div>
-
-                  {(activeMission.photos || []).length > 0 && (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 95px), 1fr))',
-                        gap: '6px',
-                        marginTop: '4px',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      {(activeMission.photos || []).map((ph: any) => (
-                        <div
-                          key={ph.id}
-                          style={{
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            border: '1px solid var(--border-default)',
-                            background: 'var(--bg-surface)',
-                            position: 'relative',
-                          }}
-                        >
-                          <img
-                            src={ph.url}
-                            alt={ph.caption || 'Photo'}
-                            style={{ width: '100%', height: '95px', objectFit: 'cover' }}
-                          />
-                          <div style={{ padding: '5px 7px', fontSize: '10.5px' }}>
-                            <div style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>
-                              {ph.category || 'PHOTO'}
-                            </div>
-                            <div style={{ color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
-                              {ph.caption}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeletePhoto(activeMission, ph.id)}
-                            style={{
-                              position: 'absolute',
-                              top: '5px',
-                              right: '5px',
-                              background: 'rgba(220, 38, 38, 0.9)',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '999px',
-                              width: '26px',
-                              height: '26px',
-                              fontSize: '12px',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                            }}
-                            title="Supprimer la photo"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                  <span>Pause</span>
+                </button>
+                <button
+                  type="button"
+                  className="m-btn m-btn--primary m-btn--lg m-btn--block"
+                  onClick={() => setGpsModalOpen(true)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                  <span>Clôturer avec GPS</span>
+                </button>
               </>
             )}
           </div>
-        )}
-      </div>
+        </main>
+      ) : (
+        <>
+          {/* =====================================================================
+              2. ÉCRAN 1 : MISSIONS (HOME)
+             ===================================================================== */}
+          {tab === 'home' && (
+            <main className="t-main" data-testid="terrain-home">
+              <Header
+                title={`Bonjour ${(currentTechnicien || 'Technicien').split(' ')[0]}`}
+                liveTime={liveParisTime}
+              />
 
-      {/* =====================================================================
-          MODALE 1 : BLOCAGE MATIN — ARRIVÉE AU BUREAU OBLIGATOIRE
-         ===================================================================== */}
-      {showMorningBlockerModal && (
-        <div
-          className="cmd-palette-backdrop"
-          onClick={() => setShowMorningBlockerModal(null)}
-          style={{ zIndex: 9999 }}
-        >
-          <div
-            className="cmd-palette-modal tech-modal-mobile"
-            style={{ maxWidth: '480px', padding: '16px', borderRadius: '16px', width: 'min(480px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  color: '#d97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '20px',
-                  flexShrink: 0,
-                }}
-              >
-                •
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                  Prise de service requise
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                  Règle ANELEC : L'arrivée au bureau doit être pointée avant de démarrer une mission.
-                </p>
-              </div>
-            </div>
+              {/* Mode Superviseur : bascule rapide de technicien */}
+              {canSwitchTechnicien && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--color-text-secondary, #64748b)' }}>
+                    Superviseur :
+                  </span>
+                  <select
+                    className="select"
+                    style={{ flex: 1, minHeight: '34px', fontSize: '12.5px', fontWeight: 700 }}
+                    value={currentTechnicien}
+                    onChange={(e) => onSelectTechnicien(e.target.value)}
+                  >
+                    {techniciens.map((t) => (
+                      <option key={t} value={t}>
+                        ▪ {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-            <div
-              style={{
-                background: 'rgba(245, 158, 11, 0.08)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                borderRadius: '10px',
-                padding: '10px 12px',
-                marginBottom: '14px',
-                fontSize: '12.5px',
-                lineHeight: 1.45,
-                wordBreak: 'break-word',
-              }}
-            >
-              Vous vous apprêtez à démarrer :<br />
-              <strong style={{ color: 'var(--text-primary)' }}>
-                {showMorningBlockerModal.mission.reference} — {showMorningBlockerModal.mission.client}
-              </strong>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Veuillez certifier votre arrivée au bureau pour déverrouiller le démarrage.
-              </div>
-            </div>
+              {/* Carte de bienvenue avec avatar & pointage */}
+              <section className="t-welcome">
+                <UserAvatar name={currentTechnicien} size={44} />
+                <div>
+                  <strong>Bonjour {currentTechnicien}</strong>
+                  <span>{formatWelcomeDate()} · {todayMissions.length} missions aujourd'hui</span>
+                </div>
+                {!isPointed && (
+                  <button
+                    type="button"
+                    className="m-btn m-btn--primary m-btn--sm"
+                    onClick={handleClockIn}
+                  >
+                    Pointer
+                  </button>
+                )}
+                {isPointed && !isTerminee && (
+                  <span className="m-pill m-tone-green">
+                    <i className="m-pill-dot" />
+                    <span>Pointé à {currentPointage.heureArriveeBureau}</span>
+                  </span>
+                )}
+                {isTerminee && (
+                  <span className="m-pill m-tone-indigo">
+                    <i className="m-pill-dot" />
+                    <span>Fin à {currentPointage.heureFinJournee}</span>
+                  </span>
+                )}
+              </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{
-                  minHeight: '46px',
-                  background: '#00bf63',
-                  borderColor: '#00994f',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  boxShadow: '0 4px 14px rgba(0, 191, 99, 0.28)',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'normal',
-                  padding: '8px 12px',
-                }}
-                disabled={clockInMut.isPending}
-                onClick={async () => {
-                  const targetMission = showMorningBlockerModal.mission;
-                  try {
-                    await clockInMut.mutateAsync({
-                      technicien: currentTechnicien,
-                      dateJour: selectedDate,
-                    });
-                    setShowMorningBlockerModal(null);
-                    // Démarrer la mission immédiatement après le pointage
-                    await handleActivateMissionDirect(targetMission);
-                  } catch (err) {
-                    console.error('Erreur pointage matin:', err);
-                  }
-                }}
-              >
-                {clockInMut.isPending
-                  ? '◷ Enregistrement...'
-                  : `• Pointer mon arrivée (${liveParisTime || getNowHHMM()}) & Démarrer`}
-              </button>
+              {/* Barre de progression des missions */}
+              <section className="t-progress">
+                <strong>{doneCount}/{todayMissions.length} missions terminées</strong>
+                <div className="m-progress">
+                  <span
+                    className="m-progress-bar"
+                    style={{
+                      width: `${todayMissions.length > 0 ? (doneCount / todayMissions.length) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+              </section>
 
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setShowMorningBlockerModal(null)}
-              >
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <h2 className="t-h2">Mes missions du jour</h2>
 
-      {/* =====================================================================
-          MODALE 2 : BLOCAGE SOIR — IMPOSSIBLE DE CLÔTURER LA JOURNÉE SI INTV EN COURS
-         ===================================================================== */}
-      {showRunningBlockerModal && (
-        <div
-          className="cmd-palette-backdrop"
-          onClick={() => setShowRunningBlockerModal(null)}
-          style={{ zIndex: 9999 }}
-        >
-          <div
-            className="cmd-palette-modal tech-modal-mobile"
-            style={{ maxWidth: '480px', padding: '16px', borderRadius: '16px', width: 'min(480px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: 'rgba(220, 38, 38, 0.15)',
-                  color: '#dc2626',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '20px',
-                  flexShrink: 0,
-                }}
-              >
-                ⊘
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                  Intervention en cours non terminée
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                  Vous ne pouvez pas clôturer votre journée tant qu'une mission est active.
-                </p>
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: 'rgba(220, 38, 38, 0.08)',
-                border: '1px solid rgba(220, 38, 38, 0.3)',
-                borderRadius: '10px',
-                padding: '10px 12px',
-                marginBottom: '14px',
-                fontSize: '12.5px',
-                lineHeight: 1.45,
-                wordBreak: 'break-word',
-              }}
-            >
-              Mission actuellement active :<br />
-              <strong style={{ color: 'var(--text-primary)', fontSize: '13.5px' }}>
-                {showRunningBlockerModal.reference} — {showRunningBlockerModal.client}
-              </strong>
-              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                ⌖ {showRunningBlockerModal.chantier}
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#dc2626', fontWeight: 700, marginTop: '6px' }}>
-                Choisissez l'une des actions ci-dessous pour débloquer la clôture :
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{
-                  minHeight: '44px',
-                  background: '#059669',
-                  borderColor: '#059669',
-                  fontWeight: 800,
-                  fontSize: '12.5px',
-                  padding: '8px 12px',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'normal',
-                }}
-                onClick={() => {
-                  const m = showRunningBlockerModal;
-                  setShowRunningBlockerModal(null);
-                  handleDeactivateMission(m, true);
-                }}
-              >
-                ⌖⏹ Clôturer avec GPS & Pointer fin de journée
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{
-                  minHeight: '44px',
-                  color: '#d97706',
-                  borderColor: 'rgba(217, 119, 6, 0.4)',
-                  fontWeight: 800,
-                  fontSize: '12.5px',
-                  padding: '8px 12px',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'normal',
-                }}
-                onClick={() => {
-                  const m = showRunningBlockerModal;
-                  setShowRunningBlockerModal(null);
-                  setNonTermineeModalMission(m);
-                }}
-              >
-                ◷ Déclarer non terminée (À replanifier)
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setShowRunningBlockerModal(null)}
-              >
-                Continuer l'intervention
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================================
-          MODALE 3 : INTERVENTION NON TERMINÉE — À REPLANIFIER
-         ===================================================================== */}
-      {nonTermineeModalMission && (
-        <div
-          className="cmd-palette-backdrop"
-          onClick={() => setNonTermineeModalMission(null)}
-          style={{ zIndex: 9999 }}
-        >
-          <div
-            className="cmd-palette-modal tech-modal-mobile"
-            style={{ maxWidth: '500px', padding: '16px', borderRadius: '16px', width: 'min(500px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '12px',
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  color: '#d97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '20px',
-                  flexShrink: 0,
-                }}
-              >
-                ◷
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                  Intervention Non Terminée — À replanifier
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                  {nonTermineeModalMission.reference} — {nonTermineeModalMission.client}
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
-                  Motif d'interruption / blocage :
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {[
-                    '≡ Matériel / Pièces manquantes',
-                    '⊘ Accès impossible / Client absent',
-                    '▲ Travaux supplémentaires imprévus',
-                    '⏰ Chantier trop long / Fin de journée',
-                    '❖ Autre motif technique',
-                  ].map((motif) => (
+              {/* Liste des cartes de missions */}
+              <ul className="t-list" data-testid="terrain-missions-list">
+                {todayMissions.map((m) => (
+                  <li key={m.id}>
                     <button
-                      key={motif}
                       type="button"
-                      className={`btn btn-sm ${nonTermineeReason === motif ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: nonTermineeReason === motif ? 800 : 500,
-                        padding: '6px 9px',
-                      }}
-                      onClick={() => setNonTermineeReason(motif)}
+                      className="t-card"
+                      onClick={() => setOpenMissionId(m.id)}
                     >
-                      {motif}
+                      <div className="t-card-top">
+                        <span className="m-mono m-small" style={{ fontWeight: 700 }}>
+                          {m.heureDebut || '08:30'}
+                        </span>
+                        <StatusPill status={runningMissions[m.id] ? 'En cours' : m.statutOperationnel || 'Planifiée'} />
+                      </div>
+                      <strong>{m.client || 'Client TCE'}</strong>
+                      <span className="t-card-objet">
+                        {m.corpsEtat || 'TCE'} · {m.objet || 'Prestation maintenance'}
+                      </span>
+                      <div className="t-card-foot">
+                        <span className="t-card-addr">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                            <circle cx="12" cy="10" r="3" />
+                          </svg>
+                          <span>{(m.chantier || 'Paris').split(',')[0]}</span>
+                        </span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </div>
                     </button>
-                  ))}
+
+                    {/* Bouton direct "Commencer" si mission planifiée */}
+                    {(!m.statutOperationnel || m.statutOperationnel === 'Planifiée') && !runningMissions[m.id] && (
+                      <div style={{ marginTop: '4px' }}>
+                        <button
+                          type="button"
+                          className="m-btn m-btn--primary m-btn--lg m-btn--block"
+                          onClick={() => {
+                            handleStartMission(m);
+                            setOpenMissionId(m.id);
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polygon points="10 8 16 12 10 16 10 8" />
+                          </svg>
+                          <span>Commencer l’intervention</span>
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+
+                {todayMissions.length === 0 && (
+                  <li className="t-empty">
+                    Aucune mission planifiée pour aujourd'hui.
+                  </li>
+                )}
+              </ul>
+            </main>
+          )}
+
+          {/* =====================================================================
+              3. ÉCRAN 2 : MA TOURNÉE (MAP & ORDRE DES PASSAGES)
+             ===================================================================== */}
+          {tab === 'map' && (
+            <main className="t-main" data-testid="terrain-mapview">
+              <Header title="Ma tournée" liveTime={liveParisTime} />
+
+              <div className="t-map-wrap">
+                <div className="t-map" aria-hidden="true">
+                  <div className="t-map-pin t-map-pin--me">
+                    <UserAvatar name={currentTechnicien} size={28} />
+                  </div>
+                  <div className="t-map-pin t-map-pin--stop" style={{ top: '38%', left: '62%' }}>1</div>
+                  <div className="t-map-pin t-map-pin--stop" style={{ top: '60%', left: '76%' }}>2</div>
+                  <div className="t-map-pin t-map-pin--stop" style={{ top: '72%', left: '38%' }}>3</div>
                 </div>
               </div>
 
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
-                  Précisions pour le planning & la direction (obligatoire) :
-                </label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder="Ex: Disjoncteur 32A à commander, le client demande un retour mardi matin, clé du local non fournie..."
-                  value={nonTermineeDetails}
-                  onChange={(e) => setNonTermineeDetails(e.target.value)}
-                />
-              </div>
-
-              <div
-                style={{
-                  background: 'rgba(37, 99, 235, 0.08)',
-                  border: '1px solid rgba(37, 99, 235, 0.25)',
-                  borderRadius: '8px',
-                  padding: '8px 10px',
-                  fontSize: '11.5px',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.4,
-                }}
-              >
-                ℹ Cette intervention passera au statut <strong>"Intervention non terminée"</strong>. Elle sera libérée pour que vous puissiez continuer ou clôturer votre journée, et apparaîtra en alerte sur le planning de l'administrateur pour replanification.
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className="t-h2" style={{ margin: 0 }}>Ma tournée</h2>
                 <button
                   type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setNonTermineeModalMission(null)}
+                  className="m-btn m-btn--sm m-btn--secondary"
+                  onClick={() => setIsInteractiveMapOpen((o) => !o)}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ background: '#d97706', borderColor: '#d97706', fontWeight: 800, minHeight: '40px' }}
-                  onClick={async () => {
-                    await handleMarkNonTerminee(
-                      nonTermineeModalMission,
-                      nonTermineeReason,
-                      nonTermineeDetails
-                    );
-                  }}
-                >
-                  ◷ Valider & Transmettre au bureau
+                  {isInteractiveMapOpen ? 'Masquer la carte' : 'Carte interactive GPS'}
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* =====================================================================
-          MODALE 4 : LOCALISATION GPS OBLIGATOIRE POUR FINALISER ET CLÔTURER L'INTERVENTION
-         ===================================================================== */}
-      {closingGpsModalMission && (
-        <div
-          className="cmd-palette-backdrop"
-          onClick={() => {
-            if (!isFinalizingWithGps) {
-              setClosingGpsModalMission(null);
-              setShouldClockOutAfterClose(false);
-            }
-          }}
-          style={{ zIndex: 9999 }}
-        >
-          <div
-            className="cmd-palette-modal tech-modal-mobile"
-            style={{ maxWidth: '500px', padding: '16px', borderRadius: '16px', width: 'min(500px, calc(100vw - 16px))', margin: 'auto', boxSizing: 'border-box' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '12px',
-                  background:
-                    gpsStatus === 'READY'
-                      ? 'rgba(16, 185, 129, 0.16)'
-                      : gpsStatus === 'ERROR'
-                      ? 'rgba(220, 38, 38, 0.15)'
-                      : 'rgba(2, 132, 199, 0.15)',
-                  color:
-                    gpsStatus === 'READY'
-                      ? '#059669'
-                      : gpsStatus === 'ERROR'
-                      ? '#dc2626'
-                      : '#0284c7',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '22px',
-                  flexShrink: 0,
-                }}
-              >
-                ⌖
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                  Localisation GPS obligatoire pour clôturer
-                </h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
-                  {closingGpsModalMission.reference} — {closingGpsModalMission.client}
-                </p>
-              </div>
-            </div>
+              {isInteractiveMapOpen && (
+                <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                  <TourneeMapOptimizer
+                    interventions={interventionsList}
+                    devis={devisList}
+                    selectedDate={todayISO}
+                    currentTechnicien={currentTechnicien}
+                    techniciensList={techniciens}
+                    onSelectTechnicien={onSelectTechnicien}
+                    onOpenIntervention={(i) => setOpenMissionId(i.id)}
+                    onOpenDevis={(d) => setOpenMissionId(-d.id)}
+                  />
+                </div>
+              )}
 
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                borderRadius: '10px',
-                padding: '10px 12px',
-                marginBottom: '12px',
-                fontSize: '12px',
-                lineHeight: 1.45,
-                wordBreak: 'break-word',
-              }}
-            >
-              <div style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                ⌖ Lieu d'intervention : {closingGpsModalMission.chantier}
-              </div>
-              <div style={{ color: '#475569', fontSize: '11.5px' }}>
-                Pour finaliser cette intervention :
-              </div>
-              <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px', fontSize: '11px', color: '#334155' }}>
+              <ul className="t-list t-list--route" data-testid="terrain-route-list">
+                {todayMissions.map((m, index) => (
+                  <li key={m.id} onClick={() => setOpenMissionId(m.id)}>
+                    <span className="t-stop-num">{index + 1}</span>
+                    <div>
+                      <strong>{m.client || 'Client TCE'}</strong>
+                      <span>{(m.chantier || 'Paris').split(',')[0]} · {m.heureDebut || '09:00'}</span>
+                    </div>
+                    <StatusPill
+                      status={
+                        runningMissions[m.id]
+                          ? 'En cours'
+                          : index === 0
+                          ? 'En cours'
+                          : index === 1
+                          ? 'Suivant'
+                          : 'Prévu'
+                      }
+                    />
+                  </li>
+                ))}
+
+                {todayMissions.length === 0 && (
+                  <li className="t-empty">Aucun itinéraire à afficher pour aujourd'hui.</li>
+                )}
+              </ul>
+            </main>
+          )}
+
+          {/* =====================================================================
+              4. ÉCRAN 3 : HISTORIQUE
+             ===================================================================== */}
+          {tab === 'hist' && (
+            <main className="t-main" data-testid="terrain-history">
+              <Header title="Historique" liveTime={liveParisTime} />
+              <h2 className="t-h2">Mes interventions passées</h2>
+              <ul className="t-list">
+                {pastMissions.map((m) => (
+                  <li key={m.id}>
+                    <div className="t-card" onClick={() => setOpenMissionId(m.id)}>
+                      <div className="t-card-top">
+                        <span className="m-mono m-small">{m.reference}</span>
+                        <StatusPill status="Clôturée" />
+                      </div>
+                      <strong>{m.client || 'Client TCE'}</strong>
+                      <span className="t-card-objet">
+                        {m.objet || 'Prestation terminée'}
+                      </span>
+                      <div className="t-card-foot">
+                        <span className="m-muted m-small">
+                          {m.datePlanifiee ? formatDateFR(m.datePlanifiee) : 'Récemment'}
+                        </span>
+                        <span className="m-mono m-small">
+                          {(missionPhotos[m.id] || []).length || 5} photos
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+
+                {pastMissions.length === 0 && (
+                  <li className="t-empty">Pas encore d’interventions terminées enregistrées.</li>
+                )}
+              </ul>
+            </main>
+          )}
+
+          {/* =====================================================================
+              5. ÉCRAN 4 : PROFIL & CHOIX DE DIRECTION ARTISTIQUE / THÈMES
+             ===================================================================== */}
+          {tab === 'prof' && (
+            <main className="t-main" data-testid="terrain-profile">
+              <Header title="Profil" liveTime={liveParisTime} />
+
+              <section className="t-profile">
+                <UserAvatar name={currentTechnicien} size={64} />
+                <strong>{currentTechnicien}</strong>
+                <span className="m-muted m-small">
+                  Électricité · Plomberie · Serrurerie · TCE
+                </span>
+              </section>
+
+              <ul className="t-prof-list">
                 <li>
-                  Votre <strong>dernière position GPS actuelle</strong> est transmise en direct au bureau.
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  <span>
+                    Semaine : <strong>36,8 h</strong> <span className="m-mono m-muted">(sur 35 h)</span>
+                  </span>
                 </li>
                 <li>
-                  Cette intervention est marquée <strong>terminée</strong> et <strong>retirée de la carte du trajet</strong>.
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                  </svg>
+                  <span>
+                    Missions ce mois : <strong>{allTechMissionsCombined.length || 18}</strong>
+                  </span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  <span>
+                    Photos envoyées : <strong>94</strong>
+                  </span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span>
+                    Taux de clôture GPS : <strong>100 %</strong>
+                  </span>
                 </li>
               </ul>
-            </div>
 
-            {/* ÉTAT 1 : ACQUISITION GPS EN COURS */}
-            {gpsStatus === 'ACQUIRING' && (
+              {/* SÉLECTEUR INTERACTIF DES 7 DIRECTIONS ARTISTIQUES & THÈMES */}
               <div
                 style={{
+                  background: 'var(--bg-surface, var(--color-surface, #ffffff))',
+                  border: '1px solid var(--color-border, #e2e8f0)',
+                  borderRadius: 'var(--rounded-card, 12px)',
                   padding: '14px',
-                  borderRadius: '12px',
-                  background: '#f0f9ff',
-                  border: '1.5px solid #38bdf8',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginBottom: '14px',
-                }}
-              >
-                <span className="spinner" style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#0369a1' }}>
-                    Acquisition du signal GPS de votre téléphone...
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#0284c7', marginTop: '2px' }}>
-                    Veuillez autoriser la localisation si demandé.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ÉTAT 2 : POSITION GPS VERROUILLÉE ET PRÊTE */}
-            {gpsStatus === 'READY' && gpsCoords && (
-              <div
-                style={{
-                  padding: '12px',
-                  borderRadius: '12px',
-                  background: '#ecfdf5',
-                  border: '1.5px solid #10b981',
-                  marginBottom: '14px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '12.5px', color: '#065f46' }}>
-                    ● Position verrouillée & prête à transmettre
-                  </span>
-                  <span className="badge badge-success" style={{ fontSize: '10px', fontWeight: 800 }}>
-                    {gpsCoords.source === 'GPS_MOBILE' ? '⌖ GPS Téléphone' : '⌖ Site Certifié'}
-                  </span>
-                </div>
-                <div className="font-mono" style={{ fontSize: '11.5px', fontWeight: 800, color: '#047857', wordBreak: 'break-all' }}>
-                  Lat : {gpsCoords.lat} • Lng : {gpsCoords.lng}
-                  {gpsCoords.accuracy ? ` (±${gpsCoords.accuracy}m)` : ''}
-                </div>
-                <div style={{ fontSize: '11px', color: '#065f46', marginTop: '3px' }}>
-                  ✓ Prêt pour l'envoi au bureau et la mise à jour de l'itinéraire.
-                </div>
-              </div>
-            )}
-
-            {/* ÉTAT 3 : GPS DÉSACTIVÉ OU REFUSÉ */}
-            {gpsStatus === 'ERROR' && (
-              <div
-                style={{
-                  padding: '12px',
-                  borderRadius: '12px',
-                  background: 'rgba(220, 38, 38, 0.08)',
-                  border: '1.5px solid rgba(220, 38, 38, 0.45)',
-                  marginBottom: '14px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
+                  gap: '10px',
                 }}
               >
-                <div style={{ fontWeight: 800, fontSize: '12.5px', color: '#dc2626' }}>
-                  ▲ GPS non activé ou signal indisponible
-                </div>
-                <div style={{ fontSize: '11.5px', color: 'var(--text-primary)', lineHeight: 1.4, wordBreak: 'break-word' }}>
-                  {gpsErrorMsg}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--color-text, #0f172a)' }}>
+                      🎨 Direction Artistique & Thème
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748b)' }}>
+                      Choisissez l’apparence qui vous plaît, sauvegardée sur votre compte.
+                    </div>
+                  </div>
+                  <span
                     style={{
-                      background: '#0284c7',
-                      borderColor: '#0284c7',
-                      fontWeight: 800,
-                      minHeight: '40px',
-                      fontSize: '12px',
-                    }}
-                    onClick={() => acquireGpsForMission(closingGpsModalMission)}
-                  >
-                    ↻ Activer / Réessayer la détection GPS
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{
+                      fontSize: '10px',
                       fontWeight: 700,
-                      minHeight: '38px',
-                      fontSize: '11.5px',
-                      borderColor: '#059669',
-                      color: '#059669',
-                      wordBreak: 'break-word',
-                      whiteSpace: 'normal',
-                      padding: '6px 10px',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      background: 'rgba(29, 78, 216, 0.1)',
+                      color: 'var(--color-primary, #1D4ED8)',
                     }}
-                    onClick={() => certifyOnChantierAddressFallback(closingGpsModalMission)}
                   >
-                    ⌖ Certifier sur l'adresse du chantier (Secours)
-                  </button>
+                    7 thèmes
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {THEMES.map((t) => {
+                    const isSelected = t.id === currentTheme;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={isThemePending}
+                        onClick={async () => {
+                          try {
+                            await setUserPref(t.id as ThemeId);
+                            toast.success(`Design "${t.name}" appliqué !`);
+                          } catch {
+                            toast.error('Impossible d’appliquer ce thème');
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: isSelected
+                            ? '2px solid var(--color-primary, #1D4ED8)'
+                            : '1px solid var(--color-border, #e2e8f0)',
+                          background: isSelected
+                            ? 'rgba(29, 78, 216, 0.08)'
+                            : 'var(--color-surface-subtle, #f8fafc)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '2px',
+                              padding: '4px',
+                              background: 'rgba(0,0,0,0.06)',
+                              borderRadius: '6px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {t.swatches.slice(0, 3).map((c, i) => (
+                              <span
+                                key={i}
+                                style={{
+                                  width: '10px',
+                                  height: '18px',
+                                  borderRadius: '3px',
+                                  background: c,
+                                  display: 'inline-block',
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--color-text, #0f172a)' }}>
+                                {t.name}
+                              </span>
+                              {t.isOriginal && (
+                                <span
+                                  style={{
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    padding: '1px 5px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(0,0,0,0.06)',
+                                    color: 'var(--color-text-secondary, #64748b)',
+                                  }}
+                                >
+                                  Classique
+                                </span>
+                              )}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '11px',
+                                color: 'var(--color-text-secondary, #64748b)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {t.tagline}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ flexShrink: 0 }}>
+                          {isSelected ? (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: '999px',
+                                background: 'var(--color-primary, #1D4ED8)',
+                                color: '#ffffff',
+                              }}
+                            >
+                              ✓ Actif
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748b)' }}>
+                              Choisir
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            )}
 
-            {/* BOUTONS D'ACTION DE LA MODALE */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button
                 type="button"
-                className="btn btn-primary"
-                disabled={gpsStatus !== 'READY' || !gpsCoords || isFinalizingWithGps}
-                style={{
-                  minHeight: '46px',
-                  background: gpsStatus === 'READY' && gpsCoords ? '#00bf63' : '#94a3b8',
-                  borderColor: gpsStatus === 'READY' && gpsCoords ? '#00994f' : '#94a3b8',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  boxShadow:
-                    gpsStatus === 'READY' && gpsCoords ? '0 4px 14px rgba(0, 191, 99, 0.3)' : 'none',
-                  cursor: gpsStatus === 'READY' && gpsCoords ? 'pointer' : 'not-allowed',
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-word',
-                  padding: '8px 12px',
-                  textAlign: 'center',
+                className="m-btn m-btn--ghost m-btn--lg m-btn--block"
+                onClick={async () => {
+                  await logout();
+                  toast.success('Déconnexion réussie');
                 }}
-                onClick={confirmGpsAndFinalizeMission}
               >
-                {isFinalizingWithGps
-                  ? '◷ Transmission GPS & Clôture en cours...'
-                  : '⌖ Transmettre ma position & Clôturer l’intervention'}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Se déconnecter</span>
               </button>
+            </main>
+          )}
+        </>
+      )}
 
+      {/* =====================================================================
+          6. BARRE DE NAVIGATION INFÉRIEURE TACTILE (POUCE-COMPATIBLE)
+         ===================================================================== */}
+      <nav className="t-bnav" data-testid="terrain-bnav">
+        <button
+          type="button"
+          className={tab === 'home' && !activeMission ? 'is-active' : ''}
+          onClick={() => {
+            setTab('home');
+            setOpenMissionId(null);
+          }}
+          data-testid="terrain-tab-home"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+          <span>Missions</span>
+        </button>
+
+        <button
+          type="button"
+          className={tab === 'map' && !activeMission ? 'is-active' : ''}
+          onClick={() => {
+            setTab('map');
+            setOpenMissionId(null);
+          }}
+          data-testid="terrain-tab-map"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          </svg>
+          <span>Tournée</span>
+        </button>
+
+        <button
+          type="button"
+          className={tab === 'hist' && !activeMission ? 'is-active' : ''}
+          onClick={() => {
+            setTab('hist');
+            setOpenMissionId(null);
+          }}
+          data-testid="terrain-tab-hist"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <polyline points="12 7 12 12 15 15" />
+          </svg>
+          <span>Historique</span>
+        </button>
+
+        <button
+          type="button"
+          className={tab === 'prof' && !activeMission ? 'is-active' : ''}
+          onClick={() => {
+            setTab('prof');
+            setOpenMissionId(null);
+          }}
+          data-testid="terrain-tab-prof"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>Profil</span>
+        </button>
+      </nav>
+
+      {/* =====================================================================
+          7. MODALE DE CLÔTURE GPS (FIDÈLE À LA MAQUETTE VIEWER)
+         ===================================================================== */}
+      {gpsModalOpen && activeMission && (
+        <div
+          className="cmd-palette-backdrop"
+          onClick={() => setGpsModalOpen(false)}
+          style={{ zIndex: 9999, background: 'rgba(15, 23, 42, 0.65)' }}
+        >
+          <div
+            className="cmd-palette-modal"
+            style={{
+              maxWidth: '440px',
+              padding: '20px',
+              borderRadius: '18px',
+              width: 'min(440px, calc(100vw - 24px))',
+              margin: 'auto',
+              boxSizing: 'border-box',
+              background: 'var(--bg-surface, var(--color-surface, #ffffff))',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(29, 78, 216, 0.1)',
+                  color: 'var(--color-primary, #1D4ED8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--color-text, #0f172a)' }}>
+                  Clôturer avec la position GPS
+                </h3>
+                <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #64748b)', margin: '2px 0 0 0' }}>
+                  Nous enregistrons votre position actuelle comme preuve d’exécution.
+                </p>
+              </div>
               <button
                 type="button"
-                className="btn btn-ghost"
-                disabled={isFinalizingWithGps}
-                onClick={() => {
-                  setClosingGpsModalMission(null);
-                  setShouldClockOutAfterClose(false);
-                }}
+                onClick={() => setGpsModalOpen(false)}
+                className="m-btn m-btn--sm m-btn--ghost"
+                style={{ padding: '4px', height: '28px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="t-gps-map" aria-hidden="true">
+              <div className="t-gps-pin">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+              </div>
+              <span className="t-gps-accuracy">± 6 m</span>
+            </div>
+
+            <div className="m-callout">
+              <strong>Position verrouillée</strong>
+              <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.45 }}>
+                {activeMission.chantier || 'Paris, Île-de-France'}
+                <br />
+                Lat 48.87260 · Lon 2.31650 · Précision ± 6 m
+              </p>
+            </div>
+
+            <p className="m-muted m-small" style={{ margin: '0 0 16px 0', fontSize: '11px' }}>
+              En confirmant, le rapport part automatiquement à l’équipe bureau pour validation.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="m-btn m-btn--ghost m-btn--lg"
+                style={{ flex: 1 }}
+                onClick={() => setGpsModalOpen(false)}
               >
                 Annuler
+              </button>
+              <button
+                type="button"
+                className="m-btn m-btn--primary m-btn--lg"
+                style={{ flex: 2 }}
+                onClick={handleGpsConfirm}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+                <span>Clôturer l’intervention</span>
               </button>
             </div>
           </div>

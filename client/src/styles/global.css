@@ -1198,7 +1198,7 @@ html, body, #root {
   }
 
   .enterprise-shell.mobile-tech-shell .enterprise-content {
-    padding: 8px 8px calc(76px + env(safe-area-inset-bottom, 0px)) 8px;
+    padding: 0 !important;
   }
 
   /* Barre de navigation inférieure fixe utilisable au pouce */
@@ -1835,7 +1835,7 @@ html, body, #root {
   }
 
   .enterprise-shell.mobile-tech-shell .enterprise-content {
-    padding: 6px 6px calc(76px + env(safe-area-inset-bottom, 0px)) 6px !important;
+    padding: 0 !important;
   }
 
   .tech-mobile-container {

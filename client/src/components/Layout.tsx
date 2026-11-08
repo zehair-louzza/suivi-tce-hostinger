@@ -508,6 +508,7 @@ export function Layout({
 
       {/* MAIN WORKSPACE */}
       <div className="enterprise-main">
+        {!isMobileTechOnly && (
         <header className="enterprise-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
             {/* Bouton Menu Hamburger sur mobile (si plusieurs sections disponibles) */}
@@ -1004,6 +1005,7 @@ export function Layout({
             </button>
           </div>
         </header>
+        )}
 
         <main className="enterprise-content">
           {children}

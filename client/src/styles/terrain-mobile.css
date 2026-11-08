@@ -1,0 +1,702 @@
+/* ============================================================================
+   ANELEC — APP MOBILE TECHNICIEN (UX TERRAIN NOUVELLE GÉNÉRATION)
+   Aligné fidèlement sur la maquette "App mobile technicien" (viewer?dir=atlas&screen=terrain&device=mobile)
+   et compatible avec les 5 directions artistiques (Atlas, Craft, Signal, Swiss, Bento).
+   ============================================================================ */
+
+.t-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg-app, var(--color-page, #f8fafc));
+  color: var(--color-text, #0f172a);
+  padding-bottom: 84px;
+  box-sizing: border-box;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+/* Status Bar téléphone */
+.t-sbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--color-text-secondary, #64748b);
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+}
+.t-sbar-mid {
+  flex: 1;
+}
+.t-sbar-bat {
+  margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* En-tête mobile collant */
+.t-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.t-head h1 {
+  font-size: 17px;
+  margin: 0;
+  flex: 1;
+  color: var(--color-text, #0f172a);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-head-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary, #64748b);
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  flex-shrink: 0;
+}
+
+/* Corps principal */
+.t-main {
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Carte de bienvenue technicien */
+.t-welcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border-radius: var(--rounded-card, 14px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.t-welcome > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.t-welcome strong {
+  font-size: 15px;
+  color: var(--color-text, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-welcome span {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Barre de progression des missions */
+.t-progress {
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  padding: 12px 14px;
+  border-radius: var(--rounded-card, 12px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.t-progress strong {
+  font-size: 13.5px;
+  color: var(--color-text, #0f172a);
+}
+
+.t-h2 {
+  font-size: 15px;
+  margin: 6px 0 -4px;
+  color: var(--color-text, #0f172a);
+  font-weight: 700;
+}
+
+/* Liste des missions */
+.t-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.t-card {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--rounded-card, 14px);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: transform 80ms ease, border-color 120ms ease;
+  box-sizing: border-box;
+}
+.t-card:active {
+  transform: scale(0.985);
+}
+.t-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.t-card strong {
+  font-size: 15px;
+  color: var(--color-text, #0f172a);
+}
+.t-card-objet {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.t-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--color-text-secondary, #64748b);
+  font-size: 12.5px;
+}
+.t-card-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Barre de navigation basse fixée pour le pouce (Thumb-friendly) */
+.t-bnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  padding: 6px 2px calc(env(safe-area-inset-bottom, 8px) + 6px);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+.t-bnav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: 0;
+  padding: 7px 4px;
+  color: var(--color-text-secondary, #64748b);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.t-bnav button.is-active {
+  color: var(--color-primary, #1D4ED8);
+  font-weight: 700;
+}
+
+/* ============================================================================
+   VUE DÉTAILLÉE D'UNE MISSION
+   ============================================================================ */
+.t-main--mission .t-mission-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.t-mission-title {
+  font-size: 20px;
+  margin: 4px 0 2px;
+  color: var(--color-text, #0f172a);
+  font-weight: 700;
+}
+.t-mission-sub {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 13.5px;
+  margin: 0;
+}
+.t-mission-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border-radius: var(--rounded-card, 10px);
+  padding: 10px;
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+.t-mission-amounts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.t-mission-amounts span {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary, #64748b);
+}
+.t-mission-amounts strong {
+  font-size: 13.5px;
+  color: var(--color-text, #0f172a);
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+.t-mission-section {
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--rounded-card, 10px);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.t-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.t-section-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary, #64748b);
+  font-weight: 700;
+}
+.t-addr {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text, #0f172a);
+  font-weight: 500;
+}
+.t-callout {
+  margin: 0;
+  padding: 10px;
+  background: var(--color-surface-subtle, #f1f5f9);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text, #0f172a);
+  border-left: 3px solid var(--color-primary, #1D4ED8);
+}
+.t-row-actions {
+  display: flex;
+  gap: 8px;
+}
+.t-row-actions .m-btn {
+  flex: 1;
+}
+
+/* Grille Photos avant / après */
+.t-photos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.t-photo {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-secondary, #64748b);
+  font-size: 10.5px;
+  margin: 0;
+  border: 1px solid var(--color-border, #e2e8f0);
+  background: var(--color-surface-subtle, #f1f5f9);
+  padding: 4px;
+  text-align: center;
+  overflow: hidden;
+  position: relative;
+}
+.t-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.t-photo figcaption {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.t-photo--0 {
+  background: linear-gradient(135deg, #E0F2FE, #BAE6FD);
+  color: #0369A1;
+}
+.t-photo--1 {
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  color: #B45309;
+}
+.t-photo--2 {
+  background: linear-gradient(135deg, #DCFCE7, #BBF7D0);
+  color: #166534;
+}
+.t-photo--add {
+  background: var(--color-surface-subtle, #f1f5f9);
+  color: var(--color-primary, #1D4ED8);
+  border-style: dashed;
+  border-color: var(--color-primary, #1D4ED8);
+  cursor: pointer;
+}
+.t-photo--add span {
+  font-weight: 600;
+}
+
+/* Actions flottantes en bas de la mission */
+.t-actions {
+  position: sticky;
+  bottom: 80px;
+  display: flex;
+  gap: 8px;
+  padding: 10px 2px 0;
+  background: linear-gradient(to top, var(--bg-app, #f8fafc) 80%, transparent);
+}
+.t-actions .m-btn {
+  flex: 1;
+}
+
+/* ============================================================================
+   MODALE GPS DE CLÔTURE
+   ============================================================================ */
+.t-gps-map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: 10px;
+  background: #DBE9F4;
+  background-image: radial-gradient(circle at 30% 60%, #B7DCF2, transparent 30%),
+    radial-gradient(circle at 60% 40%, #CEEBDF, transparent 30%),
+    repeating-linear-gradient(60deg, transparent 0 20px, rgba(100, 116, 139, .08) 20px 21px);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.t-gps-pin {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary, #1D4ED8);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 10px rgba(29, 78, 216, 0.22), 0 0 0 20px rgba(29, 78, 216, 0.10);
+}
+.t-gps-accuracy {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-text, #0f172a);
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+
+/* ============================================================================
+   ONGLET MA TOURNÉE
+   ============================================================================ */
+.t-map-wrap {
+  position: relative;
+  border-radius: var(--rounded-card, 12px);
+  overflow: hidden;
+}
+.t-map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.1;
+  background: #DDE8F0 repeating-linear-gradient(45deg, transparent 0 24px, rgba(100, 116, 139, .08) 24px 25px);
+  border-radius: var(--rounded-card, 12px);
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+.t-map-pin {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary, #1D4ED8);
+  color: #fff;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+}
+.t-map-pin--me {
+  top: 25%;
+  left: 30%;
+  background: transparent;
+  box-shadow: none;
+}
+.t-map-pin--stop {
+  background: #0f172a;
+  color: #FFC107;
+}
+
+.t-list--route li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border-radius: var(--rounded-card, 10px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  cursor: pointer;
+}
+.t-list--route li > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.t-list--route li strong {
+  font-size: 14px;
+  color: var(--color-text, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-list--route li span {
+  font-size: 12px;
+  color: var(--color-text-secondary, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-stop-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-primary, #1D4ED8);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.t-empty {
+  text-align: center;
+  color: var(--color-text-secondary, #64748b);
+  padding: 24px 12px;
+  font-size: 13.5px;
+}
+
+/* ============================================================================
+   ONGLET PROFIL
+   ============================================================================ */
+.t-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 12px;
+}
+.t-profile strong {
+  font-size: 18px;
+  color: var(--color-text, #0f172a);
+}
+.t-prof-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.t-prof-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--rounded-card, 10px);
+  font-size: 13.5px;
+  color: var(--color-text, #0f172a);
+}
+
+/* ============================================================================
+   PRIMITIVES BOUTONS & PILLS ADAPTÉS
+   ============================================================================ */
+.m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--rounded-btn, 8px);
+  border: 1px solid var(--color-border-strong, #cbd5e1);
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  color: var(--color-text, #0f172a);
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, transform 80ms ease;
+  box-sizing: border-box;
+}
+.m-btn:active {
+  transform: scale(0.98);
+}
+.m-btn--sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.m-btn--lg {
+  height: 44px;
+  padding: 0 18px;
+  font-size: 14.5px;
+  border-radius: var(--rounded-btn, 10px);
+}
+.m-btn--block {
+  width: 100%;
+}
+.m-btn--primary {
+  background: var(--color-primary, #1D4ED8);
+  color: #ffffff;
+  border-color: var(--color-primary, #1D4ED8);
+}
+.m-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text, #0f172a);
+}
+
+.m-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-subtle, #f1f5f9);
+  color: var(--color-text, #0f172a);
+  border: 1px solid var(--color-border, #e2e8f0);
+  white-space: nowrap;
+}
+.m-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.m-tone-slate {
+  background: #F1F5F9;
+  color: #334155;
+  border-color: #E2E8F0;
+}
+.m-tone-blue {
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-color: #BFDBFE;
+}
+.m-tone-green {
+  background: #DCFCE7;
+  color: #166534;
+  border-color: #BBF7D0;
+}
+.m-tone-amber {
+  background: #FEF3C7;
+  color: #92400E;
+  border-color: #FDE68A;
+}
+.m-tone-indigo {
+  background: #E0E7FF;
+  color: #3730A3;
+  border-color: #C7D2FE;
+}
+.m-tone-red {
+  background: #FEE2E2;
+  color: #991B1B;
+  border-color: #FECACA;
+}
+
+.m-mono {
+  font-family: var(--font-mono, monospace);
+}
+.m-small {
+  font-size: 11.5px;
+}
+.m-muted {
+  color: var(--color-text-secondary, #64748b);
+}
+
+.m-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong, #cbd5e1);
+  background: var(--bg-surface, var(--color-surface, #ffffff));
+  color: var(--color-text, #0f172a);
+  font-size: 13.5px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.m-callout {
+  padding: 12px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  font-size: 13px;
+  color: #1e3a8a;
+  margin: 10px 0;
+}
+.m-callout strong {
+  display: block;
+  margin-bottom: 4px;
+}
