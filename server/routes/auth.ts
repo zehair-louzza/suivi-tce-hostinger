@@ -102,7 +102,7 @@ const RegisterSchema = z.object({
   name: z.string().min(1, 'Nom du responsable requis').max(100),
   email: z.string().email('Email professionnel invalide'),
   password: z.string().min(8, 'Mot de passe trop court (min 8 caractères)'),
-  companyName: z.string().min(2, "Nom de l'entreprise requis").max(120).optional(),
+  companyName: z.string().min(2, "Nom de l'entreprise requis").max(120),
   siretOrSiren: z.string().optional(),
 });
 
@@ -211,6 +211,15 @@ authRouter.post(
           ],
         },
       });
+
+      // SÉCURITÉ : s'inscrire avec le nom/SIREN d'une entreprise existante donnait un accès ADMIN à ses données.
+      if (company) {
+        throw new AppError(
+          409,
+          'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
+          'COMPANY_EXISTS'
+        );
+      }
 
       if (!company) {
         company = await prisma.company.create({
@@ -363,8 +372,6 @@ authRouter.post(
       emailSent: delivery.sent,
       email: user.email,
       deliveryChannel: delivery.channel,
-      previewUrl: delivery.previewUrl || null,
-      activationLink: delivery.activationLink || null,
     });
   })
 );
@@ -382,8 +389,11 @@ authRouter.post(
       where: { email },
     });
 
+    // Réponse identique que le compte existe ou non (pas d'énumération de comptes).
+    // Le lien n'est JAMAIS renvoyé dans la réponse : il part uniquement par e-mail.
+    const genericMessage = `Si un compte existe pour ${email}, un e-mail de réinitialisation vient d'être envoyé.`;
     if (!user) {
-      throw new AppError(404, 'Aucun compte associé à cette adresse e-mail', 'USER_NOT_FOUND');
+      return res.json({ message: genericMessage, emailSent: true });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -395,19 +405,13 @@ authRouter.post(
       },
     });
 
-    const delivery = await sendPasswordResetEmail({
+    await sendPasswordResetEmail({
       toEmail: user.email,
       recipientName: user.name,
       resetToken,
     });
 
-    return res.json({
-      message: `Un e-mail de réinitialisation de mot de passe a été envoyé à ${user.email}.`,
-      emailSent: delivery.sent,
-      deliveryChannel: delivery.channel,
-      previewUrl: delivery.previewUrl || null,
-      resetLink: delivery.activationLink || null,
-    });
+    return res.json({ message: genericMessage, emailSent: true });
   })
 );
 
@@ -426,6 +430,11 @@ authRouter.post(
 
     if (!user) {
       throw new AppError(404, 'Lien de réinitialisation invalide ou expiré', 'INVALID_TOKEN');
+    }
+    const tokenRow = await prisma.user.findUnique({ where: { id: user.id }, select: { confirmationSentAt: true } });
+    const sentAt = tokenRow?.confirmationSentAt;
+    if (sentAt && Date.now() - sentAt.getTime() > 2 * 60 * 60 * 1000) {
+      throw new AppError(410, 'Ce lien de réinitialisation a expiré. Refaites une demande.', 'TOKEN_EXPIRED');
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
@@ -701,12 +710,10 @@ authRouter.post(
     let name = '';
     let picture = '';
 
-    // Mode simulation / démo locale si jeton préfixé par simulated_google_
+    // SÉCURITÉ : l'ancien « mode simulation » (jeton simulated_google_...) permettait de se connecter
+    // en tant que n'importe quel utilisateur sans aucune vérification. Il est supprimé.
     if (data.credential.startsWith('simulated_google_')) {
-      const parts = data.credential.split(':');
-      email = (parts[1] || 'artisan.google@example.com').toLowerCase().trim();
-      name = parts[2] || 'Utilisateur Google Direct';
-      picture = 'https://lh3.googleusercontent.com/a/default-user';
+      throw new AppError(401, 'Jeton Google invalide', 'INVALID_GOOGLE_TOKEN');
     } else {
       // Validation officielle du jeton Google (prend en charge ID Token et Access Token OAuth2)
       try {
@@ -729,6 +736,12 @@ authRouter.post(
             throw new AppError(401, 'Jeton Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
           }
           profile = await googleRes.json();
+          // Le jeton doit avoir été émis pour NOTRE application (et pas pour une autre application Google)
+          const expectedAud =
+            process.env.GOOGLE_CLIENT_ID || '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com';
+          if (profile.aud !== expectedAud) {
+            throw new AppError(401, 'Jeton Google non émis pour cette application', 'INVALID_GOOGLE_TOKEN');
+          }
         }
 
         if (profile.email_verified !== 'true' && profile.email_verified !== true) {
@@ -825,6 +838,15 @@ authRouter.post(
         ],
       },
     });
+
+    // SÉCURITÉ : idem inscription classique — jamais de rattachement implicite à une entreprise existante.
+    if (company) {
+      throw new AppError(
+        409,
+        'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
+        'COMPANY_EXISTS'
+      );
+    }
 
     if (!company) {
       company = await prisma.company.create({
