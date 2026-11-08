@@ -427,8 +427,8 @@ export function Layout({
                   gap: '8px',
                   padding: '8px 10px',
                   borderRadius: '6px',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  background: 'var(--sidebar-hover-bg)',
+                  border: '1px solid var(--sidebar-border)',
                   fontSize: '11px',
                   color: 'var(--color-sidebar-muted)',
                 }}
@@ -465,14 +465,14 @@ export function Layout({
                   color: 'inherit',
                   transition: 'background 120ms ease',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sidebar-hover-bg)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               >
                 <div className="avatar">
                   {user.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() : 'ZL'}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--sidebar-hover-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {user.name || 'Utilisateur'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-sidebar-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

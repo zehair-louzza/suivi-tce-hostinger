@@ -1,105 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-/* ============================================================================
-   LIGHT MODE BY DEFAULT (ANELEC Enterprise SaaS Standard)
-   ============================================================================ */
-:root,
-[data-theme="light"] {
-  --bg-app: #f1f5f9;
-  --bg-sidebar: #0f172a;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f8fafc;
-  --bg-hover: #f1f5f9;
-  --bg-active: #e2e8f0;
-  --bg-glass: rgba(255, 255, 255, 0.92);
-  --bg-input: #ffffff;
-
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-
-  --border-subtle: #e2e8f0;
-  --border-default: #cbd5e1;
-  --border-strong: #94a3b8;
-
-  --brand-primary: #2563eb;
-  --brand-primary-hover: #1d4ed8;
-  --brand-glow: rgba(37, 99, 235, 0.14);
-
-  --visite-accent: #9333ea;
-  --visite-bg: rgba(147, 51, 234, 0.12);
-  --visite-border: rgba(147, 51, 234, 0.4);
-
-  --travaux-accent: #2563eb;
-  --travaux-bg: rgba(37, 99, 235, 0.12);
-  --travaux-border: rgba(37, 99, 235, 0.4);
-
-  --urgence-accent: #dc2626;
-  --urgence-bg: rgba(220, 38, 38, 0.12);
-  --urgence-border: rgba(220, 38, 38, 0.45);
-
-  --success-accent: #059669;
-  --success-bg: rgba(5, 150, 105, 0.12);
-  --warning-accent: #d97706;
-  --warning-bg: rgba(217, 119, 6, 0.12);
-  --danger-accent: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.12);
-
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.09);
-  --shadow-lg: 0 20px 45px rgba(15, 23, 42, 0.18);
-  --grid-line: rgba(15, 23, 42, 0.05);
-  --grid-line-hour: rgba(15, 23, 42, 0.1);
-}
-
-[data-theme="dark"] {
-  --bg-app: #090b10;
-  --bg-sidebar: #0d1017;
-  --bg-surface: #121620;
-  --bg-elevated: #171c28;
-  --bg-hover: #1e2434;
-  --bg-active: #252d40;
-  --bg-glass: rgba(18, 22, 32, 0.86);
-  --bg-input: #0d1017;
-
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.18);
-
-  --brand-primary: #3b82f6;
-  --brand-primary-hover: #2563eb;
-  --brand-glow: rgba(59, 130, 246, 0.22);
-
-  --visite-accent: #a855f7;
-  --visite-bg: rgba(168, 85, 247, 0.15);
-  --visite-border: rgba(168, 85, 247, 0.45);
-
-  --travaux-accent: #3b82f6;
-  --travaux-bg: rgba(59, 130, 246, 0.15);
-  --travaux-border: rgba(59, 130, 246, 0.45);
-
-  --urgence-accent: #ef4444;
-  --urgence-bg: rgba(239, 68, 68, 0.16);
-  --urgence-border: rgba(239, 68, 68, 0.5);
-
-  --success-accent: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.14);
-  --warning-accent: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --danger-accent: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.14);
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.65);
-  --grid-line: rgba(255, 255, 255, 0.045);
-  --grid-line-hour: rgba(255, 255, 255, 0.09);
-}
-
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -147,9 +47,9 @@ html, body, #root {
 .enterprise-sidebar {
   width: 216px;
   flex-shrink: 0;
-  background: #0f172a;
-  color: #f8fafc;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-sidebar);
+  color: var(--sidebar-text);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -167,7 +67,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar-nav {
@@ -184,7 +84,7 @@ html, body, #root {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8;
+  color: var(--sidebar-muted);
   padding: 10px 10px 4px;
 }
 
@@ -197,7 +97,7 @@ html, body, #root {
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--sidebar-text);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -207,14 +107,13 @@ html, body, #root {
 }
 
 .sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #ffffff;
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-hover-text);
 }
 
 .sidebar-item.active {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.24) 0%, rgba(59, 130, 246, 0.08) 100%);
-  color: #ffffff;
-  border-color: rgba(59, 130, 246, 0.45);
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
   font-weight: 600;
 }
 
@@ -226,7 +125,7 @@ html, body, #root {
   bottom: 6px;
   width: 3px;
   border-radius: 0 4px 4px 0;
-  background: #3b82f6;
+  background: var(--sidebar-accent);
 }
 
 .sidebar-badge {
@@ -235,9 +134,9 @@ html, body, #root {
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  background: rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
+  font-family: var(--font-mono);
+  background: var(--sidebar-badge-bg);
+  color: var(--sidebar-badge-text);
 }
 
 .sidebar-badge.urgent {
@@ -248,7 +147,7 @@ html, body, #root {
 
 .sidebar-footer {
   padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -867,28 +766,6 @@ html, body, #root {
   min-width: 0;
 }
 
-.kpi-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  transition: all 0.16s ease;
-  position: relative;
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
-}
-
-.kpi-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
 .pro-table-container {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1415,103 +1292,6 @@ html, body, #root {
    Surfaces solides, contrastes AAA, suppression intégrale des dégradés arc-en-ciel
    ============================================================================ */
 
-:root,
-[data-theme="light"] {
-  --accent-primary: #00bf63;
-  --accent-primary-hover: #00994f;
-  --bg-app: #f4f6f9;
-  --bg-sidebar: #0a0f1d;
-  --bg-surface: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-hover: #f1f5f9;
-  --bg-active: #e2e8f0;
-  --bg-glass: #ffffff;
-  --bg-input: #ffffff;
-
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-
-  --border-subtle: #e2e8f0;
-  --border-default: #cbd5e1;
-  --border-strong: #94a3b8;
-
-  --brand-primary: #0a0f1d;
-  --brand-primary-hover: #1e293b;
-  --brand-glow: rgba(0, 191, 99, 0.12);
-
-  --visite-accent: #ffcc00;
-  --visite-bg: #fffbeb;
-  --visite-border: rgba(255, 204, 0, 0.6);
-
-  --travaux-accent: #00bf63;
-  --travaux-bg: #ecfdf5;
-  --travaux-border: rgba(0, 191, 99, 0.45);
-
-  --urgence-accent: #ff0000;
-  --urgence-bg: #fef2f2;
-  --urgence-border: rgba(255, 0, 0, 0.45);
-
-  --success-accent: #00bf63;
-  --success-bg: #ecfdf5;
-  --warning-accent: #d97706;
-  --warning-bg: #fffbeb;
-  --danger-accent: #dc2626;
-  --danger-bg: #fef2f2;
-
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 14px 34px rgba(15, 23, 42, 0.12);
-}
-
-[data-theme="dark"] {
-  --accent-primary: #00bf63;
-  --accent-primary-hover: #00994f;
-  --bg-app: #07090e;
-  --bg-sidebar: #0a0f1d;
-  --bg-surface: #0f1422;
-  --bg-elevated: #151c30;
-  --bg-hover: #1e263d;
-  --bg-active: #283350;
-  --bg-glass: #0f1422;
-  --bg-input: #0a0f1d;
-
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-default: rgba(255, 255, 255, 0.14);
-  --border-strong: rgba(255, 255, 255, 0.25);
-
-  --brand-primary: #00bf63;
-  --brand-primary-hover: #00994f;
-  --brand-glow: rgba(0, 191, 99, 0.2);
-
-  --visite-accent: #ffcc00;
-  --visite-bg: rgba(255, 204, 0, 0.16);
-  --visite-border: rgba(255, 204, 0, 0.45);
-
-  --travaux-accent: #00bf63;
-  --travaux-bg: rgba(0, 191, 99, 0.16);
-  --travaux-border: rgba(0, 191, 99, 0.45);
-
-  --urgence-accent: #ff0000;
-  --urgence-bg: rgba(255, 0, 0, 0.16);
-  --urgence-border: rgba(255, 0, 0, 0.45);
-
-  --success-accent: #00bf63;
-  --success-bg: rgba(0, 191, 99, 0.16);
-  --warning-accent: #ffcc00;
-  --warning-bg: rgba(255, 204, 0, 0.16);
-  --danger-accent: #ff0000;
-  --danger-bg: rgba(255, 0, 0, 0.16);
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.7);
-}
-
 /* ---------- Surfaces Pro Opaques & Haute Lisibilité ---------- */
 .enterprise-shell {
   background: var(--bg-app);
@@ -1526,29 +1306,29 @@ html, body, #root {
 
 .enterprise-sidebar {
   background: var(--bg-sidebar) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-right: 1px solid var(--sidebar-border) !important;
 }
 
 .sidebar-item {
-  border-radius: 8px !important;
-  color: #94a3b8 !important;
+  border-radius: var(--sidebar-radius) !important;
+  color: var(--sidebar-text) !important;
   font-weight: 500;
 }
 
 .sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: #ffffff !important;
+  background: var(--sidebar-hover-bg) !important;
+  color: var(--sidebar-hover-text) !important;
 }
 
 .sidebar-item.active {
-  background: #141c2e !important;
-  color: #ffffff !important;
-  border-left: 3px solid #00bf63 !important; /* Vert ANELEC */
+  background: var(--sidebar-active-bg) !important;
+  color: var(--sidebar-active-text) !important;
+  border-left: 3px solid var(--sidebar-accent) !important;
   font-weight: 700 !important;
 }
 
 .sidebar-item.active svg {
-  color: #00bf63 !important;
+  color: var(--sidebar-accent) !important;
 }
 
 .pro-table-container,
@@ -1562,30 +1342,16 @@ html, body, #root {
   box-shadow: var(--shadow-sm) !important;
 }
 
-.kpi-card {
-  background: var(--bg-surface) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: 10px !important;
-  box-shadow: var(--shadow-sm) !important;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
-}
-
-.kpi-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strong) !important;
-  box-shadow: var(--shadow-md) !important;
-}
-
 /* En-tête des tableaux pro : Fond foncé ANELEC + Texte blanc + Liseré Vert ANELEC */
 .pro-table thead th {
-  background: #0a0f1d !important;
-  color: #ffffff !important;
+  background: var(--table-head-bg) !important;
+  color: var(--table-head-text) !important;
   font-weight: 700 !important;
   font-size: 11.5px !important;
   text-transform: uppercase !important;
   letter-spacing: 0.04em !important;
   padding: 11px 13px !important;
-  border-bottom: 2px solid #00bf63 !important;
+  border-bottom: 2px solid var(--table-head-accent) !important;
 }
 
 .pro-table tbody td {

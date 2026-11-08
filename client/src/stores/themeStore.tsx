@@ -33,84 +33,105 @@ export interface ThemeDescriptor {
 export const THEMES: ThemeDescriptor[] = [
   {
     id: 'light',
-    name: 'ANELEC Original — Clair',
-    tagline: "L'apparence actuelle en mode clair.",
+    name: 'Clarté',
+    tagline: 'Sobre et lisible : l’apparence ANELEC, sans surprise.',
     description:
-      "Le design historique du Suivi TCE ANELEC avec sa sidebar bleu nuit et son vert d'action. Idéal pour continuer sans rupture visuelle.",
-    swatches: ['#047857', '#142536', '#f6f8fa', '#ffffff', '#b91c1c'],
+      "Quatre cartes KPI en ligne, barre latérale bleu nuit, vert d'action. Le meilleur choix pour une prise en main immédiate, au bureau comme sur le terrain.",
+    swatches: ['#047857', '#00bf63', '#142536', '#f6f8fa', '#b91c1c'],
     fonts: { display: 'Inter', body: 'Inter' },
     mood: 'light',
-    tags: ['Original', 'Léger', 'Équilibré'],
+    tags: ['Par défaut', 'Sobre', 'Équilibré'],
     isOriginal: true,
-  },
-  {
-    id: 'dark',
-    name: 'ANELEC Original — Sombre',
-    tagline: "La version sombre de l'apparence actuelle.",
-    description:
-      "Même structure et même ergonomie que l'original, en mode sombre pour les longues sessions en soirée ou les postes en intérieur peu lumineux.",
-    swatches: ['#10b981', '#0a1017', '#0b111a', '#111a26', '#ef4444'],
-    fonts: { display: 'Inter', body: 'Inter' },
-    mood: 'dark',
-    tags: ['Original', 'Sombre', 'Confort visuel'],
-    isOriginal: true,
-  },
-  {
-    id: 'atlas',
-    name: 'Atlas Clarity',
-    tagline: 'Entreprise moderne, clarté maximale, bleu profond.',
-    description:
-      "Densité équilibrée, polices techniques (Space Grotesk + IBM Plex Mono), bleu profond et accent corail. L'image d'un progiciel pro sérieux type Linear ou Stripe.",
-    swatches: ['#1D4ED8', '#0EA5A4', '#0F172A', '#F6F7FB', '#F59E0B'],
-    fonts: { display: 'Space Grotesk', body: 'Space Grotesk' },
-    mood: 'light',
-    tags: ['Enterprise', 'Dense', 'Clair'],
   },
   {
     id: 'craft',
-    name: 'Craft Warmth',
-    tagline: 'Chaleureux, artisan, arrondi — plus humain.',
+    name: 'Chronologie',
+    tagline: 'Chaleureux : la journée se lit comme une frise.',
     description:
-      "Teal profond + ocre, formes arrondies, polices chaudes (Merriweather Sans + Work Sans). Fait sortir ANELEC du cliché de l'outil administratif sec.",
-    swatches: ['#0F766E', '#D97706', '#22201C', '#FAF7F2', '#B91C1C'],
-    fonts: { display: 'Merriweather Sans', body: 'Work Sans' },
+      "Fonds crème, ambre et formes arrondies. Les indicateurs forment un seul bandeau et le planning du jour se lit comme une chronologie. Idéal pour suivre la journée d'équipe.",
+    swatches: ['#b45309', '#047857', '#2a2118', '#fbf7ef', '#b91c1c'],
+    fonts: { display: 'Manrope', body: 'Manrope' },
     mood: 'light',
-    tags: ['Chaleureux', 'Arrondi', 'Humain'],
+    tags: ['Chaleureux', 'Arrondi', 'Journée'],
   },
   {
     id: 'signal',
-    name: 'Signal Command',
-    tagline: 'Cockpit sombre, cyan vif, pour les dispatchers.',
+    name: 'Signal',
+    tagline: 'Pilotage : un filet de couleur dit tout de suite où agir.',
     description:
-      "Thème sombre premium avec cyan et ambre d'alerte. Confort visuel maximal pour les longues sessions de pilotage.",
-    swatches: ['#38BDF8', '#F59E0B', '#0B1220', '#13213A', '#34D399'],
+      "Fond clair aux couleurs du site, filets de statut colorés en haut de chaque carte (vert, jaune, ambre, rouge) et chiffres en police à chasse fixe. Pour ceux qui traitent beaucoup de dossiers.",
+    swatches: ['#047857', '#f5b400', '#e8edf2', '#f6f8fa', '#ef4444'],
     fonts: { display: 'IBM Plex Sans', body: 'IBM Plex Sans' },
-    mood: 'dark',
-    tags: ['Sombre', 'Dense', 'Cockpit'],
+    mood: 'light',
+    tags: ['Pilotage', 'Dense', 'Statuts'],
   },
   {
-    id: 'swiss',
-    name: 'Editorial Swiss',
-    tagline: 'Grille typographique premium, bleu royal + corail.',
+    id: 'atlas',
+    name: 'Atlas',
+    tagline: 'Un chiffre phare, trois indicateurs en pile.',
     description:
-      "Angles vifs, typographies Manrope/Karla, grille suisse. Position haut de gamme, présentation comme un cahier technique bien tenu.",
-    swatches: ['#0B3B8F', '#E07A5F', '#0B1220', '#FFFFFF', '#2A9D8F'],
-    fonts: { display: 'Manrope', body: 'Karla' },
+      "Bleu profond, grand chiffre d'affaires à gauche et trois indicateurs empilés à droite. Une lecture en un coup d'œil pour la direction.",
+    swatches: ['#1d4ed8', '#60a5fa', '#0f172a', '#f6f7fb', '#dc2626'],
+    fonts: { display: 'Space Grotesk', body: 'Space Grotesk' },
     mood: 'light',
-    tags: ['Premium', 'Typographique', 'Éditorial'],
+    tags: ['Direction', 'Moderne', 'Synthèse'],
   },
   {
     id: 'bento',
-    name: 'Bento Modular',
-    tagline: 'Marque ANELEC : jaune, corail, vert — tuiles arrondies.',
+    name: 'Bento',
+    tagline: 'Des tuiles colorées, très arrondies, faciles à toucher.',
     description:
-      "Tuiles bento larges, encre noire, accents marque (jaune + corail + vert). Style Apple/Vercel, pour faire parler la marque.",
-    swatches: ['#111827', '#F5B400', '#EF5B4C', '#16A34A', '#F2F3F5'],
+      "Tuile noire large pour le chiffre d'affaires, tuiles jaune et rouge pour ce qui demande de l'attention. Très lisible sur téléphone et tablette.",
+    swatches: ['#111827', '#f5b400', '#15803d', '#f2f3f5', '#b91c1c'],
     fonts: { display: 'Sora', body: 'Figtree' },
     mood: 'light',
-    tags: ['Moderne', 'Marque', 'Modulaire'],
+    tags: ['Tuiles', 'Tactile', 'Marque'],
+  },
+  {
+    id: 'swiss',
+    name: 'Éditorial',
+    tagline: 'Typographie d’abord : grands chiffres, filets, aucun décor.',
+    description:
+      "Blanc, encre et bleu royal, angles vifs. Les indicateurs sont de grands chiffres séparés par des filets, sans cartes. Pour un rendu sérieux et très imprimable.",
+    swatches: ['#0b3b8f', '#e07a5f', '#0b1220', '#ffffff', '#b91c1c'],
+    fonts: { display: 'Manrope', body: 'Karla' },
+    mood: 'light',
+    tags: ['Typographique', 'Sobre', 'Imprimable'],
+  },
+  {
+    id: 'dark',
+    name: 'Mode sombre',
+    tagline: 'La même structure que Clarté, en sombre.',
+    description:
+      "Pour les longues sessions en soirée ou les postes peu éclairés. Mêmes repères et mêmes emplacements que Clarté.",
+    swatches: ['#10b981', '#00bf63', '#0a1017', '#0b111a', '#ef4444'],
+    fonts: { display: 'Inter', body: 'Inter' },
+    mood: 'dark',
+    tags: ['Sombre', 'Confort visuel'],
   },
 ];
+
+/** Polices propres à chaque direction (Clarté et Mode sombre : Inter, déjà chargée). */
+const THEME_FONT_QUERY: Partial<Record<ThemeId, string>> = {
+  craft: 'family=Manrope:wght@500;600;700;800',
+  signal: 'family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600',
+  atlas: 'family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600',
+  bento: 'family=Sora:wght@500;600;700;800&family=Figtree:wght@400;500;600;700',
+  swiss: 'family=Manrope:wght@500;600;700;800&family=Karla:wght@400;500;600;700&family=Source+Code+Pro:wght@500;600',
+};
+
+/** Charge les polices d'une direction à la demande (une seule fois par direction). */
+function ensureThemeFonts(id: ThemeId): void {
+  const query = THEME_FONT_QUERY[id];
+  if (!query || typeof document === 'undefined') return;
+  const linkId = `anelec-theme-fonts-${id}`;
+  if (document.getElementById(linkId)) return;
+  const link = document.createElement('link');
+  link.id = linkId;
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?${query}&display=swap`;
+  document.head.appendChild(link);
+}
 
 export const DEFAULT_THEME: ThemeId = 'light';
 const ALL_IDS = THEMES.map((t) => t.id);
@@ -140,6 +161,7 @@ function writeCache(companyDefault: ThemeId, userPref: ThemeId | null, allowOver
 }
 
 function applyTheme(id: ThemeId): void {
+  ensureThemeFonts(id);
   const html = document.documentElement;
   html.setAttribute('data-theme-switching', '1');
   html.setAttribute('data-theme', id);
@@ -240,6 +262,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   /** Aperçu temporaire (survol) — n'est pas persisté côté serveur. */
   const previewTheme = useCallback((id: ThemeId | null) => {
     const resolved = id ?? resolve(companyDefault, userPref, allowUserOverride);
+    ensureThemeFonts(resolved);
     document.documentElement.setAttribute('data-theme', resolved);
   }, [companyDefault, userPref, allowUserOverride]);
 

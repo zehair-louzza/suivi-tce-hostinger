@@ -123,7 +123,7 @@ function ThemeCard({ theme, isDefault, isCurrent, onSelect, onHover }: ThemeCard
           <strong style={{ fontSize: 14, color: 'var(--color-text)' }}>{theme.name}</strong>
           {theme.isOriginal && (
             <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--color-surface-subtle)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
-              Original
+              Par défaut
             </span>
           )}
           {theme.mood === 'dark' && (

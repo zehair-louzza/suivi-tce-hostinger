@@ -11,6 +11,8 @@ import {
 } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../stores/authStore';
+import { useTheme } from '../stores/themeStore';
+import type { ThemeId } from '../stores/themeStore';
 import { compressAndOptimizeImage } from '../lib/imageOptimizer';
 import { TourneeMapOptimizer } from './TourneeMapOptimizer';
 import {
@@ -114,27 +116,9 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-type TerrainSkin = 'clarte' | 'chrono';
-const SKIN_KEY = 'anelec-terrain-skin';
-
-function useTerrainSkin(): [TerrainSkin, (s: TerrainSkin) => void] {
-  const [skin, setSkinState] = useState<TerrainSkin>(() => {
-    try {
-      const v = window.localStorage.getItem(SKIN_KEY);
-      return v === 'chrono' ? 'chrono' : 'clarte';
-    } catch {
-      return 'clarte';
-    }
-  });
-  const setSkin = (s: TerrainSkin) => {
-    setSkinState(s);
-    try {
-      window.localStorage.setItem(SKIN_KEY, s);
-    } catch {
-      // stockage indisponible : l'apparence reste valable pour la session
-    }
-  };
-  return [skin, setSkin];
+/** Chronologie ajoute la frise de la journée ; les autres directions gardent la liste de cartes. */
+function skinFor(themeId: ThemeId): 'clarte' | 'chrono' {
+  return themeId === 'craft' ? 'chrono' : 'clarte';
 }
 
 /* ============================================================================
@@ -542,7 +526,8 @@ export function TechnicianMobileView({
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
   const { logout } = useAuth();
-  const [skin, setSkin] = useTerrainSkin();
+  const { current: currentTheme, themes, userPref, allowUserOverride, setUserPref, isPending: themePending } = useTheme();
+  const skin = skinFor(currentTheme);
   const isTablet = useMediaQuery('(min-width: 768px)');
 
   const [tab, setTab] = useState<'home' | 'map' | 'hist' | 'prof'>('home');
@@ -1530,33 +1515,33 @@ export function TechnicianMobileView({
                   </li>
                 </ul>
 
-                <section className="t-skin" aria-labelledby="t-skin-title">
-                  <h3 id="t-skin-title">Apparence de l’écran terrain</h3>
-                  <div className="t-skin-opts" role="radiogroup" aria-labelledby="t-skin-title">
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={skin === 'clarte'}
-                      className={`t-skin-opt ${skin === 'clarte' ? 'is-selected' : ''}`}
-                      onClick={() => setSkin('clarte')}
-                    >
-                      <strong>Clarté</strong>
-                      <span>Cartes claires, pointage en tête</span>
-                      {skin === 'clarte' && <Ic n="check" size={20} />}
-                    </button>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={skin === 'chrono'}
-                      className={`t-skin-opt ${skin === 'chrono' ? 'is-selected' : ''}`}
-                      onClick={() => setSkin('chrono')}
-                    >
-                      <strong>Chronologie</strong>
-                      <span>La journée en frise horaire</span>
-                      {skin === 'chrono' && <Ic n="check" size={20} />}
-                    </button>
-                  </div>
-                </section>
+                {allowUserOverride && (
+                  <section className="t-skin" aria-labelledby="t-skin-title">
+                    <h3 id="t-skin-title">Apparence</h3>
+                    <div className="t-skin-opts" role="radiogroup" aria-labelledby="t-skin-title">
+                      {themes.map((t) => {
+                        const selected = (userPref ?? currentTheme) === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={themePending}
+                            className={`t-skin-opt ${selected ? 'is-selected' : ''}`}
+                            onClick={() => {
+                              setUserPref(t.id).catch(() => toast.error('Impossible de changer l’apparence pour le moment.'));
+                            }}
+                          >
+                            <strong>{t.name}</strong>
+                            <span>{t.tagline}</span>
+                            {selected && <Ic n="check" size={20} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
 
                 <button
                   type="button"

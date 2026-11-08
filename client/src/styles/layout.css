@@ -67,8 +67,8 @@
   display: flex;
   flex-direction: column;
   background: var(--color-sidebar);
-  color: var(--color-sidebar-text);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--sidebar-text);
+  border-right: 1px solid var(--sidebar-border);
   padding: 20px 14px 16px;
   overflow-y: auto;
   transition: width var(--transition-fast), transform var(--transition-fast);
@@ -108,7 +108,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--color-sidebar-text);
+  color: var(--sidebar-text);
   font-size: 13.5px;
   font-weight: 500;
   text-align: left;
@@ -118,18 +118,18 @@
 }
 
 .sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #ffffff;
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-hover-text);
 }
 
 .sidebar-item.active {
-  background: var(--color-sidebar-active);
-  color: #ffffff;
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
   font-weight: 600;
 }
 
 .sidebar-item.active svg {
-  color: #6ee7b7;
+  color: var(--sidebar-accent);
 }
 
 .sidebar-badge {
@@ -138,8 +138,8 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: var(--sidebar-badge-bg);
+  color: var(--sidebar-badge-text);
 }
 
 .sidebar-badge.urgent {
@@ -150,7 +150,7 @@
 .sidebar-footer {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--sidebar-border);
 }
 
 /* User Card Avatar */
@@ -388,58 +388,71 @@
   text-transform: uppercase;
 }
 
-/* KPI Cards & Grid */
+/* KPI Cards & Grid — pilotés par les jetons --kpi-* de chaque direction
+   (themes.css) ; la disposition propre à chaque direction est dans themes.css. */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
 .kpi-card {
+  position: relative;
   min-width: 0;
-  padding: 22px 24px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  padding: var(--kpi-pad);
+  border: 1px solid var(--kpi-border);
+  border-radius: var(--kpi-radius);
+  background: var(--kpi-bg);
+  box-shadow: var(--kpi-shadow);
   display: flex;
   flex-direction: column;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
 .kpi-card:hover {
   border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.kpi-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .kpi-card__label {
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--kpi-label-size);
+  font-weight: 600;
 }
 
 .kpi-card__value {
-  margin-top: 14px;
+  margin-top: 10px;
   color: var(--color-text);
-  font-size: clamp(26px, 2.2vw, 32px);
-  font-weight: 600;
+  font-family: var(--kpi-value-font);
+  font-size: var(--kpi-value-size);
+  font-weight: var(--kpi-value-weight);
   line-height: 1.15;
-  letter-spacing: -0.8px;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-.kpi-card__description {
-  margin-top: 10px;
-  color: var(--color-text-muted);
-  font-size: 12px;
+.kpi-card__description,
+.kpi-card__context {
+  margin-top: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
-.kpi-card--success .kpi-card__value {
+.kpi-card--success .kpi-card__value,
+.kpi-card__value--highlight {
   color: var(--color-primary);
 }
 
-.kpi-card--warning .kpi-card__value {
+.kpi-card--warning .kpi-card__value,
+.kpi-card__value--warning {
   color: var(--color-warning);
 }
 
@@ -1179,45 +1192,37 @@ body.has-open-drawer .mobile-bottom-nav {
     flex: 1 1 100% !important;
   }
 
-  /* Cartes KPIs compactes & harmonisées (Texture Volet 2) */
+  /* Cartes KPI compactes : mêmes jetons que le bureau, tailles réduites */
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-    margin-bottom: 12px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
   }
 
   .kpi-card {
-    padding: 10px 12px !important;
-    background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 10px !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+    padding: 12px 14px;
   }
 
   .kpi-card__label {
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    color: #64748b !important;
+    font-size: 12.5px;
   }
 
   .kpi-card__value {
-    font-size: 17px !important;
-    font-weight: 700 !important;
-    color: #0f172a !important;
-    margin-top: 4px !important;
-    line-height: 1.2 !important;
+    margin-top: 4px;
+    font-size: 22px;
+    line-height: 1.2;
   }
 
   .kpi-card__sub,
-  .kpi-card__description {
-    font-size: 10.5px !important;
-    color: #94a3b8 !important;
-    margin-top: 2px !important;
+  .kpi-card__description,
+  .kpi-card__context {
+    margin-top: 2px;
+    font-size: 12.5px;
   }
 }
 
 @media (max-width: 320px) {
   .kpi-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
   }
 }

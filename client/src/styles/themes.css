@@ -1,369 +1,854 @@
 /* ============================================================================
-   ANELEC — THÈMES ALTERNATIFS
-   Variantes d'apparence sélectionnables par l'administrateur (défaut entreprise)
-   et personnalisables par chaque utilisateur si autorisé.
-   Chaque thème ne redéfinit que les *tokens* déjà utilisés par l'application :
-   aucun composant n'est modifié, aucune régression possible.
+   ANELEC — DIRECTIONS ARTISTIQUES (source unique des jetons de thème)
+   ----------------------------------------------------------------------------
+   6 directions + 1 mode sombre, chacune valable PC / tablette / téléphone :
+     light  → Clarté        (par défaut : sobre, vert d'action, barre bleu nuit)
+     craft  → Chronologie   (chaud, la journée comme une frise)
+     signal → Signal        (pilotage : fond clair, filets de statut, chiffres mono)
+     atlas  → Atlas         (un chiffre phare + 3 indicateurs en pile)
+     bento  → Bento         (tuiles colorées, formes très arrondies)
+     swiss  → Éditorial     (typographie, filets, grands chiffres sans cartes)
+     dark   → Mode sombre   (version sombre de Clarté)
+
+   Les identifiants (light, craft, signal, swiss, bento, atlas, dark) restent
+   ceux enregistrés en base : aucun changement de données n'est nécessaire.
+
+   Règles :
+   - un thème ne redéfinit que des JETONS (variables) ; la mise en page propre à
+     une direction (disposition des KPI, barre de navigation…) est en bas de ce
+     fichier, dans la section « Mises en page par direction » ;
+   - `:root[data-theme="x"]` (spécificité 0,2,0) l'emporte toujours sur `:root`
+     (0,1,0), quel que soit l'ordre des feuilles ;
+   - contrastes ≥ 4,5:1 pour tout texte, cibles tactiles ≥ 44 px sur téléphone.
+   Les polices propres à chaque direction sont chargées à la demande
+   (stores/themeStore.tsx → ensureThemeFonts), pas ici.
    ============================================================================ */
 
-/* Polices utilisées par les 5 nouvelles directions.
-   Préchargées ici pour éviter un flash au changement de thème. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Merriweather+Sans:wght@400;600;700;800&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Karla:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+/* ----------------------------------------------------------------------------
+   0. Constantes communes (identiques dans toutes les directions)
+   ---------------------------------------------------------------------------- */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 
-/* ============================================================================
-   1. ATLAS CLARITY — Entreprise bleu profond, léger, moderne.
-   ============================================================================ */
-[data-theme="atlas"] {
-  --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
-  --font-primary: var(--font-sans);
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --sidebar-width: 254px;
+  --topbar-height: 68px;
+  --control-height: 40px;
+  --radius-pill: 9999px;
 
-  --color-page: #F6F7FB;
-  --color-surface: #FFFFFF;
-  --color-surface-subtle: #F3F4F8;
-  --color-surface-hover: #EEF0F6;
-  --color-sidebar: #0F172A;
-  --color-sidebar-active: #1E293B;
-  --color-sidebar-text: #CBD5E1;
-  --color-sidebar-muted: #94A3B8;
-  --color-text: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748B;
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
 
-  --color-primary: #1D4ED8;
-  --color-primary-hover: #1E40AF;
-  --color-primary-soft: rgba(29, 78, 216, 0.10);
-  --color-info: #0EA5A4;
-  --color-info-soft: #CCFBF1;
-  --color-warning: #B45309;
-  --color-warning-soft: #FEF3C7;
-  --color-danger: #DC2626;
-  --color-danger-soft: #FEE2E2;
-  --color-border: #E5E7EB;
-  --color-border-strong: #CBD1DA;
+  /* Jetons « notifications éphémères » et assimilés */
+  --color-level3-surface: #ffffff;
+  --color-primary-text: #0f172a;
+  --color-border-standard: #cbd5e1;
+  --color-inverse-text: #ffffff;
+  --color-danger-red: #dc2626;
+  --color-success-emerald: #059669;
 
+  /* Disposition des KPI (surchargée par direction) */
+  --kpi-value-size: clamp(26px, 2.2vw, 32px);
+  --kpi-value-weight: 700;
+  --kpi-label-size: 13px;
+}
+
+/* Alias dérivés : définis une seule fois, résolus sur <html> avec les jetons
+   --color-* du thème actif. Clarté et Sombre les surchargent (valeurs historiques). */
+:root {
   --bg-app: var(--color-page);
   --bg-sidebar: var(--color-sidebar);
   --bg-surface: var(--color-surface);
   --bg-elevated: var(--color-surface);
   --bg-hover: var(--color-surface-hover);
+  --bg-active: var(--color-border);
   --bg-glass: var(--color-surface);
   --bg-input: var(--color-surface);
+
   --text-primary: var(--color-text);
   --text-secondary: var(--color-text-secondary);
   --text-muted: var(--color-text-muted);
+
   --border-subtle: var(--color-border);
   --border-default: var(--color-border);
   --border-strong: var(--color-border-strong);
+
   --accent-primary: var(--color-primary);
   --accent-primary-hover: var(--color-primary-hover);
   --brand-primary: var(--color-primary);
-  --brand-glow: rgba(29, 78, 216, 0.14);
+  --brand-primary-hover: var(--color-primary-hover);
 
-  --visite-accent: #6D28D9;
-  --visite-bg: #EDE9FE;
-  --visite-border: rgba(109, 40, 217, 0.35);
-  --travaux-accent: #1D4ED8;
-  --travaux-bg: #DBEAFE;
-  --travaux-border: rgba(29, 78, 216, 0.35);
-  --urgence-accent: #DC2626;
-  --urgence-bg: #FEE2E2;
-  --urgence-border: rgba(220, 38, 38, 0.35);
+  /* Barre latérale : tout passe par ces jetons (plus aucune couleur en dur) */
+  --sidebar-text: var(--color-sidebar-text);
+  --sidebar-muted: var(--color-sidebar-muted);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.07);
+  --sidebar-hover-text: #ffffff;
+  --sidebar-active-bg: var(--color-sidebar-active);
+  --sidebar-active-text: #ffffff;
+  --sidebar-accent: var(--color-primary);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-radius: 8px;
+  --sidebar-badge-bg: rgba(255, 255, 255, 0.14);
+  --sidebar-badge-text: #ffffff;
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-pill: 9999px;
-  --rounded-card: 10px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 16px 32px rgba(15, 23, 42, 0.12);
+  /* En-têtes de tableaux */
+  --table-head-bg: var(--color-sidebar);
+  --table-head-text: #ffffff;
+  --table-head-accent: var(--color-primary);
+
+  /* Cartes KPI */
+  --kpi-bg: var(--color-surface);
+  --kpi-border: var(--color-border);
+  --kpi-radius: var(--rounded-card);
+  --kpi-shadow: var(--shadow-sm);
+  --kpi-pad: 20px 22px;
+  --kpi-value-font: var(--font-sans);
+
+  --grid-line: rgba(15, 23, 42, 0.05);
+  --grid-line-hour: rgba(15, 23, 42, 0.1);
 }
 
 /* ============================================================================
-   2. CRAFT WARMTH — Chaud, teal + ocre, arrondi, artisan.
+   1. CLARTÉ — direction par défaut. Reprend l'apparence historique d'ANELEC.
    ============================================================================ */
-[data-theme="craft"] {
-  --font-sans: 'Work Sans', 'Inter', system-ui, sans-serif;
-  --font-primary: 'Merriweather Sans', 'Inter', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+:root:not([data-theme]),
+:root[data-theme="light"] {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-page: #FAF7F2;
-  --color-surface: #FFFDF9;
-  --color-surface-subtle: #F3EFE8;
-  --color-surface-hover: #EAE4D7;
-  --color-sidebar: #22201C;
-  --color-sidebar-active: #3B342A;
-  --color-sidebar-text: #EDE5D4;
-  --color-sidebar-muted: #B9AC93;
-  --color-text: #22201C;
-  --color-text-secondary: #5A4F3E;
-  --color-text-muted: #837260;
+  --color-page: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+  --color-sidebar: #142536;
+  --color-sidebar-active: #263d4d;
+  --color-sidebar-text: #b8c8d7;
+  --color-sidebar-muted: #8ea4b9;
+  --color-text: #182230;
+  --color-text-secondary: #526175;
+  --color-text-muted: #68778a;
 
-  --color-primary: #0F766E;
-  --color-primary-hover: #115E59;
-  --color-primary-soft: rgba(15, 118, 110, 0.12);
-  --color-info: #0369A1;
-  --color-info-soft: #E0F2FE;
-  --color-warning: #D97706;
-  --color-warning-soft: #FEF3C7;
-  --color-danger: #B91C1C;
-  --color-danger-soft: #FEE2E2;
-  --color-border: #E7E0D6;
-  --color-border-strong: #CBBFAD;
+  --color-primary: #047857;
+  --color-primary-hover: #065f46;
+  --color-primary-soft: #ecfdf5;
+  --color-info: #1d4ed8;
+  --color-info-soft: #eff6ff;
+  --color-warning: #92400e;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
 
-  --bg-app: var(--color-page);
-  --bg-sidebar: var(--color-sidebar);
-  --bg-surface: var(--color-surface);
-  --bg-elevated: var(--color-surface);
-  --bg-hover: var(--color-surface-hover);
-  --bg-glass: var(--color-surface);
-  --bg-input: var(--color-surface);
-  --text-primary: var(--color-text);
-  --text-secondary: var(--color-text-secondary);
-  --text-muted: var(--color-text-muted);
-  --border-subtle: var(--color-border);
-  --border-default: var(--color-border);
-  --border-strong: var(--color-border-strong);
-  --accent-primary: var(--color-primary);
-  --accent-primary-hover: var(--color-primary-hover);
-  --brand-primary: var(--color-primary);
-  --brand-glow: rgba(15, 118, 110, 0.14);
+  --bg-app: #f4f6f9;
+  --bg-sidebar: #142536;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-glass: #ffffff;
+  --bg-input: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+  --accent-primary: #00bf63;
+  --accent-primary-hover: #00994f;
+  --brand-primary: #0a0f1d;
+  --brand-primary-hover: #1e293b;
+  --brand-glow: rgba(0, 191, 99, 0.12);
 
-  --visite-accent: #B45309;
-  --visite-bg: #FEF3C7;
-  --visite-border: rgba(180, 83, 9, 0.35);
-  --travaux-accent: #0F766E;
-  --travaux-bg: #CCFBF1;
-  --travaux-border: rgba(15, 118, 110, 0.35);
-  --urgence-accent: #B91C1C;
-  --urgence-bg: #FEE2E2;
-  --urgence-border: rgba(185, 28, 28, 0.35);
+  --visite-accent: #ffcc00;
+  --visite-bg: #fffbeb;
+  --visite-border: rgba(255, 204, 0, 0.6);
+  --travaux-accent: #00bf63;
+  --travaux-bg: #ecfdf5;
+  --travaux-border: rgba(0, 191, 99, 0.45);
+  --urgence-accent: #ff0000;
+  --urgence-bg: #fef2f2;
+  --urgence-border: rgba(255, 0, 0, 0.45);
+
+  --success-accent: #00bf63;
+  --success-bg: #ecfdf5;
+  --warning-accent: #d97706;
+  --warning-bg: #fffbeb;
+  --danger-accent: #dc2626;
+  --danger-bg: #fef2f2;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --rounded-card: 12px;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 14px 34px rgba(15, 23, 42, 0.12);
+
+  --sidebar-accent: #00bf63;
+  --sidebar-active-bg: #141c2e;
+  --sidebar-badge-bg: rgba(255, 255, 255, 0.12);
+  --table-head-bg: #0a0f1d;
+  --table-head-accent: #00bf63;
+
+  --kpi-border: #dde3ea;
+  --kpi-pad: 20px;
+  --kpi-value-weight: 800;
+}
+
+/* ============================================================================
+   2. CHRONOLOGIE — chaud, humain, la journée comme une frise (ambre + ocre).
+   ============================================================================ */
+:root[data-theme="craft"] {
+  --font-sans: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-page: #fbf7ef;
+  --color-surface: #fffdf8;
+  --color-surface-subtle: #f6efe2;
+  --color-surface-hover: #f0e7d6;
+  --color-sidebar: #2a2118;
+  --color-sidebar-active: #fbf7ef;
+  --color-sidebar-text: #e3d7c3;
+  --color-sidebar-muted: #c9b99f;
+  --color-text: #2a2118;
+  --color-text-secondary: #5c4f3f;
+  --color-text-muted: #75664f;
+
+  --color-primary: #b45309;
+  --color-primary-hover: #92400e;
+  --color-primary-soft: #fef3c7;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-border: #e6dac6;
+  --color-border-strong: #d8cbb6;
+
+  --brand-glow: rgba(180, 83, 9, 0.14);
+
+  --visite-accent: #b45309;
+  --visite-bg: #fef3c7;
+  --visite-border: rgba(180, 83, 9, 0.38);
+  --travaux-accent: #047857;
+  --travaux-bg: #dcfce7;
+  --travaux-border: rgba(4, 120, 87, 0.38);
+  --urgence-accent: #b91c1c;
+  --urgence-bg: #fee2e2;
+  --urgence-border: rgba(185, 28, 28, 0.38);
+
+  --success-accent: #047857;
+  --success-bg: #dcfce7;
+  --warning-accent: #b45309;
+  --warning-bg: #fef3c7;
+  --danger-accent: #b91c1c;
+  --danger-bg: #fee2e2;
 
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
-  --radius-pill: 9999px;
   --rounded-card: 20px;
   --shadow-sm: 0 1px 3px rgba(60, 42, 22, 0.06);
-  --shadow-md: 0 6px 18px rgba(60, 42, 22, 0.08);
-  --shadow-lg: 0 20px 48px rgba(60, 42, 22, 0.14);
+  --shadow-md: 0 6px 18px rgba(60, 42, 22, 0.09);
+  --shadow-lg: 0 20px 48px rgba(60, 42, 22, 0.16);
+
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+  --sidebar-active-text: #2a2118;
+  --sidebar-accent: #b45309;
+  --sidebar-radius: 14px;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+
+  --kpi-bg: var(--color-surface);
+  --kpi-border: #e6dac6;
+  --kpi-radius: 20px;
+  --kpi-pad: 20px 24px;
+  --kpi-value-weight: 800;
 }
 
 /* ============================================================================
-   3. SIGNAL COMMAND — Cockpit sombre, cyan vif, ambre d'alerte.
+   3. SIGNAL — pilotage : fond clair aux couleurs du site, filets de statut
+      colorés en haut des cartes, chiffres en police mono.
    ============================================================================ */
-[data-theme="signal"] {
+:root[data-theme="signal"] {
   --font-sans: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
   --font-primary: var(--font-sans);
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-  --color-page: #0B1220;
-  --color-surface: #13213A;
-  --color-surface-subtle: #1A2B4A;
-  --color-surface-hover: #22365A;
-  --color-sidebar: #0A0F1D;
-  --color-sidebar-active: #13213A;
-  --color-sidebar-text: #A3B8D8;
-  --color-sidebar-muted: #637CA4;
-  --color-text: #E6EEFB;
-  --color-text-secondary: #A3B8D8;
-  --color-text-muted: #637CA4;
+  --color-page: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f4f8;
+  --color-surface-hover: #e8edf2;
+  --color-sidebar: #e8edf2;
+  --color-sidebar-active: #ffffff;
+  --color-sidebar-text: #182230;
+  --color-sidebar-muted: #526175;
+  --color-text: #182230;
+  --color-text-secondary: #526175;
+  --color-text-muted: #5f6f84;
 
-  --color-primary: #38BDF8;
-  --color-primary-hover: #0EA5E9;
-  --color-primary-soft: rgba(56, 189, 248, 0.14);
-  --color-info: #60A5FA;
-  --color-info-soft: rgba(96, 165, 250, 0.14);
-  --color-warning: #FBBF24;
-  --color-warning-soft: rgba(251, 191, 36, 0.14);
-  --color-danger: #F87171;
-  --color-danger-soft: rgba(248, 113, 113, 0.14);
-  --color-border: #23364F;
-  --color-border-strong: #2E4568;
+  --color-primary: #047857;
+  --color-primary-hover: #065f46;
+  --color-primary-soft: #d1fae5;
+  --color-info: #1d4ed8;
+  --color-info-soft: #eff6ff;
+  --color-warning: #92400e;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-border: #e2e8f0;
+  --color-border-strong: #d5dde6;
 
-  --bg-app: var(--color-page);
-  --bg-sidebar: var(--color-sidebar);
-  --bg-surface: var(--color-surface);
-  --bg-elevated: var(--color-surface-subtle);
-  --bg-hover: var(--color-surface-hover);
-  --bg-glass: var(--color-surface);
-  --bg-input: #0B1424;
-  --text-primary: var(--color-text);
-  --text-secondary: var(--color-text-secondary);
-  --text-muted: var(--color-text-muted);
-  --border-subtle: var(--color-border);
-  --border-default: var(--color-border);
-  --border-strong: var(--color-border-strong);
-  --accent-primary: var(--color-primary);
-  --accent-primary-hover: var(--color-primary-hover);
-  --brand-primary: var(--color-primary);
-  --brand-glow: rgba(56, 189, 248, 0.26);
+  --brand-glow: rgba(4, 120, 87, 0.12);
 
-  --visite-accent: #A78BFA;
-  --visite-bg: rgba(167, 139, 250, 0.14);
-  --visite-border: rgba(167, 139, 250, 0.35);
-  --travaux-accent: #38BDF8;
-  --travaux-bg: rgba(56, 189, 248, 0.14);
-  --travaux-border: rgba(56, 189, 248, 0.35);
-  --urgence-accent: #F87171;
-  --urgence-bg: rgba(248, 113, 113, 0.14);
-  --urgence-border: rgba(248, 113, 113, 0.4);
+  --visite-accent: #f5b400;
+  --visite-bg: #fffbeb;
+  --visite-border: rgba(245, 180, 0, 0.55);
+  --travaux-accent: #16a34a;
+  --travaux-bg: #ecfdf5;
+  --travaux-border: rgba(22, 163, 74, 0.4);
+  --urgence-accent: #ef4444;
+  --urgence-bg: #fef2f2;
+  --urgence-border: rgba(239, 68, 68, 0.4);
+
+  --success-accent: #16a34a;
+  --success-bg: #ecfdf5;
+  --warning-accent: #d97706;
+  --warning-bg: #fffbeb;
+  --danger-accent: #dc2626;
+  --danger-bg: #fef2f2;
 
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-pill: 9999px;
-  --rounded-card: 10px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 6px 22px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.65);
+  --radius-lg: 6px;
+  --rounded-card: 6px;
+  --shadow-sm: none;
+  --shadow-md: 0 2px 8px rgba(24, 34, 48, 0.08);
+  --shadow-lg: 0 14px 34px rgba(24, 34, 48, 0.12);
 
-  /* Alias toasts/notifications adaptés au dark */
-  --color-level3-surface: #13213A;
-  --color-primary-text: #E6EEFB;
-  --color-border-standard: #2E4568;
-  --color-inverse-text: #0B1220;
+  --sidebar-text: #182230;
+  --sidebar-hover-bg: rgba(24, 34, 48, 0.06);
+  --sidebar-hover-text: #182230;
+  --sidebar-active-text: #182230;
+  --sidebar-accent: #047857;
+  --sidebar-radius: 4px;
+  --sidebar-border: #d5dde6;
+  --table-head-bg: #e8edf2;
+  --table-head-text: #182230;
+  --sidebar-badge-bg: #d5dde6;
+  --sidebar-badge-text: #182230;
+
+  --kpi-radius: 6px;
+  --kpi-shadow: none;
+  --kpi-pad: 14px 16px;
+  --kpi-value-font: var(--font-mono);
+  --kpi-value-weight: 600;
+  --kpi-value-size: clamp(26px, 2.4vw, 30px);
 }
 
 /* ============================================================================
-   4. EDITORIAL SWISS — Grille typographique premium, bleu royal + corail.
+   4. ATLAS — progiciel moderne : bleu profond, un chiffre phare + pile de 3.
    ============================================================================ */
-[data-theme="swiss"] {
+:root[data-theme="atlas"] {
+  --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-page: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f3f4f8;
+  --color-surface-hover: #eef0f6;
+  --color-sidebar: #0f172a;
+  --color-sidebar-active: #1e293b;
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-muted: #94a3b8;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #5b6b80;
+
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1e40af;
+  --color-primary-soft: #dbeafe;
+  --color-info: #0e7490;
+  --color-info-soft: #cffafe;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-border: #e5e7eb;
+  --color-border-strong: #cbd1da;
+
+  --brand-glow: rgba(29, 78, 216, 0.14);
+
+  --visite-accent: #6d28d9;
+  --visite-bg: #ede9fe;
+  --visite-border: rgba(109, 40, 217, 0.35);
+  --travaux-accent: #1d4ed8;
+  --travaux-bg: #dbeafe;
+  --travaux-border: rgba(29, 78, 216, 0.35);
+  --urgence-accent: #dc2626;
+  --urgence-bg: #fee2e2;
+  --urgence-border: rgba(220, 38, 38, 0.35);
+
+  --success-accent: #047857;
+  --success-bg: #d1fae5;
+  --warning-accent: #b45309;
+  --warning-bg: #fef3c7;
+  --danger-accent: #dc2626;
+  --danger-bg: #fee2e2;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --rounded-card: 10px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 16px 32px rgba(15, 23, 42, 0.12);
+
+  --sidebar-accent: #60a5fa;
+  --sidebar-radius: 8px;
+
+  --kpi-border: #e5e7eb;
+  --kpi-pad: 14px 20px;
+  --kpi-value-weight: 700;
+}
+
+/* ============================================================================
+   5. BENTO — tuiles modulaires, très arrondies : encre noire + jaune/vert/rouge.
+   ============================================================================ */
+:root[data-theme="bento"] {
+  --font-sans: 'Figtree', 'Inter', system-ui, sans-serif;
+  --font-primary: 'Sora', 'Figtree', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-page: #f2f3f5;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f2f3f5;
+  --color-surface-hover: #e8eaee;
+  --color-sidebar: #111827;
+  --color-sidebar-active: #f5b400;
+  --color-sidebar-text: #e5e7eb;
+  --color-sidebar-muted: #9ca3af;
+  --color-text: #0b0f19;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #5b6573;
+
+  --color-primary: #111827;
+  --color-primary-hover: #000000;
+  --color-primary-soft: #e5e7eb;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+  --color-warning: #8a5a05;
+  --color-warning-soft: #fde68a;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-border: #e3e6ec;
+  --color-border-strong: #c9cfd8;
+
+  --brand-glow: rgba(245, 180, 0, 0.22);
+
+  --visite-accent: #8a5a05;
+  --visite-bg: #fde68a;
+  --visite-border: rgba(245, 180, 0, 0.5);
+  --travaux-accent: #15803d;
+  --travaux-bg: #dcfce7;
+  --travaux-border: rgba(21, 128, 61, 0.38);
+  --urgence-accent: #b91c1c;
+  --urgence-bg: #fee2e2;
+  --urgence-border: rgba(185, 28, 28, 0.38);
+
+  --success-accent: #15803d;
+  --success-bg: #dcfce7;
+  --warning-accent: #b45309;
+  --warning-bg: #fde68a;
+  --danger-accent: #b91c1c;
+  --danger-bg: #fee2e2;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --rounded-card: 22px;
+  --shadow-sm: none;
+  --shadow-md: 0 4px 16px rgba(17, 24, 39, 0.07);
+  --shadow-lg: 0 24px 60px rgba(17, 24, 39, 0.14);
+
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+  --sidebar-active-text: #111827;
+  --sidebar-accent: #111827;
+  --table-head-accent: #f5b400;
+  --sidebar-radius: 16px;
+
+  --kpi-border: transparent;
+  --kpi-radius: 22px;
+  --kpi-shadow: none;
+  --kpi-pad: 16px 18px;
+  --kpi-value-font: var(--font-primary);
+  --kpi-value-weight: 700;
+}
+
+/* ============================================================================
+   6. ÉDITORIAL — typographie d'abord : filets, grands chiffres, angles vifs.
+      Bleu royal + corail (accents uniquement : le texte d'alerte reste rouge).
+   ============================================================================ */
+:root[data-theme="swiss"] {
   --font-sans: 'Karla', 'Inter', system-ui, sans-serif;
-  --font-primary: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-primary: 'Manrope', 'Karla', system-ui, sans-serif;
   --font-mono: 'Source Code Pro', ui-monospace, monospace;
 
-  --color-page: #FFFFFF;
-  --color-surface: #FFFFFF;
-  --color-surface-subtle: #F5F5F3;
-  --color-surface-hover: #ECECE8;
-  --color-sidebar: #0B1220;
-  --color-sidebar-active: #1E293B;
-  --color-sidebar-text: #D8D8D4;
-  --color-sidebar-muted: #9A9A96;
-  --color-text: #0B1220;
-  --color-text-secondary: #4B4B48;
-  --color-text-muted: #6B6B68;
+  --color-page: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f5f5f3;
+  --color-surface-hover: #ecece8;
+  --color-sidebar: #0b1220;
+  --color-sidebar-active: #1e293b;
+  --color-sidebar-text: #d8d8d4;
+  --color-sidebar-muted: #a3a39f;
+  --color-text: #0b1220;
+  --color-text-secondary: #4b4b48;
+  --color-text-muted: #66665f;
 
-  --color-primary: #0B3B8F;
-  --color-primary-hover: #0A3078;
-  --color-primary-soft: rgba(11, 59, 143, 0.10);
-  --color-info: #2A9D8F;
-  --color-info-soft: #D1F0EA;
-  --color-warning: #D97706;
-  --color-warning-soft: #FEF3C7;
-  --color-danger: #E07A5F;
-  --color-danger-soft: #FCE7DD;
-  --color-border: #D4D4D0;
-  --color-border-strong: #0B1220;
+  --color-primary: #0b3b8f;
+  --color-primary-hover: #0a3078;
+  --color-primary-soft: #dbe6f7;
+  --color-info: #0b3b8f;
+  --color-info-soft: #dbe6f7;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-border: #d4d4d0;
+  --color-border-strong: #0b1220;
 
-  --bg-app: var(--color-page);
-  --bg-sidebar: var(--color-sidebar);
-  --bg-surface: var(--color-surface);
-  --bg-elevated: var(--color-surface);
-  --bg-hover: var(--color-surface-hover);
-  --bg-glass: var(--color-surface);
-  --bg-input: var(--color-surface);
-  --text-primary: var(--color-text);
-  --text-secondary: var(--color-text-secondary);
-  --text-muted: var(--color-text-muted);
-  --border-subtle: var(--color-border);
-  --border-default: var(--color-border);
-  --border-strong: var(--color-border-strong);
-  --accent-primary: var(--color-primary);
-  --accent-primary-hover: var(--color-primary-hover);
-  --brand-primary: var(--color-primary);
   --brand-glow: rgba(11, 59, 143, 0.12);
 
-  --visite-accent: #E07A5F;
-  --visite-bg: #FCE7DD;
-  --visite-border: rgba(224, 122, 95, 0.35);
-  --travaux-accent: #0B3B8F;
-  --travaux-bg: #D6E2F5;
+  --visite-accent: #e07a5f;
+  --visite-bg: #fce7dd;
+  --visite-border: rgba(224, 122, 95, 0.45);
+  --travaux-accent: #0b3b8f;
+  --travaux-bg: #dbe6f7;
   --travaux-border: rgba(11, 59, 143, 0.35);
-  --urgence-accent: #B91C1C;
-  --urgence-bg: #FEE2E2;
+  --urgence-accent: #b91c1c;
+  --urgence-bg: #fee2e2;
   --urgence-border: rgba(185, 28, 28, 0.35);
+
+  --success-accent: #166534;
+  --success-bg: #dcfce7;
+  --warning-accent: #92400e;
+  --warning-bg: #fef3c7;
+  --danger-accent: #b91c1c;
+  --danger-bg: #fee2e2;
 
   --radius-sm: 2px;
   --radius-md: 2px;
   --radius-lg: 2px;
-  --radius-pill: 9999px;
   --rounded-card: 2px;
   --shadow-sm: none;
   --shadow-md: 0 2px 8px rgba(11, 18, 32, 0.07);
   --shadow-lg: 0 24px 50px rgba(11, 18, 32, 0.12);
+
+  --sidebar-accent: #e07a5f;
+  --table-head-accent: #e07a5f;
+  --sidebar-radius: 0;
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
+
+  --kpi-bg: transparent;
+  --kpi-border: transparent;
+  --kpi-radius: 0;
+  --kpi-shadow: none;
+  --kpi-pad: 0 24px;
+  --kpi-value-font: var(--font-primary);
+  --kpi-value-weight: 800;
+  --kpi-value-size: clamp(34px, 3.6vw, 52px);
 }
 
 /* ============================================================================
-   5. BENTO MODULAR — Apple/Vercel, tuiles arrondies, jaune/corail/vert.
+   7. MODE SOMBRE — version sombre de Clarté (même structure, mêmes réflexes).
    ============================================================================ */
-[data-theme="bento"] {
-  --font-sans: 'Figtree', 'Inter', system-ui, sans-serif;
-  --font-primary: 'Sora', 'Inter', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+:root[data-theme="dark"] {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-primary: var(--font-sans);
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --color-page: #F2F3F5;
-  --color-surface: #FFFFFF;
-  --color-surface-subtle: #F2F3F5;
-  --color-surface-hover: #E8EAEE;
-  --color-sidebar: #111827;
-  --color-sidebar-active: #1F2937;
-  --color-sidebar-text: #E5E7EB;
-  --color-sidebar-muted: #9CA3AF;
-  --color-text: #0B0F19;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #6B7280;
+  --color-page: #0b111a;
+  --color-surface: #111a26;
+  --color-surface-subtle: #162232;
+  --color-surface-hover: #1c2b3f;
+  --color-sidebar: #0a1017;
+  --color-sidebar-active: #1a2a3b;
+  --color-sidebar-text: #b8c8d7;
+  --color-sidebar-muted: #74899e;
+  --color-text: #f0f4f8;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
 
-  --color-primary: #111827;
-  --color-primary-hover: #000000;
-  --color-primary-soft: rgba(17, 24, 39, 0.08);
-  --color-info: #2563EB;
-  --color-info-soft: #DBEAFE;
-  --color-warning: #F5B400;
-  --color-warning-soft: rgba(245, 180, 0, 0.18);
-  --color-danger: #EF5B4C;
-  --color-danger-soft: rgba(239, 91, 76, 0.14);
-  --color-border: #E3E6EC;
-  --color-border-strong: #C9CFD8;
+  --color-primary: #10b981;
+  --color-primary-hover: #059669;
+  --color-primary-soft: rgba(16, 185, 129, 0.15);
+  --color-info: #3b82f6;
+  --color-info-soft: rgba(59, 130, 246, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-soft: rgba(245, 158, 11, 0.15);
+  --color-danger: #ef4444;
+  --color-danger-soft: rgba(239, 68, 68, 0.15);
+  --color-border: #1e2d3d;
+  --color-border-strong: #2a3e54;
 
-  --bg-app: var(--color-page);
-  --bg-sidebar: var(--color-sidebar);
-  --bg-surface: var(--color-surface);
-  --bg-elevated: var(--color-surface);
-  --bg-hover: var(--color-surface-hover);
-  --bg-glass: var(--color-surface);
-  --bg-input: var(--color-surface);
-  --text-primary: var(--color-text);
-  --text-secondary: var(--color-text-secondary);
-  --text-muted: var(--color-text-muted);
-  --border-subtle: var(--color-border);
-  --border-default: var(--color-border);
-  --border-strong: var(--color-border-strong);
-  --accent-primary: var(--color-primary);
-  --accent-primary-hover: var(--color-primary-hover);
-  --brand-primary: var(--color-primary);
-  --brand-glow: rgba(245, 180, 0, 0.22);
+  --bg-app: #07090e;
+  --bg-sidebar: #0a0f1d;
+  --bg-surface: #0f1422;
+  --bg-elevated: #151c30;
+  --bg-hover: #1e263d;
+  --bg-active: #283350;
+  --bg-glass: #0f1422;
+  --bg-input: #0a0f1d;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.25);
+  --accent-primary: #00bf63;
+  --accent-primary-hover: #00994f;
+  --brand-primary: #00bf63;
+  --brand-primary-hover: #00994f;
+  --brand-glow: rgba(0, 191, 99, 0.2);
 
-  --visite-accent: #8A5A05;
-  --visite-bg: rgba(245, 180, 0, 0.16);
-  --visite-border: rgba(245, 180, 0, 0.4);
-  --travaux-accent: #16A34A;
-  --travaux-bg: rgba(22, 163, 74, 0.14);
-  --travaux-border: rgba(22, 163, 74, 0.35);
-  --urgence-accent: #EF5B4C;
-  --urgence-bg: rgba(239, 91, 76, 0.14);
-  --urgence-border: rgba(239, 91, 76, 0.38);
+  --visite-accent: #ffcc00;
+  --visite-bg: rgba(255, 204, 0, 0.16);
+  --visite-border: rgba(255, 204, 0, 0.45);
+  --travaux-accent: #00bf63;
+  --travaux-bg: rgba(0, 191, 99, 0.16);
+  --travaux-border: rgba(0, 191, 99, 0.45);
+  --urgence-accent: #ff0000;
+  --urgence-bg: rgba(255, 0, 0, 0.16);
+  --urgence-border: rgba(255, 0, 0, 0.45);
 
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-pill: 9999px;
-  --rounded-card: 18px;
-  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.04);
-  --shadow-md: 0 4px 16px rgba(17, 24, 39, 0.07);
-  --shadow-lg: 0 24px 60px rgba(17, 24, 39, 0.14);
+  --success-accent: #00bf63;
+  --success-bg: rgba(0, 191, 99, 0.16);
+  --warning-accent: #ffcc00;
+  --warning-bg: rgba(255, 204, 0, 0.16);
+  --danger-accent: #ff0000;
+  --danger-bg: rgba(255, 0, 0, 0.16);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --rounded-card: 12px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.7);
+
+  --grid-line: rgba(255, 255, 255, 0.045);
+  --grid-line-hour: rgba(255, 255, 255, 0.09);
+
+  --sidebar-accent: #00bf63;
+  --sidebar-active-bg: #141c2e;
+  --table-head-bg: #0a0f1d;
+  --table-head-accent: #00bf63;
+
+  --kpi-border: var(--border-default);
+  --kpi-pad: 20px;
+  --kpi-value-weight: 800;
+}
+
+/* ============================================================================
+   MISES EN PAGE PAR DIRECTION
+   Seule la disposition change ; le balisage (.kpi-grid > .kpi-card) est commun.
+   Ordre des cartes : 1 CA réalisé · 2 Prêt à facturer · 3 Devis · 4 Rapports.
+   ============================================================================ */
+
+/* — Chronologie : un seul bandeau, 4 cellules séparées par des pointillés — */
+:root[data-theme="craft"] .kpi-grid {
+  gap: 0;
+  background: var(--kpi-bg);
+  border: 1.5px solid var(--kpi-border);
+  border-radius: var(--kpi-radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+:root[data-theme="craft"] .kpi-grid .kpi-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+:root[data-theme="craft"] .kpi-grid .kpi-card + .kpi-card {
+  border-left: 1.5px dashed var(--color-border-strong);
+}
+
+/* — Signal : filet de statut coloré en haut, chiffres en mono — */
+:root[data-theme="signal"] .kpi-card {
+  border-top: 3px solid var(--color-border-strong);
+}
+:root[data-theme="signal"] .kpi-grid .kpi-card:nth-child(1) { border-top-color: #16a34a; }
+:root[data-theme="signal"] .kpi-grid .kpi-card:nth-child(2) { border-top-color: #f5b400; }
+:root[data-theme="signal"] .kpi-grid .kpi-card:nth-child(3) { border-top-color: #92400e; }
+:root[data-theme="signal"] .kpi-grid .kpi-card:nth-child(4) { border-top-color: #ef4444; }
+:root[data-theme="signal"] .kpi-card__label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* — Atlas : un chiffre phare à gauche, 3 indicateurs en pile à droite — */
+:root[data-theme="atlas"] .kpi-grid {
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(84px, auto));
+  gap: 14px;
+}
+:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) {
+  grid-row: 1 / span 3;
+  justify-content: center;
+  padding: 24px 28px;
+}
+:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__value {
+  font-size: clamp(36px, 4.2vw, 52px);
+  color: var(--color-primary);
+}
+:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 12px;
+}
+:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__label {
+  flex: 1 0 100%;
+}
+:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__value {
+  margin-top: 0;
+  font-size: 26px;
+}
+
+/* — Bento : tuile noire large + tuiles de couleur — */
+:root[data-theme="bento"] .kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(1) {
+  grid-column: span 2;
+  background: #111827;
+  color: #ffffff;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__label,
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__context {
+  color: #d1d5db;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__value {
+  color: #f5b400;
+  font-size: clamp(34px, 3.4vw, 44px);
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(2) {
+  background: #ffffff;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(3) {
+  background: #fde68a;
+  color: #422006;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(3) .kpi-card__label,
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(3) .kpi-card__value,
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(3) .kpi-card__context {
+  color: #422006;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(4) {
+  background: #b91c1c;
+  color: #ffffff;
+}
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(4) .kpi-card__label,
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(4) .kpi-card__value,
+:root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(4) .kpi-card__context {
+  color: #ffffff;
+}
+
+/* — Éditorial : grands chiffres séparés par des filets, pas de cartes — */
+:root[data-theme="swiss"] .kpi-grid {
+  gap: 0;
+  padding: 4px 0 20px;
+  border-bottom: 2px solid var(--color-text);
+}
+:root[data-theme="swiss"] .kpi-grid .kpi-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+}
+:root[data-theme="swiss"] .kpi-grid .kpi-card:first-child { padding-left: 0; }
+:root[data-theme="swiss"] .kpi-grid .kpi-card + .kpi-card {
+  border-left: 1px solid var(--color-text);
+}
+:root[data-theme="swiss"] .kpi-grid .kpi-card:first-child .kpi-card__value {
+  color: var(--color-primary);
+}
+:root[data-theme="swiss"] .kpi-card__label {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+:root[data-theme="swiss"] .kpi-card__value {
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+/* — Téléphone : chaque direction garde sa logique, empilée proprement — */
+@media (max-width: 900px) {
+  :root[data-theme="atlas"] .kpi-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+  :root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) {
+    grid-row: auto;
+    padding: 18px 20px;
+  }
+  :root[data-theme="bento"] .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(1),
+  :root[data-theme="bento"] .kpi-grid .kpi-card:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+  :root[data-theme="craft"] .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :root[data-theme="craft"] .kpi-grid .kpi-card:nth-child(n+3) {
+    border-top: 1.5px dashed var(--color-border-strong);
+  }
+  :root[data-theme="craft"] .kpi-grid .kpi-card + .kpi-card:nth-child(3) {
+    border-left: 0;
+  }
+  :root[data-theme="swiss"] .kpi-grid {
+    grid-template-columns: 1fr;
+    padding-bottom: 0;
+  }
+  :root[data-theme="swiss"] .kpi-grid .kpi-card,
+  :root[data-theme="swiss"] .kpi-grid .kpi-card + .kpi-card,
+  :root[data-theme="swiss"] .kpi-grid .kpi-card:first-child {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--color-text);
+  }
+  :root[data-theme="swiss"] .kpi-grid .kpi-card .kpi-card__value {
+    margin-top: 0;
+    font-size: 34px;
+    order: 2;
+  }
+  :root[data-theme="swiss"] .kpi-grid .kpi-card .kpi-card__label { order: 1; flex: 1 1 60%; }
+  :root[data-theme="swiss"] .kpi-grid .kpi-card .kpi-card__context { order: 3; flex: 1 0 100%; }
 }
 
 /* ============================================================================

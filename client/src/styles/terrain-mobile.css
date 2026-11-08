@@ -1,72 +1,101 @@
 /* ============================================================================
    ANELEC — APPLICATION TERRAIN (TÉLÉPHONE & TABLETTE)
-   Deux apparences au choix du technicien :
-     • Clarté       (data-skin="clarte", par défaut) : cartes claires, vert d'action
-     • Chronologie  (data-skin="chrono")             : journée en frise, tons chauds
+   L'écran terrain suit la direction artistique choisie pour toute l'application
+   (Clarté, Chronologie, Signal, Atlas, Bento, Éditorial, Mode sombre) : les jetons
+   --t-* dérivent des jetons globaux de themes.css, puis chaque direction ajuste
+   quelques détails (formes, barre de navigation) plus bas.
+   • Chronologie (data-skin="chrono") ajoute la frise de la journée ;
+     toutes les autres directions utilisent la liste de cartes (data-skin="clarte").
    Mise en page : téléphone (barre basse) / tablette ≥ 768 px (rail + liste + détail).
    Règles de lisibilité : texte courant ≥ 14 px, champs de saisie 16 px (pas de zoom iOS),
    cibles tactiles ≥ 44 px, contrastes ≥ 4,5:1, état jamais indiqué par la couleur seule.
    ============================================================================ */
 
-/* ---------- Jetons : apparence « Clarté » (par défaut) ---------- */
+/* ---------- Jetons dérivés de la direction active ---------- */
 .t-app {
-  --t-bg: #f3f5f7;
-  --t-surface: #ffffff;
-  --t-surface-2: #f8fafc;
-  --t-text: #182230;
-  --t-text-2: #475569;
-  --t-border: #e2e8f0;
-  --t-border-strong: #cbd5e1;
-  --t-accent: #047857;
-  --t-accent-soft: #ecfdf5;
+  --t-bg: var(--color-page);
+  --t-surface: var(--color-surface);
+  --t-surface-2: var(--color-surface-subtle);
+  --t-text: var(--color-text);
+  --t-text-2: var(--color-text-secondary);
+  --t-border: var(--color-border);
+  --t-border-strong: var(--color-border-strong);
+  --t-accent: var(--color-primary);
+  --t-accent-soft: var(--color-primary-soft);
   --t-on-accent: #ffffff;
-  --t-live: #1d4ed8;
+  --t-live: var(--color-info);
   --t-done: #047857;
-  --t-idle: #64748b;
-  --t-warn-bg: #fef3c7;
-  --t-warn-border: #fcd34d;
-  --t-warn-text: #3b2410;
-  --t-warn-icon: #7c2d12;
-  --t-danger: #b91c1c;
+  --t-idle: var(--color-text-muted);
+  --t-warn-bg: var(--color-warning-soft);
+  --t-warn-border: var(--color-border-strong);
+  --t-warn-text: var(--color-text);
+  --t-warn-icon: var(--color-warning);
+  --t-danger: var(--color-danger);
   --t-radius: 16px;
   --t-radius-sm: 12px;
-  --t-nav-bg: #ffffff;
-  --t-nav-text: #475569;
-  --t-nav-active-bg: #ecfdf5;
-  --t-nav-active-text: #047857;
-  --t-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  --t-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --t-nav-bg: var(--color-surface);
+  --t-nav-text: var(--color-text-secondary);
+  --t-nav-active-bg: var(--color-primary-soft);
+  --t-nav-active-text: var(--color-primary);
+  --t-font: var(--font-sans);
+  --t-mono: var(--font-mono);
   --t-nav-h: 72px;
   --t-rail-w: 96px;
 }
 
-/* ---------- Jetons : apparence « Chronologie » ---------- */
-.t-app[data-skin='chrono'] {
-  --t-bg: #fbf7ef;
-  --t-surface: #fffdf8;
-  --t-surface-2: #f6f0e3;
-  --t-text: #2a2118;
-  --t-text-2: #5c4f3f;
-  --t-border: #e7dfcf;
-  --t-border-strong: #cfc3ab;
-  --t-accent: #b45309;
-  --t-accent-soft: #fef1dc;
-  --t-on-accent: #ffffff;
+/* Chronologie : frise, tons chauds, dock sombre */
+:root[data-theme='craft'] .t-app {
   --t-live: #b45309;
-  --t-done: #047857;
   --t-idle: #7a6a55;
-  --t-warn-bg: #fef1dc;
+  --t-accent-soft: #fef1dc;
   --t-warn-border: #f0cf98;
-  --t-warn-text: #3b2410;
-  --t-warn-icon: #7c2d12;
-  --t-danger: #b91c1c;
   --t-radius: 18px;
   --t-radius-sm: 14px;
   --t-nav-bg: #2a2118;
   --t-nav-text: #e7dfcf;
   --t-nav-active-bg: #fbf7ef;
   --t-nav-active-text: #2a2118;
-  --t-font: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+}
+/* Signal : filets, angles francs, barre basse grise */
+:root[data-theme='signal'] .t-app {
+  --t-radius: 6px;
+  --t-radius-sm: 4px;
+  --t-nav-bg: #e8edf2;
+  --t-nav-active-bg: #ffffff;
+  --t-nav-active-text: #047857;
+}
+/* Atlas */
+:root[data-theme='atlas'] .t-app {
+  --t-radius: 10px;
+  --t-radius-sm: 8px;
+  --t-accent-soft: #dbeafe;
+}
+/* Bento : très arrondi, dock flottant noir à pastille jaune */
+:root[data-theme='bento'] .t-app {
+  --t-done: #15803d;
+  --t-radius: 24px;
+  --t-radius-sm: 18px;
+  --t-nav-bg: #111827;
+  --t-nav-text: #e5e7eb;
+  --t-nav-active-bg: #f5b400;
+  --t-nav-active-text: #111827;
+}
+/* Éditorial : angles vifs, barre noire à liseré corail */
+:root[data-theme='swiss'] .t-app {
+  --t-radius: 2px;
+  --t-radius-sm: 2px;
+  --t-nav-bg: #0b1220;
+  --t-nav-text: #d8d8d4;
+  --t-nav-active-bg: #1e293b;
+  --t-nav-active-text: #ffffff;
+}
+/* Mode sombre */
+:root[data-theme='dark'] .t-app {
+  --t-on-accent: #04130c;
+  --t-done: #34d399;
+  --t-live: #60a5fa;
+  --t-warn-border: rgba(245, 158, 11, 0.4);
+  --t-nav-bg: var(--color-surface);
 }
 
 /* ---------- Base ---------- */
@@ -1071,6 +1100,7 @@
   background: var(--t-surface);
   font-size: 16px;
 }
+/* ---------- Choix de l'apparence (Profil) ---------- */
 .t-skin {
   display: flex;
   flex-direction: column;
@@ -1161,8 +1191,9 @@
 .t-nav-logo {
   display: none;
 }
-/* Chronologie : dock flottant sombre */
-.t-app[data-skin='chrono'][data-layout='phone'] .t-nav {
+/* Chronologie et Bento : dock flottant */
+.t-app[data-skin='chrono'][data-layout='phone'] .t-nav,
+:root[data-theme='bento'] .t-app[data-layout='phone'] .t-nav {
   left: 14px;
   right: 14px;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -1170,7 +1201,28 @@
   padding: 6px;
   border: 0;
   border-radius: 24px;
-  box-shadow: 0 8px 24px rgba(42, 33, 24, 0.28);
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.28);
+}
+:root[data-theme='bento'] .t-app[data-layout='phone'] .t-nav {
+  border-radius: 28px;
+}
+:root[data-theme='bento'] .t-app .t-nav button {
+  border-radius: 20px;
+}
+/* Signal : filet vert sur l'onglet actif */
+:root[data-theme='signal'] .t-app .t-nav button {
+  border-radius: 6px;
+}
+:root[data-theme='signal'] .t-app .t-nav button.is-active {
+  border-top: 3px solid var(--t-accent);
+}
+/* Éditorial : liseré corail sur l'onglet actif */
+:root[data-theme='swiss'] .t-app .t-nav button {
+  border-radius: 0;
+  color: var(--t-nav-text);
+}
+:root[data-theme='swiss'] .t-app .t-nav button.is-active {
+  border-top: 4px solid #e07a5f;
 }
 
 /* ---------- Modale de clôture GPS ---------- */
@@ -1325,7 +1377,8 @@
     font-size: 13px;
     border-radius: 16px;
   }
-  .t-app[data-skin='chrono'][data-layout='tablet'] .t-nav {
+  .t-app[data-skin='chrono'][data-layout='tablet'] .t-nav,
+  :root[data-theme='bento'] .t-app[data-layout='tablet'] .t-nav {
     background: var(--t-nav-bg);
     border-right: 0;
   }
