@@ -21,7 +21,7 @@
 5. [Pipeline Devis (22 Colonnes), Visites Techniques & Reconversion Sécurisée](#5-pipeline-devis-22-colonnes-visites-techniques--reconversion-sécurisée)
 6. [Suivi des Interventions TCE (23 Colonnes) & Envoi de Rapports Officiels par E-mail](#6-suivi-des-interventions-tce-23-colonnes--envoi-de-rapports-officiels-par-e-mail)
 7. [Planning Gantt Multi-Ressources (60 fps) & Bourse de Dispatch](#7-planning-gantt-multi-ressources-60-fps--bourse-de-dispatch)
-8. [Application Mobile Technicien (PWA), Clôture GPS Obligatoire & Retrait de la Carte](#8-application-mobile-technicien-pwa-clôture-gps-obligatoire--retrait-de-la-carte)
+8. [Application Mobile Technicien (PWA), 4 Onglets Tactiles, Clôture GPS & 7 Directions Artistiques](#8-application-mobile-technicien-pwa-4-onglets-tactiles-clôture-gps--7-directions-artistiques)
 9. [Carte Interactive, Positions Actuelles vs Trajet Restant & Mode Plein Écran PC](#9-carte-interactive-positions-actuelles-vs-trajet-restant--mode-plein-écran-pc)
 10. [Studio Facturation & Relation Client (5 Bacs B2B/B2C & Diagnostic Retards)](#10-studio-facturation--relation-client-5-bacs-b2bb2c--diagnostic-retards)
 11. [Profils Donneurs d'Ordre, Rentabilité Équipes & Administration SMTP](#11-profils-donneurs-dordre-rentabilité-équipes--administration-smtp)
@@ -162,23 +162,75 @@ Le **Planning Gantt** permet aux conducteurs de travaux et dispatchers d'organis
 
 ---
 
-## 8. Application Mobile Technicien (PWA), Clôture GPS Obligatoire & Retrait de la Carte
+## 8. Application Mobile Technicien (PWA), 4 Onglets Tactiles, Clôture GPS & 7 Directions Artistiques
 
-L'application mobile terrain (`/mobile`) accompagne les techniciens tout au long de leur journée :
+L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne le technicien de sa prise de service le matin jusqu'à la clôture certifiée de ses interventions. Entièrement réarchitecturée pour une utilisation optimale à une main (zone du pouce), elle s'articule autour de **4 onglets tactiles**, intègre le **sélecteur des 7 Directions Artistiques** et certifie chaque étape par géolocalisation.
+
+<p align="center">
+  <img src="docs/images/mobile-01-missions.png" alt="App Mobile Technicien - 1. Missions" width="24%" />
+  <img src="docs/images/mobile-02-tournee.png" alt="App Mobile Technicien - 2. Ma Tournée" width="24%" />
+  <img src="docs/images/mobile-03-historique.png" alt="App Mobile Technicien - 3. Historique" width="24%" />
+  <img src="docs/images/mobile-04-profil.png" alt="App Mobile Technicien - 4. Profil et Thèmes" width="24%" />
+</p>
+
+<p align="center">
+  <em>Figure 8.1 : Les 4 écrans natifs de l'App Mobile Technicien (Missions, Ma Tournée, Historique, Profil & 7 Thèmes).</em>
+</p>
+
+### 8.1 Les 4 Onglets de l'Application Mobile
+
+1. **Onglet « Missions » (Accueil & Prise de Service) :**
+   - **Barre de statut smartphone native :** Affichage de l'heure en temps réel, indicateurs réseau et batterie.
+   - **En-tête épuré :** Logomark ANELEC et salutation dynamique (*« Bonjour [Nom] »*).
+   - **Carte d'accueil & Pointage Inviolable 1-Clic :** Avatar circulaire avec initiales, date du jour et décompte des chantiers assignés. Un bouton tactile **« Pointer mon arrivée »** horodate immédiatement la présence en base PostgreSQL (`pointages_techniciens`) et bascule en pastille verte **`● Pointé à [HH:MM]`**. Le démarrage des chantiers est verrouillé tant que ce pointage n'est pas effectué.
+   - **Jauge de progression journalière :** Barre d'avancement visuelle en direct (ex. *« 1/3 missions terminées »*).
+   - **Cartes des missions du jour :** Créneau horaire, pastille de statut colorée (*En cours*, *Clôturée*, *Prévu*), nom du client ou bailleur, corps d'état & objet de la prestation, et adresse avec chevron tactile.
+
+2. **Onglet « Ma tournée » (Carte Schématique & Ordre des Arrêts) :**
+   - **Visualisation cartographique stylisée :** Repérage instantané de la position du technicien (initiales dans un cercle bleu) et des étapes numérotées `1`, `2`, `3` reliées visuellement sur la trame de tournée.
+   - **Ordonnancement séquentiel des arrêts :** Liste ordonnée sous la carte indiquant chaque arrêt avec son créneau horaire, son adresse et son badge de statut (*En cours*, *Suivant*, *Prévu*).
+
+3. **Onglet « Historique » (Chantiers Clôturés) :**
+   - **Archives des interventions passées :** Liste chronologique des chantiers terminés.
+   - **Cartes récapitulatives :** Référence métier officielle (`INT-2026-xxx`), pastille verte `● Clôturée`, nom du client, descriptif des travaux réalisés, date formatée et compteur de photos certifiées.
+
+4. **Onglet « Profil » & Sélecteur des 7 Directions Artistiques :**
+   - **Avatar grand format (64px) & Spécialités :** Profil du technicien avec corps d'état assignés (*Électricité • Plomberie • Serrurerie*).
+   - **4 KPI d'activité en temps réel :**
+     1. *Heures effectuées dans la semaine (avec repère légal 35 h)*
+     2. *Missions accomplies dans le mois*
+     3. *Photos d'intervention envoyées*
+     4. *Taux de clôture GPS : 100 %*
+   - **Sélecteur interactif des 7 Thèmes :** Le technicien peut changer l'apparence complète de son application en 1 tap parmi :
+     * **1. Atlas Clarity** (Mode SaaS épuré, blanc éclatant, bleu roi)
+     * **2. Craft Warmth** (Palette artisanale chaleureuse, tons sable & ambre)
+     * **3. Signal Command** (Ambiance cockpit sombre haute lisibilité)
+     * **4. Editorial Swiss** (Typographie helvétique rigoureuse et contrastée)
+     * **5. Bento Modular** (Grille modulaire géométrique aux accents ANELEC)
+     * **6. Original Clair** & **7. Original Sombre** (Thèmes historiques de la plateforme)
+   - **Bouton de déconnexion sécurisé :** « Se déconnecter ».
+
+---
+
+### 8.2 Fiche Détail de Mission & Clôture GPS Inviolable
+
+En touchant n'importe quelle carte de mission, le technicien bascule sur la vue d'intervention détaillée plein écran :
 
 <p align="center">
   <img src="docs/images/doc-10-mobile-cloture-gps-modal.png" alt="Modale de localisation GPS obligatoire pour clôturer" width="45%" />
-  <img src="docs/images/doc-11-mobile-missions-cloturees-toast.png" alt="Missions déclarées terminées et message éphémère sur fond blanc opaque" width="45%" />
+  <img src="docs/images/doc-11-mobile-missions-cloturees-toast.png" alt="Missions déclarées terminées et notification sur fond blanc opaque" width="45%" />
 </p>
 
-1. **Pointage Quotidien Certifié (Matin & Soir) :**
-   - Le technicien pointe son arrivée au bureau le matin (horodatage automatique inviolable) pour déverrouiller le démarrage de ses missions, puis pointe sa fin de journée le soir une fois toutes ses interventions terminées.
-2. **Compte-Rendu Pré-rempli, Éléments de Chiffrage & Photos (< 75 Ko) :**
-   - Cochez en 1 tap les actions réalisées par corps d'état, renseignez les métrés pour le chiffrage devis et prenez les photos avant/après avec compression automatique.
-3. **Clôture avec Localisation GPS Obligatoire & Retrait Immédiat de la Carte :**
-   - Qu'il s'agisse d'une **Intervention (`INT-...`)** ou d'un **Bon de Devis / Visite Devis (`DEV-...` / `VIS-...`)**, appuyer sur **`⌖✓ Déclarer terminé`** ou **`⌖⏹ Clôturer avec GPS`** ouvre la fenêtre de certification GPS.
-   - Le GPS du téléphone doit être activé : la **dernière position actuelle** du technicien est transmise à l'équipe opérationnelle au bureau, et **la mission (intervention ou bon de devis) est immédiatement supprimée de la carte** pour ne laisser que les missions restantes à accomplir.
-   - Une notification éphémère sur **fond blanc 100 % opaque** confirme l'opération sans aucun chevauchement puis disparaît automatiquement après 2,5 secondes.
+* **Tuiles Métriques du Chantier :** Créneau horaire planifié, Montant estimé HT et Durée indicative.
+* **Actions Rapides d'Accès :** Bouton **[Itinéraire]** ouvrant instantanément l'application GPS native du smartphone (Google Maps, Waze, Apple Plans) et bouton **[Appeler]** composant directement le numéro du contact sur site.
+* **Consignes d'Accès & Sécurité :** Digicodes, étage, porte, consignes particulières transmises par le donneur d'ordre.
+* **Photos Avant / Après avec Compression Locale Automatique (< 75 Ko) :** Galerie de vignettes et bouton d'ajout ouvrant la caméra mobile avec optimisation et réduction de poids instantanées côté client avant téléversement.
+* **Compte-Rendu & Rapport d'Intervention :** Zone de saisie libre des observations et travaux réalisés.
+* **Barre d'Actions Flottante Accessible au Pouce :** Boutons tactiles `[Démarrer sur site]`, `[Mettre en pause]` et `[Clôturer avec GPS]`.
+* **Certification GPS & Retrait Immédiat de la Carte :**
+  - La clôture d'une **Intervention (`INT-...`)** ou d'un **Bon de Devis / Visite Devis (`DEV-...` / `VIS-...`)** déclenche l'acquisition de la position géographique avec calcul du rayon de précision en mètres.
+  - La position est transmise au bureau et **la mission est automatiquement retirée de la carte générale des tournées** pour ne laisser que le reste à faire.
+  - Une confirmation nette sur **fond blanc 100 % opaque** s'affiche sans aucun chevauchement et disparaît après 2,5 secondes.
 
 ---
 

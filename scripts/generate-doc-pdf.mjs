@@ -22,6 +22,10 @@ function toBase64(file) {
 
 // Chargement des images et schémas
 const imgLogo = toBase64('01-logo-anelec-groupe.png');
+const imgMobile01Missions = toBase64('mobile-01-missions.png');
+const imgMobile02Tournee = toBase64('mobile-02-tournee.png');
+const imgMobile03Historique = toBase64('mobile-03-historique.png');
+const imgMobile04Profil = toBase64('mobile-04-profil.png');
 const imgDoc01CreationCompte = toBase64('doc-01-creation-compte-google-entreprise.png');
 const imgDoc02ActivationEmail = toBase64('doc-02-activation-confirmation-email.png');
 const imgDoc03EmailOfficiel = toBase64('doc-03-email-officiel-activation.png');
@@ -223,6 +227,13 @@ const htmlContent = `<!DOCTYPE html>
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
     margin-bottom: 10px;
   }
 
@@ -506,7 +517,7 @@ const htmlContent = `<!DOCTYPE html>
     <span class="toc-tag">Page 9</span>
   </div>
   <div class="toc-item">
-    <span class="toc-title">8. Application Mobile Technicien PWA, Clôture GPS &amp; Retrait de Carte</span>
+    <span class="toc-title">8. Application Mobile Technicien PWA (4 Onglets), Clôture GPS &amp; 7 Thèmes</span>
     <span class="toc-tag">Page 10</span>
   </div>
   <div class="toc-item">
@@ -954,36 +965,48 @@ const htmlContent = `<!DOCTYPE html>
 <div class="page-break"></div>
 
 <!-- PAGE 10 : APPLICATION MOBILE TECHNICIEN PWA & CLOTURE GPS -->
-<h1>8. Application Mobile Technicien PWA &amp; Clôture GPS</h1>
+<h1>8. Application Mobile Technicien PWA (4 Onglets), Clôture GPS &amp; 7 Thèmes</h1>
 
 <p>
-  L'application mobile terrain (PWA installable sur iOS et Android) accompagne le technicien de sa prise de service le matin jusqu'à la clôture certifiée de ses interventions.
+  L'application mobile terrain (PWA installable sur iOS et Android) accompagne le technicien de sa prise de service jusqu'à la clôture certifiée de ses interventions. Elle propose une ergonomie au pouce native structurée en <strong>4 onglets essentiels</strong> et un sélecteur interactif des <strong>7 directions artistiques</strong>.
 </p>
 
-<div class="grid-2">
-  <div class="figure-box">
-    <img src="${imgDoc10MobileGpsModal}" alt="Modale de Clôture avec Localisation GPS Obligatoire" class="figure-img" style="max-height: 220px;" />
-    <div class="figure-caption">
-      <strong>Figure 8.1 :</strong> Clôture GPS Obligatoire — Acquisition de la position exacte et confirmation d'envoi au bureau.
+<div class="grid-4">
+  <div class="figure-box" style="padding: 4px; text-align: center;">
+    <img src="${imgMobile01Missions}" alt="Missions du jour" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
+    <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
+      <strong>1. Missions :</strong> Pointage 1-clic, progression, cartes d'interventions.
     </div>
   </div>
-  <div class="figure-box">
-    <img src="${imgDoc11MobileToast}" alt="Message éphémère fond blanc opaque et missions terminées" class="figure-img" style="max-height: 220px;" />
-    <div class="figure-caption">
-      <strong>Figure 8.2 :</strong> Message éphémère sur <strong>fond blanc 100 % opaque</strong>, sans aucun chevauchement, avec disparition automatique (2,5 s).
+  <div class="figure-box" style="padding: 4px; text-align: center;">
+    <img src="${imgMobile02Tournee}" alt="Ma tournée" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
+    <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
+      <strong>2. Tournée :</strong> Tracé d'arrêts 1, 2, 3 et position GPS en direct.
+    </div>
+  </div>
+  <div class="figure-box" style="padding: 4px; text-align: center;">
+    <img src="${imgMobile03Historique}" alt="Historique des missions" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
+    <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
+      <strong>3. Historique :</strong> Chantiers clôturés et archives photos.
+    </div>
+  </div>
+  <div class="figure-box" style="padding: 4px; text-align: center;">
+    <img src="${imgMobile04Profil}" alt="Profil et thèmes" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
+    <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
+      <strong>4. Profil :</strong> 4 KPI, sélecteur des 7 thèmes et déconnexion.
     </div>
   </div>
 </div>
 
-<h2>Les 4 Règles Métier de l'Application Mobile :</h2>
+<h2>Les 5 Piliers Métier de la Nouvelle Interface Mobile :</h2>
 
 <div class="step-container">
   <div class="step-row">
     <div class="step-pin">1</div>
     <div class="step-content">
-      <div class="step-title">Pointage Matin Inviolable (Arrivée au Bureau)</div>
+      <div class="step-title">Prise de Service &amp; Pointage Inviolable (Onglet Missions)</div>
       <div class="step-desc">
-        Le démarrage des interventions est strictement verrouillé tant que le technicien n'a pas appuyé sur <strong>« Pointer mon arrivée au bureau »</strong> à son arrivée.
+        Le démarrage des interventions est subordonné au pointage d'arrivée : un tap sur <strong>« Pointer mon arrivée »</strong> horodate immédiatement la présence en base PostgreSQL (table <code>pointages_techniciens</code>) et affiche la pastille verte « Pointé à HH:MM ». La barre de progression indique en temps réel l'avancement des chantiers (ex. <em>1/3 missions terminées</em>).
       </div>
     </div>
   </div>
@@ -991,9 +1014,9 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">2</div>
     <div class="step-content">
-      <div class="step-title">Bouton Direct « Déclarer terminé » (Interventions &amp; Bons de Devis)</div>
+      <div class="step-title">Itinéraire Cartographique &amp; Ordre des Arrêts (Onglet Ma Tournée)</div>
       <div class="step-desc">
-        Que ce soit pour une <strong>Intervention (INT)</strong> ou un <strong>Bon de Devis (DEV)</strong>, un bouton tactile direct permet de déclarer la mission terminée en un clic.
+        Affiche la tournée complète sous forme de carte schématique avec la position du technicien (initiales) et les étapes numérotées 1, 2, 3 reliées visuellement. La liste sous la carte ordonne chaque arrêt avec son créneau horaire et son statut (<em>En cours</em>, <em>Suivant</em>, <em>Prévu</em>).
       </div>
     </div>
   </div>
@@ -1001,9 +1024,9 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">3</div>
     <div class="step-content">
-      <div class="step-title">Localisation GPS Obligatoire &amp; Retrait Immédiat de la Carte</div>
+      <div class="step-title">Fiche Intervention Tactile, Photos &amp; Navigation GPS Directe</div>
       <div class="step-desc">
-        Le GPS doit être actif : la dernière position du technicien est envoyée au bureau, et la mission terminée est <strong>automatiquement supprimée de la carte</strong> pour ne laisser que le reste à faire.
+        En touchant une mission, le technicien accède aux tuiles métriques (créneau, montant estimé HT, durée), aux boutons rapides <strong>[Itinéraire]</strong> (guidage Waze / Google Maps) et <strong>[Appeler]</strong>, aux consignes d'accès, à la capture photo avec compression locale (&lt; 75 Ko) et au compte rendu textuel.
       </div>
     </div>
   </div>
@@ -1011,9 +1034,19 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">4</div>
     <div class="step-content">
-      <div class="step-title">Notifications Éphémères Nettes (Fond Blanc Opaque, 0 Chevauchement)</div>
+      <div class="step-title">Clôture Certifiée avec Localisation GPS Obligatoire &amp; Retrait de Carte</div>
       <div class="step-desc">
-        Toutes les confirmations s'affichent sur un fond blanc pur (non transparent) qui n'obstrue jamais l'en-tête et disparaît tout seul après 2,5 secondes.
+        La clôture (bouton <strong>« Clôturer avec GPS »</strong>) verrouille les coordonnées GPS exactes avec le rayon de précision. La mission est certifiée terminée, transmise au bureau et <strong>immédiatement retirée de la carte globale</strong> pour ne laisser que le reste à faire.
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-pin">5</div>
+    <div class="step-content">
+      <div class="step-title">Pilotage Personnel &amp; Sélecteur des 7 Directions Artistiques (Onglet Profil)</div>
+      <div class="step-desc">
+        Visualisation des 4 KPI terrain (heures effectuées sur base 35 h, missions mensuelles, photos envoyées, taux de clôture GPS 100 %). Un sélecteur interactif permet au technicien de choisir instantanément sa direction de design préférée (<em>Atlas Clarity, Craft Warmth, Signal Command, Editorial Swiss, Bento Modular, Original Clair, Original Sombre</em>).
       </div>
     </div>
   </div>
