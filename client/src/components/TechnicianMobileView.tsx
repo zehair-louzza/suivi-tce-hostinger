@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   adminApi,
   interventionApi,
@@ -12,6 +14,11 @@ import { useTheme, THEMES, ThemeId } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
 import { compressAndOptimizeImage } from '../lib/imageOptimizer';
 import { TourneeMapOptimizer } from './TourneeMapOptimizer';
+import {
+  DEFAULT_DEPOT_ADDRESS,
+  DEFAULT_DEPOT_COORDS,
+  geocodeAddress,
+} from '../lib/geocoding';
 
 interface TechnicianMobileViewProps {
   techniciens: string[];
@@ -33,20 +40,6 @@ function getNowHHMM(): string {
   } catch {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-}
-
-function formatWelcomeDate(d: Date = new Date()): string {
-  try {
-    const s = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      timeZone: 'Europe/Paris',
-    }).format(d);
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  } catch {
-    return 'Aujourd’hui';
   }
 }
 
@@ -190,6 +183,255 @@ function UserAvatar({ name, size = 44 }: { name: string; size?: number }) {
 }
 
 /* ============================================================================
+   CARTE INTERACTIVE LEAFLET DÉDIÉE À LA TOURNÉE DU TECHNICIEN
+   ============================================================================ */
+function MobileRouteMap({
+  technicien,
+  missions,
+  onOpenMission,
+}: {
+  technicien: string;
+  missions: Intervention[];
+  selectedDate: string;
+  onOpenMission: (id: number) => void;
+}) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const layerGroupRef = useRef<L.LayerGroup | null>(null);
+  const polylineRef = useRef<L.Polyline | null>(null);
+
+  const PARIS_FALLBACKS: [number, number][] = useMemo(() => [
+    [48.8719, 2.3096], // 8 rue de Ponthieu, 75008
+    [48.8741, 2.3168], // 18 rue de Miromesnil, 75008
+    [48.8782, 2.3244], // 5 rue de Rome, 75008
+    [48.8685, 2.3325], // Opéra / 2e
+    [48.8566, 2.3522], // Châtelet
+    [48.8833, 2.3267], // Place de Clichy
+    [48.8421, 2.3219], // Montparnasse
+  ], []);
+
+  const [stopsCoords, setStopsCoords] = useState<{ id: number; coords: [number, number] }[]>([]);
+
+  // Résolution géocodée des adresses
+  useEffect(() => {
+    let cancelled = false;
+    async function resolveCoords() {
+      const results: { id: number; coords: [number, number] }[] = [];
+      for (let i = 0; i < missions.length; i++) {
+        const m = missions[i];
+        let lat = 0;
+        let lng = 0;
+        if (m.gpsCloture) {
+          try {
+            const parsed = typeof m.gpsCloture === 'string' ? JSON.parse(m.gpsCloture) : m.gpsCloture;
+            if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+              lat = parsed.lat;
+              lng = parsed.lng;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (!lat || !lng) {
+          const geo = await geocodeAddress(m.chantier || m.client || 'Paris');
+          if (geo?.lat && geo?.lng) {
+            lat = geo.lat;
+            lng = geo.lng;
+          } else {
+            const fb = PARIS_FALLBACKS[i % PARIS_FALLBACKS.length];
+            lat = fb[0];
+            lng = fb[1];
+          }
+        }
+        results.push({ id: m.id, coords: [lat, lng] });
+      }
+      if (!cancelled) {
+        setStopsCoords(results);
+      }
+    }
+    resolveCoords();
+    return () => {
+      cancelled = true;
+    };
+  }, [missions, PARIS_FALLBACKS]);
+
+  // Initialisation Map Leaflet
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        center: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng],
+        zoom: 13,
+        zoomControl: true,
+        attributionControl: false,
+      });
+
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+        }
+      ).addTo(map);
+
+      const lg = L.layerGroup().addTo(map);
+      layerGroupRef.current = lg;
+      mapInstanceRef.current = map;
+    }
+
+    const map = mapInstanceRef.current;
+    const t1 = setTimeout(() => map?.invalidateSize(), 100);
+    const t2 = setTimeout(() => map?.invalidateSize(), 300);
+    const t3 = setTimeout(() => map?.invalidateSize(), 600);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, []);
+
+  // Rendu des marqueurs et de l'itinéraire polyline
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const lg = layerGroupRef.current;
+    if (!map || !lg) return;
+
+    lg.clearLayers();
+    if (polylineRef.current) {
+      map.removeLayer(polylineRef.current);
+      polylineRef.current = null;
+    }
+
+    // Exposer l'ouverture de mission dans la fenêtre globale pour les popups Leaflet
+    (window as any).__openMobileMission = (id: number) => {
+      onOpenMission(id);
+    };
+
+    const bounds = L.latLngBounds(
+      [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng],
+      [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng]
+    );
+
+    // 1. Marqueur Siège / Technicien
+    const initials = (technicien || 'TE').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+    const techPinIcon = L.divIcon({
+      className: 't-leaflet-tech-pin',
+      html: `
+        <div style="
+          width: 34px; height: 34px; border-radius: 50%;
+          background: #1D4ED8; color: #ffffff;
+          display: flex; align-items: center; justify-content: center;
+          font-weight: 800; font-size: 13px;
+          border: 3px solid #ffffff; box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.25), 0 3px 8px rgba(0,0,0,0.3);
+        ">
+          ${initials}
+        </div>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+    });
+
+    L.marker([DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng], { icon: techPinIcon })
+      .bindPopup(`
+        <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
+          <strong style="color: #1D4ED8; font-size: 13px;">🏢 Point de départ tournée</strong>
+          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">${DEFAULT_DEPOT_ADDRESS}</div>
+        </div>
+      `)
+      .addTo(lg);
+
+    const routePoints: [number, number][] = [[DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng]];
+
+    // 2. Marqueurs numérotés 1, 2, 3...
+    missions.forEach((m, idx) => {
+      const stopCoord = stopsCoords.find((s) => s.id === m.id);
+      const latLng: [number, number] = stopCoord?.coords || PARIS_FALLBACKS[idx % PARIS_FALLBACKS.length];
+      routePoints.push(latLng);
+      bounds.extend(latLng);
+
+      const stopNum = idx + 1;
+      const isDone = ['Clôturée', 'Terminée', 'Effectuée'].includes(m.statutOperationnel || '');
+      const bgColor = isDone ? '#059669' : '#0f172a';
+      const textColor = isDone ? '#ffffff' : '#ffc107';
+
+      const stopPinIcon = L.divIcon({
+        className: 't-leaflet-stop-pin',
+        html: `
+          <div style="
+            width: 32px; height: 32px; border-radius: 50%;
+            background: ${bgColor}; color: ${textColor};
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 14px; font-family: ui-monospace, monospace;
+            border: 2.5px solid #ffffff; box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+          ">
+            ${stopNum}
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+
+      const marker = L.marker(latLng, { icon: stopPinIcon }).addTo(lg);
+      marker.bindPopup(`
+        <div style="font-family: inherit; font-size: 12px; line-height: 1.45; min-width: 210px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <span style="background: ${bgColor}; color: ${textColor}; font-weight: 800; font-size: 11px; padding: 2px 7px; border-radius: 999px;">
+              Étape ${stopNum}
+            </span>
+            <span style="font-weight: 700; color: #1D4ED8; font-size: 11px;">
+              ${m.heureDebut || '09:00'}
+            </span>
+          </div>
+          <strong style="font-size: 13px; color: #0f172a; display: block; margin-top: 2px;">
+            ${m.client || 'Client TCE'}
+          </strong>
+          <div style="color: #64748b; font-size: 11px; margin: 2px 0 8px 0;">
+            ${(m.chantier || 'Paris').split(',')[0]}
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button
+              type="button"
+              onclick="window.__openMobileMission(${m.id})"
+              style="flex: 1; padding: 6px 10px; background: #1D4ED8; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 11.5px; cursor: pointer;"
+            >
+              Ouvrir la mission
+            </button>
+            <button
+              type="button"
+              onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m.chantier || 'Paris')}', '_blank')"
+              style="padding: 6px 10px; background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 700; font-size: 11.5px; cursor: pointer;"
+            >
+              GPS
+            </button>
+          </div>
+        </div>
+      `);
+    });
+
+    // 3. Tracé d'itinéraire
+    if (routePoints.length > 1) {
+      polylineRef.current = L.polyline(routePoints, {
+        color: '#1D4ED8',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '6, 8',
+      }).addTo(map);
+    }
+
+    if (missions.length > 0) {
+      map.fitBounds(bounds, { padding: [35, 35], maxZoom: 15 });
+    }
+  }, [missions, stopsCoords, technicien, onOpenMission, PARIS_FALLBACKS]);
+
+  return (
+    <div className="t-leaflet-map-container" data-testid="mobile-route-leaflet-map">
+      <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+    </div>
+  );
+}
+
+/* ============================================================================
    COMPOSANT PRINCIPAL : TECHNICIAN MOBILE VIEW
    ============================================================================ */
 export function TechnicianMobileView({
@@ -215,6 +457,7 @@ export function TechnicianMobileView({
   const [runningMissions, setRunningMissions] = useState<Record<number, boolean>>({});
 
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   // Horloge en direct au fuseau officiel Paris
   const [liveParisTime, setLiveParisTime] = useState<string>(() => {
@@ -249,32 +492,44 @@ export function TechnicianMobileView({
     return () => clearInterval(timer);
   }, []);
 
-  // Pointages Query
+  // Pointages Query pour la date sélectionnée
   const pointagesQuery = useQuery({
-    queryKey: ['admin-pointages', todayISO, currentTechnicien],
+    queryKey: ['admin-pointages', selectedDate, currentTechnicien],
     queryFn: async () => {
       const res = await adminApi.listPointages({
-        dateJour: todayISO,
+        dateJour: selectedDate,
         technicien: currentTechnicien,
       });
       return res.data.data;
     },
-    enabled: Boolean(currentTechnicien),
+    enabled: Boolean(currentTechnicien && selectedDate),
   });
 
   const currentPointage = (pointagesQuery.data || [])[0] || null;
   const isPointed = Boolean(currentPointage?.heureArriveeBureau);
-  const isTerminee = currentPointage?.statutJournee === 'TERMINEE';
+  const isTerminee = currentPointage?.statutJournee === 'TERMINEE' || Boolean(currentPointage?.heureFinJournee);
 
-  // Pointage Mut
+  // Pointage Mut : Prise de poste matin ("Commencer la journée")
   const clockInMut = useMutation({
     mutationFn: adminApi.clockIn,
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['admin-pointages'] });
-      toast.success(res.data.message || `Arrivée pointée à ${getNowHHMM()}`);
+      toast.success(res.data.message || `Journée commencée à ${getNowHHMM()}`);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Erreur de pointage matin');
+      toast.error(err.response?.data?.error || 'Erreur lors du commencement de journée');
+    },
+  });
+
+  // Pointage Mut : Fin de poste soir ("Finir la journée")
+  const clockOutMut = useMutation({
+    mutationFn: adminApi.clockOut,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-pointages'] });
+      toast.success(res.data.message || `Journée terminée à ${getNowHHMM()}`);
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Erreur lors de la fin de journée');
     },
   });
 
@@ -394,16 +649,110 @@ export function TechnicianMobileView({
     });
   }, [currentTechnicien, devisList, interventionsList, todayISO]);
 
-  // Missions d'aujourd'hui
-  const todayMissions = useMemo(() => {
-    return allTechMissionsCombined.filter((m: Intervention) => m.datePlanifiee === todayISO || !m.datePlanifiee);
+  // Décompte des missions par date ISO
+  const countByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    allTechMissionsCombined.forEach((m) => {
+      const d = m.datePlanifiee || todayISO;
+      map[d] = (map[d] || 0) + 1;
+    });
+    return map;
   }, [allTechMissionsCombined, todayISO]);
 
+  // Jours de la semaine entourant la date sélectionnée (Lundi à Dimanche)
+  const weekDays = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const ref = new Date(y, m - 1, d, 12, 0, 0);
+      const dayOfWeek = ref.getDay();
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(ref);
+      monday.setDate(ref.getDate() + diffToMonday);
+
+      const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+      const res = [];
+      for (let i = 0; i < 7; i++) {
+        const cur = new Date(monday);
+        cur.setDate(monday.getDate() + i);
+        const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        res.push({
+          iso,
+          dayLabel: dayNames[i],
+          dayNum: String(cur.getDate()).padStart(2, '0'),
+          isToday: iso === todayISO,
+        });
+      }
+      return res;
+    } catch {
+      return [];
+    }
+  }, [selectedDate, todayISO]);
+
+  // Titre du mois en français
+  const monthTitle = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const date = new Date(y, m - 1, d, 12, 0, 0);
+      const str = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(date);
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
+
+  // Format complet de la date sélectionnée (ex: "Vendredi 6 novembre")
+  const formattedSelectedDate = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const date = new Date(y, m - 1, d, 12, 0, 0);
+      const s = new Intl.DateTimeFormat('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }).format(date);
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
+
+  const handlePrevMonth = () => {
+    try {
+      const [y, m] = selectedDate.split('-').map(Number);
+      const prev = new Date(y, m - 2, 1, 12, 0, 0);
+      setSelectedDate(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-01`);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleNextMonth = () => {
+    try {
+      const [y, m] = selectedDate.split('-').map(Number);
+      const next = new Date(y, m, 1, 12, 0, 0);
+      setSelectedDate(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleTodayShortcut = () => {
+    setSelectedDate(todayISO);
+  };
+
+  // Missions pour le jour sélectionné
+  const selectedDateMissions = useMemo(() => {
+    return allTechMissionsCombined.filter((m: Intervention) => {
+      const d = m.datePlanifiee || todayISO;
+      return d === selectedDate;
+    });
+  }, [allTechMissionsCombined, selectedDate, todayISO]);
+
   const doneCount = useMemo(() => {
-    return todayMissions.filter((m: Intervention) =>
+    return selectedDateMissions.filter((m: Intervention) =>
       ['Clôturée', 'Terminée', 'Terminée - à valider', 'Effectuée'].includes(m.statutOperationnel || '')
     ).length;
-  }, [todayMissions]);
+  }, [selectedDateMissions]);
 
   // Interventions passées pour l'historique
   const pastMissions = useMemo(() => {
@@ -418,12 +767,29 @@ export function TechnicianMobileView({
     return allTechMissionsCombined.find((m: Intervention) => m.id === openMissionId) || null;
   }, [allTechMissionsCombined, openMissionId]);
 
-  // Handlers
-  const handleClockIn = () => {
+  // Handlers Pointage
+  const handleStartDay = () => {
     clockInMut.mutate({
       technicien: currentTechnicien,
-      dateJour: todayISO,
+      dateJour: selectedDate,
       heureArriveeBureau: getNowHHMM(),
+    });
+  };
+
+  const handleEndDay = () => {
+    const unfinished = selectedDateMissions.filter(
+      (m) => !['Clôturée', 'Terminée', 'Terminée - à valider', 'Effectuée'].includes(m.statutOperationnel || '')
+    );
+    if (unfinished.length > 0) {
+      const confirmEnd = window.confirm(
+        `Attention : il reste ${unfinished.length} mission(s) non clôturée(s) pour aujourd'hui. Voulez-vous vraiment finir votre journée ?`
+      );
+      if (!confirmEnd) return;
+    }
+    clockOutMut.mutate({
+      technicien: currentTechnicien,
+      dateJour: selectedDate,
+      heureFinJournee: getNowHHMM(),
     });
   };
 
@@ -483,7 +849,6 @@ export function TechnicianMobileView({
           toast.success('Intervention clôturée · rapport envoyé au bureau');
         },
         () => {
-          // Fallback géocodé standard
           if (activeMission.id > 0) {
             updateMissionMut.mutate({
               id: activeMission.id,
@@ -758,54 +1123,148 @@ export function TechnicianMobileView({
                 </div>
               )}
 
-              {/* Carte de bienvenue avec avatar & pointage */}
+              {/* Carte de bienvenue avec avatar & pointage séparé (Commencer / Finir la journée) */}
               <section className="t-welcome">
                 <UserAvatar name={currentTechnicien} size={44} />
                 <div>
                   <strong>Bonjour {currentTechnicien}</strong>
-                  <span>{formatWelcomeDate()} · {todayMissions.length} missions aujourd'hui</span>
+                  <span>{formattedSelectedDate} · {selectedDateMissions.length} mission{selectedDateMissions.length > 1 ? 's' : ''}</span>
+                  <div className="t-pointage-actions">
+                    {!isPointed ? (
+                      <button
+                        type="button"
+                        className="t-btn-pointage-start"
+                        disabled={clockInMut.isPending}
+                        onClick={handleStartDay}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                        <span>{clockInMut.isPending ? 'Enregistrement...' : 'Commencer la journée'}</span>
+                      </button>
+                    ) : (
+                      <span className="m-pill m-tone-green" title="Heure de commencement">
+                        <i className="m-pill-dot" />
+                        <span>Début : {currentPointage?.heureArriveeBureau || '07:52'}</span>
+                      </span>
+                    )}
+
+                    {isPointed && !isTerminee ? (
+                      <button
+                        type="button"
+                        className="t-btn-pointage-end"
+                        disabled={clockOutMut.isPending}
+                        onClick={handleEndDay}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                        <span>{clockOutMut.isPending ? 'Enregistrement...' : 'Finir la journée'}</span>
+                      </button>
+                    ) : isTerminee ? (
+                      <span className="m-pill m-tone-indigo" title="Heure de fin">
+                        <i className="m-pill-dot" />
+                        <span>Fin : {currentPointage?.heureFinJournee || '18:00'}</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="t-btn-pointage-end"
+                        disabled
+                        style={{ opacity: 0.45, cursor: 'not-allowed' }}
+                        title="Commencez d'abord votre journée"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                        <span>Finir la journée</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {!isPointed && (
-                  <button
-                    type="button"
-                    className="m-btn m-btn--primary m-btn--sm"
-                    onClick={handleClockIn}
-                  >
-                    Pointer
-                  </button>
-                )}
-                {isPointed && !isTerminee && (
-                  <span className="m-pill m-tone-green">
-                    <i className="m-pill-dot" />
-                    <span>Pointé à {currentPointage.heureArriveeBureau}</span>
-                  </span>
-                )}
-                {isTerminee && (
-                  <span className="m-pill m-tone-indigo">
-                    <i className="m-pill-dot" />
-                    <span>Fin à {currentPointage.heureFinJournee}</span>
-                  </span>
-                )}
               </section>
 
-              {/* Barre de progression des missions */}
+              {/* Sélecteur de date : Filtre Mois & Bandeau Semaine (Lun à Dim) */}
+              <section className="t-date-picker" data-testid="terrain-date-picker">
+                <div className="t-month-row">
+                  <div className="t-month-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <span>{monthTitle}</span>
+                  </div>
+                  <div className="t-month-nav-btns">
+                    <button
+                      type="button"
+                      className="t-month-nav-btn"
+                      onClick={handlePrevMonth}
+                      title="Mois précédent"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="t-today-btn"
+                      onClick={handleTodayShortcut}
+                      title="Revenir à aujourd'hui"
+                    >
+                      Aujourd'hui
+                    </button>
+                    <button
+                      type="button"
+                      className="t-month-nav-btn"
+                      onClick={handleNextMonth}
+                      title="Mois suivant"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+
+                <div className="t-week-strip">
+                  {weekDays.map((day) => {
+                    const isSelected = day.iso === selectedDate;
+                    const missionCount = countByDate[day.iso] || 0;
+                    return (
+                      <button
+                        key={day.iso}
+                        type="button"
+                        onClick={() => setSelectedDate(day.iso)}
+                        className={`t-day-pill ${isSelected ? 'is-selected' : ''} ${day.isToday ? 'is-today' : ''}`}
+                        title={`${day.dayLabel} ${day.dayNum} (${missionCount} mission${missionCount > 1 ? 's' : ''})`}
+                      >
+                        <span className="t-day-name">{day.dayLabel}</span>
+                        <span className="t-day-num">{day.dayNum}</span>
+                        {missionCount > 0 && (
+                          <span className="t-day-badge">{missionCount}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Barre de progression des missions de la date */}
               <section className="t-progress">
-                <strong>{doneCount}/{todayMissions.length} missions terminées</strong>
+                <strong>{doneCount}/{selectedDateMissions.length} missions terminées</strong>
                 <div className="m-progress">
                   <span
                     className="m-progress-bar"
                     style={{
-                      width: `${todayMissions.length > 0 ? (doneCount / todayMissions.length) * 100 : 0}%`,
+                      width: `${selectedDateMissions.length > 0 ? (doneCount / selectedDateMissions.length) * 100 : 0}%`,
                     }}
                   />
                 </div>
               </section>
 
-              <h2 className="t-h2">Mes missions du jour</h2>
+              <h2 className="t-h2">Missions du jour ({formattedSelectedDate})</h2>
 
               {/* Liste des cartes de missions */}
               <ul className="t-list" data-testid="terrain-missions-list">
-                {todayMissions.map((m) => (
+                {selectedDateMissions.map((m) => (
                   <li key={m.id}>
                     <button
                       type="button"
@@ -858,9 +1317,9 @@ export function TechnicianMobileView({
                   </li>
                 ))}
 
-                {todayMissions.length === 0 && (
+                {selectedDateMissions.length === 0 && (
                   <li className="t-empty">
-                    Aucune mission planifiée pour aujourd'hui.
+                    Aucune mission planifiée pour le {formattedSelectedDate}.
                   </li>
                 )}
               </ul>
@@ -874,25 +1333,24 @@ export function TechnicianMobileView({
             <main className="t-main" data-testid="terrain-mapview">
               <Header title="Ma tournée" liveTime={liveParisTime} />
 
-              <div className="t-map-wrap">
-                <div className="t-map" aria-hidden="true">
-                  <div className="t-map-pin t-map-pin--me">
-                    <UserAvatar name={currentTechnicien} size={28} />
-                  </div>
-                  <div className="t-map-pin t-map-pin--stop" style={{ top: '38%', left: '62%' }}>1</div>
-                  <div className="t-map-pin t-map-pin--stop" style={{ top: '60%', left: '76%' }}>2</div>
-                  <div className="t-map-pin t-map-pin--stop" style={{ top: '72%', left: '38%' }}>3</div>
-                </div>
-              </div>
+              {/* VRAIE CARTE LEAFLET INTERACTIVE MOBILE */}
+              <MobileRouteMap
+                technicien={currentTechnicien}
+                missions={selectedDateMissions}
+                selectedDate={selectedDate}
+                onOpenMission={(id) => setOpenMissionId(id)}
+              />
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 className="t-h2" style={{ margin: 0 }}>Ma tournée</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                <h2 className="t-h2" style={{ margin: 0 }}>
+                  Ma tournée · {selectedDateMissions.length} étape{selectedDateMissions.length > 1 ? 's' : ''}
+                </h2>
                 <button
                   type="button"
                   className="m-btn m-btn--sm m-btn--secondary"
                   onClick={() => setIsInteractiveMapOpen((o) => !o)}
                 >
-                  {isInteractiveMapOpen ? 'Masquer la carte' : 'Carte interactive GPS'}
+                  {isInteractiveMapOpen ? 'Masquer optimisation' : 'Optimisation multi-agents'}
                 </button>
               </div>
 
@@ -901,7 +1359,7 @@ export function TechnicianMobileView({
                   <TourneeMapOptimizer
                     interventions={interventionsList}
                     devis={devisList}
-                    selectedDate={todayISO}
+                    selectedDate={selectedDate}
                     currentTechnicien={currentTechnicien}
                     techniciensList={techniciens}
                     onSelectTechnicien={onSelectTechnicien}
@@ -912,7 +1370,7 @@ export function TechnicianMobileView({
               )}
 
               <ul className="t-list t-list--route" data-testid="terrain-route-list">
-                {todayMissions.map((m, index) => (
+                {selectedDateMissions.map((m, index) => (
                   <li key={m.id} onClick={() => setOpenMissionId(m.id)}>
                     <span className="t-stop-num">{index + 1}</span>
                     <div>
@@ -923,18 +1381,15 @@ export function TechnicianMobileView({
                       status={
                         runningMissions[m.id]
                           ? 'En cours'
-                          : index === 0
-                          ? 'En cours'
-                          : index === 1
-                          ? 'Suivant'
-                          : 'Prévu'
+                          : m.statutOperationnel ||
+                            (index === 0 ? 'En cours' : index === 1 ? 'Suivant' : 'Prévu')
                       }
                     />
                   </li>
                 ))}
 
-                {todayMissions.length === 0 && (
-                  <li className="t-empty">Aucun itinéraire à afficher pour aujourd'hui.</li>
+                {selectedDateMissions.length === 0 && (
+                  <li className="t-empty">Aucun itinéraire à afficher pour cette date.</li>
                 )}
               </ul>
             </main>
@@ -996,7 +1451,7 @@ export function TechnicianMobileView({
               <ul className="t-prof-list">
                 <li>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="10" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
                   <span>
@@ -1160,120 +1615,108 @@ export function TechnicianMobileView({
                           </div>
                         </div>
 
-                        <div style={{ flexShrink: 0 }}>
-                          {isSelected ? (
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                fontWeight: 800,
-                                padding: '3px 8px',
-                                borderRadius: '999px',
-                                background: 'var(--color-primary, #1D4ED8)',
-                                color: '#ffffff',
-                              }}
-                            >
-                              ✓ Actif
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748b)' }}>
-                              Choisir
-                            </span>
-                          )}
-                        </div>
+                        {isSelected && (
+                          <span style={{ color: 'var(--color-primary, #1D4ED8)', fontWeight: 800, fontSize: '14px' }}>
+                            ✓
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="m-btn m-btn--ghost m-btn--lg m-btn--block"
-                onClick={async () => {
-                  await logout();
-                  toast.success('Déconnexion réussie');
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-                <span>Se déconnecter</span>
-              </button>
+              {/* Bouton de déconnexion */}
+              <div style={{ marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="m-btn m-btn--danger m-btn--lg m-btn--block"
+                  onClick={async () => {
+                    await logout();
+                    toast.success('Déconnexion réussie');
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  <span>Se déconnecter</span>
+                </button>
+              </div>
             </main>
           )}
+
+          {/* =====================================================================
+              6. BARRE DE NAVIGATION INFÉRIEURE MOBILE (POUCE)
+             ===================================================================== */}
+          <nav className="t-bnav" aria-label="Navigation principale">
+            <button
+              type="button"
+              className={tab === 'home' && !activeMission ? 'is-active' : ''}
+              onClick={() => {
+                setTab('home');
+                setOpenMissionId(null);
+              }}
+              data-testid="terrain-tab-missions"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+              <span>Missions</span>
+            </button>
+
+            <button
+              type="button"
+              className={tab === 'map' && !activeMission ? 'is-active' : ''}
+              onClick={() => {
+                setTab('map');
+                setOpenMissionId(null);
+              }}
+              data-testid="terrain-tab-map"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="3 11 22 2 13 21 11 13 3 11" />
+              </svg>
+              <span>Tournée</span>
+            </button>
+
+            <button
+              type="button"
+              className={tab === 'hist' && !activeMission ? 'is-active' : ''}
+              onClick={() => {
+                setTab('hist');
+                setOpenMissionId(null);
+              }}
+              data-testid="terrain-tab-hist"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <polyline points="12 7 12 12 15 15" />
+              </svg>
+              <span>Historique</span>
+            </button>
+
+            <button
+              type="button"
+              className={tab === 'prof' && !activeMission ? 'is-active' : ''}
+              onClick={() => {
+                setTab('prof');
+                setOpenMissionId(null);
+              }}
+              data-testid="terrain-tab-prof"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span>Profil</span>
+            </button>
+          </nav>
         </>
       )}
-
-      {/* =====================================================================
-          6. BARRE DE NAVIGATION INFÉRIEURE TACTILE (POUCE-COMPATIBLE)
-         ===================================================================== */}
-      <nav className="t-bnav" data-testid="terrain-bnav">
-        <button
-          type="button"
-          className={tab === 'home' && !activeMission ? 'is-active' : ''}
-          onClick={() => {
-            setTab('home');
-            setOpenMissionId(null);
-          }}
-          data-testid="terrain-tab-home"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-            <polyline points="9 22 9 12 15 12 15 22" />
-          </svg>
-          <span>Missions</span>
-        </button>
-
-        <button
-          type="button"
-          className={tab === 'map' && !activeMission ? 'is-active' : ''}
-          onClick={() => {
-            setTab('map');
-            setOpenMissionId(null);
-          }}
-          data-testid="terrain-tab-map"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="3 11 22 2 13 21 11 13 3 11" />
-          </svg>
-          <span>Tournée</span>
-        </button>
-
-        <button
-          type="button"
-          className={tab === 'hist' && !activeMission ? 'is-active' : ''}
-          onClick={() => {
-            setTab('hist');
-            setOpenMissionId(null);
-          }}
-          data-testid="terrain-tab-hist"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <polyline points="12 7 12 12 15 15" />
-          </svg>
-          <span>Historique</span>
-        </button>
-
-        <button
-          type="button"
-          className={tab === 'prof' && !activeMission ? 'is-active' : ''}
-          onClick={() => {
-            setTab('prof');
-            setOpenMissionId(null);
-          }}
-          data-testid="terrain-tab-prof"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          <span>Profil</span>
-        </button>
-      </nav>
 
       {/* =====================================================================
           7. MODALE DE CLÔTURE GPS (FIDÈLE À LA MAQUETTE VIEWER)

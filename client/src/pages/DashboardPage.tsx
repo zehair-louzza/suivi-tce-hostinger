@@ -2300,18 +2300,7 @@ export function DashboardPage() {
           SECTION 7 : APPLICATION MOBILE DÉDIÉE TECHNICIEN TERRAIN
          ===================================================================== */}
       {activeSection === 'mobile_tech' && (
-        <div className="dashboard-container" style={{ maxWidth: '640px', marginInline: 'auto' }}>
-          <div className="dashboard-header desktop-only-flex">
-            <div>
-              <h1 className="dashboard-title">Interface Mobile Technicien</h1>
-              <p className="dashboard-subtitle">
-                Vue smartphone pour pointages matin/soir, missions du jour, guidage GPS Waze/Maps et rapports photos.
-              </p>
-            </div>
-            <div className="dashboard-header__actions">
-              <span className="badge badge--primary">Terrain PWA</span>
-            </div>
-          </div>
+        <div style={{ width: '100%', minHeight: '100vh', margin: 0, padding: 0 }}>
           <TechnicianMobileView
             techniciens={isMobileTechUser ? [user?.technicienNom || user?.name || 'Technicien'] : techniciensList}
             currentTechnicien={

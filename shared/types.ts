@@ -1416,7 +1416,7 @@ export function canUserAccessSection(
 
   switch (section) {
     case 'mobile_tech':
-      return Boolean(perms.canAccessMobileTech) || Boolean(perms.mobileOnly) || Boolean(user.technicienNom);
+      return true; // Accès universel pour tout profil utilisateur
 
     case 'admin':
       return Boolean(perms.canManageUsers);

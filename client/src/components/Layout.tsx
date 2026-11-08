@@ -296,6 +296,7 @@ export function Layout({
   ];
 
   const isMobileTechOnly = isUserMobileOnly(user);
+  const isMobileTechMode = isMobileTechOnly || activeSection === 'mobile_tech';
 
   // Cloisonnement étanche : filtrer les services affichés strictement selon les droits conférés
   const visibleGroups = allGroups
@@ -332,7 +333,7 @@ export function Layout({
   };
 
   return (
-    <div className={`enterprise-shell ${isMobileTechOnly ? 'mobile-tech-shell' : ''}`}>
+    <div className={`enterprise-shell ${isMobileTechMode ? 'mobile-tech-shell' : ''}`}>
       <BubbleBackdrop />
       {/* Backdrop pour le tiroir mobile */}
       <div
@@ -508,7 +509,56 @@ export function Layout({
 
       {/* MAIN WORKSPACE */}
       <div className="enterprise-main">
-        {!isMobileTechOnly && (
+        {activeSection === 'mobile_tech' && !isMobileTechOnly && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 16px',
+            background: 'linear-gradient(90deg, #0f172a, #1e293b)',
+            color: '#f8fafc',
+            fontSize: '12px',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 100,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px' }}>📱</span>
+              <span style={{ fontWeight: 700 }}>Mode Mobile Technicien</span>
+              <span style={{
+                fontSize: '10.5px',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                background: 'rgba(16, 185, 129, 0.2)',
+                color: '#10b981',
+                fontWeight: 700,
+              }}>
+                {user?.name || user?.email} · {user?.role || 'Utilisateur'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleSelectSection('aujourdhui')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.1)',
+                color: '#ffffff',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              ← Revenir au bureau PC
+            </button>
+          </div>
+        )}
+        {!isMobileTechMode && (
         <header className="enterprise-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
             {/* Bouton Menu Hamburger sur mobile (si plusieurs sections disponibles) */}
@@ -1012,7 +1062,7 @@ export function Layout({
         </main>
 
         {/* BARRE DE NAVIGATION INFÉRIEURE SUR SMARTPHONE (pour les comptes multi-sections) */}
-        {!isMobileTechOnly && visibleNavItems.length > 1 && (
+        {!isMobileTechMode && visibleNavItems.length > 1 && (
           <nav className="mobile-bottom-nav" aria-label="Navigation mobile">
             {visibleNavItems.slice(0, 6).map((item) => {
               const isActive = activeSection === item.id;
