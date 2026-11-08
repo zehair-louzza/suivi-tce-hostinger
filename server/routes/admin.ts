@@ -320,31 +320,62 @@ adminRouter.post(
       }
     }
 
-    const upserted = await prisma.pointageTechnicien.upsert({
-      where: {
-        technicien_dateJour_companyId: {
-          technicien,
-          dateJour,
-          companyId,
+    let upserted;
+    try {
+      upserted = await prisma.pointageTechnicien.upsert({
+        where: {
+          technicien_dateJour_companyId: {
+            technicien,
+            dateJour,
+            companyId,
+          },
         },
-      },
-      update: {
-        heureArriveeBureau,
-        timestampArrivee: now,
-        statutJournee: 'EN_SERVICE',
-        ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
-      },
-      create: {
-        technicien,
-        userId: caller.id,
-        companyId,
-        dateJour,
-        heureArriveeBureau,
-        timestampArrivee: now,
-        statutJournee: 'EN_SERVICE',
-        commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
-      },
-    });
+        update: {
+          heureArriveeBureau,
+          timestampArrivee: now,
+          statutJournee: 'EN_SERVICE',
+          ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
+        },
+        create: {
+          technicien,
+          userId: caller.id,
+          companyId,
+          dateJour,
+          heureArriveeBureau,
+          timestampArrivee: now,
+          statutJournee: 'EN_SERVICE',
+          commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
+        },
+      });
+    } catch (upsertErr) {
+      const existingRow = await prisma.pointageTechnicien.findFirst({
+        where: { technicien, dateJour, companyId },
+      });
+      if (existingRow) {
+        upserted = await prisma.pointageTechnicien.update({
+          where: { id: existingRow.id },
+          data: {
+            heureArriveeBureau,
+            timestampArrivee: now,
+            statutJournee: 'EN_SERVICE',
+            ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
+          },
+        });
+      } else {
+        upserted = await prisma.pointageTechnicien.create({
+          data: {
+            technicien,
+            userId: caller.id,
+            companyId,
+            dateJour,
+            heureArriveeBureau,
+            timestampArrivee: now,
+            statutJournee: 'EN_SERVICE',
+            commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
+          },
+        });
+      }
+    }
 
     res.json({
       data: {
@@ -406,34 +437,68 @@ adminRouter.post(
       }
     }
 
-    const upserted = await prisma.pointageTechnicien.upsert({
-      where: {
-        technicien_dateJour_companyId: {
-          technicien,
-          dateJour,
-          companyId,
+    let upserted;
+    try {
+      upserted = await prisma.pointageTechnicien.upsert({
+        where: {
+          technicien_dateJour_companyId: {
+            technicien,
+            dateJour,
+            companyId,
+          },
         },
-      },
-      update: {
-        heureFinJournee,
-        timestampFin: now,
-        statutJournee: 'TERMINEE',
-        ...(derniereInterventionRef !== undefined ? { derniereInterventionRef } : {}),
-        ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
-      },
-      create: {
-        technicien,
-        userId: caller.id,
-        companyId,
-        dateJour,
-        heureArriveeBureau: '08:00',
-        heureFinJournee,
-        timestampFin: now,
-        statutJournee: 'TERMINEE',
-        derniereInterventionRef: derniereInterventionRef || null,
-        commentaireJournee: commentaireJournee || 'Fin de journée certifiée par bouton mobile',
-      },
-    });
+        update: {
+          heureFinJournee,
+          timestampFin: now,
+          statutJournee: 'TERMINEE',
+          ...(derniereInterventionRef !== undefined ? { derniereInterventionRef } : {}),
+          ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
+        },
+        create: {
+          technicien,
+          userId: caller.id,
+          companyId,
+          dateJour,
+          heureArriveeBureau: '08:00',
+          heureFinJournee,
+          timestampFin: now,
+          statutJournee: 'TERMINEE',
+          derniereInterventionRef: derniereInterventionRef || null,
+          commentaireJournee: commentaireJournee || 'Fin de journée certifiée par bouton mobile',
+        },
+      });
+    } catch (upsertErr) {
+      const existingRow = await prisma.pointageTechnicien.findFirst({
+        where: { technicien, dateJour, companyId },
+      });
+      if (existingRow) {
+        upserted = await prisma.pointageTechnicien.update({
+          where: { id: existingRow.id },
+          data: {
+            heureFinJournee,
+            timestampFin: now,
+            statutJournee: 'TERMINEE',
+            ...(derniereInterventionRef !== undefined ? { derniereInterventionRef } : {}),
+            ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
+          },
+        });
+      } else {
+        upserted = await prisma.pointageTechnicien.create({
+          data: {
+            technicien,
+            userId: caller.id,
+            companyId,
+            dateJour,
+            heureArriveeBureau: '08:00',
+            heureFinJournee,
+            timestampFin: now,
+            statutJournee: 'TERMINEE',
+            derniereInterventionRef: derniereInterventionRef || null,
+            commentaireJournee: commentaireJournee || 'Fin de journée certifiée par bouton mobile',
+          },
+        });
+      }
+    }
 
     res.json({
       data: {

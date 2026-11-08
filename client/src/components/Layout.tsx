@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
 import { ProfileMenu } from './ProfileMenu';
+import { useTheme, THEMES } from '../stores/themeStore';
 import { isUserMobileOnly, canUserAccessSection } from '../../../shared/types';
 
 export type AppSection =
@@ -56,11 +57,10 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parisTime, setParisTime] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-
   // L'apparence est entièrement gérée par le ThemeProvider (défaut entreprise +
-  // préférence individuelle). On ne manipule plus directement data-theme ici,
-  // pour éviter tout conflit avec le sélecteur d'interfaces (admin + profil).
-  const { current: currentTheme, allowUserOverride, setUserPref } = useTheme();
+  // préférence individuelle).
+  const { current: currentTheme, allowUserOverride, setUserPref, isPending: isThemePending } = useTheme();
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const isDarkTheme = THEMES.find((t) => t.id === currentTheme)?.mood === 'dark';
   const toggleQuickTheme = async () => {
     try {
@@ -689,6 +689,7 @@ export function Layout({
 
             <InstallAppButton />
 
+            {/* Bouton rapide clair/sombre pour compatibilité */}
             <button
               type="button"
               onClick={toggleQuickTheme}
@@ -713,6 +714,279 @@ export function Layout({
                 </svg>
               )}
             </button>
+
+            {/* Sélecteur Interactif de Thème & Directions Artistiques */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setThemeDropdownOpen((open) => !open)}
+                className="btn btn-secondary btn-sm"
+                title="Choisir la direction artistique / thème de l'interface"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 10px',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  borderRadius: '8px',
+                  background: themeDropdownOpen ? 'var(--bg-hover)' : undefined,
+                }}
+              >
+                {/* Palette Icon */}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                  <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                  <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+                  <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                  <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+                </svg>
+
+                {/* Swatches pill of active theme */}
+                {(() => {
+                  const activeT = THEMES.find((t) => t.id === currentTheme) || THEMES[0];
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '2px 5px',
+                        background: 'rgba(0,0,0,0.06)',
+                        borderRadius: '999px',
+                      }}
+                    >
+                      {activeT.swatches.slice(0, 3).map((c, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            width: '7px',
+                            height: '7px',
+                            borderRadius: '50%',
+                            background: c,
+                            display: 'inline-block',
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.15)',
+                          }}
+                        />
+                      ))}
+                    </span>
+                  );
+                })()}
+
+                {/* Theme Name (desktop) */}
+                <span className="desktop-only-el" style={{ fontSize: '11.5px', fontWeight: 700 }}>
+                  {THEMES.find((t) => t.id === currentTheme)?.name.replace('ANELEC Original — ', '') || 'Apparence'}
+                </span>
+
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {/* Popover Dropdown */}
+              {themeDropdownOpen && (
+                <>
+                  <div
+                    onClick={() => setThemeDropdownOpen(false)}
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      zIndex: 999,
+                      background: 'transparent',
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 8px)',
+                      zIndex: 1000,
+                      width: '320px',
+                      maxWidth: '92vw',
+                      background: 'var(--bg-surface, #ffffff)',
+                      border: '1px solid var(--border-subtle, #e2e8f0)',
+                      borderRadius: '14px',
+                      boxShadow: '0 18px 40px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.1)',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingBottom: '8px',
+                        borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                          🎨 Direction Artistique
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                          Choisissez votre design préféré en direct
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '2px 7px',
+                          borderRadius: '999px',
+                          background: 'rgba(4, 120, 87, 0.1)',
+                          color: '#047857',
+                        }}
+                      >
+                        7 styles
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '340px', overflowY: 'auto' }}>
+                      {THEMES.map((t) => {
+                        const isCurrent = t.id === currentTheme;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            disabled={isThemePending}
+                            onClick={async () => {
+                              try {
+                                await setUserPref(t.id);
+                                setThemeDropdownOpen(false);
+                                toast.success(`Design "${t.name}" appliqué !`);
+                              } catch {
+                                toast.error('Impossible d’appliquer ce thème');
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '10px',
+                              padding: '8px 10px',
+                              borderRadius: '10px',
+                              border: isCurrent ? '1.5px solid var(--accent-primary, #047857)' : '1px solid transparent',
+                              background: isCurrent ? 'var(--color-primary-soft, rgba(4,120,87,0.08))' : 'transparent',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              width: '100%',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isCurrent) e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.04))';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isCurrent) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              {/* Swatches pill */}
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '2px',
+                                  padding: '3px',
+                                  background: 'rgba(0,0,0,0.08)',
+                                  borderRadius: '6px',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {t.swatches.slice(0, 3).map((c, i) => (
+                                  <span
+                                    key={i}
+                                    style={{
+                                      width: '9px',
+                                      height: '14px',
+                                      borderRadius: '2px',
+                                      background: c,
+                                      display: 'inline-block',
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontWeight: isCurrent ? 800 : 600,
+                                    fontSize: '12px',
+                                    color: 'var(--text-primary)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {t.name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '10px',
+                                    color: 'var(--text-muted)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {t.tagline}
+                                </div>
+                              </div>
+                            </div>
+
+                            {isCurrent && (
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  color: 'var(--accent-primary, #047857)',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                ✓
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div
+                      style={{
+                        paddingTop: '8px',
+                        borderTop: '1px solid var(--border-subtle, #e2e8f0)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '11px',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setThemeDropdownOpen(false);
+                          setProfileOpen(true);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--accent-primary, #047857)',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: '11px',
+                        }}
+                      >
+                        Options de profil →
+                      </button>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        Persistance Supabase
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Bouton Déconnexion direct dans la barre du haut sur mobile ou compte Technicien */}
             <button
