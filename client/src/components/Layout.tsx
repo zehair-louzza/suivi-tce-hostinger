@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
 import { ProfileMenu } from './ProfileMenu';
-import { useTheme, THEMES } from '../stores/themeStore';
 import { isUserMobileOnly, canUserAccessSection } from '../../../shared/types';
 
 export type AppSection =
