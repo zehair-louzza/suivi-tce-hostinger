@@ -1042,6 +1042,8 @@ export interface CompanyInfo {
   name: string;
   siret?: string | null;
   siren?: string | null;
+  /** Ouvrir le tableau de bord sur « Ma file » (réglage de la société) */
+  accueilMaFile?: boolean | null;
 }
 
 export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';

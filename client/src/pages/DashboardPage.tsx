@@ -49,6 +49,7 @@ import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { DemandesStudioView } from '../components/DemandesStudioView';
+import { MaFileView } from '../components/MaFileView';
 import { DossierPanel } from '../components/DossierPanel';
 import { DossierDIField } from '../components/DossierDIField';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
@@ -910,6 +911,32 @@ export function DashboardPage() {
          ===================================================================== */}
       {activeSection === 'aujourdhui' && canUserAccessSection('aujourdhui', user) && (
         <>
+          {/* « Ma file » en tête du tableau de bord, quand la société a activé la bascule */}
+          {user?.company?.accueilMaFile === true && (
+            <div style={{ padding: '18px 20px 0' }}>
+              <MaFileView
+                user={user}
+                devisList={devisList}
+                interventionsList={interventionsList}
+                demandes={demandesQueue || []}
+                queues={queues}
+                onOpenDevis={(d) => {
+                  handleSectionChange('devis');
+                  setIsCreatingDevis(false);
+                  setDevisTab('qualif');
+                  setSelectedDevis(d);
+                }}
+                onOpenIntervention={(i) => {
+                  handleSectionChange('interventions');
+                  setIsCreatingIntv(false);
+                  setIntvTab('planif');
+                  setSelectedIntv(i);
+                }}
+                onGoDemandes={() => handleSectionChange('demandes')}
+              />
+            </div>
+          )}
+
           {dashboardTab === 'synthese' && (
             <DashboardSynthese
               devisList={devisList}

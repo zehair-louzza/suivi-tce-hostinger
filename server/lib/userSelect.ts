@@ -93,6 +93,7 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
   if (themeColumnsAvailable) {
     companySelect.defaultTheme = true;
     companySelect.allowThemeOverride = true;
+    companySelect.accueilMaFile = true;
   }
   const select: Record<string, unknown> = {
     id: true,

@@ -13,6 +13,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
+import { api } from '../lib/api';
 import { ProGlyph } from './ProIcons';
 
 interface ThemeCardProps {
@@ -196,6 +197,8 @@ export function AppearancePanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="appearance-panel">
+      <AccueilMaFileToggle />
+
       {/* Bandeau introductif */}
       <section
         style={{
@@ -421,5 +424,66 @@ export function PersonalThemePicker() {
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Bascule « ouvrir le tableau de bord sur Ma file », pour toute la société.
+ * Désactivée par défaut : l'accueil actuel ne change pour personne tant qu'un
+ * administrateur ne l'a pas activée.
+ */
+function AccueilMaFileToggle() {
+  const { user, fetchMe } = useAuth();
+  const actif = user?.company?.accueilMaFile === true;
+  const [pending, setPending] = useState(false);
+
+  const basculer = async () => {
+    setPending(true);
+    try {
+      await api.patch('/admin/appearance', { accueilMaFile: !actif });
+      await fetchMe();
+      toast.success(
+        !actif
+          ? '« Ma file » s’affiche maintenant en haut du tableau de bord pour toute la société.'
+          : '« Ma file » est masquée ; le tableau de bord retrouve son accueil habituel.'
+      );
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Impossible de modifier ce réglage.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <section
+      style={{
+        padding: 18,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--rounded-card, 10px)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 14,
+        alignItems: 'center',
+      }}
+      data-testid="accueil-mafile-section"
+    >
+      <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+        <strong style={{ fontSize: 15, color: 'var(--color-text)' }}>Accueil sur « Ma file »</strong>
+        <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+          Affiche en haut du tableau de bord ce que chaque personne doit faire, selon son rôle : à chiffrer, à
+          planifier, interventions du jour, à facturer. Le tableau de bord actuel reste en dessous, inchangé.
+        </p>
+      </div>
+      <button
+        type="button"
+        className={`btn ${actif ? 'btn-secondary' : 'btn-primary'}`}
+        onClick={basculer}
+        disabled={pending}
+        data-testid="accueil-mafile-toggle"
+      >
+        {pending ? 'Enregistrement…' : actif ? 'Masquer « Ma file »' : 'Activer « Ma file »'}
+      </button>
+    </section>
   );
 }

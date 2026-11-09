@@ -911,6 +911,8 @@ const ALLOWED_THEMES = ['light', 'dark', 'atlas', 'craft', 'signal', 'swiss', 'b
 const CompanyAppearanceSchema = z.object({
   defaultTheme: z.enum(ALLOWED_THEMES).optional(),
   allowThemeOverride: z.boolean().optional(),
+  /** Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse */
+  accueilMaFile: z.boolean().optional(),
 });
 
 /**
@@ -925,11 +927,17 @@ adminRouter.get(
       throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     }
     const companyId = caller.companyId || 1;
-    let company: { id: number; name: string; defaultTheme?: string | null; allowThemeOverride?: boolean | null } | null;
+    let company: {
+      id: number;
+      name: string;
+      defaultTheme?: string | null;
+      allowThemeOverride?: boolean | null;
+      accueilMaFile?: boolean | null;
+    } | null;
     try {
       company = await prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true },
       });
     } catch (e) {
       if (!isMissingSchemaError(e)) throw e;
@@ -945,6 +953,7 @@ adminRouter.get(
       companyName: company.name,
       defaultTheme: company.defaultTheme || 'light',
       allowThemeOverride: company.allowThemeOverride !== false,
+      accueilMaFile: company.accueilMaFile === true,
       availableThemes: ALLOWED_THEMES,
     });
   })
@@ -965,8 +974,8 @@ adminRouter.patch(
     if (!parsed.success) {
       throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
     }
-    const { defaultTheme, allowThemeOverride } = parsed.data;
-    if (defaultTheme === undefined && allowThemeOverride === undefined) {
+    const { defaultTheme, allowThemeOverride, accueilMaFile } = parsed.data;
+    if (defaultTheme === undefined && allowThemeOverride === undefined && accueilMaFile === undefined) {
       throw new AppError(400, 'Rien à mettre à jour', 'EMPTY_PAYLOAD');
     }
 
@@ -978,8 +987,9 @@ adminRouter.patch(
         data: {
           ...(defaultTheme !== undefined ? { defaultTheme } : {}),
           ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
+          ...(accueilMaFile !== undefined ? { accueilMaFile } : {}),
         },
-        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true },
+        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true },
       });
     } catch (e) {
       if (isMissingSchemaError(e)) {
@@ -997,6 +1007,7 @@ adminRouter.patch(
       companyName: updated.name,
       defaultTheme: updated.defaultTheme || 'light',
       allowThemeOverride: updated.allowThemeOverride !== false,
+      accueilMaFile: updated.accueilMaFile === true,
       message: "Apparence de l'entreprise mise à jour.",
     });
   })

@@ -144,7 +144,15 @@ export function formatPublicUser(u: {
   active?: boolean;
   companyId?: number | null;
   themePref?: string | null;
-  company?: { id: number; name: string; siret?: string | null; siren?: string | null; defaultTheme?: string | null; allowThemeOverride?: boolean | null } | null;
+  company?: {
+    id: number;
+    name: string;
+    siret?: string | null;
+    siren?: string | null;
+    defaultTheme?: string | null;
+    allowThemeOverride?: boolean | null;
+    accueilMaFile?: boolean | null;
+  } | null;
   createdAt?: Date | string;
 }) {
   const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
@@ -165,7 +173,15 @@ export function formatPublicUser(u: {
     companyId,
     companyName,
     companySiret: u.company?.siret || (companyId === 1 ? '933 108 607 00021' : null),
-    company: u.company ? { id: u.company.id, name: u.company.name, siret: u.company.siret, siren: u.company.siren } : { id: companyId, name: companyName },
+    company: u.company
+      ? {
+          id: u.company.id,
+          name: u.company.name,
+          siret: u.company.siret,
+          siren: u.company.siren,
+          accueilMaFile: u.company.accueilMaFile === true,
+        }
+      : { id: companyId, name: companyName, accueilMaFile: false },
     theme: {
       companyDefault: companyDefaultTheme,
       allowOverride: allowThemeOverride,
