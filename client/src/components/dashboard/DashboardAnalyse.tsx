@@ -1,3 +1,4 @@
+import { buildLedgerContext, amountOf, isVisite } from '../../lib/dossiers';
 import React, { useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -163,9 +164,11 @@ export function DashboardAnalyse({
   // 3. CA par donneur d'ordre (Graphique Recharts BarChart)
   const caByClient = useMemo(() => {
     const totalsByClient: Record<string, number> = {};
+    const ledger = buildLedgerContext(devisList, interventionsList);
     interventionsList.forEach((i) => {
+      if (isVisite(i) || !['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')) return;
       const name = i.client || 'Sans client';
-      const amount = Number(i.amount) || 0;
+      const amount = amountOf(i, ledger);
       totalsByClient[name] = (totalsByClient[name] || 0) + amount;
     });
 
@@ -174,23 +177,24 @@ export function DashboardAnalyse({
       .filter((e) => e.ca > 0)
       .sort((a, b) => b.ca - a.ca)
       .slice(0, 6);
-  }, [interventionsList]);
+  }, [interventionsList, devisList]);
 
   // 4. Performance par corps d'état
   const corpsStats = useMemo(() => {
+    const ledger = buildLedgerContext(devisList, interventionsList);
     const trades = ['Électricité', 'Plomberie', 'Peinture', 'Menuiserie', 'Serrurerie', 'CVC / Climatisation'];
     return trades.map((corps) => {
       const key = corps.toLowerCase();
-      const intvs = interventionsList.filter((i) => (i.corpsEtat || '').toLowerCase().includes(key));
+      const intvs = interventionsList.filter((i) => !isVisite(i) && (i.corpsEtat || '').toLowerCase().includes(key));
       const actifs = intvs.filter((i) =>
         ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel || '')
       ).length;
       const done = intvs.filter((i) => ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || ''));
-      const ca = done.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+      const ca = done.reduce((acc, i) => acc + amountOf(i, ledger), 0);
       const pct = intvs.length > 0 ? Math.round((done.length / intvs.length) * 100) : 0;
       return { corps, actifs, clotures: done.length, ca, pct };
     });
-  }, [interventionsList]);
+  }, [interventionsList, devisList]);
 
   return (
     <div className="m-page" data-testid="atlas-screen-dashboard-analyse">

@@ -86,7 +86,7 @@ export function DevisStudioView({
     return devisList.filter((d) => {
       const matchStatus = status === 'all' || d.statutCommercial === status;
       const matchResp = respFilter === 'all' || d.responsable === respFilter;
-      const text = `${d.reference || ''} ${d.client || ''} ${d.objet || ''} ${d.site || ''} ${d.corpsEtat || ''}`.toLowerCase();
+      const text = `${d.reference || ''} ${d.numeroDI || ''} ${d.client || ''} ${d.objet || ''} ${d.site || ''} ${d.corpsEtat || ''}`.toLowerCase();
       const matchSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
       return matchStatus && matchResp && matchSearch;
     });
@@ -104,8 +104,6 @@ export function DevisStudioView({
     if (pa.kind === 'convert') {
       if (onConvertDevis) onConvertDevis(d);
       else toast.success(`Conversion du devis ${d.reference} en cours...`);
-    } else if (pa.kind === 'relance') {
-      toast.success(`Relance programmée pour ${d.client}`);
     } else {
       if (onSelectDevis) onSelectDevis(d);
       else setSelectedItem(d);
@@ -120,6 +118,11 @@ export function DevisStudioView({
       render: (d: Devis) => (
         <div className="m-cell-ref">
           <span className="m-mono m-strong">{d.reference || `DEV-${d.id}`}</span>
+          {d.numeroDI && (
+            <span className="m-linked" title="Numéro de DI du dossier">
+              DI {d.numeroDI}
+            </span>
+          )}
           {d.refInterventionTexte && (
             <span className="m-linked">
               <Link2 size={11} /> {d.refInterventionTexte}
@@ -356,7 +359,10 @@ export function DevisStudioView({
                       else setSelectedItem(d);
                     }}
                   >
-                    <span className="m-mono m-small">{d.reference || `DEV-${d.id}`}</span>
+                    <span className="m-mono m-small">
+                      {d.reference || `DEV-${d.id}`}
+                      {d.numeroDI ? ` · DI ${d.numeroDI}` : ''}
+                    </span>
                     <strong>{d.client}</strong>
                     <span className="m-small m-muted m-ellipsis">{d.objet}</span>
                     <div className="m-kcard-foot">

@@ -1,5 +1,6 @@
 // Devis routes - Full 22 ANELEC columns + Auto-planning Visite Devis + Non-destructive linked interventions + History + PostgreSQL compatibility
 import { Router, Request, Response } from 'express';
+import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -135,6 +136,7 @@ export function transformDevis(d: any) {
     siteAdresse: site,
     objet: d.objet || null,
     corpsEtat: d.corpsEtat || null,
+    numeroDI: d.numeroDI || null,
     origine: d.origine || null,
     dateCreated,
     dateDemande: dateCreated,
@@ -270,6 +272,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         siteAdresse: devis.siteAdresse || devis.client,
         objet: devis.objet ? `[Visite Devis] ${devis.objet}` : `[Visite Devis] ${devis.client}`,
         corpsEtat: devis.corpsEtat,
+        numeroDI: devis.numeroDI || existingVisite.numeroDI || null,
         origine: devis.origine || 'Interne',
         priorite: devis.priorite || 'Normale',
         entreprise: devis.visiteTechnicien || existingVisite.entreprise,
@@ -298,6 +301,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
       data: {
         referenceMetier: `VIS-${String(devis.id).padStart(3, '0')}`,
         refDevisTexte: refDevis,
+        numeroDI: devis.numeroDI || null,
         client: devis.client,
         chantier: devis.siteAdresse || devis.client,
         siteAdresse: devis.siteAdresse || devis.client,
@@ -317,7 +321,8 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         heureDebut: devis.visiteHeureDebut || '09:00',
         heureFin: devis.visiteHeureFin || '10:30',
         isVisiteDevis: true,
-        amount: devis.amount || 0,
+        amount: 0, // une visite de chiffrage n'est pas du chiffre d'affaires
+
         notes: `Visite technique générée automatiquement pour chiffrer le devis ${refDevis}.`,
         origineDevisId: devis.id,
         origineDevisClient: devis.client,
@@ -354,6 +359,7 @@ devisRouter.get(
               { siteAdresse: { contains: search, mode: 'insensitive' } },
               { objet: { contains: search, mode: 'insensitive' } },
               { referenceMetier: { contains: search, mode: 'insensitive' } },
+              { numeroDI: { contains: search, mode: 'insensitive' } },
               { responsable: { contains: search, mode: 'insensitive' } },
               { notes: { contains: search, mode: 'insensitive' } },
             ],
@@ -527,6 +533,7 @@ devisRouter.post(
     const created = await prisma.devis.create({
       data: {
         referenceMetier: b.reference || b.referenceMetier ? String(b.reference || b.referenceMetier).trim() : null,
+        numeroDI: normalizeDI(b.numeroDI),
         client,
         siteAdresse: site ? String(site).trim() : null,
         objet: b.objet ? String(b.objet).trim() : null,
@@ -573,6 +580,7 @@ devisRouter.post(
     }
 
     await syncVisiteDevisIntervention(created, userId, auteur);
+    await syncDevisDossier(created, companyId);
 
     const refreshed = await prisma.devis.findUnique({
       where: { id: created.id },
@@ -682,6 +690,7 @@ devisRouter.patch(
     if (b.reference !== undefined || b.referenceMetier !== undefined) {
       updateData.referenceMetier = b.reference || b.referenceMetier || null;
     }
+    if (b.numeroDI !== undefined) updateData.numeroDI = normalizeDI(b.numeroDI);
     if (b.client !== undefined) updateData.client = String(b.client).trim();
     if (b.site !== undefined || b.siteAdresse !== undefined) {
       updateData.siteAdresse = b.site ?? b.siteAdresse ?? null;
@@ -738,6 +747,7 @@ devisRouter.patch(
     });
 
     await syncVisiteDevisIntervention(updated, userId, auteur);
+    await syncDevisDossier(updated, companyId);
 
     const refreshed = await prisma.devis.findUnique({
       where: { id },
@@ -838,6 +848,7 @@ devisRouter.post(
       data: {
         referenceMetier: isVisite ? `VIS-2026-${String(devis.id).padStart(3, '0')}` : null,
         refDevisTexte: refDevis,
+        numeroDI: devis.numeroDI || null,
         client: devis.client,
         chantier: devis.siteAdresse || devis.client,
         siteAdresse: devis.siteAdresse || devis.client,
@@ -859,7 +870,7 @@ devisRouter.post(
         heureDebut,
         heureFin,
         isVisiteDevis: isVisite,
-        amount: devis.amount || 0,
+        amount: isVisite ? 0 : devis.amount || 0,
         notes: b.notes || devis.notes || null,
         origineDevisId: devis.id,
         origineDevisClient: devis.client,

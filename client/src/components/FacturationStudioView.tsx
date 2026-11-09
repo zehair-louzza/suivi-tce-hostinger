@@ -24,6 +24,7 @@ import {
   useIsMobile,
 } from './ui';
 import type { Devis, Intervention } from '../lib/api';
+import { buildLedgerContext, amountOf, isVisite, isCancelled, isBilled, isDone } from '../lib/dossiers';
 import toast from 'react-hot-toast';
 
 interface FacturationStudioViewProps {
@@ -39,6 +40,7 @@ interface FactuRow {
   id: number;
   sourceType: 'INTERVENTION' | 'DEVIS';
   ref: string;
+  di?: string;
   client: string;
   type: 'B2B' | 'B2C';
   objet: string;
@@ -76,57 +78,73 @@ function tvaLabel(r: FactuRow): string {
 }
 
 export function FacturationStudioView({
-  devisList: _devisList,
+  devisList,
   interventionsList,
   onUpdateIntervention,
 }: FacturationStudioViewProps) {
-  void _devisList;
   const isMobile = useIsMobile();
   const [bucket, setBucket] = useState<BucketId>('a-facturer');
   const [clientType, setClientType] = useState<string>('all');
   const [amountMode, setAmountMode] = useState<'ht' | 'ttc'>('ht');
   const [diagRow, setDiagRow] = useState<FactuRow | null>(null);
 
-  // Transform interventions into facturation rows
+  // Lignes de facturation : uniquement les vraies interventions (montants réels, visites exclues)
+  const ctx = useMemo(() => buildLedgerContext(devisList, interventionsList), [devisList, interventionsList]);
   const rows: FactuRow[] = useMemo(() => {
-    return interventionsList.map((i) => {
-      const isB2B = !(i.client || '').toLowerCase().includes('particulier') &&
-                    !(i.client || '').toLowerCase().includes('copro');
-      const tvaRate = isB2B ? 0 : 10;
-      const baseHt = (i as any).montantFacture || ((i as any).devisAmount ? (i as any).devisAmount * 0.9 : 450 + (i.id * 85) % 1200);
+    const todayMs = Date.now();
+    const out: FactuRow[] = [];
+    for (const i of interventionsList) {
+      if (isCancelled(i)) continue;
+      const lowClient = (i.client || '').toLowerCase();
+      const isB2B = !lowClient.includes('particulier') && !lowClient.includes('copro');
+      const day = String(i.dateReelle || i.datePlanifiee || '').slice(0, 10);
+      const ageDays = day ? (todayMs - new Date(day + 'T00:00:00').getTime()) / 86400000 : 0;
 
-      let bId: BucketId = 'a-verifier';
-      let note = 'Rapport technique à vérifier';
-
-      if (i.statutFacture === 'Facturée') {
+      let bId: BucketId;
+      let note: string;
+      if (isVisite(i)) {
+        bId = 'non-eligibles';
+        note = 'Visite de chiffrage : non facturable (comprise dans le devis)';
+      } else if (isBilled(i)) {
         bId = 'facturees';
-        note = `Facture F-2026-0${100 + (i.id % 900)} émise`;
+        note = i.numeroFacture ? `Facture ${i.numeroFacture}` : 'Facturée (n° de facture non renseigné)';
       } else if (i.typeIntervention === 'SAV' || (i.objet || '').includes('[SAV]')) {
         bId = 'non-eligibles';
-        note = 'Prise en charge SAV / Garantie contractuelle';
-      } else if (i.computed?.alerteDelai === 'En retard' || (i.id % 7 === 0)) {
+        note = 'Prise en charge SAV / garantie contractuelle';
+      } else if (!isDone(i)) {
+        continue; // pas encore terminée : rien à facturer
+      } else if ((i.statutOperationnel || '').toLowerCase().startsWith('terminée')) {
+        bId = 'a-verifier';
+        note = 'Rapport terminé : à valider avant facturation';
+      } else if (ageDays > 15) {
         bId = 'retards';
-        note = 'Intervention clôturée depuis plus de 15 jours sans facturation';
-      } else if (i.statutOperationnel === 'Clôturée' || i.statutOperationnel === 'Terminée - à valider') {
+        note = `Clôturée depuis ${Math.floor(ageDays)} jours sans facturation`;
+      } else {
         bId = 'a-facturer';
-        note = 'Rapport validé & signé par le client';
+        note = 'Rapport validé : prête à facturer';
       }
 
-      return {
-        id: i.id,
+      const ht = amountOf(i, ctx);
+      if (ht <= 0 && (bId === 'a-facturer' || bId === 'a-verifier' || bId === 'retards')) {
+        note += ' · montant HT à renseigner';
+      }
+      out.push({
+        id: i.id as number,
         sourceType: 'INTERVENTION',
         ref: i.reference || `INT-${i.id}`,
+        di: i.numeroDI || undefined,
         client: i.client || 'Client',
         type: isB2B ? 'B2B' : 'B2C',
         objet: i.objet || i.corpsEtat || 'Travaux TCE',
-        tva: tvaRate,
-        ht: baseHt,
+        tva: isB2B ? 0 : 10,
+        ht,
         bucket: bId,
         note,
-        date: i.datePlanifiee || '2026-11-09',
-      };
-    });
-  }, [interventionsList]);
+        date: day || '—',
+      });
+    }
+    return out;
+  }, [interventionsList, ctx]);
 
   // Filtered rows
   const filteredList = useMemo(() => {
@@ -142,6 +160,10 @@ export function FacturationStudioView({
   const readyList = useMemo(() => rows.filter((r) => r.bucket === 'a-facturer'), [rows]);
 
   const handleBillSingle = async (row: FactuRow) => {
+    if (row.ht <= 0) {
+      toast.error(`${row.ref} : renseignez d’abord le montant HT de l’intervention`);
+      return;
+    }
     if (onUpdateIntervention) {
       await onUpdateIntervention(row.id, { statutFacture: 'Facturée' });
       toast.success(`Facture pour ${row.ref} générée et transmise au client`);
@@ -149,14 +171,22 @@ export function FacturationStudioView({
   };
 
   const handleBillAllReady = async () => {
-    if (readyList.length === 0) return;
-    const toastId = toast.loading(`Génération de ${readyList.length} factures...`);
-    for (const r of readyList) {
+    const billable = readyList.filter((r) => r.ht > 0);
+    const skipped = readyList.length - billable.length;
+    if (billable.length === 0) {
+      if (skipped > 0) toast.error('Aucune intervention facturable : renseignez les montants HT manquants');
+      return;
+    }
+    const toastId = toast.loading(`Facturation de ${billable.length} intervention${billable.length > 1 ? 's' : ''}...`);
+    for (const r of billable) {
       if (onUpdateIntervention) {
         await onUpdateIntervention(r.id, { statutFacture: 'Facturée' });
       }
     }
-    toast.success(`${readyList.length} factures émises et synchronisées !`, { id: toastId });
+    toast.success(
+      `${billable.length} intervention${billable.length > 1 ? 's' : ''} marquée${billable.length > 1 ? 's' : ''} facturée${billable.length > 1 ? 's' : ''}${skipped ? ` · ${skipped} ignorée${skipped > 1 ? 's' : ''} (montant manquant)` : ''}`,
+      { id: toastId }
+    );
   };
 
   const renderActionBtn = (r: FactuRow) => {
@@ -196,7 +226,7 @@ export function FacturationStudioView({
           size="sm"
           variant="ghost"
           icon={Eye}
-          onClick={() => toast(`Affichage de la facture ${r.ref}`)}
+          onClick={() => toast(r.note)}
         >
           Facture
         </Btn>
@@ -210,7 +240,12 @@ export function FacturationStudioView({
       key: 'ref',
       label: 'Référence',
       width: 130,
-      render: (r: FactuRow) => <span className="m-mono" style={{ fontWeight: 600 }}>{r.ref}</span>,
+      render: (r: FactuRow) => (
+        <div className="m-cell-ref">
+          <span className="m-mono" style={{ fontWeight: 600 }}>{r.ref}</span>
+          {r.di && <span className="m-linked">DI {r.di}</span>}
+        </div>
+      ),
     },
     {
       key: 'client',

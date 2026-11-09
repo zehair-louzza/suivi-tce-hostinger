@@ -369,6 +369,7 @@ function createSyntheseSheet(
 function createInterventionsSheet(interventions: Intervention[]): XLSX.WorkSheet {
   const headers = [
     'Réf. Intervention',
+    'N° de DI',
     'Étape Actuelle d\'Avancement',
     'Statut Opérationnel',
     'Statut Facturation',
@@ -405,6 +406,7 @@ function createInterventionsSheet(interventions: Intervention[]): XLSX.WorkSheet
 
     rows.push([
       intv.reference || `INT-${intv.id}`,
+      intv.numeroDI || '',
       avancement.label,
       intv.statutOperationnel || 'À planifier',
       intv.statutFacture || 'Non facturée',
@@ -445,6 +447,7 @@ function createInterventionsSheet(interventions: Intervention[]): XLSX.WorkSheet
 function createDevisSheet(devis: Devis[]): XLSX.WorkSheet {
   const headers = [
     'Réf. Devis',
+    'N° de DI',
     'Étape Actuelle d\'Avancement',
     'Statut Commercial',
     'Traitement Administratif',
@@ -480,6 +483,7 @@ function createDevisSheet(devis: Devis[]): XLSX.WorkSheet {
 
     rows.push([
       d.reference || `DEV-${d.id}`,
+      d.numeroDI || '',
       avancement.label,
       d.statutCommercial || 'À préparer',
       d.traitement || 'À traiter',

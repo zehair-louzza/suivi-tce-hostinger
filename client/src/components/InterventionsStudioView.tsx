@@ -104,7 +104,7 @@ export function InterventionsStudioView({
       const norm = normalizeStatus(i.statutOperationnel);
       const matchStatus = statusFilter === 'all' || norm === statusFilter;
       const matchTech = techFilter === 'all' || i.entreprise === techFilter;
-      const text = `${i.reference || ''} ${i.client || ''} ${i.objet || ''} ${i.chantier || ''} ${i.typeIntervention || ''} ${i.corpsEtat || ''}`.toLowerCase();
+      const text = `${i.reference || ''} ${i.numeroDI || ''} ${i.client || ''} ${i.objet || ''} ${i.chantier || ''} ${i.typeIntervention || ''} ${i.corpsEtat || ''}`.toLowerCase();
       const matchSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
       return matchStatus && matchTech && matchSearch;
     });
@@ -134,7 +134,10 @@ export function InterventionsStudioView({
         label: 'Planifier',
         icon: CalendarPlus,
         variant: 'secondary' as const,
-        run: () => toast.success(`${i.reference} ajoutée à la bourse de dispatch`),
+        run: () => {
+          if (onSelectIntv) onSelectIntv(i);
+          else setSelectedItem(i);
+        },
       };
     }
     if (norm === 'Non terminée') {
@@ -142,7 +145,10 @@ export function InterventionsStudioView({
         label: 'Replanifier',
         icon: CalendarPlus,
         variant: 'secondary' as const,
-        run: () => toast.success(`${i.reference} replanifiée`),
+        run: () => {
+          if (onSelectIntv) onSelectIntv(i);
+          else setSelectedItem(i);
+        },
       };
     }
     return {
@@ -166,6 +172,11 @@ export function InterventionsStudioView({
         return (
           <div className="m-cell-ref">
             <span className="m-mono m-strong">{i.reference || `INT-${i.id}`}</span>
+            {i.numeroDI && (
+              <span className="m-linked" title="Numéro de DI du dossier">
+                DI {i.numeroDI}
+              </span>
+            )}
             {isUrgent && (
               <span className="m-urgent">
                 <AlertTriangle size={11} /> urgent
@@ -388,7 +399,10 @@ export function InterventionsStudioView({
               return (
                 <>
                   <div className="m-mcard-top">
-                    <span className="m-mono m-strong">{i.reference || `INT-${i.id}`}</span>
+                    <span className="m-mono m-strong">
+                      {i.reference || `INT-${i.id}`}
+                      {i.numeroDI ? ` · DI ${i.numeroDI}` : ''}
+                    </span>
                     <StatusPill status={norm}>{SHORT_STATUS[norm] || norm}</StatusPill>
                   </div>
                   <strong>{i.client}</strong>

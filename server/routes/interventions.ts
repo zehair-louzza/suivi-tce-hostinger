@@ -1,5 +1,6 @@
 // Interventions routes - Full 23 ANELEC columns + Planning horaire + Synchronisation Visite Devis + Historique + PostgreSQL compatibility
 import { Router, Request, Response } from 'express';
+import { normalizeDI, resolveInterventionDossier, pushDIToDevis, findDevisByDI } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -122,6 +123,7 @@ export function transformIntervention(i: any) {
     referenceMetier:
       i.referenceMetier ||
       (isVisiteDevis ? `VIS-2026-${String(i.id).padStart(3, '0')}` : `INT-2026-${String(i.id).padStart(3, '0')}`),
+    numeroDI: i.numeroDI || null,
     refDevisTexte: i.refDevisTexte || (i.devisId ? `DEV-2026-${String(i.devisId).padStart(3, '0')}` : null),
     client: i.client || i.origineDevisClient || null,
     chantier: site,
@@ -232,6 +234,7 @@ interventionRouter.get(
               { client: { contains: search, mode: 'insensitive' } },
               { objet: { contains: search, mode: 'insensitive' } },
               { referenceMetier: { contains: search, mode: 'insensitive' } },
+              { numeroDI: { contains: search, mode: 'insensitive' } },
               { entreprise: { contains: search, mode: 'insensitive' } },
               { technicien: { contains: search, mode: 'insensitive' } },
               { notes: { contains: search, mode: 'insensitive' } },
@@ -414,14 +417,21 @@ interventionRouter.post(
       }`
     );
 
-    const safeDevisId = await assertOwnDevisId(b.devisId ?? b.origineDevisId, companyId);
-    const safeOrigineDevisId = await assertOwnDevisId(b.origineDevisId ?? b.devisId, companyId);
+    const requestedDevisId = await assertOwnDevisId(b.devisId ?? b.origineDevisId, companyId);
+    // Le numéro de DI est la clé de suivi du dossier : il rattache l'intervention au devis qui le porte
+    const dossier = await resolveInterventionDossier(companyId, {
+      numeroDI: normalizeDI(b.numeroDI),
+      devisId: requestedDevisId,
+    });
+    const safeDevisId = dossier.devisId;
+    const safeOrigineDevisId = dossier.devisId;
 
     const created = await prisma.intervention.create({
       data: {
         referenceMetier: b.reference || b.referenceMetier ? String(b.reference || b.referenceMetier).trim() : null,
-        refDevisTexte: b.refDevisTexte || null,
-        client: b.client ? String(b.client).trim() : null,
+        refDevisTexte: b.refDevisTexte || dossier.devis?.referenceMetier || null,
+        numeroDI: dossier.numeroDI,
+        client: b.client ? String(b.client).trim() : (dossier.devis?.client ?? null),
         chantier,
         siteAdresse: chantier,
         objet: b.objet ? String(b.objet).trim() : null,
@@ -467,6 +477,8 @@ interventionRouter.post(
         companyId,
       },
     });
+
+    await pushDIToDevis(dossier.devis, dossier.numeroDI);
 
     if (!created.referenceMetier) {
       const autoRef = isVisiteDevis
@@ -664,11 +676,29 @@ interventionRouter.patch(
       updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
     }
     if (b.devisId !== undefined) updateData.devisId = await assertOwnDevisId(b.devisId, companyId);
+    let patchedDossierDevis: { id: number; numeroDI?: string | null } | null = null;
+    if (b.numeroDI !== undefined || b.devisId !== undefined) {
+      const nextDI = b.numeroDI !== undefined ? normalizeDI(b.numeroDI) : existing.numeroDI;
+      const nextDevisId = b.devisId !== undefined ? updateData.devisId : existing.devisId;
+      const dossier = await resolveInterventionDossier(companyId, { numeroDI: nextDI, devisId: nextDevisId });
+      updateData.numeroDI = dossier.numeroDI;
+      // DI modifié sans choix explicite de devis : on suit le devis qui porte ce DI (ou on détache si aucun)
+      if (b.numeroDI !== undefined && b.devisId === undefined && dossier.numeroDI !== existing.numeroDI) {
+        const byDI = await findDevisByDI(dossier.numeroDI, companyId);
+        updateData.devisId = byDI ? byDI.id : existing.devisId;
+        patchedDossierDevis = byDI || dossier.devis;
+      } else if (dossier.devis) {
+        updateData.devisId = dossier.devisId;
+        patchedDossierDevis = dossier.devis;
+      }
+    }
 
     const updated = await prisma.intervention.update({
       where: { id },
       data: updateData,
     });
+
+    await pushDIToDevis(patchedDossierDevis, updated.numeroDI || null);
 
     const linkedDevisId = updated.devisId || updated.origineDevisId;
     let parentDevis = linkedDevisId

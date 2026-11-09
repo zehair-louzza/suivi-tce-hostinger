@@ -1,3 +1,4 @@
+import { buildLedgerContext, amountOf, isVisite } from '../../lib/dossiers';
 import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
@@ -161,13 +162,17 @@ export function DashboardSynthese({
     rapportsAValiderCount,
     clotureesCount,
   } = useMemo(() => {
-    const cloturees = interventionsList.filter((i) =>
-      ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')
+    const ledger = buildLedgerContext(devisList, interventionsList);
+    // Les visites de chiffrage ne sont pas du chiffre d'affaires
+    const cloturees = interventionsList.filter(
+      (i) => !isVisite(i) && ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')
     );
-    const caCloture = cloturees.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+    const caCloture = cloturees.reduce((acc, i) => acc + amountOf(i, ledger), 0);
 
-    const aFacturer = interventionsList.filter((i) => i.statutOperationnel === 'Terminée - à valider');
-    const caAFacturer = aFacturer.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+    const aFacturer = interventionsList.filter(
+      (i) => !isVisite(i) && i.statutOperationnel === 'Terminée - à valider'
+    );
+    const caAFacturer = aFacturer.reduce((acc, i) => acc + amountOf(i, ledger), 0);
 
     const devisAttente = devisList.filter((d) => ['Envoyé', 'En négociation', 'Accepté'].includes(d.statutCommercial || ''));
     const totalDevisPortefeuille = devisAttente.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
@@ -196,15 +201,16 @@ export function DashboardSynthese({
     const now = new Date();
     const year = now.getFullYear();
     const totals = new Array(12).fill(0) as number[];
+    const ledger = buildLedgerContext(devisList, interventionsList);
     for (const i of interventionsList) {
-      if (!['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')) continue;
+      if (isVisite(i) || !['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')) continue;
       const day = i.datePlanifiee || i.dateDemande || '';
       if (!day.startsWith(String(year))) continue;
       const month = Number(day.slice(5, 7)) - 1;
-      if (month >= 0 && month < 12) totals[month] += Number(i.amount) || 0;
+      if (month >= 0 && month < 12) totals[month] += amountOf(i, ledger);
     }
     return labels.slice(0, now.getMonth() + 1).map((m, idx) => ({ m, ca: totals[idx] }));
-  }, [interventionsList]);
+  }, [interventionsList, devisList]);
 
   const caSparkline = useMemo(() => {
     const vals = caMonthlyData.map((d) => d.ca);

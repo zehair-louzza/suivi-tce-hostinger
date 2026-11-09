@@ -74,6 +74,7 @@ model Devis {
   company              Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   interventions        Intervention[]
   referenceMetier      String?
+  numeroDI             String?
   siteAdresse          String?
   objet                String?
   corpsEtat            String?
@@ -105,6 +106,7 @@ model Devis {
 
   @@index([userId])
   @@index([companyId], map: "devis_companyid_idx")
+  @@index([companyId, numeroDI], map: "devis_companyid_numerodi_idx")
   @@index([status])
   @@index([dateCreated])
   @@index([userId, traitement], map: "devis_userid_traitement_idx")
@@ -134,6 +136,7 @@ model Intervention {
   devisId            Int?
   devis              Devis?              @relation(fields: [devisId], references: [id], onDelete: SetNull)
   referenceMetier    String?
+  numeroDI           String?
   client             String?
   siteAdresse        String?
   objet              String?
@@ -175,6 +178,7 @@ model Intervention {
 
   @@index([userId])
   @@index([companyId], map: "interventions_companyid_idx")
+  @@index([companyId, numeroDI], map: "interventions_companyid_numerodi_idx")
   @@index([status])
   @@index([datePlanifiee])
   @@index([devisId])

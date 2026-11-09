@@ -46,6 +46,7 @@ import { ComptabiliteStudioView } from '../components/ComptabiliteStudioView';
 import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
+import { DossierDIField } from '../components/DossierDIField';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
@@ -753,6 +754,7 @@ export function DashboardPage() {
     setDevisTab('qualif');
     setSelectedDevis({
       reference: '',
+      numeroDI: '',
       statutCommercial: 'À préparer',
       traitement: 'À traiter',
       priorite: 'Normale',
@@ -779,6 +781,7 @@ export function DashboardPage() {
     setIntvTab('planif');
     setSelectedIntv({
       reference: '',
+      numeroDI: '',
       statutOperationnel: 'À planifier',
       traitement: 'À traiter',
       priorite: 'Normale',
@@ -1027,6 +1030,18 @@ export function DashboardPage() {
           interventionsList={interventionsList}
           devisList={devisList}
           techniciens={techniciensList}
+          onOpenDevis={(d) => {
+            handleSectionChange('devis');
+            setIsCreatingDevis(false);
+            setDevisTab('qualif');
+            setSelectedDevis(d);
+          }}
+          onOpenIntervention={(i) => {
+            handleSectionChange('interventions');
+            setIsCreatingIntv(false);
+            setIntvTab('planif');
+            setSelectedIntv(i);
+          }}
         />
       )}
 
@@ -1194,6 +1209,14 @@ export function DashboardPage() {
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {devisTab === 'qualif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <DossierDIField
+                    kind="devis"
+                    value={selectedDevis.numeroDI}
+                    onChange={(v) => setSelectedDevis({ ...selectedDevis, numeroDI: v })}
+                    devisList={devisList}
+                    interventionsList={interventionsList}
+                    currentId={selectedDevis.id}
+                  />
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client / Donneur d'ordre *</label>
                     <select
@@ -1256,6 +1279,9 @@ export function DashboardPage() {
                       value={selectedDevis.corpsEtat || ''}
                       onChange={(e) => setSelectedDevis({ ...selectedDevis, corpsEtat: e.target.value })}
                     >
+                      {selectedDevis.corpsEtat && !corpsEtatList.includes(selectedDevis.corpsEtat) && (
+                        <option value={selectedDevis.corpsEtat}>{selectedDevis.corpsEtat}</option>
+                      )}
                       {corpsEtatList.map((t) => (
                         <option key={t} value={t}>{t}</option>
                       ))}
@@ -1692,6 +1718,27 @@ export function DashboardPage() {
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {intvTab === 'planif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <DossierDIField
+                    kind="intervention"
+                    value={selectedIntv.numeroDI}
+                    onChange={(v) => setSelectedIntv({ ...selectedIntv, numeroDI: v })}
+                    devisList={devisList}
+                    interventionsList={interventionsList}
+                    currentId={selectedIntv.id}
+                    onApplyDevis={(d) => {
+                      setIsCustomIntvClient(false);
+                      setSelectedIntv({
+                        ...selectedIntv,
+                        client: d.client || selectedIntv.client,
+                        chantier: d.site || selectedIntv.chantier,
+                        corpsEtat: d.corpsEtat || selectedIntv.corpsEtat,
+                        objet: d.objet || selectedIntv.objet,
+                        devisId: d.id,
+                        refDevisTexte: d.reference || selectedIntv.refDevisTexte,
+                      });
+                      toast.success(`Informations reprises du devis ${d.reference || d.id}`);
+                    }}
+                  />
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Client / Donneur d'ordre *</label>
                     <select
@@ -1746,6 +1793,23 @@ export function DashboardPage() {
                       value={selectedIntv.chantier || ''}
                       onChange={(e) => setSelectedIntv({ ...selectedIntv, chantier: e.target.value })}
                     />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Corps d'état TCE</label>
+                    <select
+                      className="select"
+                      value={selectedIntv.corpsEtat || ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, corpsEtat: e.target.value })}
+                      data-testid="intv-corps-etat"
+                    >
+                      <option value="">— Sélectionner un corps d'état —</option>
+                      {selectedIntv.corpsEtat && !corpsEtatList.includes(selectedIntv.corpsEtat) && (
+                        <option value={selectedIntv.corpsEtat}>{selectedIntv.corpsEtat}</option>
+                      )}
+                      {corpsEtatList.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Technicien Terrain (Intervenant)</label>
@@ -2236,19 +2300,26 @@ export function DashboardPage() {
                     <strong>{selectedIntv.computed?.alerteExplication || '—'}</strong>
                   </div>
                   {(() => {
-                    const linkedId = selectedIntv.devisId || selectedIntv.origineDevisId;
+                    const diKey = (selectedIntv.numeroDI || '').trim().toUpperCase();
+                    const byDI = diKey ? devisList.find((d) => (d.numeroDI || '').trim().toUpperCase() === diKey) : undefined;
+                    const linkedId = selectedIntv.devisId || selectedIntv.origineDevisId || byDI?.id;
                     const linked = linkedId ? devisList.find((d) => d.id === linkedId) : undefined;
                     if (!linkedId && !selectedIntv.refDevisTexte) {
                       return (
                         <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          Devis lié : <strong>aucun</strong> (intervention créée directement).
+                          {diKey && <>Dossier <strong>{diKey}</strong> · </>}
+                          Devis lié : <strong>aucun</strong> (intervention créée directement
+                          {diKey ? ' ; elle sera rattachée dès qu’un devis portera ce DI' : ''}).
                         </div>
                       );
                     }
                     return (
                       <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                         <div style={{ fontSize: '12.5px', minWidth: 0 }}>
-                          <div style={{ fontWeight: 700 }}>Devis lié : {linked?.reference || selectedIntv.refDevisTexte || `#${linkedId}`}</div>
+                          <div style={{ fontWeight: 700 }}>
+                            {selectedIntv.numeroDI ? <>Dossier {selectedIntv.numeroDI} · </> : null}
+                            Devis lié : {linked?.reference || selectedIntv.refDevisTexte || `#${linkedId}`}
+                          </div>
                           <div style={{ color: 'var(--text-secondary)' }}>
                             {[linked?.client || selectedIntv.origineDevisClient, linked?.objet].filter(Boolean).join(' — ') || 'Devis d’origine'}
                           </div>
