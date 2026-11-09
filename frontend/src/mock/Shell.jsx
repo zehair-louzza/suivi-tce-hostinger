@@ -105,6 +105,21 @@ function ProfileModal({ open, onClose }) {
             )}
           </section>
           <section>
+            <strong style={{ fontSize: 14 }}>Accès mobile terrain</strong>
+            <button
+              type="button"
+              className="m-btn m-btn--primary"
+              style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
+              onClick={() => {
+                onClose();
+                go('terrain');
+              }}
+              data-testid="mock-profile-open-terrain"
+            >
+              📱 Ouvrir l’app mobile technicien
+            </button>
+          </section>
+          <section>
             <strong style={{ fontSize: 14 }}>Mes informations</strong>
             <div className="m-dl" style={{ marginTop: 8 }}>
               <div><dt>Entreprise</dt><dd>{COMPANY.name}</dd></div>

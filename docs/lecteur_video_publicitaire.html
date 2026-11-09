@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lecteur Vidéo Officiel • ANELEC GROUPE TCE</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .chapter-btn:hover {
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-4 select-none">
+  <div class="bg-[var(--card,#0f172a)] text-[var(--foreground,#f8fafc)] border border-[var(--border,#1e293b)] rounded-2xl p-6 shadow-2xl max-w-5xl mx-auto backdrop-blur-xl">
+    
+    <!-- En-tête -->
+    <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[var(--border,#334155)] mb-5">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-xl shadow-lg shadow-emerald-500/20">
+          🎬
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            ANELEC GROUPE TCE <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">1080p Full HD</span>
+          </h1>
+          <p class="text-xs text-slate-400">Spot Publicitaire Officiel (44s) • Bande Sonore Électronique Originale Synthétisée</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <a 
+          href="video_publicitaire_anelec_tce.mp4" 
+          download="video_publicitaire_anelec_tce.mp4"
+          class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-all flex items-center gap-1.5"
+        >
+          <span>📥</span> Télécharger MP4 (35 Mo)
+        </a>
+      </div>
+    </div>
+
+    <!-- Lecteur Vidéo HTML5 -->
+    <div class="relative rounded-xl overflow-hidden bg-black border border-slate-800 shadow-2xl mb-5 group">
+      <video 
+        id="promoVideo"
+        src="video_publicitaire_anelec_tce.mp4"
+        controls
+        autoplay
+        playsinline
+        class="w-full h-auto aspect-video max-h-[540px] mx-auto block"
+      >
+        Votre navigateur ne prend pas en charge la lecture de vidéos HTML5.
+      </video>
+    </div>
+
+    <!-- Contrôles rapides de vitesse et chapitres -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <span>Accès Rapide par Scènes Clés (Cliquez pour naviguer) :</span>
+        <div class="flex items-center gap-1">
+          <span class="text-slate-500">Vitesse :</span>
+          <button onclick="setSpeed(0.75)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">0.75x</button>
+          <button onclick="setSpeed(1)" class="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold">1x</button>
+          <button onclick="setSpeed(1.25)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">1.25x</button>
+        </div>
+      </div>
+
+      <!-- Grille des 8 Chapitres cliquables -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-left">
+        <button onclick="jumpTo(0)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-emerald-400 mb-0.5">00:00 • Scène 1</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Accroche & Logo</div>
+          <div class="text-[11px] text-slate-500">Identité SaaS BTP</div>
+        </button>
+
+        <button onclick="jumpTo(5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-sky-400 mb-0.5">00:05 • Scène 2</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Cockpit & KPIs</div>
+          <div class="text-[11px] text-slate-500">CA & Marges Directes</div>
+        </button>
+
+        <button onclick="jumpTo(10.5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-indigo-400 mb-0.5">00:10.5 • Scène 3</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Devis 22 Colonnes</div>
+          <div class="text-[11px] text-slate-500">Visites VIS-DEV & Travaux</div>
+        </button>
+
+        <button onclick="jumpTo(16)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-emerald-400 mb-0.5">00:16 • Scène 4</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Gantt 60 FPS</div>
+          <div class="text-[11px] text-slate-500">Dispatch sans latence</div>
+        </button>
+
+        <button onclick="jumpTo(21.5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-amber-400 mb-0.5">00:21.5 • Scène 5</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Tournées TSP</div>
+          <div class="text-[11px] text-slate-500">Retrait automatique carte</div>
+        </button>
+
+        <button onclick="jumpTo(27.5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-purple-400 mb-0.5">00:27.5 • Scène 6</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Mobile Technicien</div>
+          <div class="text-[11px] text-slate-500">Clôture GPS obligatoire</div>
+        </button>
+
+        <button onclick="jumpTo(33.5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-rose-400 mb-0.5">00:33.5 • Scène 7</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Facturation 5 Bacs</div>
+          <div class="text-[11px] text-slate-500">Diagnostic 1-clic retards</div>
+        </button>
+
+        <button onclick="jumpTo(38.5)" class="chapter-btn p-3 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 transition-all text-left">
+          <div class="text-[11px] font-bold text-emerald-400 mb-0.5">00:38.5 • Scène 8</div>
+          <div class="text-xs font-semibold text-slate-200 truncate">Inscription 1-Clic</div>
+          <div class="text-[11px] text-slate-500">Google & Supabase Dédié</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pied de carte -->
+    <div class="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+      <div>Durée : 43.90s • Débit : 6.6 Mbps • Codec : H.264 High Profile / AAC Stéréo</div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        <span class="text-emerald-400 font-medium">Production Prête à Diffuser</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('promoVideo');
+
+    function jumpTo(seconds) {
+      if (!video) return;
+      video.currentTime = seconds;
+      video.play();
+    }
+
+    function setSpeed(speed) {
+      if (!video) return;
+      video.playbackRate = speed;
+    }
+  </script>
+</body>
+</html>

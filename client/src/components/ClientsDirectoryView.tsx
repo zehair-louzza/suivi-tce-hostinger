@@ -259,7 +259,7 @@ export function ClientsDirectoryView({
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
               Profils Entreprises & Donneurs d'Ordre
             </h1>
             <span
@@ -296,7 +296,7 @@ export function ClientsDirectoryView({
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
             Donneurs d'Ordre B2B
           </div>
@@ -306,7 +306,7 @@ export function ClientsDirectoryView({
           <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Grands comptes & gestionnaires</div>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
             Particuliers B2C
           </div>
@@ -316,7 +316,7 @@ export function ClientsDirectoryView({
           <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Copropriétés & particuliers</div>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
             Emails d'envoi configurés
           </div>
@@ -332,8 +332,8 @@ export function ClientsDirectoryView({
       {/* Barre de Recherche et Filtres */}
       <div
         style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           padding: '12px 16px',
           display: 'flex',
@@ -414,8 +414,8 @@ export function ClientsDirectoryView({
             <div
               key={p.id}
               style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '14px',
                 padding: '18px 20px',
                 display: 'flex',
@@ -445,7 +445,7 @@ export function ClientsDirectoryView({
                     >
                       {badge.label}
                     </span>
-                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                       {p.nom}
                     </h3>
                   </div>
@@ -543,10 +543,12 @@ export function ClientsDirectoryView({
 
                   {/* Services & Adresses E-mails Dédiées */}
                   {p.services && p.services.length > 0 && (
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border-subtle)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          Services & Contacts Rattachés ({p.services.length})
+
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          ▪ Services & Contacts Rattachés ({p.services.length})
+
                         </span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -554,8 +556,8 @@ export function ClientsDirectoryView({
                           <div
                             key={srv.id}
                             style={{
-                              background: '#f8fafc',
-                              border: '1px solid #e2e8f0',
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border-subtle)',
                               borderRadius: '8px',
                               padding: '6px 10px',
                               fontSize: '11.5px',
@@ -566,8 +568,10 @@ export function ClientsDirectoryView({
                             }}
                           >
                             <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                              <div style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '€' : ''}</span>
+
+                              <div style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span>{srv.nomService.toLowerCase().includes('factur') || srv.nomService.toLowerCase().includes('compta') ? '€' : srv.nomService.toLowerCase().includes('travaux') || srv.nomService.toLowerCase().includes('tech') ? '❖' : srv.nomService.toLowerCase().includes('gestion') ? '▪' : '≡'}</span>
+
                                 <span>{srv.nomService}</span>
                                 {srv.contactNom && <span style={{ color: '#64748b', fontWeight: 500 }}>• {srv.contactNom}</span>}
                               </div>
@@ -618,16 +622,16 @@ export function ClientsDirectoryView({
                   <div
                     style={{
                       marginTop: '12px',
-                      background: '#f8fafc',
+                      background: 'var(--bg-elevated)',
                       borderLeft: '3px solid #00bf63',
                       padding: '8px 12px',
                       borderRadius: '0 8px 8px 0',
                       fontSize: '11.5px',
-                      color: '#334155',
+                      color: 'var(--text-secondary)',
                       lineHeight: 1.5,
                     }}
                   >
-                    <strong style={{ color: '#0f172a', display: 'block', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>
+                    <strong style={{ color: 'var(--text-primary)', display: 'block', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>
                       Consignes Particulières d'Intervention :
                     </strong>
                     {p.consignesParticulieres}
@@ -639,7 +643,7 @@ export function ClientsDirectoryView({
               <div
                 style={{
                   paddingTop: '12px',
-                  borderTop: '1px solid #f1f5f9',
+                  borderTop: '1px solid var(--border-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -710,7 +714,7 @@ export function ClientsDirectoryView({
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '16px',
               width: '100%',
               maxWidth: '640px',
@@ -719,7 +723,7 @@ export function ClientsDirectoryView({
               flexDirection: 'column',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
               overflow: 'hidden',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border-subtle)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -727,15 +731,15 @@ export function ClientsDirectoryView({
             <div
               style={{
                 padding: '18px 24px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--border-subtle)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: '#f8fafc',
+                background: 'var(--bg-elevated)',
               }}
             >
               <div>
-                <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                   {isCreating
                     ? "Nouvelle Fiche Donneur d'Ordre / Entreprise"
                     : `Fiche Technique • ${editingProfile.nom}`}
@@ -846,8 +850,8 @@ export function ClientsDirectoryView({
               {/* Section Multi-Services & Multi-Emails Dédiés */}
               <div
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '12px',
                   padding: '16px',
                   display: 'flex',
@@ -858,10 +862,11 @@ export function ClientsDirectoryView({
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>▪</span>
                         <span>Services de l'Entreprise & Adresses E-mail Dédiées</span>
                       </h4>
-                      <span style={{ fontSize: '11px', background: '#e2e8f0', color: '#334155', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
+                      <span style={{ fontSize: '11px', background: 'var(--border-subtle)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
                         {(editingProfile.services || []).length} service(s)
                       </span>
                     </div>
@@ -909,7 +914,7 @@ export function ClientsDirectoryView({
 
                 {/* Liste interactive des services */}
                 {(!editingProfile.services || editingProfile.services.length === 0) ? (
-                  <div style={{ textAlign: 'center', padding: '16px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '12px' }}>
+                  <div style={{ textAlign: 'center', padding: '16px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-subtle)', color: '#64748b', fontSize: '12px' }}>
                     Aucun service spécifique configuré. Cliquez sur l'un des boutons ci-dessus pour ajouter le service Travaux, Comptabilité ou Gestionnaire.
                   </div>
                 ) : (
@@ -918,8 +923,8 @@ export function ClientsDirectoryView({
                       <div
                         key={srv.id || srvIdx}
                         style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border-subtle)',
                           borderRadius: '10px',
                           padding: '12px 14px',
                           display: 'flex',
@@ -931,7 +936,7 @@ export function ClientsDirectoryView({
                         {/* Ligne 1 : Nom service, Email, Contact, Téléphone */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
                           <div>
-                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '2px' }}>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
                               Nom du Service *
                             </label>
                             <input
@@ -1131,7 +1136,7 @@ export function ClientsDirectoryView({
               <div
                 style={{
                   paddingTop: '14px',
-                  borderTop: '1px solid #e2e8f0',
+                  borderTop: '1px solid var(--border-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',

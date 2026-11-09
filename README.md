@@ -174,21 +174,34 @@ L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne
 </p>
 
 <p align="center">
-  <em>Figure 8.1 : Les 4 écrans natifs de l'App Mobile Technicien (Missions, Ma Tournée, Historique, Profil & 7 Thèmes).</em>
+  <img src="docs/images/mobile-01-missions.png" alt="1. Missions & Pointage dynamique" width="24%" />
+  <img src="docs/images/mobile-02-tournee-carte.png" alt="2. Tournée & Carte Leaflet temps réel" width="24%" />
+  <img src="docs/images/mobile-03-historique.png" alt="3. Historique des interventions clôturées" width="24%" />
+  <img src="docs/images/mobile-04-profil.png" alt="4. Profil technicien & métriques" width="24%" />
+</p>
+<p align="center">
+  <em>Figure 8.1 : Les 4 écrans natifs de l'App Mobile Technicien (1. Missions, 2. Ma Tournée avec carte Leaflet, 3. Historique, 4. Profil & 7 Thèmes).</em>
 </p>
 
-### 8.1 Les 4 Onglets de l'Application Mobile
+### 8.1 Les 4 Onglets de l'Application Mobile & Nouveautés Homologuées
 
-1. **Onglet « Missions » (Accueil & Prise de Service) :**
+1. **Onglet « Missions » (Accueil, Prise & Fin de Service, Filtres Temporels) :**
    - **Barre de statut smartphone native :** Affichage de l'heure en temps réel, indicateurs réseau et batterie.
    - **En-tête épuré :** Logomark ANELEC et salutation dynamique (*« Bonjour [Nom] »*).
-   - **Carte d'accueil & Pointage Inviolable 1-Clic :** Avatar circulaire avec initiales, date du jour et décompte des chantiers assignés. Un bouton tactile **« Pointer mon arrivée »** horodate immédiatement la présence en base PostgreSQL (`pointages_techniciens`) et bascule en pastille verte **`● Pointé à [HH:MM]`**. Le démarrage des chantiers est verrouillé tant que ce pointage n'est pas effectué.
+   - **Boutons Pointage Métier Explicites :** 
+     - **Bouton « Commencer la journée » :** Horodate immédiatement la prise de service en base PostgreSQL (`pointages_techniciens`) et bascule en pastille verte **`● Pointé à [HH:MM]`**.
+     - **Bouton « Finir la journée » :** Permet au technicien de clôturer sa journée de service avec vérification des missions terminées et horodatage de fin (`heureFinJournee`).
+   - **Filtre Mois Direct & Choix des Jours de la Semaine :**
+     - Menu déroulant pour basculer instantanément de mois en mois (*Novembre 2026, Décembre 2026, Janvier 2027...*) avec navigation Semaine Précédente / Semaine Suivante et bouton raccourci **« Aujourd'hui »**.
+     - Bandeau tactile des 7 jours de la semaine (**Lun, Mar, Mer, Jeu, Ven, Sam, Dim**) affichant le numéro du jour et le **compteur de missions planifiées**. Le jour cliqué met à jour immédiatement les interventions du terrain.
    - **Jauge de progression journalière :** Barre d'avancement visuelle en direct (ex. *« 1/3 missions terminées »*).
    - **Cartes des missions du jour :** Créneau horaire, pastille de statut colorée (*En cours*, *Clôturée*, *Prévu*), nom du client ou bailleur, corps d'état & objet de la prestation, et adresse avec chevron tactile.
 
-2. **Onglet « Ma tournée » (Carte Schématique & Ordre des Arrêts) :**
-   - **Visualisation cartographique stylisée :** Repérage instantané de la position du technicien (initiales dans un cercle bleu) et des étapes numérotées `1`, `2`, `3` reliées visuellement sur la trame de tournée.
-   - **Ordonnancement séquentiel des arrêts :** Liste ordonnée sous la carte indiquant chaque arrêt avec son créneau horaire, son adresse et son badge de statut (*En cours*, *Suivant*, *Prévu*).
+2. **Onglet « Ma tournée » (Carte Interactive Leaflet Temps Réel & Ordre des Arrêts) :**
+   - **Affichage cartographique complet Leaflet :** Intégration de tuiles vectorielles claires (OpenStreetMap / Carto Positron), point de départ Siège/Dépôt (pastille bleue avec initiales), et **marqueurs numérotés 1, 2, 3** correspondant aux étapes ordonnancées.
+   - **Tracé d'itinéraire automatique :** Ligne en pointillés reliant le départ et l'ensemble des chantiers de la journée.
+   - **Redimensionnement dynamique sans bug d'affichage :** Écouteur `ResizeObserver` et invalidation automatique des tuiles à l'ouverture de l'onglet pour garantir un affichage net sur tous les modèles de smartphones et tablettes.
+   - **Ordonnancement séquentiel des arrêts :** Liste ordonnée sous la carte indiquant chaque arrêt avec son numéro, son heure de passage, son adresse et son badge de statut (*En cours*, *Suivant*, *Prévu*).
 
 3. **Onglet « Historique » (Chantiers Clôturés) :**
    - **Archives des interventions passées :** Liste chronologique des chantiers terminés.
@@ -201,7 +214,7 @@ L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne
      2. *Missions accomplies dans le mois*
      3. *Photos d'intervention envoyées*
      4. *Taux de clôture GPS : 100 %*
-   - **Sélecteur interactif des 7 Thèmes :** Le technicien peut changer l'apparence complète de son application en 1 tap parmi :
+   - **Sélecteur interactif des 7 Thèmes :** Le collaborateur peut changer l'apparence complète de son application en 1 tap parmi :
      * **1. Atlas Clarity** (Mode SaaS épuré, blanc éclatant, bleu roi)
      * **2. Craft Warmth** (Palette artisanale chaleureuse, tons sable & ambre)
      * **3. Signal Command** (Ambiance cockpit sombre haute lisibilité)
@@ -209,6 +222,16 @@ L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne
      * **5. Bento Modular** (Grille modulaire géométrique aux accents ANELEC)
      * **6. Original Clair** & **7. Original Sombre** (Thèmes historiques de la plateforme)
    - **Bouton de déconnexion sécurisé :** « Se déconnecter ».
+
+---
+
+### 8.1.1 Accès Universel à l'App Mobile sur N'importe Quel Profil Utilisateur
+
+Que l'utilisateur soit connecté en tant qu'**Administrateur**, **Conducteur de travaux**, **Chiffrage & Devis**, **Rédacteur de rapports** ou **Consultation seule (Viewer)** :
+* **Bouton « Version Mobile » dans la Topbar :** Un bouton direct permet de basculer instantanément de l'interface bureau vers l'application mobile technicien sans quitter sa session.
+* **Option « Basculer vers l'App Mobile » dans le Menu « Mon profil » :** Accessible via la pastille utilisateur en bas de la barre latérale.
+* **Lien permanent « App Mobile Technicien » :** Présent dans le menu de gauche sous la rubrique *Espace Terrain* (accessible avec raccourci clavier `0`).
+* **Sélecteur Superviseur :** Lorsqu'un profil bureau ou admin consulte l'application mobile, un menu déroulant en en-tête lui permet de visualiser la tournée et les pointages de n'importe quel technicien de son entreprise.
 
 ---
 

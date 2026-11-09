@@ -975,25 +975,25 @@ const htmlContent = `<!DOCTYPE html>
   <div class="figure-box" style="padding: 4px; text-align: center;">
     <img src="${imgMobile01Missions}" alt="Missions du jour" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
     <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
-      <strong>1. Missions :</strong> Pointage 1-clic, progression, cartes d'interventions.
+      <strong>1. Missions :</strong> Pointage « Commencer / Finir », filtre mois, bandeau 7 jours.
     </div>
   </div>
   <div class="figure-box" style="padding: 4px; text-align: center;">
     <img src="${imgMobile02Tournee}" alt="Ma tournée" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
     <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
-      <strong>2. Tournée :</strong> Tracé d'arrêts 1, 2, 3 et position GPS en direct.
+      <strong>2. Tournée :</strong> Carte interactive Leaflet (QG, arrêts 1-2-3, tracé) &amp; liste ordonnée.
     </div>
   </div>
   <div class="figure-box" style="padding: 4px; text-align: center;">
     <img src="${imgMobile03Historique}" alt="Historique des missions" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
     <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
-      <strong>3. Historique :</strong> Chantiers clôturés et archives photos.
+      <strong>3. Historique :</strong> Chantiers clôturés, dates et archives photos.
     </div>
   </div>
   <div class="figure-box" style="padding: 4px; text-align: center;">
     <img src="${imgMobile04Profil}" alt="Profil et thèmes" class="figure-img" style="max-height: 180px; width: 100%; object-fit: contain; border-radius: 6px;" />
     <div class="figure-caption" style="font-size: 7pt; margin-top: 3px;">
-      <strong>4. Profil :</strong> 4 KPI, sélecteur des 7 thèmes et déconnexion.
+      <strong>4. Profil :</strong> 4 KPI terrain, sélecteur des 7 thèmes et déconnexion.
     </div>
   </div>
 </div>
@@ -1004,9 +1004,9 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">1</div>
     <div class="step-content">
-      <div class="step-title">Prise de Service &amp; Pointage Inviolable (Onglet Missions)</div>
+      <div class="step-title">Prise de Service &amp; Pointage Vacations (« Commencer la journée » / « Finir la journée »)</div>
       <div class="step-desc">
-        Le démarrage des interventions est subordonné au pointage d'arrivée : un tap sur <strong>« Pointer mon arrivée »</strong> horodate immédiatement la présence en base PostgreSQL (table <code>pointages_techniciens</code>) et affiche la pastille verte « Pointé à HH:MM ». La barre de progression indique en temps réel l'avancement des chantiers (ex. <em>1/3 missions terminées</em>).
+        Le démarrage des interventions est subordonné au pointage d'arrivée : un tap sur <strong>« Commencer la journée »</strong> horodate immédiatement la présence en base PostgreSQL (table <code>pointages_techniciens</code>) et affiche la pastille verte « Pointé à HH:MM ». En fin de tournée, le bouton <strong>« Finir la journée »</strong> enregistre l'heure de départ. Le bandeau hebdomadaire interactif (7 jours de Lun à Dim) permet de naviguer sur n'importe quel jour de la semaine et un filtre déroulant mensuel offre un accès direct à tous les mois de l'année. La barre de progression indique en temps réel l'avancement des chantiers (ex. <em>1/3 missions terminées</em>).
       </div>
     </div>
   </div>
@@ -1014,9 +1014,9 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">2</div>
     <div class="step-content">
-      <div class="step-title">Itinéraire Cartographique &amp; Ordre des Arrêts (Onglet Ma Tournée)</div>
+      <div class="step-title">Carte Interactive Leaflet &amp; Ordre Optimisé des Arrêts (Onglet Ma Tournée)</div>
       <div class="step-desc">
-        Affiche la tournée complète sous forme de carte schématique avec la position du technicien (initiales) et les étapes numérotées 1, 2, 3 reliées visuellement. La liste sous la carte ordonne chaque arrêt avec son créneau horaire et son statut (<em>En cours</em>, <em>Suivant</em>, <em>Prévu</em>).
+        L'onglet « Ma tournée » intègre désormais une véritable carte dynamique Leaflet OpenStreetMap. Elle matérialise le point de départ QG, le tracé d'itinéraire en pointillés et chaque étape numérotée (1, 2, 3) avec pastille d'état (<em>En cours</em>, <em>Suivant</em>, <em>Prévu</em>). L'affichage est stabilisé par <code>ResizeObserver</code> et invalidation dynamique de taille, garantissant un rendu fluide sans mosaïque ni distorsion lors du passage d'un onglet à l'autre.
       </div>
     </div>
   </div>
@@ -1044,9 +1044,9 @@ const htmlContent = `<!DOCTYPE html>
   <div class="step-row">
     <div class="step-pin">5</div>
     <div class="step-content">
-      <div class="step-title">Pilotage Personnel &amp; Sélecteur des 7 Directions Artistiques (Onglet Profil)</div>
+      <div class="step-title">Accès Universel Multi-Profils &amp; Sélecteur des 7 Directions Artistiques (Onglet Profil)</div>
       <div class="step-desc">
-        Visualisation des 4 KPI terrain (heures effectuées sur base 35 h, missions mensuelles, photos envoyées, taux de clôture GPS 100 %). Un sélecteur interactif permet au technicien de choisir instantanément sa direction de design préférée (<em>Atlas Clarity, Craft Warmth, Signal Command, Editorial Swiss, Bento Modular, Original Clair, Original Sombre</em>).
+        N'importe quel profil connecté (Administrateur, Chargé d'affaires, Conducteur ou Technicien) peut afficher l'application mobile en 1 clic grâce au bouton <strong>« 📱 Version Mobile »</strong> situé dans la barre supérieure et dans le menu utilisateur. Dans l'onglet Profil, le technicien dispose en outre de ses 4 KPI terrain et du sélecteur interactif des <strong>7 directions artistiques</strong> (<em>Atlas Clarity, Craft Warmth, Signal Command, Editorial Swiss, Bento Modular, Original Clair, Original Sombre</em>).
       </div>
     </div>
   </div>

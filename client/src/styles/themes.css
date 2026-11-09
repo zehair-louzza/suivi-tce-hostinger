@@ -41,6 +41,7 @@
   --topbar-height: 68px;
   --control-height: 40px;
   --radius-pill: 9999px;
+  --color-primary-ink: #ffffff;
 
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
@@ -367,10 +368,20 @@
   --color-surface: #ffffff;
   --color-surface-subtle: #f3f4f8;
   --color-surface-hover: #eef0f6;
-  --color-sidebar: #0f172a;
-  --color-sidebar-active: #1e293b;
-  --color-sidebar-text: #cbd5e1;
-  --color-sidebar-muted: #94a3b8;
+  --color-sidebar: #ffffff;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #0f172a;
+  --sidebar-border: #e5e7eb;
+  --sidebar-hover-bg: #f3f4f8;
+  --sidebar-hover-text: #0b1220;
+  --sidebar-active-bg: rgba(29, 78, 216, 0.08);
+  --sidebar-active-text: #1d4ed8;
+  --sidebar-accent: #1d4ed8;
+  --sidebar-badge-bg: #f1f5f9;
+  --sidebar-badge-text: #64748b;
+  --color-sidebar-active: rgba(29, 78, 216, 0.08);
+  --color-sidebar-text: #0f172a;
+  --color-sidebar-muted: #64748b;
   --color-text: #0f172a;
   --color-text-secondary: #475569;
   --color-text-muted: #5b6b80;
@@ -699,34 +710,10 @@
   font-weight: 600;
 }
 
-/* — Atlas : un chiffre phare à gauche, 3 indicateurs en pile à droite — */
+/* — Atlas : 4 indicateurs en ligne nette (Design System Atlas Clarity) — */
 :root[data-theme="atlas"] .kpi-grid {
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(84px, auto));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) {
-  grid-row: 1 / span 3;
-  justify-content: center;
-  padding: 24px 28px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__value {
-  font-size: clamp(36px, 4.2vw, 52px);
-  color: var(--color-primary);
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  column-gap: 12px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__label {
-  flex: 1 0 100%;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__value {
-  margin-top: 0;
-  font-size: 26px;
 }
 
 /* — Bento : tuile noire large + tuiles de couleur — */
@@ -863,4 +850,87 @@ html[data-theme-switching="1"] *::after {
     color 220ms ease,
     border-color 220ms ease,
     box-shadow 220ms ease !important;
+}
+
+/* ============================================================================
+   RÈGLES COMPOSANTS SIGNATURES PAR DIRECTION ARTISTIQUE (PRIORITÉ 2)
+   ============================================================================ */
+
+/* Liaison typographique globale titres et KPI */
+h1, h2, h3, h4, .dashboard-title, .kpi-card__value, .kpi-number {
+  font-family: var(--font-primary, var(--font-sans));
+}
+
+/* 1. ATLAS CLARITY : Space Grotesk sur les titres */
+:root[data-theme="atlas"] h1,
+:root[data-theme="atlas"] h2,
+:root[data-theme="atlas"] h3,
+:root[data-theme="atlas"] .dashboard-title,
+:root[data-theme="atlas"] .kpi-card__value {
+  letter-spacing: -0.02em;
+}
+
+/* 2. CRAFT WARMTH : Boutons pilules et cartes très douces */
+:root[data-theme="craft"] .btn,
+:root[data-theme="craft"] .segmented-control,
+:root[data-theme="craft"] .segmented-btn {
+  border-radius: 9999px !important;
+}
+
+:root[data-theme="craft"] .card,
+:root[data-theme="craft"] .kpi-card,
+:root[data-theme="craft"] .pro-table-container,
+:root[data-theme="craft"] .dashboard-card {
+  border-radius: 20px !important;
+}
+
+/* 3. SIGNAL COMMAND : Files nets, cockpit */
+:root[data-theme="signal"] .btn--primary,
+:root[data-theme="signal"] .btn-primary {
+  font-weight: 700 !important;
+}
+
+/* 4. EDITORIAL SWISS : Angles stricts 0px et bordures nettes */
+:root[data-theme="swiss"] .card,
+:root[data-theme="swiss"] .kpi-card,
+:root[data-theme="swiss"] .pro-table-container,
+:root[data-theme="swiss"] .dashboard-card,
+:root[data-theme="swiss"] .btn,
+:root[data-theme="swiss"] .segmented-control,
+:root[data-theme="swiss"] .segmented-btn,
+:root[data-theme="swiss"] .m-pill,
+:root[data-theme="swiss"] .badge,
+:root[data-theme="swiss"] input,
+:root[data-theme="swiss"] select,
+:root[data-theme="swiss"] textarea {
+  border-radius: 0px !important;
+}
+
+:root[data-theme="swiss"] .pro-table th,
+:root[data-theme="swiss"] table th {
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+:root[data-theme="swiss"] h1,
+:root[data-theme="swiss"] h2,
+:root[data-theme="swiss"] h3,
+:root[data-theme="swiss"] .dashboard-title,
+:root[data-theme="swiss"] .kpi-card__value {
+  letter-spacing: -0.03em !important;
+  font-weight: 800 !important;
+}
+
+/* 5. BENTO MODULAR : Tuiles modernes 18px */
+:root[data-theme="bento"] .card,
+:root[data-theme="bento"] .kpi-card,
+:root[data-theme="bento"] .pro-table-container,
+:root[data-theme="bento"] .dashboard-card {
+  border-radius: 18px !important;
+}
+
+:root[data-theme="bento"] .btn {
+  border-radius: 12px !important;
 }

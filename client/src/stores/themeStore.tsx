@@ -133,7 +133,7 @@ function ensureThemeFonts(id: ThemeId): void {
   document.head.appendChild(link);
 }
 
-export const DEFAULT_THEME: ThemeId = 'light';
+export const DEFAULT_THEME: ThemeId = 'atlas';
 const ALL_IDS = THEMES.map((t) => t.id);
 const isValid = (v: unknown): v is ThemeId => typeof v === 'string' && (ALL_IDS as string[]).includes(v);
 
@@ -165,6 +165,8 @@ function applyTheme(id: ThemeId): void {
   const html = document.documentElement;
   html.setAttribute('data-theme-switching', '1');
   html.setAttribute('data-theme', id);
+  html.setAttribute('data-dir', id);
+  if (typeof document !== 'undefined' && document.body) { document.body.classList.add('m-body'); }
   window.setTimeout(() => html.removeAttribute('data-theme-switching'), 260);
 }
 

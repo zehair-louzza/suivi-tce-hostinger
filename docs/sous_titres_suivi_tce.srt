@@ -1,0 +1,111 @@
+1
+00:00:00,500 --> 00:00:05,200
+Dans le bâtiment, chaque journée fait avancer
+plusieurs sujets à la fois.
+
+2
+00:00:05,500 --> 00:00:10,000
+Des devis à suivre.
+Des interventions à organiser.
+
+3
+00:00:10,500 --> 00:00:15,000
+Des informations à rapprocher.
+Et une activité qu’il faut garder en vue.
+
+4
+00:00:20,500 --> 00:00:26,000
+Quand ces informations sont dispersées,
+comprendre la situation demande de les remettre en perspective.
+
+5
+00:00:26,500 --> 00:00:32,000
+Suivi TCE propose une lecture structurée :
+distinguer les étapes, suivre les montants,
+
+6
+00:00:32,500 --> 00:00:37,500
+et retrouver le fil de votre activité.
+
+7
+00:00:40,500 --> 00:00:46,500
+Les devis émis donnent une vue
+sur les propositions commerciales.
+
+8
+00:00:47,000 --> 00:00:52,500
+Les devis acceptés indiquent
+les engagements retenus.
+
+9
+00:00:53,000 --> 00:00:58,000
+Les interventions effectuées
+représentent l’activité réalisée.
+
+10
+00:00:58,500 --> 00:01:04,500
+La facturation apporte une autre lecture,
+distincte de la réalisation et de l’encaissement.
+
+11
+00:01:05,500 --> 00:01:10,500
+Un total donne un repère.
+Une évolution raconte ce qui se passe dans le temps.
+
+12
+00:01:11,000 --> 00:01:17,500
+En distinguant les séries, vous pouvez observer les variations,
+comparer les périodes
+
+13
+00:01:18,000 --> 00:01:23,500
+et identifier les écarts qui méritent votre attention.
+
+14
+00:01:30,500 --> 00:01:36,500
+Le détail quotidien permet de situer une variation.
+Les repères hebdomadaires replacent cette variation dans une période.
+
+15
+00:01:37,000 --> 00:01:43,500
+Une date, une semaine, une sélection : la présentation garde
+le même objectif, rendre les informations plus faciles à lire.
+
+16
+00:01:55,500 --> 00:02:01,000
+Les montants ne disent pas tout.
+Les volumes apportent un éclairage complémentaire.
+
+17
+00:02:01,500 --> 00:02:07,000
+Combien d’interventions ont été effectuées ?
+Combien de devis ont été émis ?
+
+18
+00:02:07,500 --> 00:02:14,000
+En regardant ces indicateurs ensemble, vous disposez
+d’une base plus précise pour examiner votre activité.
+
+19
+00:02:20,500 --> 00:02:26,000
+Une interface claire laisse la place à l’essentiel.
+Des couleurs constantes. Des périodes identifiables.
+
+20
+00:02:26,500 --> 00:02:32,000
+Des indicateurs qui restent distincts.
+Et une présentation pensée pour passer de la vue d’ensemble au détail utile.
+
+21
+00:02:40,500 --> 00:02:46,000
+Votre activité ne se résume pas à un seul chiffre.
+Elle se construit à travers vos devis, vos interventions et leur suivi.
+
+22
+00:02:46,500 --> 00:02:51,000
+Suivi TCE.
+Du devis au suivi de votre activité.
+
+23
+00:02:51,500 --> 00:02:57,500
+Découvrez une nouvelle façon de voir l’essentiel.
