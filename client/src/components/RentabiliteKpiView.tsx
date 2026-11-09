@@ -474,8 +474,8 @@ export function RentabiliteKpiView({
         className="pro-table-container"
         style={{
           padding: '12px 18px',
-          background: '#ffffff',
-          border: '1px solid #cbd5e1',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           display: 'flex',
           alignItems: 'center',
@@ -533,7 +533,7 @@ export function RentabiliteKpiView({
           {/* =====================================================================
               1. EN-TÊTE DE LA CONSOLE DE RENTABILITÉ & PERFORMANCE (STYLE VOLET 2)
              ===================================================================== */}
-          <div className="pro-table-container" style={{ padding: '16px 20px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+          <div className="pro-table-container" style={{ padding: '16px 20px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -665,7 +665,7 @@ export function RentabiliteKpiView({
           2. BANDEAU DES KPIS STRATÉGIQUES DE RENTABILITÉ (STYLE VOLET 2)
          ===================================================================== */}
       <div className="kpi-strip">
-        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div className="kpi-card" style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
               CA Total Produit
@@ -682,7 +682,7 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div className="kpi-card" style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
               Rentabilité Horaire
@@ -699,7 +699,7 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div className="kpi-card" style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
               Marge Brute Estimée
@@ -716,7 +716,7 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div className="kpi-card" style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
               Efficience / Délais
@@ -735,7 +735,7 @@ export function RentabiliteKpiView({
           </div>
         </div>
 
-        <div className="kpi-card" style={{ border: '1px solid #e2e8f0', borderRadius: '10px', background: '#ffffff', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div className="kpi-card" style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-surface)', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
               Top Rentabilité
@@ -764,8 +764,8 @@ export function RentabiliteKpiView({
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          background: '#ffffff',
-          border: '1px solid #cbd5e1',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
         }}
       >
         {/* Commutateur de vue : Par Technicien vs Par Équipe / Métier */}
@@ -792,7 +792,7 @@ export function RentabiliteKpiView({
 
         {/* Simulateur / Réglage Coût Horaire Moyen Chargé */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-surface)', padding: '6px 12px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#0a0f1d' }}>
+          <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--text-primary)' }}>
             ⊞ Coût Moyen Chargé :
           </span>
           <input
@@ -847,8 +847,8 @@ export function RentabiliteKpiView({
           className="pro-table-container"
           style={{
             padding: '16px 20px',
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '10px',
             display: 'flex',
             flexDirection: 'column',
@@ -954,8 +954,8 @@ export function RentabiliteKpiView({
                         gap: '5px',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-subtle)',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontSize: '12px' }}>
@@ -965,8 +965,8 @@ export function RentabiliteKpiView({
                               width: '20px',
                               height: '20px',
                               borderRadius: '50%',
-                              background: idx === 0 ? '#fef3c7' : '#e2e8f0',
-                              color: idx === 0 ? '#b45309' : '#475569',
+                              background: idx === 0 ? 'var(--color-warning-soft, #fef3c7)' : 'var(--bg-surface)',
+                              color: idx === 0 ? '#b45309' : 'var(--text-secondary)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -992,7 +992,7 @@ export function RentabiliteKpiView({
                         style={{
                           width: '100%',
                           height: '14px',
-                          background: '#e2e8f0',
+                          background: 'var(--border-subtle)',
                           borderRadius: '999px',
                           overflow: 'hidden',
                           position: 'relative',
@@ -1275,10 +1275,10 @@ export function RentabiliteKpiView({
                       display: 'grid',
                       gridTemplateColumns: '1fr 1fr 1fr',
                       gap: '8px',
-                      background: '#f8fafc',
+                      background: 'var(--bg-elevated)',
                       borderRadius: '8px',
                       padding: '8px 10px',
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid var(--border-subtle)',
                     }}
                   >
                     <div>
@@ -1402,7 +1402,7 @@ export function RentabiliteKpiView({
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                          <div style={{ width: '50px', background: 'var(--border-subtle)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
                             <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
                           </div>
                           <span className="font-mono" style={{ fontSize: '11.5px', fontWeight: 700, color: '#047857' }}>
@@ -1497,10 +1497,10 @@ export function RentabiliteKpiView({
                         display: 'grid',
                         gridTemplateColumns: '1fr 1fr 1fr',
                         gap: '8px',
-                        background: '#f8fafc',
+                        background: 'var(--bg-elevated)',
                         borderRadius: '8px',
                         padding: '8px 10px',
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--border-subtle)',
                       }}
                     >
                       <div>
@@ -1539,7 +1539,7 @@ export function RentabiliteKpiView({
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Part CA Global :</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: '50px', background: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                          <div style={{ width: '50px', background: 'var(--border-subtle)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
                             <div style={{ width: `${Math.min(100, eq.partCA)}%`, background: '#00bf63', height: '100%' }} />
                           </div>
                           <span className="font-mono" style={{ fontWeight: 700, color: '#047857' }}>{eq.partCA}%</span>

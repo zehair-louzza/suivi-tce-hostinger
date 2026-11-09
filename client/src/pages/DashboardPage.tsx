@@ -859,7 +859,7 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-header__actions">
-              <span className="font-mono topbar-date-pill">Moteur Gantt 60 fps</span>
+              <span className="font-mono topbar-date-pill">Planning interactif</span>
             </div>
           </div>
           <PlanningBoard
@@ -965,7 +965,7 @@ export function DashboardPage() {
                   className={`segmented-btn ${devisViewStyle === 'table' ? 'active' : ''}`}
                   onClick={() => setDevisViewStyle('table')}
                 >
-                  <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
+                  <span className="desktop-only-el">Liste</span>
                   <span className="mobile-only-flex">≡ Liste</span>
                 </button>
                 <button
@@ -1045,7 +1045,7 @@ export function DashboardPage() {
                         setSelectedDevis(d);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#0f172a', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {d.reference || `DEV-${d.id}`}
                         {(d.interventionsCount || 0) > 0 && (
                           <span
@@ -1345,7 +1345,7 @@ export function DashboardPage() {
                   className={`segmented-btn ${intvViewStyle === 'table' ? 'active' : ''}`}
                   onClick={() => setIntvViewStyle('table')}
                 >
-                  <span className="desktop-only-el">Tableau Synthétique (8 col)</span>
+                  <span className="desktop-only-el">Liste</span>
                   <span className="mobile-only-flex">≡ Liste</span>
                 </button>
                 <button
@@ -1422,7 +1422,7 @@ export function DashboardPage() {
                         setSelectedIntv(i);
                       }}
                     >
-                      <td className="font-mono" style={{ fontWeight: 700, color: '#0f172a', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      <td className="font-mono" style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         {i.reference || `INT-${i.id}`}
                       </td>
                       <td style={{ maxWidth: '145px' }}>
@@ -1454,7 +1454,7 @@ export function DashboardPage() {
                         {i.entreprise || 'À affecter'}
                       </td>
                       <td className="font-mono" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{formatDateFR(i.datePlanifiee)}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDateFR(i.datePlanifiee)}</div>
                         {i.heureDebut && (
                           <div style={{ color: '#047857', fontSize: '10px', fontWeight: 700 }}>
                             {i.heureDebut}–{i.heureFin || '12:00'}
@@ -2266,13 +2266,13 @@ export function DashboardPage() {
         <div className="dashboard-container">
           <div className="dashboard-header">
             <div>
-              <h1 className="dashboard-title">Workstation Super-Admin & Rapports</h1>
+              <h1 className="dashboard-title">Console d'administration & Rapports</h1>
               <p className="dashboard-subtitle">
                 Gestion des utilisateurs, affectation des permissions granulaires, contrôle des pointages matin/soir et validation des rapports.
               </p>
             </div>
             <div className="dashboard-header__actions">
-              <span className="badge badge--danger">Super-Admin</span>
+              <span className="badge badge--danger">Administration</span>
             </div>
           </div>
           <AdminWorkstation
@@ -3746,8 +3746,8 @@ export function DashboardPage() {
                     id: 'PHASE2',
                     title: '2ème Phase / Tranche de Chantier',
                     badge: 'Étape 2 prévue',
-                    color: '#0f172a',
-                    bg: '#f1f5f9',
+                    color: 'var(--text-primary)',
+                    bg: 'var(--bg-elevated)',
                     desc: 'Chantier planifié en plusieurs temps (ex: pose après séchage, raccordement final).',
                   },
                 ].map((opt) => {

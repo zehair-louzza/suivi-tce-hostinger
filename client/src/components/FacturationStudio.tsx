@@ -741,8 +741,8 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_FACTURER');
           }}
           style={{
-            border: filterCategory === 'A_FACTURER' ? '1.5px solid #047857' : '1px solid #e2e8f0',
-            background: '#ffffff',
+            border: filterCategory === 'A_FACTURER' ? '1.5px solid #047857' : '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
             borderRadius: '10px',
             padding: '13px 15px',
             boxShadow: filterCategory === 'A_FACTURER' ? '0 0 0 2px rgba(4, 120, 87, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
@@ -793,8 +793,8 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('A_VERIFIER');
           }}
           style={{
-            border: filterCategory === 'A_VERIFIER' ? '1.5px solid #d97706' : '1px solid #e2e8f0',
-            background: '#ffffff',
+            border: filterCategory === 'A_VERIFIER' ? '1.5px solid #d97706' : '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
             borderRadius: '10px',
             padding: '13px 15px',
             boxShadow: filterCategory === 'A_VERIFIER' ? '0 0 0 2px rgba(217, 119, 6, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
@@ -845,8 +845,8 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('NE_PAS_FACTURER');
           }}
           style={{
-            border: filterCategory === 'NE_PAS_FACTURER' ? '1.5px solid #64748b' : '1px solid #e2e8f0',
-            background: '#ffffff',
+            border: filterCategory === 'NE_PAS_FACTURER' ? '1.5px solid #64748b' : '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
             borderRadius: '10px',
             padding: '13px 15px',
             boxShadow: filterCategory === 'NE_PAS_FACTURER' ? '0 0 0 2px rgba(100, 116, 139, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
@@ -889,8 +889,8 @@ Service Client & Facturation — ANELEC GROUPE`;
           className="kpi-card"
           onClick={() => setActiveTab('retards_clients')}
           style={{
-            border: activeTab === 'retards_clients' ? '1.5px solid #be123c' : '1px solid #e2e8f0',
-            background: '#ffffff',
+            border: activeTab === 'retards_clients' ? '1.5px solid #be123c' : '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
             borderRadius: '10px',
             padding: '13px 15px',
             boxShadow: activeTab === 'retards_clients' ? '0 0 0 2px rgba(190, 18, 60, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
@@ -936,8 +936,8 @@ Service Client & Facturation — ANELEC GROUPE`;
             setFilterCategory('FACTUREE');
           }}
           style={{
-            border: filterCategory === 'FACTUREE' ? '1.5px solid #1e293b' : '1px solid #e2e8f0',
-            background: '#ffffff',
+            border: filterCategory === 'FACTUREE' ? '1.5px solid var(--text-primary)' : '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
             borderRadius: '10px',
             padding: '13px 15px',
             boxShadow: filterCategory === 'FACTUREE' ? '0 0 0 2px rgba(30, 41, 59, 0.15), 0 2px 6px rgba(0,0,0,0.04)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
@@ -951,14 +951,14 @@ Service Client & Facturation — ANELEC GROUPE`;
                 gap: '5px',
                 fontSize: '11.5px',
                 fontWeight: 700,
-                color: '#1e293b',
-                background: 'rgba(30, 41, 59, 0.09)',
+                color: 'var(--text-primary)',
+                background: 'var(--color-primary-soft, rgba(148, 163, 184, 0.15))',
                 padding: '3px 9px',
                 borderRadius: '6px',
                 lineHeight: 1.3,
               }}
             >
-              <ProFileTextIcon size={12} color="#1e293b" />
+              <ProFileTextIcon size={12} color="var(--text-primary)" />
               <span>Facturées (B2B/B2C)</span>
             </span>
           </div>
@@ -2046,10 +2046,10 @@ Service Client & Facturation — ANELEC GROUPE`;
                             color: 'var(--text-secondary)',
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
-                            background: '#f8fafc',
+                            background: 'var(--bg-elevated)',
                             padding: '2px 8px',
                             borderRadius: '6px',
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--border-subtle)',
                           }}
                         >
                           Tech: <strong style={{ color: 'var(--text-primary)' }}>{intv.entreprise || 'Non affecté'}</strong>
@@ -2168,8 +2168,8 @@ Service Client & Facturation — ANELEC GROUPE`;
                         gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
                         gap: '8px',
                         fontSize: '10.5px',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-subtle)',
                         padding: '8px 10px',
                         borderRadius: '8px',
                       }}
