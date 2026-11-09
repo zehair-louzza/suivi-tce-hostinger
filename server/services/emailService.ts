@@ -790,10 +790,10 @@ export async function sendConfirmationEmail({
       <h1>Confirmation d'activation de votre espace entreprise</h1>
     </div>
 
-    <p>Bonjour <strong>${recipientName}</strong>,</p>
+    <p>Bonjour <strong>${esc(recipientName)}</strong>,</p>
 
     <p>
-      Votre demande d'ouverture d'espace pour la société <strong>${companyName}</strong> a bien été enregistrée sur la plateforme ANELEC TCE.
+      Votre demande d'ouverture d'espace pour la société <strong>${esc(companyName)}</strong> a bien été enregistrée sur la plateforme ANELEC TCE.
     </p>
 
     <p>
@@ -808,7 +808,7 @@ export async function sendConfirmationEmail({
 
     <div class="terms-box">
       <strong>Engagement contractuel et RGPD certifié :</strong><br />
-      En cliquant sur le lien ci-dessus, vous reconnaissez avoir pris connaissance et accepté sans réserve les Conditions Générales d'Utilisation (CGU). Vous confirmez que les données métier saisies dans votre espace (devis, chantiers, factures, clients, plannings) restent la propriété exclusive de <strong>${companyName}</strong>, sont hébergées sur des serveurs souverains sécurisés en France (Supabase & Hostinger), et ne font l'objet d'aucun traitement ni exploitation par ANELEC GROUPE.
+      En cliquant sur le lien ci-dessus, vous reconnaissez avoir pris connaissance et accepté sans réserve les Conditions Générales d'Utilisation (CGU). Vous confirmez que les données métier saisies dans votre espace (devis, chantiers, factures, clients, plannings) restent la propriété exclusive de <strong>${esc(companyName)}</strong>, sont hébergées sur des serveurs souverains sécurisés en France (Supabase & Hostinger), et ne font l'objet d'aucun traitement ni exploitation par ANELEC GROUPE.
     </div>
 
     <p style="font-size: 12px; color: #64748b;">
@@ -868,8 +868,8 @@ export async function sendPasswordResetEmail(params: {
 <body>
   <div class="card">
     <h2 style="margin-top:0;color:#0f172a;">Réinitialisation de votre mot de passe ANELEC TCE</h2>
-    <p>Bonjour <strong>${params.recipientName}</strong>,</p>
-    <p>Vous avez demandé la réinitialisation du mot de passe de votre compte <strong>${params.toEmail}</strong>.</p>
+    <p>Bonjour <strong>${esc(params.recipientName)}</strong>,</p>
+    <p>Vous avez demandé la réinitialisation du mot de passe de votre compte <strong>${esc(params.toEmail)}</strong>.</p>
     <div style="text-align:center;">
       <a href="${resetLink}" class="btn" target="_blank">Choisir un nouveau mot de passe</a>
     </div>
@@ -919,12 +919,12 @@ export async function sendWelcomeUserEmail(params: {
 </head>
 <body>
   <div class="card">
-    <h2 style="margin-top:0;">Bienvenue sur l'espace ${params.companyName} — ANELEC TCE</h2>
-    <p>Bonjour <strong>${params.recipientName}</strong>,</p>
-    <p>Votre compte collaborateur (profil : <strong>${params.roleLabel}</strong>) a été créé et activé par votre administrateur.</p>
+    <h2 style="margin-top:0;">Bienvenue sur l'espace ${esc(params.companyName)} — ANELEC TCE</h2>
+    <p>Bonjour <strong>${esc(params.recipientName)}</strong>,</p>
+    <p>Votre compte collaborateur (profil : <strong>${esc(params.roleLabel)}</strong>) a été créé et activé par votre administrateur.</p>
     <div class="creds">
-      <div><strong>Identifiant (E-mail) :</strong> ${params.toEmail}</div>
-      <div style="margin-top:6px;"><strong>Mot de passe initial :</strong> <code>${params.tempPassword}</code></div>
+      <div><strong>Identifiant (E-mail) :</strong> ${esc(params.toEmail)}</div>
+      <div style="margin-top:6px;"><strong>Mot de passe initial :</strong> <code>${esc(params.tempPassword)}</code></div>
     </div>
     <a href="${loginLink}" class="btn" target="_blank">Se connecter à la plateforme</a>
   </div>
@@ -1007,8 +1007,8 @@ export async function sendInterventionReportEmail({
           .map(
             (p, idx) => `
           <div style="display: inline-block; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; text-align: center; margin: 4px;">
-            <a href="${p.url}" target="_blank" style="text-decoration: none;">
-              <img src="${p.url}" alt="Photo ${idx + 1}" style="max-width: 180px; max-height: 140px; border-radius: 6px; display: block; object-fit: cover;" />
+            <a href="${esc(p.url)}" target="_blank" style="text-decoration: none;">
+              <img src="${esc(p.url)}" alt="Photo ${idx + 1}" style="max-width: 180px; max-height: 140px; border-radius: 6px; display: block; object-fit: cover;" />
             </a>
             <span style="font-size: 10px; color: #64748b; font-weight: 600; display: block; margin-top: 4px;">
               ${p.category || 'CONSTAT'} • ${p.takenAt ? new Date(p.takenAt).toLocaleDateString('fr-FR') : ''}
@@ -1028,7 +1028,7 @@ export async function sendInterventionReportEmail({
     <div style="margin-top: 18px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px;">
       <strong style="color: #166534; font-size: 13px;">✓ Travaux & Opérations réalisés sur site :</strong>
       <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 12.5px; color: #15803d; line-height: 1.6;">
-        ${intervention.actionsRealisees.map((a) => `<li>${a}</li>`).join('')}
+        ${intervention.actionsRealisees.map((a) => `<li>${esc(a)}</li>`).join('')}
       </ul>
     </div>
   `
@@ -1057,8 +1057,8 @@ export async function sendInterventionReportEmail({
   <div class="card">
     <div class="header">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span class="badge">${companyName} • RAPPORT OFFICIEL</span>
-        <span style="font-weight: 800; color: #00bf63; font-size: 13px;">${ref}</span>
+        <span class="badge">${esc(companyName)} • RAPPORT OFFICIEL</span>
+        <span style="font-weight: 800; color: #00bf63; font-size: 13px;">${esc(ref)}</span>
       </div>
       <h1 class="title">Rapport d'Intervention Technique</h1>
     </div>
@@ -1067,13 +1067,13 @@ export async function sendInterventionReportEmail({
       customMessage
         ? `
       <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
-        ${customMessage}
+        ${esc(customMessage)}
       </div>
     `
         : `
       <p style="font-size: 13.5px; color: #475569; line-height: 1.5; margin: 0 0 16px 0;">
         Bonjour,<br /><br />
-        Veuillez trouver ci-dessous le rapport officiel d'intervention technique réalisé par les équipes de <strong>${companyName}</strong>.
+        Veuillez trouver ci-dessous le rapport officiel d'intervention technique réalisé par les équipes de <strong>${esc(companyName)}</strong>.
       </p>
     `
     }
@@ -1131,7 +1131,7 @@ export async function sendInterventionReportEmail({
     ${photosHtml}
 
     <div class="footer">
-      Document transmis par <strong>${senderName}</strong> (${senderEmail}) • <strong>${companyName}</strong><br />
+      Document transmis par <strong>${senderName}</strong> (${senderEmail}) • <strong>${esc(companyName)}</strong><br />
       Plateforme de pilotage ANELEC TCE • Ce rapport fait foi d'exécution technique.
     </div>
   </div>
@@ -1198,11 +1198,11 @@ export async function sendDevisProposalEmail(params: {
 <body>
   <div class="card">
     <div style="border-bottom:2px solid #0284c7;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
-      <strong style="font-size:16px;color:#0f172a;">Proposition Commerciale & Chiffrage • ${params.companyName}</strong>
-      <span style="color:#0284c7;font-weight:800;">${ref}</span>
+      <strong style="font-size:16px;color:#0f172a;">Proposition Commerciale & Chiffrage • ${esc(params.companyName)}</strong>
+      <span style="color:#0284c7;font-weight:800;">${esc(ref)}</span>
     </div>
     <p style="font-size:14px;line-height:1.6;color:#334155;">
-      ${params.customMessage || `Bonjour,<br/><br/>Veuillez trouver ci-dessous le récapitulatif de notre proposition de devis <strong>${ref}</strong> concernant votre demande de travaux.`}
+      ${params.customMessage || `Bonjour,<br/><br/>Veuillez trouver ci-dessous le récapitulatif de notre proposition de devis <strong>${esc(ref)}</strong> concernant votre demande de travaux.`}
     </p>
     <div class="grid">
       <div><strong>Client / Donneur d'ordre :</strong><br/>${params.devis.client}</div>

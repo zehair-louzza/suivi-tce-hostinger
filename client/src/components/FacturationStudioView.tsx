@@ -74,7 +74,7 @@ function eur(v: number): string {
 }
 
 function tvaLabel(r: FactuRow): string {
-  return r.tva === 0 ? 'Autoliquidation (0 %)' : `TVA ${String(r.tva).replace('.', ',')} %`;
+  return r.tva === 0 ? 'Autoliquidation (0 %) ?' : `TVA ${String(r.tva).replace('.', ',')} % ?`;
 }
 
 export function FacturationStudioView({
@@ -136,6 +136,10 @@ export function FacturationStudioView({
         client: i.client || 'Client',
         type: isB2B ? 'B2B' : 'B2C',
         objet: i.objet || i.corpsEtat || 'Travaux TCE',
+        // HYPOTHÈSE à confirmer par l'entreprise : autoliquidation pour le B2B, 10 % pour
+        // les particuliers. L'autoliquidation (CGI art. 283-2 nonies) ne vaut que pour la
+        // sous-traitance BTP ; une facturation B2B directe reste soumise à TVA. Les taux
+        // 5,5 % et 20 % ne sont pas couverts. Le taux n'est pas encore stocké par pièce.
         tva: isB2B ? 0 : 10,
         ht,
         bucket: bId,
@@ -304,7 +308,7 @@ export function FacturationStudioView({
     <Page
       testid="screen-facturation"
       title="Facturation"
-      subtitle="Tri des interventions, calcul HT/TTC, relances et bordereaux de facturation clients."
+      subtitle="Tri des interventions, calcul HT/TTC, relances et bordereaux de facturation clients. Les taux de TVA affichés sont une hypothèse (autoliquidation en B2B, 10 % pour les particuliers) : à confirmer contrat par contrat avant d’émettre une facture."
       actions={
         <>
           <Segmented
