@@ -351,7 +351,7 @@ export function Layout({
           >
             {!collapsed ? (
               <img
-                src="/brand/anelec-logo-white.png"
+                src={isDarkTheme ? '/brand/anelec-logo-white.png' : '/brand/anelec-logo.png'}
                 alt="ANELEC GROUPE"
                 style={{ height: '38px', maxWidth: '175px', objectFit: 'contain' }}
               />
@@ -364,9 +364,9 @@ export function Layout({
             onClick={() => setCollapsed((c) => !c)}
             className="desktop-only-el"
             style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: '#94a3b8',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              color: 'var(--muted)',
               width: '26px',
               height: '26px',
               borderRadius: '6px',

@@ -12,6 +12,7 @@ import './styles/themes.css';
 import './styles/global.css';
 import './styles/layout.css';
 import './styles/terrain-mobile.css';
+import './styles/mock-design-system.css';
 import './styles/atlas-clarity.css';
 import { registerServiceWorker } from './components/InstallAppButton';
 
