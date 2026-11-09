@@ -201,6 +201,20 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
     if (g.travaux.some((i) => isDone(i) && amountOf(i, ctx) <= 0)) a.push('Intervention terminée sans montant');
     // Un DI sans client ne désigne aucun dossier : le numéro vient du donneur d'ordre
     if (g.di && normClient(g.client) === '') a.push('Numéro de DI sans donneur d’ordre');
+    // Le devis et ses interventions doivent porter le même donneur d'ordre : renommer
+    // le client d'un côté seulement casse la clé du dossier sans rien signaler.
+    if (g.devis) {
+      const autres = Array.from(
+        new Set(
+          [...g.travaux, ...g.visites]
+            .map((i) => (i.client || '').trim())
+            .filter((c) => c !== '' && normClient(c) !== normClient(g.devis!.client))
+        )
+      );
+      if (autres.length > 0) {
+        a.push(`Client différent du devis sur ${autres.length > 1 ? 'les interventions' : 'une intervention'} : ${autres.join(', ')}`);
+      }
+    }
     // Une visite de chiffrage ne se facture pas : un montant facturé dessus fausse les comptes
     if (g.visites.some((i) => isBilled(i) && Number(i.amount) > 0)) {
       a.push('Visite de chiffrage portant un montant facturé');
