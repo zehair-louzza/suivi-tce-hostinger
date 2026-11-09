@@ -36,8 +36,13 @@ export function DossierPanel({
   const ctx = useMemo(() => buildLedgerContext(devisList, interventionsList), [devisList, interventionsList]);
   const c = current as any;
   const dossier = useMemo(
-    () => findDossier({ kind, id: creating ? undefined : c.id, numeroDI: c.numeroDI, devisId: c.devisId || c.origineDevisId }, devisList, interventionsList),
-    [kind, creating, c.id, c.numeroDI, c.devisId, c.origineDevisId, devisList, interventionsList],
+    () =>
+      findDossier(
+        { kind, id: creating ? undefined : c.id, numeroDI: c.numeroDI, devisId: c.devisId || c.origineDevisId, client: c.client },
+        devisList,
+        interventionsList,
+      ),
+    [kind, creating, c.id, c.numeroDI, c.devisId, c.origineDevisId, c.client, devisList, interventionsList],
   );
   const cas = dossierCase(kind, dossier);
   const devis = dossier?.devis;

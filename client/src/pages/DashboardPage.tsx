@@ -1294,6 +1294,7 @@ export function DashboardPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <DossierDIField
                     kind="devis"
+                    client={selectedDevis.client}
                     value={selectedDevis.numeroDI}
                     onChange={(v) => setSelectedDevis({ ...selectedDevis, numeroDI: v })}
                     devisList={devisList}
@@ -1815,6 +1816,7 @@ export function DashboardPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <DossierDIField
                     kind="intervention"
+                    client={selectedIntv.client}
                     value={selectedIntv.numeroDI}
                     onChange={(v) => setSelectedIntv({ ...selectedIntv, numeroDI: v })}
                     devisList={devisList}

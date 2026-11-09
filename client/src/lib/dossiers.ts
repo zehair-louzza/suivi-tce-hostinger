@@ -5,6 +5,17 @@ import type { Devis, Intervention } from './api';
 const low = (s?: string | null) => (s || '').trim().toLowerCase();
 export const normDI = (s?: string | null) => String(s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
 
+/**
+ * Le numéro de DI est émis par le donneur d'ordre : deux clients peuvent porter le même.
+ * La clé d'un dossier est donc le couple (client + DI), jamais le DI seul.
+ */
+export const normClient = (s?: string | null) => String(s ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+export const dossierKeyOf = (client?: string | null, di?: string | null) => {
+  const c = normClient(client);
+  const d = normDI(di);
+  return d ? `${c}|${d}` : '';
+};
+
 /** Une visite de chiffrage n'est pas du chiffre d'affaires. */
 export function isVisite(i: Intervention): boolean {
   return Boolean(i.isVisiteDevis) || low(i.typeIntervention) === 'visite technique devis';
@@ -66,19 +77,25 @@ export function inPeriod(day: string, period: Period, now = new Date()): boolean
 
 export interface LedgerContext {
   devisById: Map<number, Devis>;
-  devisByDI: Map<string, Devis>;
+  /** clé « CLIENT|DI » -> devis */
+  devisByKey: Map<string, Devis>;
+  /** DI seul -> nombre de devis le portant, tous clients confondus */
+  devisCountByDI: Map<string, number>;
   revenueCountByDevis: Map<number, number>;
 }
 
 export function buildLedgerContext(devisList: Devis[], interventionsList: Intervention[]): LedgerContext {
   const devisById = new Map<number, Devis>();
-  const devisByDI = new Map<string, Devis>();
+  const devisByKey = new Map<string, Devis>();
+  const devisCountByDI = new Map<string, number>();
   [...devisList].sort((a, b) => (a.id || 0) - (b.id || 0)).forEach((d) => {
     if (d.id) devisById.set(d.id, d);
-    const k = normDI(d.numeroDI);
-    if (k) devisByDI.set(k, d); // le plus récent l'emporte, comme côté serveur
+    const k = dossierKeyOf(d.client, d.numeroDI);
+    if (k) devisByKey.set(k, d); // le plus récent l'emporte, comme côté serveur
+    const di = normDI(d.numeroDI);
+    if (di) devisCountByDI.set(di, (devisCountByDI.get(di) || 0) + 1);
   });
-  const ctx: LedgerContext = { devisById, devisByDI, revenueCountByDevis: new Map() };
+  const ctx: LedgerContext = { devisById, devisByKey, devisCountByDI, revenueCountByDevis: new Map() };
   interventionsList.forEach((i) => {
     if (isVisite(i) || isCancelled(i)) return;
     const d = linkedDevis(i, ctx);
@@ -90,8 +107,13 @@ export function buildLedgerContext(devisList: Devis[], interventionsList: Interv
 export function linkedDevis(i: Intervention, ctx: LedgerContext): Devis | undefined {
   const id = i.devisId || i.origineDevisId;
   if (id && ctx.devisById.has(id)) return ctx.devisById.get(id);
-  const k = normDI(i.numeroDI);
-  return k ? ctx.devisByDI.get(k) : undefined;
+  const di = normDI(i.numeroDI);
+  if (!di) return undefined;
+  // Client renseigné : seul un devis du même donneur d'ordre peut être le bon
+  if (normClient(i.client) !== '') return ctx.devisByKey.get(dossierKeyOf(i.client, di));
+  // Sans client : on ne rattache que si un seul devis porte ce DI
+  if (ctx.devisCountByDI.get(di) !== 1) return undefined;
+  return [...ctx.devisByKey.values()].find((d) => normDI(d.numeroDI) === di);
 }
 
 /** Montant HT d'une intervention : son montant, sinon celui du devis si elle en est l'unique intervention de travaux. */
@@ -142,7 +164,7 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
     if (isCancelled(i)) return;
     const d = linkedDevis(i, ctx);
     const di = normDI(i.numeroDI);
-    const key = d ? `D${d.id}` : di ? `DI:${di}` : `I${i.id}`;
+    const key = d ? `D${d.id}` : di ? `DI:${dossierKeyOf(i.client, di)}` : `I${i.id}`;
     const g = get(key, () => ({
       key, di, client: i.client || '—', devis: undefined, devisMontant: 0,
       travaux: [], visites: [], caRealise: 0, facture: 0, resteAFacturer: 0, anomalies: [],
@@ -152,9 +174,10 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
   });
 
   const list = Array.from(groups.values());
+  // Un même numéro chez deux donneurs d'ordre est normal ; deux devis du MÊME client ne l'est pas.
   const diCount = new Map<string, number>();
   devisList.forEach((d) => {
-    const k = normDI(d.numeroDI);
+    const k = dossierKeyOf(d.client, d.numeroDI);
     if (k) diCount.set(k, (diCount.get(k) || 0) + 1);
   });
 
@@ -170,7 +193,8 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
     const a = g.anomalies;
     if (g.devis && !g.di) a.push('Devis sans numéro de DI');
     if (!g.devis && g.travaux.length + g.visites.length > 0 && !g.di) a.push('Intervention sans DI ni devis');
-    if (g.di && (diCount.get(g.di) || 0) > 1) a.push(`DI porté par ${diCount.get(g.di)} devis`);
+    const gKey = dossierKeyOf(g.client, g.di);
+    if (gKey && (diCount.get(gKey) || 0) > 1) a.push(`DI porté par ${diCount.get(gKey)} devis du même client`);
     if (g.devis && low(g.devis.statutCommercial).startsWith('accept') && g.travaux.length === 0) a.push('Devis accepté sans intervention');
     const sommeTravaux = g.travaux.reduce((s, i) => s + (Number(i.amount) || 0), 0);
     if (g.devis && g.devisMontant > 0 && sommeTravaux > g.devisMontant + TOL) a.push('Interventions supérieures au montant du devis');
@@ -197,19 +221,24 @@ export function isDevisSuiteIntervention(d?: Devis | null): boolean {
 
 /** Retrouve le dossier (devis + interventions) auquel appartient une fiche. */
 export function findDossier(
-  target: { kind: 'devis' | 'intervention'; id?: number; numeroDI?: string | null; devisId?: number | null },
+  target: { kind: 'devis' | 'intervention'; id?: number; numeroDI?: string | null; devisId?: number | null; client?: string | null },
   devisList: Devis[],
   interventionsList: Intervention[],
 ): Dossier | undefined {
   const all = buildDossiers(devisList, interventionsList);
   const di = normDI(target.numeroDI);
+  // Même DI chez deux clients : on ne retient que le dossier du bon donneur d'ordre
+  const byDI = () =>
+    di
+      ? all.find((g) => g.di === di && (normClient(target.client) === '' || normClient(g.client) === normClient(target.client)))
+      : undefined;
   if (target.kind === 'devis') {
-    return all.find((g) => g.devis?.id === target.id) || (di ? all.find((g) => g.di === di) : undefined);
+    return all.find((g) => g.devis?.id === target.id) || byDI();
   }
   return (
     all.find((g) => [...g.travaux, ...g.visites].some((i) => i.id === target.id)) ||
     (target.devisId ? all.find((g) => g.devis?.id === target.devisId) : undefined) ||
-    (di ? all.find((g) => g.di === di) : undefined)
+    byDI()
   );
 }
 

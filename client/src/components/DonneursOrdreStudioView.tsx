@@ -27,11 +27,13 @@ import {
   Segmented,
 } from './ui';
 import type { ClientProfile, Devis, Intervention } from '../lib/api';
+import { amountOf, buildLedgerContext, isBilled, isRevenue, normClient } from '../lib/dossiers';
 import toast from 'react-hot-toast';
 
 interface EnrichedClientProfile extends ClientProfile {
   isB2B: boolean;
   ca: number;
+  facture: number;
   jobs: number;
   emailsList: string[];
   delay: string;
@@ -47,16 +49,7 @@ interface DonneursOrdreStudioViewProps {
   onNewIntvForClient?: (clientName: string) => void;
 }
 
-const RATES: Record<string, number> = {
-  'Électricité': 62,
-  'Plomberie': 58,
-  'CVC / Climatisation': 68,
-  'Chauffage': 60,
-  'Serrurerie': 55,
-  'Menuiserie': 52,
-  'Peinture': 45,
-  'Plâtrerie': 48,
-};
+
 
 function eur(v: number): string {
   return new Intl.NumberFormat('fr-FR', {
@@ -90,38 +83,37 @@ export function DonneursOrdreStudioView({
 
   // Enrich clients with calculated stats
   const clientsData: EnrichedClientProfile[] = useMemo(() => {
+    const ledger = buildLedgerContext(devisList, interventionsList);
     return clientProfiles.map((cp) => {
       const clientDevis = devisList.filter(
-        (d) => (d.client || '').toLowerCase().trim() === cp.nom.toLowerCase().trim()
+        (d) => normClient(d.client) === normClient(cp.nom)
       );
       const clientIntvs = interventionsList.filter(
-        (i) => (i.client || '').toLowerCase().trim() === cp.nom.toLowerCase().trim()
+        (i) => normClient(i.client) === normClient(cp.nom)
       );
 
-      const caDevis = clientDevis.reduce((s, d) => s + (d.amount || 0), 0);
-      const caIntvs = clientIntvs.reduce((s, i) => s + ((i as any).montantFacture || 0), 0);
+      // CA réellement réalisé, avec les mêmes règles que la comptabilité : travaux terminés, hors visites
+      const caRealise = clientIntvs.filter(isRevenue).reduce((s, i) => s + amountOf(i, ledger), 0);
+      const facture = clientIntvs.filter((i) => isRevenue(i) && isBilled(i)).reduce((s, i) => s + amountOf(i, ledger), 0);
       const isB2B = cp.type === 'DONNEUR_ORDRE' || cp.type === 'ENTREPRISE';
-      const totalCa = caIntvs || caDevis || (isB2B ? 14500 : 2800);
-      const totalJobs = clientIntvs.length + clientDevis.length || 3;
 
       const rawServices = (cp as any).servicesContacts;
       const emailsList: string[] =
         Array.isArray(rawServices) && rawServices.length > 0
-          ? rawServices.map((s: any) => String(s.email))
+          ? rawServices.map((s: any) => String(s.email)).filter(Boolean)
           : cp.email
           ? [cp.email]
-          : ['contact@' + cp.nom.toLowerCase().replace(/[^a-z]/g, '') + '.fr'];
+          : [];
 
       return {
         ...cp,
         isB2B,
-        ca: totalCa,
-        jobs: totalJobs,
+        ca: caRealise,
+        facture,
+        jobs: clientIntvs.length + clientDevis.length,
         emailsList,
-        delay: isB2B ? 'J+2 ouvré' : 'J+1 intervention',
-        consignes:
-          (cp as any).notesInternes ||
-          'Rapport avec photos avant/après obligatoire. Badge d’accès sécurité à retirer à l’accueil.',
+        delay: cp.delaiPaiement ? `Paiement ${cp.delaiPaiement}` : 'Délai non renseigné',
+        consignes: (cp as any).notesInternes || 'Aucune consigne particulière enregistrée pour ce client.',
       };
     });
   }, [clientProfiles, devisList, interventionsList]);
@@ -361,7 +353,7 @@ export function DonneursOrdreStudioView({
                 <li style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Mail size={14} style={{ color: 'var(--muted)' }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.emailsList[0] || 'contact@client.fr'}
+                    {c.emailsList[0] || 'Aucun e-mail renseigné'}
                   </span>
                   {c.emailsList.length > 1 && (
                     <em style={{ fontStyle: 'normal', fontSize: '11px', color: 'var(--muted)' }}>
@@ -640,28 +632,31 @@ export function DonneursOrdreStudioView({
 
         {selectedClient && drawerTab === 'tarifs' && (
           <div style={{ marginTop: '14px' }}>
-            <table className="m-table m-table--compact">
-              <thead>
-                <tr>
-                  <th>Corps d’état</th>
-                  <th style={{ textAlign: 'right' }}>Taux horaire HT</th>
-                  <th style={{ textAlign: 'right' }}>Déplacement</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(RATES).map(([corps, rate]) => (
-                  <tr key={corps}>
-                    <td>{corps}</td>
+            {selectedClient.tauxHoraireNegocie ? (
+              <table className="m-table m-table--compact">
+                <tbody>
+                  <tr>
+                    <td>Taux horaire négocié</td>
                     <td style={{ textAlign: 'right' }} className="m-mono">
-                      {rate} €
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="m-mono">
-                      35 €
+                      {eur(selectedClient.tauxHoraireNegocie)} HT
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                  <tr>
+                    <td>Délai de paiement</td>
+                    <td style={{ textAlign: 'right' }}>{selectedClient.delaiPaiement || 'Non renseigné'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                Aucun taux horaire négocié n’est enregistré pour ce client. Renseignez-le sur sa fiche pour qu’il
+                apparaisse ici et serve de base aux chiffrages.
+              </p>
+            )}
+            <div style={{ marginTop: '12px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+              CA réalisé : <strong>{eur(selectedClient.ca)}</strong> · dont facturé :{' '}
+              <strong>{eur(selectedClient.facture)}</strong>
+            </div>
           </div>
         )}
 

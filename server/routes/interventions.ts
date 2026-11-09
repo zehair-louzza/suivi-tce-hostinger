@@ -422,6 +422,7 @@ interventionRouter.post(
     const dossier = await resolveInterventionDossier(companyId, {
       numeroDI: normalizeDI(b.numeroDI),
       devisId: requestedDevisId,
+      client: b.client,
     });
     const safeDevisId = dossier.devisId;
     const safeOrigineDevisId = dossier.devisId;
@@ -680,11 +681,16 @@ interventionRouter.patch(
     if (b.numeroDI !== undefined || b.devisId !== undefined) {
       const nextDI = b.numeroDI !== undefined ? normalizeDI(b.numeroDI) : existing.numeroDI;
       const nextDevisId = b.devisId !== undefined ? updateData.devisId : existing.devisId;
-      const dossier = await resolveInterventionDossier(companyId, { numeroDI: nextDI, devisId: nextDevisId });
+      const nextClient = b.client !== undefined ? b.client : existing.client;
+      const dossier = await resolveInterventionDossier(companyId, {
+        numeroDI: nextDI,
+        devisId: nextDevisId,
+        client: nextClient,
+      });
       updateData.numeroDI = dossier.numeroDI;
       // DI modifié sans choix explicite de devis : on suit le devis qui porte ce DI (ou on détache si aucun)
       if (b.numeroDI !== undefined && b.devisId === undefined && dossier.numeroDI !== existing.numeroDI) {
-        const byDI = await findDevisByDI(dossier.numeroDI, companyId);
+        const byDI = await findDevisByDI(dossier.numeroDI, companyId, nextClient);
         updateData.devisId = byDI ? byDI.id : existing.devisId;
         patchedDossierDevis = byDI || dossier.devis;
       } else if (dossier.devis) {
