@@ -173,7 +173,7 @@ export function InterventionsStudioView({
           <div className="m-cell-ref">
             <span className="m-mono m-strong">{i.reference || `INT-${i.id}`}</span>
             {i.numeroDI && (
-              <span className="m-linked" title="Numéro de DI du dossier">
+              <span className="m-linked" title={`Dossier ${[i.client, i.numeroDI].filter(Boolean).join(' · ')}`}>
                 DI {i.numeroDI}
               </span>
             )}

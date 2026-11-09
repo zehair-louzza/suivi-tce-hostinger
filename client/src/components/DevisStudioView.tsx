@@ -119,7 +119,7 @@ export function DevisStudioView({
         <div className="m-cell-ref">
           <span className="m-mono m-strong">{d.reference || `DEV-${d.id}`}</span>
           {d.numeroDI && (
-            <span className="m-linked" title="Numéro de DI du dossier">
+            <span className="m-linked" title={`Dossier ${[d.client, d.numeroDI].filter(Boolean).join(' · ')}`}>
               DI {d.numeroDI}
             </span>
           )}
