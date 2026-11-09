@@ -12,7 +12,6 @@ import type { PeriodeId } from '../../lib/periode';
 import { Devis, Intervention, formatCurrency } from '../../lib/api';
 import { DashboardQueues } from './DashboardSynthese';
 import { DashboardHeader } from './DashboardHeader';
-import toast from 'react-hot-toast';
 
 interface DashboardOperationsProps {
   devisList: Devis[];
@@ -43,10 +42,12 @@ export function DashboardOperations({
   activeTab,
   onTabChange,
   onNavigateSection,
-  onOpenDevis: _onOpenDevis,
-  onOpenIntv: _onOpenIntv,
+  onOpenDevis,
+  onOpenIntv,
   onNewIntv,
   onConvertDevis,
+  onRelanceDevis,
+  onFactureIntv,
   onGoAdminRapports,
 }: DashboardOperationsProps) {
   // Capacité de l'équipe : heures réellement planifiées aujourd'hui, par technicien
@@ -205,10 +206,7 @@ export function DashboardOperations({
                 <button
                   type="button"
                   className="m-btn m-btn--sm m-btn--primary"
-                  onClick={() => {
-                    toast.success(`Intervention créée pour ${d.reference || d.id}`);
-                    onConvertDevis(d);
-                  }}
+                  onClick={() => onConvertDevis(d)}
                 >
                   Convertir
                 </button>
@@ -265,17 +263,26 @@ export function DashboardOperations({
               <div key={d.reference || d.id} className="m-ops-item">
                 <div>
                   <strong className="m-mono">{d.reference || `DEV-${d.id}`}</strong>
-                  <span>{d.client} · {formatCurrency(d.amount || d.totalHT || 4200)}</span>
+                  <span>
+                    {d.client} · {Number(d.amount) > 0 ? formatCurrency(Number(d.amount)) : 'montant à saisir'}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className="m-btn m-btn--sm m-btn--secondary"
-                  onClick={() => {
-                    toast.success(`Relance e-mail envoyée pour ${d.reference || d.id}`);
-                  }}
-                >
-                  Relancer
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="m-btn m-btn--sm m-btn--secondary" onClick={() => onOpenDevis(d)}>
+                    Ouvrir
+                  </button>
+                  {/* Planifie la relance : aucun e-mail n'est envoyé d'ici */}
+                  <button
+                    type="button"
+                    className="m-btn m-btn--sm m-btn--primary"
+                    onClick={() => {
+                      if (onRelanceDevis) onRelanceDevis(d.id);
+                      else onOpenDevis(d);
+                    }}
+                  >
+                    Planifier la relance
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -297,15 +304,25 @@ export function DashboardOperations({
               <div key={f.reference || f.id} className="m-ops-item">
                 <div>
                   <strong className="m-mono">{f.reference || `INT-${f.id}`}</strong>
-                  <span>{f.client} · {formatCurrency(f.amount || f.montantHT || 2100)}</span>
+                  <span>
+                    {f.client} · {Number(f.amount) > 0 ? formatCurrency(Number(f.amount)) : 'montant à saisir'}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className="m-btn m-btn--sm m-btn--secondary"
-                  onClick={() => onNavigateSection('facturation')}
-                >
-                  Facturer
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="m-btn m-btn--sm m-btn--secondary" onClick={() => onOpenIntv(f)}>
+                    Ouvrir
+                  </button>
+                  <button
+                    type="button"
+                    className="m-btn m-btn--sm m-btn--primary"
+                    onClick={() => {
+                      if (onFactureIntv && Number(f.amount) > 0) onFactureIntv(f.id);
+                      else onNavigateSection('facturation');
+                    }}
+                  >
+                    Facturer
+                  </button>
+                </div>
               </div>
             ))}
           </div>

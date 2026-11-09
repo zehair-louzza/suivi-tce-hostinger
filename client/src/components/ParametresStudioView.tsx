@@ -20,6 +20,9 @@ import {
 import toast from 'react-hot-toast';
 
 interface ParametresStudioViewProps {
+  /** Références réelles, pour afficher la dernière émise au lieu d'un exemple */
+  referencesDevis?: string[];
+  referencesInterventions?: string[];
   techniciens: string[];
   corpsEtatList: string[];
   technicienCompetences: Record<string, string[]>;
@@ -49,10 +52,14 @@ const TVA_REGIMES = [
   { label: 'TVA 5,5 %', rate: '5,5 %', usage: 'Rénovation énergétique et amélioration de l’habitat' },
 ];
 
-const NUMBERS_CONFIG = [
-  { kind: 'Devis de travaux', mask: 'DEV-AAAA-###', last: 'DEV-2026-008' },
-  { kind: 'Intervention TCE', mask: 'INT-AAAA-###', last: 'INT-2026-014' },
-  { kind: 'Facture client', mask: 'F-AAAA-####', last: 'F-2026-0187' },
+/**
+ * Masques de numérotation. La dernière référence émise est LUE dans les données :
+ * elle était auparavant écrite en dur (« F-2026-0187 »), donc fausse en permanence.
+ */
+const NUMBERS_MASKS = [
+  { kind: 'Devis de travaux', mask: 'DEV-AAAA-###', prefixe: 'DEV-' },
+  { kind: 'Intervention TCE', mask: 'INT-AAAA-###', prefixe: 'INT-' },
+  { kind: 'Visite de chiffrage', mask: 'VIS-AAAA-###', prefixe: 'VIS-' },
 ];
 
 function eur(v: number): string {
@@ -60,12 +67,22 @@ function eur(v: number): string {
 }
 
 export function ParametresStudioView({
+  referencesDevis = [],
+  referencesInterventions = [],
   techniciens,
   corpsEtatList,
   technicienCompetences,
   onUpdateCompetences,
 }: ParametresStudioViewProps) {
   const [activeTab, setActiveTab] = useState('competences');
+
+  const numbersRows = useMemo(() => {
+    const toutes = [...referencesDevis, ...referencesInterventions].filter(Boolean);
+    return NUMBERS_MASKS.map((n) => {
+      const correspondantes = toutes.filter((r) => String(r).toUpperCase().startsWith(n.prefixe)).sort();
+      return { ...n, last: correspondantes.length ? correspondantes[correspondantes.length - 1] : 'aucune émise' };
+    });
+  }, [referencesDevis, referencesInterventions]);
   const [searchTech, setSearchTech] = useState('');
 
   const filteredTechs = useMemo(() => {
@@ -122,7 +139,7 @@ export function ParametresStudioView({
             <Btn
               size="sm"
               icon={Plus}
-              onClick={() => toast('Ajout d’un nouveau profil collaborateur dans l’équipe')}
+              onClick={() => toast('Les collaborateurs se créent dans Administration · Utilisateurs')}
             >
               Ajouter un technicien
             </Btn>
@@ -243,7 +260,11 @@ export function ParametresStudioView({
                     size="sm"
                     variant="ghost"
                     icon={Edit3}
-                    onClick={() => toast(`Édition du barème ${b.corps}`)}
+                    onClick={() =>
+                      toast(
+                        `Barème indicatif. Le taux qui s’applique est celui de la fiche client (${b.corps}).`
+                      )
+                    }
                   >
                     Modifier
                   </Btn>
@@ -263,7 +284,7 @@ export function ParametresStudioView({
           subtitle="Référentiel des spécialités mobilisées dans les devis, plannings et calculs de rentabilité."
           icon={Wrench}
           actions={
-            <Btn size="sm" icon={Plus} onClick={() => toast('Ajout d’une nouvelle spécialité métier')}>
+            <Btn size="sm" icon={Plus} onClick={() => toast('Les corps d’état se gèrent dans Référentiels')}>
               Ajouter
             </Btn>
           }
@@ -314,7 +335,7 @@ export function ParametresStudioView({
                 { key: 'mask', label: 'Format de référence', render: (n: any) => <span className="m-mono">{n.mask}</span> },
                 { key: 'last', label: 'Dernière référence émise', align: 'right' as const, render: (n: any) => <span className="m-mono" style={{ fontWeight: 700, color: 'var(--primary)' }}>{n.last}</span> },
               ]}
-              rows={NUMBERS_CONFIG}
+              rows={numbersRows}
               rowKey={(n) => n.kind}
             />
           </Card>

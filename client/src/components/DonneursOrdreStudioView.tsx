@@ -27,7 +27,7 @@ import {
   Segmented,
 } from './ui';
 import type { ClientProfile, Devis, Intervention } from '../lib/api';
-import { amountOf, buildLedgerContext, isBilled, isRevenue, normClient } from '../lib/dossiers';
+import { amountOf, buildLedgerContext, isBilled, isRevenue, isVisite, normClient } from '../lib/dossiers';
 import toast from 'react-hot-toast';
 
 interface EnrichedClientProfile extends ClientProfile {
@@ -175,17 +175,21 @@ export function DonneursOrdreStudioView({
       .map((d) => ({
         ref: d.reference || `DEV-${d.id}`,
         label: d.objet || 'Devis de travaux',
-        date: d.createdAt || '09/11/2026',
+        date: d.dateEnvoi || d.dateCreated || null,
         ht: d.amount || 0,
         s: d.statutCommercial,
       }));
+    // Le montant vient des règles de la comptabilité, pas d'un champ inexistant :
+    // « montantFacture » n'existe pas sur une intervention, ce repli affichait donc
+    // toujours 450 € sur toutes les lignes.
+    const ledgerClient = buildLedgerContext(devisList, interventionsList);
     const iList = interventionsList
       .filter((i) => (i.client || '').toLowerCase().trim() === clientName)
       .map((i) => ({
         ref: i.reference || `INT-${i.id}`,
         label: i.objet || 'Intervention TCE',
-        date: i.datePlanifiee || '09/11/2026',
-        ht: (i as any).montantFacture || 450,
+        date: i.dateReelle || i.datePlanifiee || null,
+        ht: isVisite(i) ? 0 : amountOf(i, ledgerClient),
         s: i.statutOperationnel,
       }));
     return [...iList, ...dList];
@@ -248,7 +252,7 @@ export function DonneursOrdreStudioView({
           tone="green"
         />
         <Kpi
-          label="CA 2026 HT"
+          label={`CA ${new Date().getFullYear()} HT`}
           value={eur(totalCaAll)}
           hint="Tous donneurs d’ordre"
           icon={Euro}
@@ -394,7 +398,7 @@ export function DonneursOrdreStudioView({
                 }}
               >
                 <div>
-                  <span style={{ color: 'var(--muted)', display: 'block' }}>CA 2026</span>
+                  <span style={{ color: 'var(--muted)', display: 'block' }}>CA {new Date().getFullYear()}</span>
                   <strong className="m-mono" style={{ fontSize: '12.5px' }}>
                     {eur(c.ca)}
                   </strong>
@@ -521,7 +525,7 @@ export function DonneursOrdreStudioView({
             >
               <div>
                 <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>
-                  CA 2026 HT
+                  CA {new Date().getFullYear()} HT
                 </span>
                 <strong className="m-mono" style={{ fontSize: '15px' }}>
                   {eur(selectedClient.ca)}
@@ -620,7 +624,7 @@ export function DonneursOrdreStudioView({
             <Btn
               icon={Plus}
               variant="ghost"
-              onClick={() => toast('Ajout d’un destinataire e-mail supplémentaire')}
+              onClick={() => toast('Les destinataires se modifient sur la fiche du client')}
             >
               Ajouter un service / e-mail
             </Btn>

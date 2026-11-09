@@ -1506,10 +1506,6 @@ export function TechnicianMobileView({
           )}
           {!done && live && (
             <>
-              <button type="button" className="t-btn t-btn--outline t-btn--xl" onClick={() => toast('Pause enregistrée')}>
-                <Ic n="pause" size={20} />
-                <span>Pause</span>
-              </button>
               <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--grow" onClick={() => setGpsModalOpen(true)}>
                 <Ic n="target" size={22} />
                 <span>Clôturer avec GPS</span>

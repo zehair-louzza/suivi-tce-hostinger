@@ -32,7 +32,6 @@ import {
   Check,
 } from 'lucide-react';
 import { Devis, Intervention, formatCurrency } from '../../lib/api';
-import toast from 'react-hot-toast';
 
 export interface DashboardQueues {
   devisARelancer: Devis[];
@@ -859,13 +858,10 @@ export function DashboardSynthese({
                       />
                     </div>
                   </div>
+                  {/* Aucun envoi automatique n'existe : on ouvre les rapports à relancer */}
                   {!t.since ? (
-                    <button
-                      type="button"
-                      className="m-btn m-btn--sm m-btn--ghost"
-                      onClick={() => toast.success(`Rappel automatique envoyé à ${t.name}`)}
-                    >
-                      Relancer
+                    <button type="button" className="m-btn m-btn--sm m-btn--ghost" onClick={onGoAdminRapports}>
+                      Voir ses rapports
                     </button>
                   ) : (
                     <span style={{ width: '60px' }} />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,6 +17,21 @@ const loginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
+
+/**
+ * Mot de passe d'un compte créé via Google.
+ *
+ * Il était écrit en dur dans le code du navigateur, donc public : n'importe qui pouvait se
+ * connecter à un compte Google de l'application avec son e-mail et cette constante. Chaque
+ * inscription reçoit désormais une valeur aléatoire, qui n'est jamais réutilisée. La personne
+ * se connecte avec Google ; pour un mot de passe à elle, elle passe par « mot de passe oublié ».
+ */
+function motDePasseAleatoire(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+';
+  const octets = new Uint32Array(32);
+  crypto.getRandomValues(octets);
+  return Array.from(octets, (v) => alphabet[v % alphabet.length]).join('');
+}
 
 const registerCompanySchema = z
   .object({
@@ -164,6 +179,9 @@ export function LoginPage() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Généré une fois par session d'inscription, jamais une constante partagée
+  const motDePasseGoogle = useMemo(() => motDePasseAleatoire(), []);
+
   const registerForm = useForm<RegisterCompanyForm>({
     resolver: zodResolver(registerCompanySchema),
     defaultValues: {
@@ -171,8 +189,8 @@ export function LoginPage() {
       siretOrSiren: sessionStorage.getItem('pending_google_siret') || '',
       name: pendingGoogleProfile?.name || '',
       email: pendingGoogleProfile?.email || '',
-      password: pendingGoogleProfile ? 'GoogleAuth!2026Valid' : '',
-      confirmPassword: pendingGoogleProfile ? 'GoogleAuth!2026Valid' : '',
+      password: pendingGoogleProfile ? motDePasseGoogle : '',
+      confirmPassword: pendingGoogleProfile ? motDePasseGoogle : '',
       acceptTerms: (sessionStorage.getItem('pending_google_terms') === 'true') as any,
     },
   });
@@ -187,8 +205,8 @@ export function LoginPage() {
       if (pendingGoogleProfile.email) {
         registerForm.setValue('email', pendingGoogleProfile.email, { shouldValidate: true });
       }
-      registerForm.setValue('password', 'GoogleAuth!2026Valid', { shouldValidate: false });
-      registerForm.setValue('confirmPassword', 'GoogleAuth!2026Valid', { shouldValidate: false });
+      registerForm.setValue('password', motDePasseGoogle, { shouldValidate: false });
+      registerForm.setValue('confirmPassword', motDePasseGoogle, { shouldValidate: false });
     }
   }, [pendingGoogleProfile, registerForm]);
 
@@ -317,8 +335,8 @@ export function LoginPage() {
         setActiveTab('register');
         registerForm.setValue('name', res.googleProfile.name || '', { shouldValidate: true });
         registerForm.setValue('email', res.googleProfile.email || '', { shouldValidate: true });
-        registerForm.setValue('password', 'GoogleAuth!2026Valid', { shouldValidate: false });
-        registerForm.setValue('confirmPassword', 'GoogleAuth!2026Valid', { shouldValidate: false });
+        registerForm.setValue('password', motDePasseGoogle, { shouldValidate: false });
+        registerForm.setValue('confirmPassword', motDePasseGoogle, { shouldValidate: false });
         if (compName) registerForm.setValue('companyName', compName);
         if (siretVal) registerForm.setValue('siretOrSiren', siretVal);
 

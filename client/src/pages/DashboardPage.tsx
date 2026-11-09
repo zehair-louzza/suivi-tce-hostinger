@@ -1226,6 +1226,8 @@ export function DashboardPage() {
          ===================================================================== */}
       {activeSection === 'referentiels' && canUserAccessSection('referentiels', user) && (
         <ParametresStudioView
+          referencesDevis={devisList.map((d) => d.reference || '').filter(Boolean)}
+          referencesInterventions={interventionsList.map((i) => i.reference || '').filter(Boolean)}
           techniciens={techniciensList}
           corpsEtatList={corpsEtatList}
           technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
