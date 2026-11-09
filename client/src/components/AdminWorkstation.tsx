@@ -1222,10 +1222,11 @@ export function AdminWorkstation({
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      style={{ marginLeft: 'auto' }}
+                      style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}
+                      title={`Ouvrir la vue mobile de ${tech}`}
                       onClick={() => onSwitchToMobilePreview(tech)}
                     >
-                      Ouvrir Mobile de {tech}
+                      Vue mobile
                     </button>
                   </div>
                 </div>

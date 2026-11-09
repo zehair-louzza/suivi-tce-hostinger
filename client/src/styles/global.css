@@ -961,6 +961,11 @@ html, body, #root {
   display: none !important;
 }
 
+/* Libellé court des onglets : visible uniquement sur petit écran (le libellé long prend le relais sur PC) */
+.mobile-only-el {
+  display: none;
+}
+
 .desktop-only-flex {
   display: flex;
 }
@@ -1064,6 +1069,10 @@ html, body, #root {
   .enterprise-topbar .cmd-kbd,
   .desktop-only-el {
     display: none !important;
+  }
+
+  .mobile-only-el {
+    display: inline !important;
   }
 
   /* Contenu principal occupant 100% de la largeur du téléphone avec marge pour la barre du bas */
@@ -1350,7 +1359,7 @@ html, body, #root {
   font-size: 11.5px !important;
   text-transform: uppercase !important;
   letter-spacing: 0.04em !important;
-  padding: 11px 13px !important;
+  padding: 11px 9px !important;
   border-bottom: 2px solid var(--table-head-accent) !important;
 }
 
@@ -1359,7 +1368,7 @@ html, body, #root {
   font-size: 12.5px !important;
   font-weight: 500 !important;
   border-bottom: 1px solid var(--border-subtle) !important;
-  padding: 10px 13px !important;
+  padding: 10px 9px !important;
 }
 
 .pro-table tbody tr:hover td {

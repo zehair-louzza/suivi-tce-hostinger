@@ -185,6 +185,20 @@ export function transformIntervention(i: any) {
   };
 }
 
+/**
+ * Un devis ne peut être rattaché qu'à une intervention de la MÊME entreprise.
+ * Renvoie l'id si le devis appartient à l'entreprise, sinon refuse (404) : on ne révèle pas l'existence
+ * d'un devis d'une autre société.
+ */
+async function assertOwnDevisId(raw: unknown, companyId: number): Promise<number | null> {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) throw new AppError(400, 'Identifiant de devis invalide', 'INVALID_DEVIS_ID');
+  const devis = await prisma.devis.findFirst({ where: { id: n, companyId }, select: { id: true } });
+  if (!devis) throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
+  return devis.id;
+}
+
 interventionRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
@@ -400,6 +414,9 @@ interventionRouter.post(
       }`
     );
 
+    const safeDevisId = await assertOwnDevisId(b.devisId ?? b.origineDevisId, companyId);
+    const safeOrigineDevisId = await assertOwnDevisId(b.origineDevisId ?? b.devisId, companyId);
+
     const created = await prisma.intervention.create({
       data: {
         referenceMetier: b.reference || b.referenceMetier ? String(b.reference || b.referenceMetier).trim() : null,
@@ -441,10 +458,10 @@ interventionRouter.post(
         rapportFinal: b.rapportFinal || null,
         statutRapport: b.statutRapport || null,
         isVisiteDevis,
-        origineDevisId: b.origineDevisId ? Number(b.origineDevisId) : b.devisId ? Number(b.devisId) : null,
+        origineDevisId: safeOrigineDevisId,
         origineDevisClient: b.origineDevisClient || b.client || null,
         origineDevisDate: parseDateOrNull(b.origineDevisDate),
-        devisId: b.devisId ? Number(b.devisId) : b.origineDevisId ? Number(b.origineDevisId) : null,
+        devisId: safeDevisId,
         historiqueJson,
         userId,
         companyId,
@@ -646,7 +663,7 @@ interventionRouter.patch(
     if (b.isVisiteDevis !== undefined) {
       updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
     }
-    if (b.devisId !== undefined) updateData.devisId = b.devisId ? Number(b.devisId) : null;
+    if (b.devisId !== undefined) updateData.devisId = await assertOwnDevisId(b.devisId, companyId);
 
     const updated = await prisma.intervention.update({
       where: { id },
@@ -655,7 +672,7 @@ interventionRouter.patch(
 
     const linkedDevisId = updated.devisId || updated.origineDevisId;
     let parentDevis = linkedDevisId
-      ? await prisma.devis.findUnique({ where: { id: linkedDevisId } })
+      ? await prisma.devis.findFirst({ where: { id: linkedDevisId, companyId } })
       : null;
 
     if (!parentDevis && updated.refDevisTexte) {

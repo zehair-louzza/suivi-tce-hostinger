@@ -9,7 +9,6 @@ import {
   Intervention,
   ReferentielsMap,
   DEFAULT_REFERENTIELS,
-  DEFAULT_CLIENT_PROFILES,
   DEFAULT_TECHNICIEN_COMPETENCES,
   ClientProfile,
   SendReportEmailPayload,
@@ -49,6 +48,41 @@ import {
 } from '../../../shared/types';
 import { ProAlertIcon, ProLockIcon } from '../components/ProIcons';
 
+/** Frise chronologique des événements enregistrés par le serveur (création, modifications, conversions…). */
+function HistoriqueTimeline({ events }: { events?: Array<{ id?: string; date?: string; auteur?: string; action?: string; details?: string }> }) {
+  const list = Array.isArray(events) ? events : [];
+  return (
+    <div
+      style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
+      data-testid="historique-timeline"
+    >
+      <div style={{ fontWeight: 700, marginBottom: '8px' }}>Historique des actions ({list.length})</div>
+      {list.length === 0 ? (
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Aucun événement enregistré pour le moment.</div>
+      ) : (
+        <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {list.map((ev, i) => {
+            const d = ev.date ? new Date(ev.date) : null;
+            const when = d && !Number.isNaN(d.getTime())
+              ? d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' })
+              : '';
+            return (
+              <li key={ev.id || i} style={{ display: 'grid', gridTemplateColumns: '10px 1fr', gap: '10px' }}>
+                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--color-primary, #047857)', marginTop: 5 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>{ev.action || 'Événement'}</div>
+                  {ev.details && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{ev.details}</div>}
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{[when, ev.auteur].filter(Boolean).join(' · ')}</div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -82,7 +116,7 @@ export function DashboardPage() {
     sectionFromPath(location.pathname)
   );
   const [selectedMobileTech, setSelectedMobileTech] = useState<string>(
-    () => user?.technicienNom || 'Anouar'
+    () => user?.technicienNom || ''
   );
   const [selectedMapTech, setSelectedMapTech] = useState<string>('TOUS');
 
@@ -129,6 +163,7 @@ export function DashboardPage() {
   const [devisSearch, setDevisSearch] = useState('');
   const [devisStatutFilter, setDevisStatutFilter] = useState('ALL');
   const [devisResponsableFilter, setDevisResponsableFilter] = useState('ALL');
+  const [devisVisitesOnly, setDevisVisitesOnly] = useState(false);
 
   const [intvSearch, setIntvSearch] = useState('');
   const [intvStatutFilter, setIntvStatutFilter] = useState('ALL');
@@ -226,16 +261,23 @@ export function DashboardPage() {
 
   const devisList: Devis[] = devisRes?.data || [];
   const interventionsList: Intervention[] = intvRes?.data || [];
-  const refs: ReferentielsMap = refRes?.data || DEFAULT_REFERENTIELS;
+  // Les listes viennent uniquement du serveur (cloisonnées par entreprise) : aucune valeur « maison »
+  // ANELEC n'est injectée côté navigateur, sinon une autre entreprise verrait vos noms et contacts.
+  const refs: ReferentielsMap = refRes?.data || {
+    ...DEFAULT_REFERENTIELS,
+    clients: [],
+    clients_fiches: [],
+    responsables: [],
+    techniciens: [],
+    technicien_competences: {},
+  };
 
-  const techniciensList = refs.techniciens?.length ? refs.techniciens : DEFAULT_REFERENTIELS.techniciens;
-  const responsablesList = refs.responsables?.length ? refs.responsables : DEFAULT_REFERENTIELS.responsables;
+  const techniciensList = refs.techniciens || [];
+  const responsablesList = refs.responsables || [];
   const corpsEtatList = refs.corps_etat?.length ? refs.corps_etat : DEFAULT_REFERENTIELS.corps_etat;
   const originesList = refs.origines?.length ? refs.origines : DEFAULT_REFERENTIELS.origines;
-  const clientsList = refs.clients?.length ? refs.clients : DEFAULT_REFERENTIELS.clients;
-  const clientProfiles: ClientProfile[] = refs.clients_fiches?.length
-    ? refs.clients_fiches
-    : DEFAULT_CLIENT_PROFILES;
+  const clientsList = refs.clients || [];
+  const clientProfiles: ClientProfile[] = refs.clients_fiches || [];
 
   // Gestion des menus déroulants automatisés Donneurs d'ordre / Clients
   const [isCustomDevisClient, setIsCustomDevisClient] = useState(false);
@@ -637,6 +679,7 @@ export function DashboardPage() {
     return devisList.filter((d) => {
       if (devisStatutFilter !== 'ALL' && d.statutCommercial !== devisStatutFilter) return false;
       if (devisResponsableFilter !== 'ALL' && d.responsable !== devisResponsableFilter) return false;
+      if (devisVisitesOnly && !(d.visiteNecessaire || d.visiteTechnicien)) return false;
       if (devisSearch.trim()) {
         const q = devisSearch.toLowerCase();
         const hay = `${d.reference} ${d.client} ${d.site} ${d.objet} ${d.responsable} ${d.corpsEtat}`.toLowerCase();
@@ -644,7 +687,7 @@ export function DashboardPage() {
       }
       return true;
     });
-  }, [devisList, devisStatutFilter, devisResponsableFilter, devisSearch]);
+  }, [devisList, devisStatutFilter, devisResponsableFilter, devisVisitesOnly, devisSearch]);
 
   const filteredInterventions = useMemo(() => {
     return interventionsList.filter((i) => {
@@ -659,23 +702,43 @@ export function DashboardPage() {
     });
   }, [interventionsList, intvStatutFilter, intvTechFilter, intvSearch]);
 
+  // Les indicateurs ne tiennent pas compte du filtre de statut choisi en cliquant sur une carte
+  // (sinon les autres cartes tomberaient à zéro) ; ils suivent la recherche et le responsable / technicien.
   const devisKpis = useMemo(() => {
-    const totalCount = filteredDevis.length;
-    const totalMontantHT = filteredDevis.reduce((sum, d) => sum + (d.amount || 0), 0);
-    const acceptesCount = filteredDevis.filter((d) => ['Accepté'].includes(d.statutCommercial)).length;
-    const visitesCount = filteredDevis.filter((d) => d.visiteNecessaire || d.visiteTechnicien).length;
+    const base = devisList.filter((d) => {
+      if (devisResponsableFilter !== 'ALL' && d.responsable !== devisResponsableFilter) return false;
+      if (devisSearch.trim()) {
+        const q = devisSearch.toLowerCase();
+        const hay = `${d.reference} ${d.client} ${d.site} ${d.objet} ${d.responsable} ${d.corpsEtat}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const totalCount = base.length;
+    const totalMontantHT = base.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const acceptesCount = base.filter((d) => ['Accepté'].includes(d.statutCommercial)).length;
+    const visitesCount = base.filter((d) => d.visiteNecessaire || d.visiteTechnicien).length;
     const tauxSignature = totalCount > 0 ? Math.round((acceptesCount / totalCount) * 100) : 0;
     return { totalCount, totalMontantHT, acceptesCount, visitesCount, tauxSignature };
-  }, [filteredDevis]);
+  }, [devisList, devisResponsableFilter, devisSearch]);
 
   const intvKpis = useMemo(() => {
-    const totalCount = filteredInterventions.length;
-    const enCoursCount = filteredInterventions.filter((i) => i.statutOperationnel === 'En cours').length;
-    const planifieesCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Planifiée').length;
-    const aValiderCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Terminée - à valider').length;
-    const clotureesCount = filteredInterventions.filter((i) => i.statutOperationnel === 'Clôturée').length;
+    const base = interventionsList.filter((i) => {
+      if (intvTechFilter !== 'ALL' && i.entreprise !== intvTechFilter) return false;
+      if (intvSearch.trim()) {
+        const q = intvSearch.toLowerCase();
+        const hay = `${i.reference} ${i.client} ${i.chantier} ${i.objet} ${i.entreprise} ${i.corpsEtat}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const totalCount = base.length;
+    const enCoursCount = base.filter((i) => i.statutOperationnel === 'En cours').length;
+    const planifieesCount = base.filter((i) => i.statutOperationnel === 'Planifiée').length;
+    const aValiderCount = base.filter((i) => i.statutOperationnel === 'Terminée - à valider').length;
+    const clotureesCount = base.filter((i) => i.statutOperationnel === 'Clôturée').length;
     return { totalCount, enCoursCount, planifieesCount, aValiderCount, clotureesCount };
-  }, [filteredInterventions]);
+  }, [interventionsList, intvTechFilter, intvSearch]);
 
   const openNewDevisDrawer = () => {
     setIsCreatingDevis(true);
@@ -691,7 +754,7 @@ export function DashboardPage() {
       corpsEtat: 'Électricité',
       objet: '',
       origine: 'Client',
-      responsable: 'Anouar',
+      responsable: '',
       prochaineAction: 'Chiffrer',
       amount: 0,
       validiteJours: 30,
@@ -933,28 +996,28 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* 4 Cartes KPI Devis */}
+          {/* 4 Cartes KPI Devis — chaque carte filtre le tableau ci-dessous */}
           <div className="kpi-grid" style={{ marginBottom: '20px' }}>
-            <div className="kpi-card">
-              <span className="kpi-card__label">Total devis en portefeuille</span>
-              <span className="kpi-card__value numeric">{devisKpis.totalCount}</span>
-              <span className="kpi-card__sub">{devisList.length} devis au total</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-card__label">Volume chiffré HT</span>
-              <span className="kpi-card__value numeric">{formatCurrency(devisKpis.totalMontantHT)}</span>
-              <span className="kpi-card__sub">Potentiel commercial brut</span>
-            </div>
-            <div className="kpi-card kpi-card--success">
-              <span className="kpi-card__label">Devis signés / acceptés</span>
-              <span className="kpi-card__value numeric">{devisKpis.acceptesCount}</span>
-              <span className="kpi-card__sub">{devisKpis.tauxSignature}% taux de concrétisation</span>
-            </div>
-            <div className="kpi-card kpi-card--warning">
-              <span className="kpi-card__label">Visites de devis requises</span>
-              <span className="kpi-card__value numeric">{devisKpis.visitesCount}</span>
-              <span className="kpi-card__sub">Prises de cotes sur place</span>
-            </div>
+            {[
+              { cls: '', label: 'Total devis en portefeuille', value: devisKpis.totalCount, sub: `${devisList.length} devis au total`, active: false, apply: () => { setDevisStatutFilter('ALL'); setDevisVisitesOnly(false); }, title: 'Afficher tous les devis' },
+              { cls: '', label: 'Volume chiffré HT', value: formatCurrency(devisKpis.totalMontantHT), sub: 'Potentiel commercial brut', active: false, apply: () => { setDevisStatutFilter('ALL'); setDevisVisitesOnly(false); }, title: 'Afficher tous les devis chiffrés' },
+              { cls: 'kpi-card--success', label: 'Devis signés / acceptés', value: devisKpis.acceptesCount, sub: `${devisKpis.tauxSignature}% taux de concrétisation`, active: devisStatutFilter === 'Accepté', apply: () => { setDevisVisitesOnly(false); setDevisStatutFilter(devisStatutFilter === 'Accepté' ? 'ALL' : 'Accepté'); }, title: 'Filtrer les devis acceptés (cliquer à nouveau pour retirer)' },
+              { cls: 'kpi-card--warning', label: 'Visites de devis requises', value: devisKpis.visitesCount, sub: 'Prises de cotes sur place', active: devisVisitesOnly, apply: () => { setDevisStatutFilter('ALL'); setDevisVisitesOnly(!devisVisitesOnly); }, title: 'Filtrer les devis qui nécessitent une visite (cliquer à nouveau pour retirer)' },
+            ].map((k) => (
+              <button
+                key={k.label}
+                type="button"
+                className={`kpi-card ${k.cls}`}
+                aria-pressed={k.active}
+                title={k.title}
+                onClick={k.apply}
+                style={{ outline: k.active ? '2px solid var(--color-primary)' : undefined, outlineOffset: k.active ? '-2px' : undefined }}
+              >
+                <span className="kpi-card__label">{k.label}</span>
+                <span className="kpi-card__value numeric">{k.value}</span>
+                <span className="kpi-card__sub">{k.sub}</span>
+              </button>
+            ))}
           </div>
 
           <div className="fsm-toolbar">
@@ -1313,28 +1376,31 @@ export function DashboardPage() {
             </div>
           </div>
 
-          {/* 4 Cartes KPI Interventions */}
+          {/* 4 Cartes KPI Interventions — chaque carte filtre le tableau ci-dessous */}
           <div className="kpi-grid" style={{ marginBottom: '20px' }}>
-            <div className="kpi-card">
-              <span className="kpi-card__label">Interventions totales</span>
-              <span className="kpi-card__value numeric">{intvKpis.totalCount}</span>
-              <span className="kpi-card__sub">{interventionsList.length} dossiers enregistrés</span>
-            </div>
-            <div className="kpi-card kpi-card--primary">
-              <span className="kpi-card__label">En cours sur site</span>
-              <span className="kpi-card__value numeric">{intvKpis.enCoursCount}</span>
-              <span className="kpi-card__sub">Techniciens en intervention</span>
-            </div>
-            <div className="kpi-card kpi-card--warning">
-              <span className="kpi-card__label">À valider / rapport</span>
-              <span className="kpi-card__value numeric">{intvKpis.aValiderCount}</span>
-              <span className="kpi-card__sub">Rapports finaux à certifier</span>
-            </div>
-            <div className="kpi-card kpi-card--success">
-              <span className="kpi-card__label">Chantiers clôturés</span>
-              <span className="kpi-card__value numeric">{intvKpis.clotureesCount}</span>
-              <span className="kpi-card__sub">{intvKpis.planifieesCount} planifiées à venir</span>
-            </div>
+            {[
+              { cls: '', label: 'Interventions totales', value: intvKpis.totalCount, sub: `${interventionsList.length} dossiers enregistrés`, statut: 'ALL', title: 'Afficher toutes les interventions' },
+              { cls: 'kpi-card--primary', label: 'En cours sur site', value: intvKpis.enCoursCount, sub: 'Techniciens en intervention', statut: 'En cours', title: 'Filtrer les interventions en cours (cliquer à nouveau pour retirer)' },
+              { cls: 'kpi-card--warning', label: 'À valider / rapport', value: intvKpis.aValiderCount, sub: 'Rapports finaux à certifier', statut: 'Terminée - à valider', title: 'Filtrer les interventions terminées à valider (cliquer à nouveau pour retirer)' },
+              { cls: 'kpi-card--success', label: 'Chantiers clôturés', value: intvKpis.clotureesCount, sub: `${intvKpis.planifieesCount} planifiées à venir`, statut: 'Clôturée', title: 'Filtrer les chantiers clôturés (cliquer à nouveau pour retirer)' },
+            ].map((k) => {
+              const active = k.statut === 'ALL' ? intvStatutFilter === 'ALL' : intvStatutFilter === k.statut;
+              return (
+                <button
+                  key={k.label}
+                  type="button"
+                  className={`kpi-card ${k.cls}`}
+                  aria-pressed={active}
+                  title={k.title}
+                  onClick={() => setIntvStatutFilter(k.statut === 'ALL' || intvStatutFilter === k.statut ? 'ALL' : k.statut)}
+                  style={{ outline: active && k.statut !== 'ALL' ? '2px solid var(--color-primary)' : undefined, outlineOffset: active && k.statut !== 'ALL' ? '-2px' : undefined }}
+                >
+                  <span className="kpi-card__label">{k.label}</span>
+                  <span className="kpi-card__value numeric">{k.value}</span>
+                  <span className="kpi-card__sub">{k.sub}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="fsm-toolbar">
@@ -2307,7 +2373,7 @@ export function DashboardPage() {
             currentTechnicien={
               isMobileTechUser
                 ? (user?.technicienNom || user?.name || 'Technicien')
-                : (selectedMobileTech || user?.technicienNom || techniciensList[0] || 'Anouar')
+                : (selectedMobileTech || user?.technicienNom || techniciensList[0] || '')
             }
             canSwitchTechnicien={!isMobileTechUser && Boolean(user?.id === 1 || (user?.role || '').toUpperCase() === 'ADMIN' || user?.permissions?.canEditPlanning)}
             onSelectTechnicien={(t) => {
@@ -2526,7 +2592,7 @@ export function DashboardPage() {
                     }}
                   >
                     <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 700, color: '#d8b4fe', fontSize: '12.5px' }}>
+                      <span style={{ fontWeight: 700, color: '#6d28d9', fontSize: '12.5px' }}>
                         Visite Technique Préalable (Synchronisée avec le Planning Techniciens)
                       </span>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
@@ -2781,6 +2847,7 @@ export function DashboardPage() {
                       <div>Détail : <strong>{selectedDevis.computed?.alerteExplication || '—'}</strong></div>
                     </div>
                   </div>
+                  <HistoriqueTimeline events={selectedDevis.historique} />
                 </div>
               )}
             </div>
@@ -3438,6 +3505,45 @@ export function DashboardPage() {
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                     Alerte délai : <strong>{selectedIntv.computed?.alerteDelai || 'À suivre'}</strong> • Détail :{' '}
                     <strong>{selectedIntv.computed?.alerteExplication || '—'}</strong>
+                  </div>
+                  {(() => {
+                    const linkedId = selectedIntv.devisId || selectedIntv.origineDevisId;
+                    const linked = linkedId ? devisList.find((d) => d.id === linkedId) : undefined;
+                    if (!linkedId && !selectedIntv.refDevisTexte) {
+                      return (
+                        <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          Devis lié : <strong>aucun</strong> (intervention créée directement).
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '12.5px', minWidth: 0 }}>
+                          <div style={{ fontWeight: 700 }}>Devis lié : {linked?.reference || selectedIntv.refDevisTexte || `#${linkedId}`}</div>
+                          <div style={{ color: 'var(--text-secondary)' }}>
+                            {[linked?.client || selectedIntv.origineDevisClient, linked?.objet].filter(Boolean).join(' — ') || 'Devis d’origine'}
+                          </div>
+                        </div>
+                        {linked && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setSelectedIntv(null);
+                              handleSectionChange('devis');
+                              setIsCreatingDevis(false);
+                              setDevisTab('qualif');
+                              setSelectedDevis(linked);
+                            }}
+                          >
+                            Ouvrir le devis
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div style={{ marginTop: '10px' }}>
+                    <HistoriqueTimeline events={selectedIntv.historique} />
                   </div>
                 </div>
               )}

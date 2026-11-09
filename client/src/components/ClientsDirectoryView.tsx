@@ -290,7 +290,7 @@ export function ClientsDirectoryView({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          + Nouvelle Fiche Donneur d'Ordre
+          Nouvelle Fiche Donneur d'Ordre
         </button>
       </div>
 
@@ -391,6 +391,20 @@ export function ClientsDirectoryView({
           </button>
         </div>
       </div>
+
+      {filteredProfiles.length === 0 && (
+        <div
+          data-testid="clients-empty"
+          style={{ padding: '28px 20px', textAlign: 'center', border: '1px dashed var(--border-default, #cbd5e1)', borderRadius: 12, color: 'var(--text-secondary, #475569)', fontSize: 13.5 }}
+        >
+          <strong style={{ display: 'block', color: 'var(--text-primary, #0f172a)', marginBottom: 4 }}>
+            {clientProfiles.length === 0 ? 'Aucune fiche donneur d’ordre pour le moment' : 'Aucune fiche ne correspond à la recherche'}
+          </strong>
+          {clientProfiles.length === 0
+            ? 'Créez votre première fiche avec le bouton « Nouvelle Fiche Donneur d’Ordre » : elle servira aux devis, interventions et envois de rapports.'
+            : 'Modifiez la recherche ou le filtre pour afficher les fiches.'}
+        </div>
+      )}
 
       {/* Grille des Fiches Techniques */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>

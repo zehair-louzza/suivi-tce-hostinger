@@ -393,9 +393,7 @@ export function TourneeMapOptimizer({
       const targetTechs =
         techFilter && techFilter !== 'TOUS'
           ? [techFilter]
-          : techniciensList.length > 0
-          ? techniciensList
-          : ['Anouar', 'Mohamed', 'Haitam'];
+          : techniciensList;
 
       const liveTechData: TechnicienLiveMarkerData[] = [];
 

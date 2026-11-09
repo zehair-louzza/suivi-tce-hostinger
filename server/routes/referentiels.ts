@@ -28,16 +28,20 @@ referentielsRouter.get(
       orderBy: { id: 'asc' },
     });
 
+    // Les listes « maison » ANELEC (clients, fiches donneurs d'ordre, équipe, compétences) ne servent
+    // de point de départ qu'à l'entreprise plateforme (id 1). Toute autre entreprise démarre vide :
+    // elle ne doit jamais voir les noms, contacts ou SIRET d'une autre société.
+    const isPlatform = companyId === 1;
     const result: ReferentielsMap = {
-      clients: [...DEFAULT_REFERENTIELS.clients],
-      clients_fiches: [...(DEFAULT_REFERENTIELS.clients_fiches || [])],
+      clients: isPlatform ? [...DEFAULT_REFERENTIELS.clients] : [],
+      clients_fiches: isPlatform ? [...(DEFAULT_REFERENTIELS.clients_fiches || [])] : [],
       corps_etat: [...DEFAULT_REFERENTIELS.corps_etat],
       origines: [...DEFAULT_REFERENTIELS.origines],
-      responsables: [...DEFAULT_REFERENTIELS.responsables],
-      techniciens: [...DEFAULT_REFERENTIELS.techniciens],
+      responsables: isPlatform ? [...DEFAULT_REFERENTIELS.responsables] : [],
+      techniciens: isPlatform ? [...DEFAULT_REFERENTIELS.techniciens] : [],
       motifs_blocage: [...DEFAULT_REFERENTIELS.motifs_blocage],
       resultats_techniques: [...DEFAULT_REFERENTIELS.resultats_techniques],
-      technicien_competences: { ...DEFAULT_TECHNICIEN_COMPETENCES },
+      technicien_competences: isPlatform ? { ...DEFAULT_TECHNICIEN_COMPETENCES } : {},
       equipes_journalieres: [],
       positions_gps_techniciens: {},
     };
@@ -50,7 +54,7 @@ referentielsRouter.get(
           const parsed = JSON.parse(r.valeurs);
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
             result.technicien_competences = {
-              ...DEFAULT_TECHNICIEN_COMPETENCES,
+              ...(isPlatform ? DEFAULT_TECHNICIEN_COMPETENCES : {}),
               ...parsed,
             };
           }
@@ -120,7 +124,7 @@ referentielsRouter.get(
     const compMap: Record<string, string[]> = { ...(result.technicien_competences || {}) };
     for (const tech of result.techniciens) {
       if (!Array.isArray(compMap[tech])) {
-        compMap[tech] = DEFAULT_TECHNICIEN_COMPETENCES[tech] || ['Électricité'];
+        compMap[tech] = (isPlatform && DEFAULT_TECHNICIEN_COMPETENCES[tech]) || ['Électricité'];
       }
     }
     result.technicien_competences = compMap;
@@ -331,7 +335,9 @@ referentielsRouter.put(
         });
         const currentList: string[] = existingClientsRow
           ? JSON.parse(existingClientsRow.valeurs)
-          : [...DEFAULT_REFERENTIELS.clients];
+          : companyId === 1
+            ? [...DEFAULT_REFERENTIELS.clients]
+            : [];
         const mergedList = Array.from(new Set([...currentList, ...clientNames]));
         if (existingClientsRow) {
           await prisma.referentiel.update({

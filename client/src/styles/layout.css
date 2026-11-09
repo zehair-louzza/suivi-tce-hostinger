@@ -1226,3 +1226,29 @@ body.has-open-drawer .mobile-bottom-nav {
     grid-template-columns: 1fr;
   }
 }
+
+/* Barre du haut : sur écran moyen, les actions secondaires passent en icône seule pour que
+   le fil d'Ariane (entreprise / page) et la recherche restent lisibles. */
+@media (min-width: 901px) {
+  .enterprise-topbar > div:first-child {
+    min-width: 200px;
+  }
+}
+@media (min-width: 901px) and (max-width: 1750px) {
+  .enterprise-topbar .topbar-compact-label {
+    display: none !important;
+  }
+}
+
+/* Cartes d'indicateurs cliquables (filtres des pages Devis / Interventions) : un <button> doit hériter
+   de la police et de la couleur du thème, comme les cartes <div>. Spécificité volontairement faible :
+   les règles propres à chaque thème (ex. tuile sombre « Bento ») gardent la main. */
+button.kpi-card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+button.kpi-card[aria-pressed='true'] {
+  border-color: var(--color-primary, currentColor);
+}

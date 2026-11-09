@@ -710,7 +710,7 @@ export function Layout({
                   <path d="M3 9h18" />
                   <path d="M9 21V9" />
                 </svg>
-                <span>Situation Excel</span>
+                <span className="topbar-compact-label">Situation Excel</span>
               </button>
             )}
 

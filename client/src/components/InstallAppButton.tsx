@@ -138,7 +138,7 @@ export function InstallAppButton({ variant = 'compact' }: InstallAppButtonProps)
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          <span className="desktop-only-el">Installer l’app</span>
+          <span className="desktop-only-el topbar-compact-label">Installer l’app</span>
         </button>
       )}
 
