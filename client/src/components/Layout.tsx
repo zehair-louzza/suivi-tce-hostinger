@@ -11,6 +11,7 @@ import { ProGlyph } from './ProIcons';
 
 export type AppSection =
   | 'aujourdhui'
+  | 'demandes'
   | 'planning'
   | 'devis'
   | 'interventions'
@@ -28,6 +29,7 @@ interface LayoutProps {
   onSectionChange?: (section: AppSection) => void;
   badges?: {
     aujourdhui?: number;
+    demandes?: number;
     devis?: number;
     interventions?: number;
     facturation?: number;
@@ -135,6 +137,20 @@ export function Layout({
               <rect x="14" y="3" width="7" height="5" rx="1.5" />
               <rect x="14" y="12" width="7" height="9" rx="1.5" />
               <rect x="3" y="16" width="7" height="5" rx="1.5" />
+            </svg>
+          ),
+        },
+        {
+          id: 'demandes',
+          label: 'Demandes reçues',
+          subtitle: 'File d’entrée · DI du donneur d’ordre',
+          badge: badges?.demandes,
+          urgent: (badges?.demandes || 0) > 0,
+          shortcut: '0',
+          icon: (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+              <polyline points="3 7 12 13 21 7" />
             </svg>
           ),
         },

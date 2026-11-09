@@ -23,6 +23,7 @@ model Company {
   pointagesTechniciens PointageTechnicien[]
   referentiels         Referentiel[]
   invitations          CompanyInvitation[]
+  demandes             Demande[]
   mailSettings         CompanyMailSettings?
   emailLogs            EmailLog[]
 
@@ -54,6 +55,8 @@ model User {
   pointages          PointageTechnicien[]
   invitationsSent    CompanyInvitation[] @relation("InvitationsSent")
 
+  demandes             Demande[]
+
   @@index([companyId], map: "users_companyid_idx")
   @@map("users")
 }
@@ -73,6 +76,7 @@ model Devis {
   companyId            Int?
   company              Company?       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   interventions        Intervention[]
+  demandes             Demande[]
   referenceMetier      String?
   numeroDI             String?
   siteAdresse          String?
@@ -113,6 +117,47 @@ model Devis {
   @@index([userId, statutCommercial], map: "devis_userid_statutcommercial_idx")
   @@index([userId, dateRelance], map: "devis_userid_daterelance_idx")
   @@map("devis")
+}
+
+/// Demande reçue du donneur d'ordre, avant qu'elle devienne devis ou intervention.
+/// La clé de suivi est le couple (client + numeroDI) : le DI est émis par le client,
+/// donc deux donneurs d'ordre peuvent porter le même numéro. Les particuliers n'ont
+/// pas de DI et sont suivis par une référence interne.
+model Demande {
+  id                Int           @id @default(autoincrement())
+  typeDemandeur     String        @default("DONNEUR_ORDRE")
+  client            String
+  numeroDI          String?
+  referenceInterne  String?
+  site              String?
+  objet             String?
+  corpsEtat         String?
+  priorite          String        @default("Normale")
+  canalReception    String?
+  dateReception     DateTime      @db.Date
+  echeanceSouhaitee DateTime?     @db.Date
+  notes             String?
+  statut            String        @default("A_DECIDER")
+  decision          String?
+  decidedAt         DateTime?
+  devisId           Int?
+  devis             Devis?        @relation(fields: [devisId], references: [id], onDelete: SetNull)
+  interventionId    Int?
+  intervention      Intervention? @relation(fields: [interventionId], references: [id], onDelete: SetNull)
+  historiqueJson    String?
+  userId            Int
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId         Int?
+  company           Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([companyId, statut, dateReception], map: "demandes_companyid_statut_date_idx")
+  @@index([companyId, client, numeroDI], map: "demandes_companyid_client_di_idx")
+  @@index([userId], map: "demandes_userid_idx")
+  @@index([devisId], map: "demandes_devisid_idx")
+  @@index([interventionId], map: "demandes_interventionid_idx")
+  @@map("demandes")
 }
 
 model Intervention {
@@ -175,6 +220,8 @@ model Intervention {
   elementsChiffrage    String?
   rapportFinal         String?
   statutRapport        String?
+
+  demandes           Demande[]
 
   @@index([userId])
   @@index([companyId], map: "interventions_companyid_idx")

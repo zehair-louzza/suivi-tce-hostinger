@@ -3,6 +3,10 @@ import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 import {
   Devis,
+  Demande,
+  DecisionDemande,
+  TypeDemandeur,
+  StatutDemande,
   Intervention,
   ReferentielsMap,
   formatCurrency,
@@ -31,6 +35,7 @@ import {
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
   PRIORITES,
+  CANAUX_RECEPTION,
   TYPES_INTERVENTION,
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
@@ -42,6 +47,10 @@ import {
 
 export type {
   Devis,
+  Demande,
+  DecisionDemande,
+  TypeDemandeur,
+  StatutDemande,
   Intervention,
   ReferentielsMap,
   User,
@@ -72,6 +81,7 @@ export {
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
   PRIORITES,
+  CANAUX_RECEPTION,
   TYPES_INTERVENTION,
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
@@ -185,6 +195,24 @@ export interface PaginatedResponse<T> {
 }
 
 export type StatsResponse = Record<string, number>;
+
+/** Demandes reçues : la file d'entrée, avant orientation en visite, devis ou intervention. */
+export const demandeApi = {
+  list: (params?: { search?: string; statut?: string; limit?: number }) =>
+    api.get<{ data: Demande[]; total: number }>('/demandes', { params }),
+
+  create: (data: Partial<Demande>) => api.post<{ data: Demande; message: string }>('/demandes', data),
+
+  update: (id: number, data: Partial<Demande> & { motif?: string }) =>
+    api.patch<{ data: Demande }>(`/demandes/${id}`, data),
+
+  /** Oriente la demande : crée la visite, le devis ou l'intervention et les relie au dossier. */
+  orienter: (id: number, decision: DecisionDemande) =>
+    api.post<{
+      data: Demande;
+      created: { decision: DecisionDemande; devisId: number | null; interventionId: number | null; libelle: string };
+    }>(`/demandes/${id}/orienter`, { decision }),
+};
 
 export const devisApi = {
   list: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>

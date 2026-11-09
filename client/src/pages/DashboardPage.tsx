@@ -16,11 +16,13 @@ import {
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
   PRIORITES,
+  CANAUX_RECEPTION,
   TYPES_INTERVENTION,
   MODES_PLANIFICATION,
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
   formatDateFR,
+  demandeApi
 } from '../lib/api';
 import { Layout, AppSection } from '../components/Layout';
 
@@ -46,6 +48,7 @@ import { ComptabiliteStudioView } from '../components/ComptabiliteStudioView';
 import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
+import { DemandesStudioView } from '../components/DemandesStudioView';
 import { DossierPanel } from '../components/DossierPanel';
 import { DossierDIField } from '../components/DossierDIField';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
@@ -104,7 +107,8 @@ export function DashboardPage() {
   const sectionFromPath = (pathname: string): AppSection => {
     if (isMobileTechUser) return 'mobile_tech';
     let target: AppSection = 'aujourdhui';
-    if (pathname.startsWith('/planning')) target = 'planning';
+    if (pathname.startsWith('/demandes')) target = 'demandes';
+    else if (pathname.startsWith('/planning')) target = 'planning';
     else if (pathname.startsWith('/devis')) target = 'devis';
     else if (pathname.startsWith('/interventions')) target = 'interventions';
     else if (pathname.startsWith('/carte')) target = 'carte';
@@ -148,6 +152,7 @@ export function DashboardPage() {
     setActiveSection(sec);
     const pathMap: Record<AppSection, string> = {
       aujourdhui: '/',
+      demandes: '/demandes',
       planning: '/planning',
       devis: '/devis',
       interventions: '/interventions',
@@ -296,6 +301,14 @@ export function DashboardPage() {
     techniciens: [],
     technicien_competences: {},
   };
+
+  // Badge « Demandes reçues » : nombre de demandes encore à décider
+  const { data: demandesQueue } = useQuery({
+    queryKey: ['demandes'],
+    queryFn: async () => (await demandeApi.list({ limit: 300 })).data.data,
+    enabled: canUserAccessSection('demandes', user),
+  });
+  const demandesADecider = (demandesQueue || []).filter((d) => d.statut === 'A_DECIDER').length;
 
   const techniciensList = refs.techniciens || [];
   const responsablesList = refs.responsables || [];
@@ -881,6 +894,7 @@ export function DashboardPage() {
           queues.intvEnRetard.length +
           queues.rapportsEnAttente.length,
         planning: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
+        demandes: demandesADecider,
         devis: devisList.length,
         interventions: interventionsList.length,
         facturation: queues.intvAFacturer.length,
@@ -994,6 +1008,37 @@ export function DashboardPage() {
       {/* =====================================================================
           SECTION 2 : CONSOLE DISPATCH & PLANNING TECHNICIENS (ATLAS CLARITY)
          ===================================================================== */}
+      {/* =====================================================================
+          SECTION 1B : DEMANDES REÇUES — LA FILE D'ENTRÉE (DI DU DONNEUR D'ORDRE)
+         ===================================================================== */}
+      {activeSection === 'demandes' && canUserAccessSection('demandes', user) && (
+        <DemandesStudioView
+          clientProfiles={clientProfiles}
+          corpsEtatList={corpsEtatList}
+          prioritesList={[...PRIORITES]}
+          canalList={CANAUX_RECEPTION}
+          onOpenDevis={async (id) => {
+            // La pièce vient d'être créée : on la charge directement, la liste n'est pas encore rafraîchie
+            const d = devisList.find((x) => x.id === id) || (await devisApi.get(id).then((r) => r.data.data).catch(() => null));
+            if (!d) return;
+            handleSectionChange('devis');
+            setIsCreatingDevis(false);
+            setDevisTab('qualif');
+            setSelectedDevis(d);
+          }}
+          onOpenIntervention={async (id) => {
+            const i =
+              interventionsList.find((x) => x.id === id) ||
+              (await interventionApi.get(id).then((r) => r.data.data).catch(() => null));
+            if (!i) return;
+            handleSectionChange('interventions');
+            setIsCreatingIntv(false);
+            setIntvTab('planif');
+            setSelectedIntv(i);
+          }}
+        />
+      )}
+
       {activeSection === 'planning' && canUserAccessSection('planning', user) && (
         <PlanningStudioView
           devisList={devisList}

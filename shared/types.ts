@@ -970,6 +970,49 @@ export type Intervention = z.infer<typeof InterventionSchema> & {
   computed?: InterventionComputed;
 };
 
+/**
+ * Demande reçue du donneur d'ordre, avant d'être orientée en visite, devis ou intervention.
+ * Le numéro de DI est émis par le client : la clé de suivi est le couple (client + numeroDI).
+ * Un particulier n'a pas de DI et reçoit une référence interne.
+ */
+export const TYPES_DEMANDEUR = ['DONNEUR_ORDRE', 'ENTREPRISE', 'PARTICULIER', 'SOUS_TRAITANT'] as const;
+export const STATUTS_DEMANDE = ['A_DECIDER', 'ORIENTEE', 'ANNULEE'] as const;
+export const DECISIONS_DEMANDE = ['VISITE', 'DEVIS', 'INTERVENTION'] as const;
+
+export type TypeDemandeur = (typeof TYPES_DEMANDEUR)[number];
+export type StatutDemande = (typeof STATUTS_DEMANDE)[number];
+export type DecisionDemande = (typeof DECISIONS_DEMANDE)[number];
+
+export const CANAUX_RECEPTION = ['E-mail', 'Téléphone', 'Portail client', 'Courrier', 'Sur place'] as const;
+
+export interface Demande {
+  id: number;
+  typeDemandeur: TypeDemandeur;
+  client: string;
+  numeroDI?: string | null;
+  referenceInterne?: string | null;
+  site?: string | null;
+  objet?: string | null;
+  corpsEtat?: string | null;
+  priorite: string;
+  canalReception?: string | null;
+  dateReception: string;
+  echeanceSouhaitee?: string | null;
+  notes?: string | null;
+  statut: StatutDemande;
+  decision?: DecisionDemande | null;
+  decidedAt?: string | null;
+  devisId?: number | null;
+  interventionId?: number | null;
+  historique?: HistoriqueEvent[];
+  /** Clé de suivi affichable : « client · DI », jamais le DI seul */
+  cleDossier: string;
+  isB2C: boolean;
+  companyId?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type UserRoleCode =
   | 'ADMIN'
   | 'CHIFFRAGE_DEVIS'
@@ -1425,6 +1468,12 @@ export function canUserAccessSection(
 
     case 'referentiels':
       return Boolean(perms.canManageReferentiels);
+
+    case 'demandes':
+      // La file d'entrée est partagée : chiffrage, planification et interventions y puisent
+      return (
+        Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning) || Boolean(perms.canEditInterventions)
+      );
 
     case 'devis':
       return Boolean(perms.canEditDevis);
