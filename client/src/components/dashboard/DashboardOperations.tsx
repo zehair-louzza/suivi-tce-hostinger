@@ -32,8 +32,8 @@ interface DashboardOperationsProps {
 
 export function DashboardOperations({
   devisList: _devisList,
-  interventionsList: _interventionsList,
-  techniciensList: _techniciensList = ['Anouar', 'Mohamed', 'Haitam', 'Jamal', 'Manneh', 'Yankoubou'],
+  interventionsList,
+  techniciensList = [],
   queues,
   activeTab,
   onTabChange,
@@ -44,54 +44,45 @@ export function DashboardOperations({
   onConvertDevis,
   onGoAdminRapports,
 }: DashboardOperationsProps) {
-  // Capacité de l'équipe (heures planifiées)
+  // Capacité de l'équipe : heures réellement planifiées aujourd'hui, par technicien
   const capacityData = useMemo(() => {
-    return [
-      { name: 'Anouar', initials: 'AN', color: '#1D4ED8', tr: 5.5, vi: 1.5, ur: 0 },
-      { name: 'Mohamed', initials: 'MO', color: '#10B981', tr: 5.0, vi: 0, ur: 0 },
-      { name: 'Haitam', initials: 'HA', color: '#6366F1', tr: 3.5, vi: 0, ur: 2.0 },
-      { name: 'Jamal', initials: 'JA', color: '#0EA5A4', tr: 6.0, vi: 0, ur: 0 },
-      { name: 'Manneh', initials: 'MA', color: '#EC4899', tr: 6.0, vi: 0, ur: 0 },
-      { name: 'Yankoubou', initials: 'YA', color: '#F59E0B', tr: 4.5, vi: 0, ur: 0 },
-    ];
-  }, []);
+    const palette = ['#1D4ED8', '#10B981', '#6366F1', '#0EA5A4', '#EC4899', '#F59E0B', '#8B5CF6', '#DC2626'];
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const hours = (i: Intervention) => {
+      if (i.heureDebut && i.heureFin) {
+        const [h1, m1] = i.heureDebut.split(':').map(Number);
+        const [h2, m2] = i.heureFin.split(':').map(Number);
+        const diff = h2 + (m2 || 0) / 60 - (h1 + (m1 || 0) / 60);
+        if (diff > 0) return diff;
+      }
+      return 2;
+    };
+    return techniciensList.map((name, idx) => {
+      const mine = interventionsList.filter((i) => i.datePlanifiee === today && i.entreprise === name);
+      let tr = 0;
+      let vi = 0;
+      let ur = 0;
+      for (const i of mine) {
+        if (i.priorite === 'Urgente' || i.priorite === 'Haute') ur += hours(i);
+        else if (i.statutOperationnel === 'Visite devis') vi += hours(i);
+        else tr += hours(i);
+      }
+      return { name, initials: name.slice(0, 2).toUpperCase(), color: palette[idx % palette.length], tr, vi, ur };
+    });
+  }, [techniciensList, interventionsList]);
 
   // Devis à convertir
-  const toConvert = useMemo(() => {
-    if (queues.devisAcceptesSansIntv.length > 0) return queues.devisAcceptesSansIntv;
-    return [
-      { id: 101, reference: 'DEV-2026-004', client: 'GMS', objet: 'Remplacement disjoncteur TGBT 160 A' },
-      { id: 102, reference: 'DEV-2026-006', client: 'Bailleur 3F', objet: 'Reprise carrelage hall d’entrée 25 m²' },
-    ];
-  }, [queues.devisAcceptesSansIntv]);
+  const toConvert = queues.devisAcceptesSansIntv;
 
   // Missions à planifier
-  const toDispatch = useMemo(() => {
-    if (queues.intvAPlanifier.length > 0) return queues.intvAPlanifier;
-    return [
-      { id: 201, reference: 'INT-2026-015', client: 'Foncia', city: 'Paris 17e', label: 'Dépannage rideau métallique' },
-      { id: 202, reference: 'INT-2026-016', client: 'Citya', city: 'Boulogne', label: 'Remplacement combiné interphone' },
-      { id: 203, reference: 'INT-2026-017', client: 'Nexity', city: 'Levallois', label: 'Recherche de fuite gaine technique' },
-    ];
-  }, [queues.intvAPlanifier]);
+  const toDispatch = queues.intvAPlanifier;
 
   // Devis à relancer
-  const toRelance = useMemo(() => {
-    if (queues.devisARelancer.length > 0) return queues.devisARelancer;
-    return [
-      { id: 301, reference: 'DEV-2026-002', client: 'C-Multi-Serv', amount: 4200 },
-      { id: 302, reference: 'DEV-2026-005', client: 'Nexity', amount: 8400 },
-    ];
-  }, [queues.devisARelancer]);
+  const toRelance = queues.devisARelancer;
 
   // Interventions à facturer
-  const toBill = useMemo(() => {
-    if (queues.intvAFacturer.length > 0) return queues.intvAFacturer;
-    return [
-      { id: 401, reference: 'INT-2026-001', client: 'Presta maintenance', amount: 1850 },
-      { id: 402, reference: 'INT-2026-004', client: 'EMALEC', amount: 2350 },
-    ];
-  }, [queues.intvAFacturer]);
+  const toBill = queues.intvAFacturer;
 
   const totalAlerts =
     (queues?.rapportsEnAttente?.length || 0) +
@@ -110,20 +101,27 @@ export function DashboardOperations({
 
       <div className="m-dash m-dash--ops" data-testid="atlas-dashboard-operations">
       {/* 1. BANNIÈRE D'ALERTE RAPPORT TERRAIN */}
-      <div className="m-banner m-tone-blue">
-        <Camera size={20} />
-        <div>
-          <strong>1 rapport terrain avec photos attend votre vérification</strong>
-          <span>Dernière déclaration : INT-2026-004 (Jamal) à 10:34</span>
+      {queues.rapportsEnAttente.length > 0 && (
+        <div className="m-banner m-tone-blue">
+          <Camera size={20} />
+          <div>
+            <strong>
+              {queues.rapportsEnAttente.length} rapport{queues.rapportsEnAttente.length > 1 ? 's' : ''} terrain en attente de vérification
+            </strong>
+            <span>
+              Dernier : {queues.rapportsEnAttente[0].reference || `INT-${queues.rapportsEnAttente[0].id}`}
+              {queues.rapportsEnAttente[0].client ? ` · ${queues.rapportsEnAttente[0].client}` : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="m-btn m-btn--sm m-btn--primary"
+            onClick={onGoAdminRapports}
+          >
+            Vérifier
+          </button>
         </div>
-        <button
-          type="button"
-          className="m-btn m-btn--sm m-btn--primary"
-          onClick={onGoAdminRapports}
-        >
-          Vérifier
-        </button>
-      </div>
+      )}
 
       {/* 2. CAPACITÉ DES ÉQUIPES (HEURES SUR 8H) */}
       <section className="m-card" data-testid="atlas-capacity-card">

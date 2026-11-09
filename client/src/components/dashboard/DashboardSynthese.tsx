@@ -104,7 +104,7 @@ function ChartTooltip({ active, payload, label }: any) {
 export function DashboardSynthese({
   devisList,
   interventionsList,
-  techniciensList = ['Anouar', 'Mohamed', 'Haitam', 'Jamal', 'Manneh', 'Yankoubou'],
+  techniciensList = [],
   queues,
   activeTab,
   onTabChange,
@@ -174,42 +174,52 @@ export function DashboardSynthese({
 
     const totalDevisNonBrouillon = devisList.filter((d) => d.statutCommercial !== 'À préparer').length;
     const acceptesCount = devisList.filter((d) => d.statutCommercial === 'Accepté').length;
-    const taux = totalDevisNonBrouillon > 0 ? Math.round((acceptesCount / totalDevisNonBrouillon) * 100) : 50;
+    const taux = totalDevisNonBrouillon > 0 ? Math.round((acceptesCount / totalDevisNonBrouillon) * 100) : 0;
 
     return {
-      totalCAClotureHT: caCloture > 0 ? caCloture : 47200,
-      totalAFacturerHT: caAFacturer > 0 ? caAFacturer : 4200,
-      intvAFacturerCount: aFacturer.length > 0 ? aFacturer.length : 2,
-      devisASuivreCount: devisAttente.length > 0 ? devisAttente.length : 6,
-      totalDevisEnPortefeuille: totalDevisPortefeuille > 0 ? totalDevisPortefeuille : 40350,
+      totalCAClotureHT: caCloture,
+      totalAFacturerHT: caAFacturer,
+      intvAFacturerCount: aFacturer.length,
+      devisASuivreCount: devisAttente.length,
+      totalDevisEnPortefeuille: totalDevisPortefeuille,
       tauxTransformation: taux,
-      rapportsAValiderCount: queues.rapportsEnAttente.length > 0 ? queues.rapportsEnAttente.length : 1,
-      clotureesCount: cloturees.length > 0 ? cloturees.length : 3,
+      rapportsAValiderCount: queues.rapportsEnAttente.length,
+      clotureesCount: cloturees.length,
     };
   }, [devisList, interventionsList, queues]);
 
-  // Sparkline data
-  const caSparkline = [31, 28, 36, 34, 41, 39, 30, 22, 44, 48, 47];
-
   // =========================================================================
-  // DONNÉES DU GRAPHIQUE CA MENSUEL (12 MOIS)
+  // CA MENSUEL RÉEL : interventions terminées / clôturées, par mois de réalisation
   // =========================================================================
   const caMonthlyData = useMemo(() => {
-    return [
-      { m: 'Jan', ca: 28000 },
-      { m: 'Fév', ca: 32000 },
-      { m: 'Mar', ca: 39000 },
-      { m: 'Avr', ca: 36000 },
-      { m: 'Mai', ca: 44000 },
-      { m: 'Juin', ca: 41000 },
-      { m: 'Juil', ca: 35000 },
-      { m: 'Août', ca: 22000 },
-      { m: 'Sep', ca: 46000 },
-      { m: 'Oct', ca: 48000 },
-      { m: 'Nov', ca: totalCAClotureHT },
-      { m: 'Déc', ca: Math.round(totalCAClotureHT * 1.1) },
-    ];
-  }, [totalCAClotureHT]);
+    const labels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+    const now = new Date();
+    const year = now.getFullYear();
+    const totals = new Array(12).fill(0) as number[];
+    for (const i of interventionsList) {
+      if (!['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')) continue;
+      const day = i.datePlanifiee || i.dateDemande || '';
+      if (!day.startsWith(String(year))) continue;
+      const month = Number(day.slice(5, 7)) - 1;
+      if (month >= 0 && month < 12) totals[month] += Number(i.amount) || 0;
+    }
+    return labels.slice(0, now.getMonth() + 1).map((m, idx) => ({ m, ca: totals[idx] }));
+  }, [interventionsList]);
+
+  const caSparkline = useMemo(() => {
+    const vals = caMonthlyData.map((d) => d.ca);
+    return vals.length >= 2 ? vals : [0, ...vals, ...(vals.length === 0 ? [0] : [])];
+  }, [caMonthlyData]);
+
+  // Variation réelle du mois en cours par rapport au précédent
+  const caDeltaPct = useMemo(() => {
+    const n = caMonthlyData.length;
+    if (n < 2) return null;
+    const prev = caMonthlyData[n - 2].ca;
+    const cur = caMonthlyData[n - 1].ca;
+    if (prev <= 0) return null;
+    return Math.round(((cur - prev) / prev) * 100);
+  }, [caMonthlyData]);
 
   // =========================================================================
   // LISTE DES PRIORITÉS (HYBRIDE DONNÉES RÉELLES + EXEMPLES STRUCTURELS)
@@ -225,171 +235,146 @@ export function DashboardSynthese({
       cta: string;
       onClick: () => void;
     }> = [];
+    const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
-    // 1. Rapports en attente
+    // 1. Rapports terrain à valider
     if (queues.rapportsEnAttente.length > 0) {
       const first = queues.rapportsEnAttente[0];
+      const nb = first.photos?.length || 0;
       list.push({
         id: 'prio-rapports',
         icon: Camera,
         tone: 'blue',
-        title: 'Valider le rapport terrain',
-        meta: `${first.reference || `INT-${first.id}`} · ${first.client || 'Client'} · ${first.photos?.length || 6} photos reçues`,
-        amount: Number(first.amount) || 2100,
-        cta: 'Valider',
-        onClick: onGoAdminRapports,
-      });
-    } else {
-      list.push({
-        id: 'prio-rapports-def',
-        icon: Camera,
-        tone: 'blue',
-        title: 'Valider le rapport terrain',
-        meta: 'INT-2026-004 · EMALEC · 6 photos reçues de Jamal',
-        amount: 2100,
+        title: queues.rapportsEnAttente.length > 1
+          ? `Valider ${plural(queues.rapportsEnAttente.length, 'rapport')} terrain`
+          : 'Valider le rapport terrain',
+        meta: `${first.reference || `INT-${first.id}`} · ${first.client || 'Client'}${nb ? ` · ${plural(nb, 'photo')} reçue${nb > 1 ? 's' : ''}` : ''}`,
+        amount: Number(first.amount) || 0,
         cta: 'Valider',
         onClick: onGoAdminRapports,
       });
     }
 
-    // 2. Urgence ou intervention à planifier
+    // 2. Interventions à planifier / affecter
     if (queues.intvAPlanifier.length > 0) {
       const first = queues.intvAPlanifier[0];
+      const urgent = first.priorite === 'Urgente' || first.priorite === 'Haute';
       list.push({
         id: 'prio-urgence',
         icon: Siren,
-        tone: 'red',
-        title: 'Affecter l’urgence',
-        meta: `${first.reference || `INT-${first.id}`} · ${first.objet || 'Fuite sur colonne EU'} · Presta maintenance`,
-        amount: Number(first.amount) || 420,
-        cta: 'Affecter',
-        onClick: () => onNavigateSection('planning'),
-      });
-    } else {
-      list.push({
-        id: 'prio-urgence-def',
-        icon: Siren,
-        tone: 'red',
-        title: 'Affecter l’urgence',
-        meta: 'INT-2026-010 · Fuite sur colonne EU · Presta maintenance',
-        amount: 420,
+        tone: urgent ? 'red' : 'amber',
+        title: queues.intvAPlanifier.length > 1
+          ? `Planifier ${plural(queues.intvAPlanifier.length, 'intervention')}`
+          : urgent ? 'Affecter l’urgence' : 'Planifier l’intervention',
+        meta: `${first.reference || `INT-${first.id}`} · ${first.objet || first.chantier || 'Intervention'}${first.client ? ` · ${first.client}` : ''}`,
+        amount: Number(first.amount) || 0,
         cta: 'Affecter',
         onClick: () => onNavigateSection('planning'),
       });
     }
 
-    // 3. Facturation chantiers terminés
+    // 3. Facturation des chantiers terminés
     if (queues.intvAFacturer.length > 0) {
       list.push({
         id: 'prio-factu',
         icon: Receipt,
         tone: 'green',
-        title: `Facturer ${queues.intvAFacturer.length} intervention${queues.intvAFacturer.length > 1 ? 's' : ''} terminée${queues.intvAFacturer.length > 1 ? 's' : ''}`,
-        meta: `${queues.intvAFacturer.slice(0, 2).map((i) => i.client).join(' et ')} · rapports validés`,
-        amount: queues.intvAFacturer.reduce((s, i) => s + (Number(i.amount) || 0), 0) || 2390,
-        cta: 'Facturer',
-        onClick: () => onNavigateSection('facturation'),
-      });
-    } else {
-      list.push({
-        id: 'prio-factu-def',
-        icon: Receipt,
-        tone: 'green',
-        title: 'Facturer 2 interventions terminées',
-        meta: 'GMS et M. et Mme Martin · rapports validés',
-        amount: 2390,
+        title: `Facturer ${plural(queues.intvAFacturer.length, 'intervention')} terminée${queues.intvAFacturer.length > 1 ? 's' : ''}`,
+        meta: `${Array.from(new Set(queues.intvAFacturer.map((i) => i.client).filter(Boolean))).slice(0, 2).join(' et ')} · rapports validés`,
+        amount: queues.intvAFacturer.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
         cta: 'Facturer',
         onClick: () => onNavigateSection('facturation'),
       });
     }
 
-    // 4. Relance devis
+    // 4. Devis à relancer
     if (queues.devisARelancer.length > 0) {
       const first = queues.devisARelancer[0];
       list.push({
         id: 'prio-relance',
         icon: Send,
         tone: 'blue',
-        title: 'Relancer le devis envoyé',
-        meta: `${first.reference || `DEV-${first.id}`} · ${first.client || 'C-Multi-Serv'} · envoyé récemment`,
-        amount: Number(first.amount) || 4200,
-        cta: 'Relancer',
-        onClick: () => onNavigateSection('devis'),
-      });
-    } else {
-      list.push({
-        id: 'prio-relance-def',
-        icon: Send,
-        tone: 'blue',
-        title: 'Relancer le devis envoyé',
-        meta: 'DEV-2026-002 · C-Multi-Serv · envoyé il y a 9 jours',
-        amount: 4200,
+        title: queues.devisARelancer.length > 1
+          ? `Relancer ${plural(queues.devisARelancer.length, 'devis')}`
+          : 'Relancer le devis envoyé',
+        meta: `${first.reference || `DEV-${first.id}`} · ${first.client || 'Client'}`,
+        amount: Number(first.amount) || 0,
         cta: 'Relancer',
         onClick: () => onNavigateSection('devis'),
       });
     }
 
-    // 5. Chantier bloqué / anomalie
-    list.push({
-      id: 'prio-bloque-def',
-      icon: AlertTriangle,
-      tone: 'amber',
-      title: 'Chantier bloqué : pièce manquante',
-      meta: 'INT-2026-012 · EMALEC · disjoncteur différentiel 63 A',
-      amount: 1600,
-      cta: 'Diagnostic',
-      onClick: () => onNavigateSection('facturation'),
-    });
+    // 5. Chantiers bloqués (motif de blocage renseigné, intervention non terminée)
+    const bloques = interventionsList.filter(
+      (i) => (i.traitement === 'Bloqué' || i.statutOperationnel === 'Suspendue') && i.statutOperationnel !== 'Clôturée'
+    );
+    if (bloques.length > 0) {
+      const first = bloques[0];
+      list.push({
+        id: 'prio-bloque',
+        icon: AlertTriangle,
+        tone: 'amber',
+        title: bloques.length > 1 ? `${plural(bloques.length, 'chantier')} bloqué${bloques.length > 1 ? 's' : ''}` : 'Chantier bloqué',
+        meta: `${first.reference || `INT-${first.id}`} · ${first.motifBlocage || first.objet || 'Motif à préciser'}`,
+        amount: Number(first.amount) || 0,
+        cta: 'Ouvrir',
+        onClick: () => onNavigateSection('interventions'),
+      });
+    }
 
     return list;
-  }, [queues, onGoAdminRapports, onNavigateSection]);
+  }, [queues, interventionsList, onGoAdminRapports, onNavigateSection]);
 
   // =========================================================================
   // PLANNING DU JOUR
   // =========================================================================
-  const todayMissions = useMemo(() => {
-    // Si des interventions réelles ont des créneaux
-    const realWithSlots = interventionsList.filter((i) => i.heureDebut && i.heureFin).slice(0, 7);
-    if (realWithSlots.length >= 3) {
-      return realWithSlots.map((i, idx) => ({
-        id: i.id || idx,
-        start: i.heureDebut || '08:00',
-        end: i.heureFin || '10:30',
-        client: i.client || 'Client TCE',
-        ref: i.reference || `INT-2026-${String(i.id).padStart(3, '0')}`,
-        label: i.chantier || i.objet || 'Prestation maintenance',
-        kind: ((i.priorite === 'Urgente' || i.priorite === 'Haute') ? 'urgence' : i.statutOperationnel === 'Visite devis' ? 'visite' : 'travaux') as 'travaux' | 'visite' | 'urgence',
-        techName: i.entreprise || 'Anouar',
-        techInitials: (i.entreprise ? i.entreprise.slice(0, 2) : 'AN').toUpperCase(),
-        techColor: '#1D4ED8',
-      }));
-    }
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const techPalette = ['#1D4ED8', '#10B981', '#6366F1', '#0EA5A4', '#EC4899', '#F59E0B', '#8B5CF6', '#DC2626'];
+  const colorOfTech = (name?: string | null) => {
+    const idx = name ? techniciensList.indexOf(name) : -1;
+    return techPalette[(idx >= 0 ? idx : 0) % techPalette.length];
+  };
 
-    // Sinon, jeu de données complet de la maquette Atlas Clarity
-    return [
-      { id: 1, start: '08:00', end: '10:30', client: 'EMALEC', ref: 'INT-2026-004', label: 'Peinture cage d’escalier & boiseries', kind: 'travaux', techName: 'Jamal', techInitials: 'JA', techColor: '#0EA5A4' },
-      { id: 2, start: '08:30', end: '11:00', client: 'Presta maintenance', ref: 'INT-2026-001', label: 'Dépannage TGBT & diagnostic puissance', kind: 'travaux', techName: 'Anouar', techInitials: 'AN', techColor: '#1D4ED8' },
-      { id: 3, start: '09:00', end: '11:30', client: 'C-Multi-Serv', ref: 'INT-2026-002', label: 'Recherche de fuite colonne montante', kind: 'travaux', techName: 'Mohamed', techInitials: 'MO', techColor: '#10B981' },
-      { id: 4, start: '09:30', end: '15:30', client: 'Presta la Rochelle', ref: 'INT-2026-005', label: 'Pose parquet chêne flottant 45 m²', kind: 'travaux', techName: 'Manneh', techInitials: 'MA', techColor: '#6366F1' },
-      { id: 5, start: '10:00', end: '12:00', client: 'GMS', ref: 'INT-2026-007', label: 'Éclairage de sécurité défaillant TGBT', kind: 'urgence', techName: 'Haitam', techInitials: 'HA', techColor: '#DC2626' },
-      { id: 6, start: '13:00', end: '17:30', client: 'Syndic Paris 08', ref: 'INT-2026-008', label: 'Peinture hall d’accueil après dégât des eaux', kind: 'travaux', techName: 'Yankoubou', techInitials: 'YA', techColor: '#F59E0B' },
-      { id: 7, start: '13:30', end: '15:30', client: 'Syndic Paris 08', ref: 'DEV-2026-007', label: 'Visite devis réfection VMC collective', kind: 'visite', techName: 'Anouar', techInitials: 'AN', techColor: '#8B5CF6' },
-    ];
-  }, [interventionsList]);
+  // Missions du jour : uniquement les vraies interventions planifiées aujourd'hui
+  const todayMissions = useMemo(() => {
+    return interventionsList
+      .filter((i) => i.datePlanifiee === todayIso)
+      .sort((x, y) => (x.heureDebut || '').localeCompare(y.heureDebut || ''))
+      .slice(0, 12)
+      .map((i, idx) => ({
+        id: i.id || idx,
+        start: i.heureDebut || '—',
+        end: i.heureFin || '—',
+        client: i.client || '—',
+        ref: i.reference || `INT-${i.id}`,
+        label: i.chantier || i.objet || 'Intervention',
+        kind: ((i.priorite === 'Urgente' || i.priorite === 'Haute') ? 'urgence' : i.statutOperationnel === 'Visite devis' ? 'visite' : 'travaux') as 'travaux' | 'visite' | 'urgence',
+        techName: i.entreprise || 'À affecter',
+        techInitials: (i.entreprise ? i.entreprise.slice(0, 2) : '?').toUpperCase(),
+        techColor: colorOfTech(i.entreprise),
+      }));
+  }, [interventionsList, todayIso, techniciensList]);
 
   // =========================================================================
-  // ÉQUIPE AUJOURD’HUI
+  // ÉQUIPE AUJOURD’HUI (missions réelles du jour par technicien)
   // =========================================================================
   const teamStatus = useMemo(() => {
-    return [
-      { id: 'anouar', name: 'Anouar', initials: 'AN', color: '#1D4ED8', since: '07:52', done: 1, total: 3 },
-      { id: 'mohamed', name: 'Mohamed', initials: 'MO', color: '#10B981', since: '08:05', done: 0, total: 2 },
-      { id: 'haitam', name: 'Haitam', initials: 'HA', color: '#6366F1', since: '07:58', done: 0, total: 2 },
-      { id: 'jamal', name: 'Jamal', initials: 'JA', color: '#0EA5A4', since: '07:40', done: 1, total: 2 },
-      { id: 'manneh', name: 'Manneh', initials: 'MA', color: '#EC4899', since: '08:21', done: 0, total: 1 },
-      { id: 'yankoubou', name: 'Yankoubou', initials: 'YA', color: '#F59E0B', since: null, done: 0, total: 1 },
-    ];
-  }, []);
+    return techniciensList.map((name) => {
+      const mine = interventionsList.filter((i) => i.datePlanifiee === todayIso && i.entreprise === name);
+      return {
+        id: name,
+        name,
+        initials: name.slice(0, 2).toUpperCase(),
+        color: colorOfTech(name),
+        since: null as string | null,
+        done: mine.filter((i) => i.statutOperationnel === 'Clôturée' || i.statutOperationnel === 'Terminée - à valider').length,
+        total: mine.length,
+      };
+    });
+  }, [techniciensList, interventionsList, todayIso]);
 
   const totalQueuesCount =
     queues.devisAcceptesSansIntv.length +
@@ -573,14 +558,16 @@ export function DashboardSynthese({
                 <Euro size={16} />
               </span>
               <span className="m-kpi-label">CA travaux réalisés</span>
-              <span className="m-kpi-delta is-up">
-                <TrendingUp size={13} />
-                +12 %
-              </span>
+              {caDeltaPct !== null && (
+                <span className={`m-kpi-delta ${caDeltaPct >= 0 ? 'is-up' : 'is-down'}`}>
+                  <TrendingUp size={13} />
+                  {caDeltaPct >= 0 ? '+' : ''}{caDeltaPct} %
+                </span>
+              )}
             </div>
             <div className="m-kpi-value">{formatCurrency(totalCAClotureHT)}</div>
             <div className="m-kpi-foot">
-              <span className="m-kpi-hint">vs octobre · {clotureesCount} clôturées</span>
+              <span className="m-kpi-hint">vs mois précédent · {clotureesCount} clôturées</span>
               <Sparkline data={caSparkline} />
             </div>
           </div>
@@ -598,10 +585,6 @@ export function DashboardSynthese({
                 <Receipt size={16} />
               </span>
               <span className="m-kpi-label">Prêt à facturer</span>
-              <span className="m-kpi-delta is-up">
-                <TrendingUp size={13} />
-                +2
-              </span>
             </div>
             <div className="m-kpi-value">{formatCurrency(totalAFacturerHT)}</div>
             <div className="m-kpi-foot">
@@ -670,6 +653,9 @@ export function DashboardSynthese({
           </header>
           <div className="m-card-body">
             <ul className="m-prio">
+              {priorityItems.length === 0 && (
+                <p style={{ margin: 0, padding: '18px 4px', color: 'var(--muted, #64748b)', fontSize: 13 }}>Rien à traiter en priorité pour le moment.</p>
+              )}
               {priorityItems.map((p, i) => (
                 <li key={p.id} className="m-prio-item">
                   <span className={`m-prio-ic m-tone-${p.tone}`}>
@@ -702,7 +688,7 @@ export function DashboardSynthese({
                 <CalendarRange size={16} className="m-card-icon" />
                 Planning du jour
               </h2>
-              <p>{todayMissions.length} missions · {techniciensList.length} techniciens · 3 à affecter</p>
+              <p>{todayMissions.length} missions · {techniciensList.length} techniciens · {queues.intvAPlanifier.length} à affecter</p>
             </div>
             <div className="m-card-actions">
               <button
@@ -717,6 +703,9 @@ export function DashboardSynthese({
           </header>
           <div className="m-card-body">
             <ul className="m-agenda">
+              {todayMissions.length === 0 && (
+                <p style={{ margin: 0, padding: '18px 4px', color: 'var(--muted, #64748b)', fontSize: 13 }}>Aucune intervention planifiée aujourd’hui.</p>
+              )}
               {todayMissions.map((b) => (
                 <li
                   key={b.id}
@@ -764,12 +753,6 @@ export function DashboardSynthese({
                 Chiffre d’affaires 2026
               </h2>
               <p>Montants HT par mois · {currentMonthLabel} en cours</p>
-            </div>
-            <div className="m-card-actions">
-              <span className="m-pill m-tone-green">
-                <i className="m-pill-dot" />
-                +14 % sur 12 mois
-              </span>
             </div>
           </header>
           <div className="m-card-body">
@@ -824,6 +807,9 @@ export function DashboardSynthese({
           </header>
           <div className="m-card-body">
             <ul className="m-team">
+              {teamStatus.length === 0 && (
+                <p style={{ margin: 0, padding: '18px 4px', color: 'var(--muted, #64748b)', fontSize: 13 }}>Aucun technicien enregistré. Ajoutez votre équipe dans Paramètres métier.</p>
+              )}
               {teamStatus.map((t) => (
                 <li key={t.id}>
                   <span

@@ -45,7 +45,7 @@ import { FacturationStudioView } from '../components/FacturationStudioView';
 import { ComptabiliteStudioView } from '../components/ComptabiliteStudioView';
 import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
-import { UtilisateursStudioView } from '../components/UtilisateursStudioView';
+import { AdminWorkstation } from '../components/AdminWorkstation';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
 import toast from 'react-hot-toast';
@@ -1071,8 +1071,24 @@ export function DashboardPage() {
           SECTION 6 : WORKSTATION ADMIN & UTILISATEURS (ATLAS CLARITY)
          ===================================================================== */}
       {activeSection === 'admin' && canUserAccessSection('admin', user) && (
-        <UtilisateursStudioView
+        <AdminWorkstation
           techniciens={techniciensList}
+          interventionsList={interventionsList}
+          devisList={devisList}
+          initialSubTab={adminSubTab}
+          onOpenInterventionDrawer={(intv) => {
+            setIsCreatingIntv(false);
+            setSelectedIntv(intv);
+          }}
+          onOpenDevisDrawer={(devis) => {
+            setIsCreatingDevis(false);
+            setSelectedDevis(devis);
+          }}
+          onSwitchToMobilePreview={(techName) => {
+            setSelectedMobileTech(techName);
+            handleSectionChange('mobile_tech');
+          }}
+          onOpenSendReportEmail={(intv) => setReportEmailIntv(intv)}
         />
       )}
 

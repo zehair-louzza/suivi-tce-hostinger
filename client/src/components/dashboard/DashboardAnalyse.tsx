@@ -91,31 +91,31 @@ export function DashboardAnalyse({
     );
     const facturees = interventionsList.filter((i) => i.statutFacture === 'Facturée');
 
-    const devisVal = devisEnCours.length || 8;
-    const planVal = missionsPlanifiees.length || 3;
-    const encoursVal = intvEnCours.length || 4;
-    const rapportsVal = rapportsAValider || 1;
-    const clotureesVal = cloturees.length || 3;
-    const factureesVal = facturees.length || 2;
-    const pctFact = clotureesVal > 0 ? Math.round((factureesVal / clotureesVal) * 100) : 67;
+    const devisVal = devisEnCours.length;
+    const planVal = missionsPlanifiees.length;
+    const encoursVal = intvEnCours.length;
+    const rapportsVal = rapportsAValider;
+    const clotureesVal = cloturees.length;
+    const factureesVal = facturees.length;
+    const pctFact = clotureesVal > 0 ? Math.round((factureesVal / clotureesVal) * 100) : 0;
 
     return [
       {
         step: 'Devis & chiffrages',
         value: devisVal,
-        hint: `${devisVisites.length || 2} visites requises`,
+        hint: `${devisVisites.length} visites requises`,
         action: () => onNavigateSection('devis'),
       },
       {
         step: 'Ordonnancement',
         value: planVal,
-        hint: `${missionsAPlanifier || 3} missions à affecter`,
+        hint: `${missionsAPlanifier} missions à affecter`,
         action: () => onNavigateSection('planning'),
       },
       {
         step: 'Terrain en direct',
         value: encoursVal,
-        hint: `${encoursVal} techniciens sur site`,
+        hint: 'interventions en cours',
         action: () => onNavigateSection('interventions'),
       },
       {
@@ -144,17 +144,17 @@ export function DashboardAnalyse({
     const tauxTransfo =
       devisList.length > 0
         ? Math.round((devisAcceptes.length / devisList.length) * 100)
-        : 50;
+        : 0;
     const panierMoyen =
       devisList.length > 0
-        ? Math.round((totalPipelineHT || 40350) / devisList.length)
-        : 6725;
+        ? Math.round(totalPipelineHT / devisList.length)
+        : 0;
 
     return {
-      pipelineTotal: totalPipelineHT || 40350,
-      devisCount: devisEnCours.length || 6,
-      accepteTotal: totalAccepteHT || 24750,
-      acceptesCount: devisAcceptes.length || 3,
+      pipelineTotal: totalPipelineHT,
+      devisCount: devisEnCours.length,
+      accepteTotal: totalAccepteHT,
+      acceptesCount: devisAcceptes.length,
       tauxTransfo,
       panierMoyen,
     };
@@ -164,56 +164,31 @@ export function DashboardAnalyse({
   const caByClient = useMemo(() => {
     const totalsByClient: Record<string, number> = {};
     interventionsList.forEach((i) => {
-      const name = i.entreprise || 'Autres';
+      const name = i.client || 'Sans client';
       const amount = Number(i.amount) || 0;
       totalsByClient[name] = (totalsByClient[name] || 0) + amount;
     });
 
-    const entries = Object.entries(totalsByClient).map(([name, ca]) => ({ name, ca }));
-    if (entries.length >= 3) {
-      return entries.sort((a, b) => b.ca - a.ca).slice(0, 6);
-    }
-
-    // Données de référence fidèles à la maquette Atlas Clarity
-    return [
-      { name: 'GMS (Générale de Maintenance)', ca: 16800 },
-      { name: 'EMALEC Facility', ca: 12400 },
-      { name: 'C-Multi-Serv Habitat', ca: 9800 },
-      { name: 'Nexity Gestion Immobilière', ca: 5200 },
-      { name: 'Bailleur 3F Résidences', ca: 3000 },
-    ].sort((a, b) => b.ca - a.ca);
+    return Object.entries(totalsByClient)
+      .map(([name, ca]) => ({ name, ca }))
+      .filter((e) => e.ca > 0)
+      .sort((a, b) => b.ca - a.ca)
+      .slice(0, 6);
   }, [interventionsList]);
 
   // 4. Performance par corps d'état
   const corpsStats = useMemo(() => {
-    const trades = [
-      { corps: 'Électricité', fallback: { actifs: 3, clotures: 9, ca: 14200, pct: 78 } },
-      { corps: 'Plomberie', fallback: { actifs: 2, clotures: 6, ca: 8900, pct: 64 } },
-      { corps: 'Peinture', fallback: { actifs: 2, clotures: 4, ca: 9400, pct: 55 } },
-      { corps: 'Menuiserie', fallback: { actifs: 1, clotures: 3, ca: 7100, pct: 70 } },
-      { corps: 'Serrurerie', fallback: { actifs: 0, clotures: 5, ca: 4150, pct: 92 } },
-      { corps: 'CVC / Climatisation', fallback: { actifs: 0, clotures: 2, ca: 3200, pct: 40 } },
-    ];
-
-    return trades.map((t) => {
-      const key = t.corps.toLowerCase();
-      const intvs = interventionsList.filter((i) =>
-        (i.corpsEtat || '').toLowerCase().includes(key)
-      );
-      if (intvs.length > 0) {
-        const actifs = intvs.filter((i) =>
-          ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel || '')
-        ).length;
-        const clotures = intvs.filter((i) =>
-          ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')
-        ).length;
-        const ca = clotures > 0
-          ? intvs.reduce((acc, i) => acc + (Number(i.amount) || 0), 0)
-          : t.fallback.ca;
-        const pct = Math.round((clotures / intvs.length) * 100);
-        return { corps: t.corps, actifs, clotures, ca, pct };
-      }
-      return { corps: t.corps, ...t.fallback };
+    const trades = ['Électricité', 'Plomberie', 'Peinture', 'Menuiserie', 'Serrurerie', 'CVC / Climatisation'];
+    return trades.map((corps) => {
+      const key = corps.toLowerCase();
+      const intvs = interventionsList.filter((i) => (i.corpsEtat || '').toLowerCase().includes(key));
+      const actifs = intvs.filter((i) =>
+        ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel || '')
+      ).length;
+      const done = intvs.filter((i) => ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || ''));
+      const ca = done.reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+      const pct = intvs.length > 0 ? Math.round((done.length / intvs.length) * 100) : 0;
+      return { corps, actifs, clotures: done.length, ca, pct };
     });
   }, [interventionsList]);
 
@@ -294,9 +269,6 @@ export function DashboardAnalyse({
             </div>
             <div className="m-kpi-val m-mono">{formatCurrency(pipelineStats.accepteTotal)}</div>
             <div className="m-kpi-foot">
-              <span className="m-kpi-delta m-delta-up">
-                +{pipelineStats.acceptesCount}
-              </span>
               <span className="m-kpi-hint">
                 {pipelineStats.acceptesCount} devis validé{pipelineStats.acceptesCount > 1 ? 's' : ''}
               </span>
@@ -312,7 +284,6 @@ export function DashboardAnalyse({
             </div>
             <div className="m-kpi-val m-mono">{pipelineStats.tauxTransfo} %</div>
             <div className="m-kpi-foot">
-              <span className="m-kpi-delta m-delta-up">+8 pts</span>
               <span className="m-kpi-hint">Signatures / devis émis</span>
             </div>
           </div>
@@ -326,7 +297,6 @@ export function DashboardAnalyse({
             </div>
             <div className="m-kpi-val m-mono">{formatCurrency(pipelineStats.panierMoyen)}</div>
             <div className="m-kpi-foot">
-              <span className="m-kpi-delta m-delta-down">-4 %</span>
               <span className="m-kpi-hint">Par dossier chiffré</span>
             </div>
           </div>

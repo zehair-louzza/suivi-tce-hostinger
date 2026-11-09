@@ -106,7 +106,7 @@ export function PlanningStudioView({
   const [kind, setKind] = useState('all');
   const [selectedTech, setSelectedTech] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mTech, setMTech] = useState<string>(techniciens[0] || 'Anouar');
+  const [mTech, setMTech] = useState<string>(techniciens[0] || '');
 
   const nowHour = useMemo(() => {
     const d = new Date();
@@ -165,7 +165,7 @@ export function PlanningStudioView({
           city: intv.chantier ? intv.chantier.slice(0, 20) : 'Paris',
           kind: kindVal,
           duration: ((intv as any).dureePrevueMinutes ? (intv as any).dureePrevueMinutes / 60 : 2),
-          suggest: techniciens[(intv.id + 1) % techniciens.length] || techniciens[0] || 'Anouar',
+          suggest: techniciens[(intv.id + 1) % techniciens.length] || techniciens[0] || '',
           corps: intv.corpsEtat || 'Électricité',
         });
       }
@@ -204,7 +204,7 @@ export function PlanningStudioView({
             city: dev.site ? dev.site.slice(0, 20) : 'IDF',
             kind: 'visite',
             duration: 1.5,
-            suggest: techniciens[dev.id % techniciens.length] || techniciens[0] || 'Anouar',
+            suggest: techniciens[dev.id % techniciens.length] || techniciens[0] || '',
             corps: dev.corpsEtat || 'Tous corps d’état',
           });
         }

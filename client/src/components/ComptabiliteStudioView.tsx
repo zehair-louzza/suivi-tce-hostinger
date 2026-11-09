@@ -112,7 +112,7 @@ export function ComptabiliteStudioView({
   const totalPrev = rows.reduce((s, r) => s + r.prev, 0);
   const totalMarge = totalCa - totalHrs * cost;
   const maxPerH = Math.max(...rows.map((r) => r.perH), 1);
-  const topTech = rows[0] || { tech: 'Anouar', perH: 85 };
+  const topTech = rows[0] || { tech: '—', perH: 0 };
 
   const handleCopySynthese = () => {
     const text = `SYNTHÈSE DE GESTION ANELEC (${new Date().toLocaleDateString('fr-FR')})
