@@ -250,3 +250,130 @@ export function dossierCase(kind: 'devis' | 'intervention', dossier?: Dossier): 
   if (!dossier?.devis) return 'directe';
   return isDevisSuiteIntervention(dossier.devis) ? 'devis-suite-intervention' : 'sur-devis';
 }
+
+/**
+ * Avancement du dossier en six étapes, DÉDUIT des faits déjà saisis.
+ *
+ * Aucune de ces étapes ne se choisit dans un menu : elle se lit des dates, des montants et
+ * des statuts déjà enregistrés. Les statuts en base restent écrits et modifiables dans les
+ * fiches ; cette barre ne fait que les résumer d'une seule voix.
+ *
+ * Une intervention directe n'a ni chiffrage ni acceptation : ces deux étapes sont marquées
+ * « sans objet » au lieu d'être présentées comme en retard.
+ */
+export type EtapeEtat = 'faite' | 'encours' | 'attente' | 'sansobjet';
+
+export interface EtapeDossier {
+  cle: 'demande' | 'chiffre' | 'accepte' | 'planifie' | 'realise' | 'facture';
+  label: string;
+  etat: EtapeEtat;
+  date?: string;
+  detail?: string;
+}
+
+/** Demande d'origine, telle qu'enregistrée dans la file d'entrée. */
+export interface DemandeLite {
+  client: string;
+  numeroDI?: string | null;
+  referenceInterne?: string | null;
+  dateReception: string;
+  canalReception?: string | null;
+  statut: string;
+}
+
+export function findDemande(dossier: Dossier | undefined, demandes: DemandeLite[]): DemandeLite | undefined {
+  if (!dossier) return undefined;
+  const di = normDI(dossier.di);
+  const cli = normClient(dossier.client);
+  return demandes.find((d) => normClient(d.client) === cli && (di ? normDI(d.numeroDI) === di : true));
+}
+
+const firstDate = (values: (string | null | undefined)[]): string | undefined => {
+  const list = values.filter(Boolean).map((v) => String(v).slice(0, 10)).sort();
+  return list[0];
+};
+const lastDate = (values: (string | null | undefined)[]): string | undefined => {
+  const list = values.filter(Boolean).map((v) => String(v).slice(0, 10)).sort();
+  return list[list.length - 1];
+};
+
+export function dossierProgress(
+  dossier: Dossier | undefined,
+  ctx: LedgerContext,
+  demande?: DemandeLite,
+): EtapeDossier[] {
+  const devis = dossier?.devis;
+  const travaux = (dossier?.travaux || []).filter((i) => !isCancelled(i));
+  const visites = (dossier?.visites || []).filter((i) => !isCancelled(i));
+  const pieces = [...travaux, ...visites];
+  const sansDevis = !devis;
+
+  // 1. Demande reçue
+  const dateDemande = demande?.dateReception || firstDate(pieces.map((i) => i.dateDemande)) || (devis ? String(devis.dateCreated || '').slice(0, 10) : undefined);
+  const demandeFaite = Boolean(demande || devis || pieces.length);
+
+  // 2. Chiffré : le devis porte un montant ou a été envoyé
+  const chiffre = Boolean(devis && (Number(devis.amount) > 0 || devis.dateEnvoi));
+  // 3. Accepté : lu du statut commercial, sans inventer de date
+  const accepte = Boolean(devis && low(devis.statutCommercial).startsWith('accept'));
+
+  // 4. Planifié : au moins une intervention de travaux a une date
+  const datePlanif = firstDate(travaux.map((i) => i.datePlanifiee));
+  const planifie = Boolean(datePlanif);
+
+  // 5. Réalisé : des travaux terminés
+  const realises = travaux.filter(isDone);
+  const dateRealise = lastDate(realises.map((i) => i.dateReelle || i.datePlanifiee));
+
+  // 6. Facturé : tout ce qui est réalisé est facturé
+  const aFacturer = travaux.filter((i) => isDone(i) && amountOf(i, ctx) > 0);
+  const facture = aFacturer.length > 0 && aFacturer.every(isBilled);
+
+  const etapes: EtapeDossier[] = [
+    {
+      cle: 'demande',
+      label: 'Demande reçue',
+      etat: demandeFaite ? 'faite' : 'attente',
+      date: dateDemande,
+      detail: demande?.canalReception || (demande ? undefined : 'origine non enregistrée'),
+    },
+    {
+      cle: 'chiffre',
+      label: 'Chiffré',
+      etat: sansDevis ? 'sansobjet' : chiffre ? 'faite' : 'attente',
+      date: devis?.dateEnvoi ? String(devis.dateEnvoi).slice(0, 10) : undefined,
+      detail: sansDevis ? 'intervention directe' : devis && Number(devis.amount) > 0 ? undefined : 'montant à saisir',
+    },
+    {
+      cle: 'accepte',
+      label: 'Accepté',
+      etat: sansDevis ? 'sansobjet' : accepte ? 'faite' : 'attente',
+      detail: sansDevis ? 'sans devis' : devis?.statutCommercial || undefined,
+    },
+    {
+      cle: 'planifie',
+      label: 'Planifié',
+      etat: planifie ? 'faite' : 'attente',
+      date: datePlanif,
+      detail: planifie ? `${travaux.length} intervention${travaux.length > 1 ? 's' : ''}` : undefined,
+    },
+    {
+      cle: 'realise',
+      label: 'Réalisé',
+      etat: realises.length > 0 && realises.length === travaux.length ? 'faite' : 'attente',
+      date: dateRealise,
+      detail: travaux.length ? `${realises.length} / ${travaux.length} terminée${travaux.length > 1 ? 's' : ''}` : undefined,
+    },
+    {
+      cle: 'facture',
+      label: 'Facturé',
+      etat: facture ? 'faite' : 'attente',
+      detail: dossier && dossier.resteAFacturer > 0 ? `reste ${Math.round(dossier.resteAFacturer)} €` : undefined,
+    },
+  ];
+
+  // L'étape en cours est la première qui reste à faire
+  const idx = etapes.findIndex((e) => e.etat === 'attente');
+  if (idx >= 0) etapes[idx].etat = 'encours';
+  return etapes;
+}

@@ -1334,6 +1334,7 @@ export function DashboardPage() {
                 onOpenIntervention={(it) => { setSelectedDevis(null); handleSectionChange('interventions'); setIsCreatingIntv(false); setIntvTab('planif'); setSelectedIntv(it); }}
                 onNewIntervention={startInterventionFromDevis}
                 onNewDevisFromIntervention={startDevisFromIntervention}
+                demandes={demandesQueue || []}
               />
               {devisTab === 'qualif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1855,6 +1856,7 @@ export function DashboardPage() {
                 onOpenIntervention={(it) => { setSelectedDevis(null); handleSectionChange('interventions'); setIsCreatingIntv(false); setIntvTab('planif'); setSelectedIntv(it); }}
                 onNewIntervention={startInterventionFromDevis}
                 onNewDevisFromIntervention={startDevisFromIntervention}
+                demandes={demandesQueue || []}
                 onPickSourceDevis={pickSourceDevis}
               />
               {intvTab === 'planif' && (

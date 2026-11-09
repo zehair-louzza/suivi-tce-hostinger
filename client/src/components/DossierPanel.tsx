@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Devis, Intervention } from '../lib/api';
+import type { DemandeLite, EtapeDossier } from '../lib/dossiers';
 import {
-  CASE_LABEL, amountOf, buildLedgerContext, dossierCase, findDossier, isBilled, isDone, isVisite,
+  CASE_LABEL, amountOf, buildLedgerContext, dossierCase, dossierProgress, findDemande, findDossier,
+  isBilled, isDone, isVisite,
 } from '../lib/dossiers';
 
 interface Props {
@@ -18,6 +20,8 @@ interface Props {
   onNewDevisFromIntervention: (i: Intervention) => void;
   /** Création d'intervention : choisir un devis source (cas 1) ou aucun (cas 2) */
   onPickSourceDevis?: (d: Devis | null) => void;
+  /** Demandes reçues, pour l'étape d'origine de l'avancement */
+  demandes?: DemandeLite[];
 }
 
 const eur = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0);
@@ -29,7 +33,7 @@ const rowBtn = { display: 'flex', width: '100%', justifyContent: 'space-between'
 
 export function DossierPanel({
   kind, current, creating, devisList, interventionsList, onOpenDevis, onOpenIntervention,
-  onNewIntervention, onNewDevisFromIntervention, onPickSourceDevis,
+  onNewIntervention, onNewDevisFromIntervention, onPickSourceDevis, demandes,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [sourceMode, setSourceMode] = useState<'directe' | 'devis'>('directe');
@@ -121,6 +125,8 @@ export function DossierPanel({
         </button>
       </div>
 
+      {dossier && <BarreAvancement etapes={dossierProgress(dossier, ctx, findDemande(dossier, demandes || []))} />}
+
       {dossier && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8, marginTop: 10, fontSize: 12 }}>
           <div><div style={{ color: 'var(--text-secondary)' }}>Devis</div><strong>{devis ? eur(dossier.devisMontant) : 'aucun'}</strong></div>
@@ -184,6 +190,46 @@ export function DossierPanel({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Six étapes déduites, pas choisies. « Sans objet » distingue une intervention directe
+ * d'un dossier en retard de chiffrage.
+ */
+function BarreAvancement({ etapes }: { etapes: EtapeDossier[] }) {
+  const couleur = (e: EtapeDossier) =>
+    e.etat === 'faite' ? '#16A34A' : e.etat === 'encours' ? '#1D4ED8' : e.etat === 'sansobjet' ? 'var(--border-default)' : 'var(--border-default)';
+  const texte = (e: EtapeDossier) =>
+    e.etat === 'faite' ? '#15803D' : e.etat === 'encours' ? '#1E40AF' : 'var(--text-secondary)';
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {etapes.map((e) => (
+          <div key={e.cle} style={{ flex: '1 1 110px', minWidth: 100 }}>
+            <div
+              style={{
+                height: 5,
+                borderRadius: 3,
+                background: couleur(e),
+                marginBottom: 6,
+                opacity: e.etat === 'sansobjet' ? 0.5 : 1,
+              }}
+            />
+            <div style={{ fontSize: 11.5, fontWeight: e.etat === 'encours' ? 700 : 600, color: texte(e) }}>
+              {e.label}
+              {e.etat === 'encours' ? ' · en cours' : ''}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {[e.date ? fmtDay(e.date) : null, e.detail].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{ margin: '10px 0 0', fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        Chaque étape se déduit de ce qui est déjà saisi. Les statuts détaillés restent modifiables dans les onglets de la fiche.
+      </p>
     </div>
   );
 }
