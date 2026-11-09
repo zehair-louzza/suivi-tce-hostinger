@@ -152,7 +152,8 @@
 .m-prio { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .m-prio-item { display: grid; grid-template-columns: 36px 1fr auto auto; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px dashed var(--border); }
 .m-prio-item:last-child { border-bottom: 0; }
-.m-prio-ic { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.m-prio-ic { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid transparent; }
+.m-prio-ic svg { stroke: currentColor; fill: none; display: block; flex-shrink: 0; }
 .m-prio-text { display: flex; flex-direction: column; min-width: 0; }
 .m-prio-text strong { font-size: 13.5px; color: var(--text-strong); font-weight: 600; }
 .m-prio-text span { color: var(--muted); font-size: 12px; }
@@ -193,7 +194,7 @@
 .m-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
 .m-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .m-tone-slate { background: #F1F5F9; color: #334155; border-color: #E2E8F0; }
-.m-tone-blue  { background: #DBEAFE; color: #1E40AF; border-color: #BFDBFE; }
+.m-tone-blue  { background: #DBEAFE; color: #1D4ED8; border-color: #BFDBFE; }
 .m-tone-green { background: #DCFCE7; color: #166534; border-color: #BBF7D0; }
 .m-tone-amber { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
 .m-tone-red   { background: #FEE2E2; color: #991B1B; border-color: #FECACA; }
@@ -237,6 +238,7 @@
 /* ---------- OPÉRATIONS & ANALYSE ---------- */
 .m-banner { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius); font-size: 13.5px; }
 .m-banner.m-tone-teal { background: rgba(14, 165, 164, .1); color: #0F766E; border: 1px solid rgba(14, 165, 164, .25); }
+.m-banner.m-tone-blue { background: rgba(29, 78, 216, .08); color: #1D4ED8; border: 1px solid rgba(29, 78, 216, .25); }
 .m-banner > div { flex: 1; display: flex; flex-direction: column; }
 .m-banner strong { color: var(--text-strong); }
 .m-banner span { color: var(--muted); font-size: 12px; }

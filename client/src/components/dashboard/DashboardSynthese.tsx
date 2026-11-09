@@ -232,7 +232,7 @@ export function DashboardSynthese({
       list.push({
         id: 'prio-rapports',
         icon: Camera,
-        tone: 'teal',
+        tone: 'blue',
         title: 'Valider le rapport terrain',
         meta: `${first.reference || `INT-${first.id}`} · ${first.client || 'Client'} · ${first.photos?.length || 6} photos reçues`,
         amount: Number(first.amount) || 2100,
@@ -243,7 +243,7 @@ export function DashboardSynthese({
       list.push({
         id: 'prio-rapports-def',
         icon: Camera,
-        tone: 'teal',
+        tone: 'blue',
         title: 'Valider le rapport terrain',
         meta: 'INT-2026-004 · EMALEC · 6 photos reçues de Jamal',
         amount: 2100,
@@ -637,7 +637,7 @@ export function DashboardSynthese({
 
           {/* KPI 4 : Rapports à valider */}
           <div
-            className="m-kpi m-kpi-tone-teal is-click"
+            className="m-kpi m-kpi-tone-blue is-click"
             onClick={onGoAdminRapports}
             role="button"
             tabIndex={0}
@@ -685,7 +685,8 @@ export function DashboardSynthese({
                     className={`m-btn m-btn--sm ${i === 0 ? 'm-btn--primary' : 'm-btn--secondary'}`}
                     onClick={p.onClick}
                   >
-                    {p.cta}
+                    {p.cta === 'Valider' && <Check size={14} />}
+                    <span>{p.cta}</span>
                   </button>
                 </li>
               ))}

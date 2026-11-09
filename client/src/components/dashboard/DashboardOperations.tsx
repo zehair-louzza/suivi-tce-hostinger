@@ -110,7 +110,7 @@ export function DashboardOperations({
 
       <div className="m-dash m-dash--ops" data-testid="atlas-dashboard-operations">
       {/* 1. BANNIÈRE D'ALERTE RAPPORT TERRAIN */}
-      <div className="m-banner m-tone-teal">
+      <div className="m-banner m-tone-blue">
         <Camera size={20} />
         <div>
           <strong>1 rapport terrain avec photos attend votre vérification</strong>
