@@ -46,6 +46,7 @@ import { ComptabiliteStudioView } from '../components/ComptabiliteStudioView';
 import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
+import { DossierPanel } from '../components/DossierPanel';
 import { DossierDIField } from '../components/DossierDIField';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
@@ -798,6 +799,77 @@ export function DashboardPage() {
     });
   };
 
+  /** Cas 1 : nouvelle intervention rattachée à un devis (infos reprises du devis). */
+  const intvDefaultsFromDevis = (d: Devis): Partial<Intervention> => ({
+    numeroDI: d.numeroDI || '',
+    devisId: d.id,
+    client: d.client || '',
+    chantier: d.site || '',
+    corpsEtat: d.corpsEtat || 'Électricité',
+    objet: d.objet || '',
+    origine: d.origine || undefined,
+    refDevisTexte: d.reference || undefined,
+    priorite: d.priorite || 'Normale',
+  });
+  const startInterventionFromDevis = (d: Devis) => {
+    setSelectedDevis(null);
+    setIsCreatingDevis(false);
+    handleSectionChange('interventions');
+    setIsCreatingIntv(true);
+    setIsCustomIntvClient(false);
+    setIntvTab('planif');
+    setSelectedIntv({
+      statutOperationnel: 'À planifier',
+      traitement: 'À traiter',
+      typeIntervention: 'Corrective',
+      heureDebut: '08:00',
+      heureFin: '12:00',
+      modePlanification: 'Planifiée',
+      statutFacture: 'Non facturée',
+      entreprise: '',
+      ...intvDefaultsFromDevis(d),
+    });
+  };
+  const pickSourceDevis = (d: Devis | null) => {
+    setSelectedIntv((cur) => {
+      if (!cur) return cur;
+      if (!d) return { ...cur, devisId: undefined, origineDevisId: undefined, refDevisTexte: undefined };
+      return { ...cur, ...intvDefaultsFromDevis(d) };
+    });
+  };
+  /** Cas 3 : devis suite à intervention — le DI relie automatiquement les deux fiches. */
+  const startDevisFromIntervention = (i: Intervention) => {
+    const di = (i.numeroDI || '').trim() || (i.reference || '').trim() || `INT-${i.id}`;
+    if (!(i.numeroDI || '').trim()) {
+      updateIntvMut.mutate({ id: i.id, data: { ...i, numeroDI: di } });
+    }
+    setSelectedIntv(null);
+    setIsCreatingIntv(false);
+    handleSectionChange('devis');
+    setIsCreatingDevis(true);
+    setIsCustomDevisClient(false);
+    setDevisTab('qualif');
+    setSelectedDevis({
+      reference: '',
+      numeroDI: di,
+      statutCommercial: 'À préparer',
+      traitement: 'À traiter',
+      priorite: i.priorite || 'Normale',
+      client: i.client || '',
+      site: i.chantier || '',
+      corpsEtat: i.corpsEtat || 'Électricité',
+      objet: i.objet || '',
+      origine: 'Intervention',
+      refInterventionTexte: i.reference || `#${i.id}`,
+      responsable: '',
+      prochaineAction: 'Chiffrer',
+      amount: 0,
+      validiteJours: 30,
+      visiteNecessaire: false,
+      notes: [i.resultatTechnique, i.elementsChiffrage].filter(Boolean).join('\n') || undefined,
+    });
+  };
+
   return (
     <Layout
       activeSection={activeSection}
@@ -1207,6 +1279,17 @@ export function DashboardPage() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <DossierPanel
+                kind="devis"
+                current={selectedDevis}
+                creating={isCreatingDevis}
+                devisList={devisList}
+                interventionsList={interventionsList}
+                onOpenDevis={(d) => { setIsCreatingDevis(false); setDevisTab('qualif'); setSelectedDevis(d); }}
+                onOpenIntervention={(it) => { setSelectedDevis(null); handleSectionChange('interventions'); setIsCreatingIntv(false); setIntvTab('planif'); setSelectedIntv(it); }}
+                onNewIntervention={startInterventionFromDevis}
+                onNewDevisFromIntervention={startDevisFromIntervention}
+              />
               {devisTab === 'qualif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <DossierDIField
@@ -1439,7 +1522,7 @@ export function DashboardPage() {
                       value={selectedDevis.origine || 'Client'}
                       onChange={(e) => setSelectedDevis({ ...selectedDevis, origine: e.target.value })}
                     >
-                      {originesList.map((p) => (
+                      {(originesList.includes('Intervention') ? originesList : [...originesList, 'Intervention']).map((p) => (
                         <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
@@ -1716,6 +1799,18 @@ export function DashboardPage() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <DossierPanel
+                kind="intervention"
+                current={selectedIntv}
+                creating={isCreatingIntv}
+                devisList={devisList}
+                interventionsList={interventionsList}
+                onOpenDevis={(d) => { setIsCreatingDevis(false); setDevisTab('qualif'); setSelectedDevis(d); }}
+                onOpenIntervention={(it) => { setSelectedDevis(null); handleSectionChange('interventions'); setIsCreatingIntv(false); setIntvTab('planif'); setSelectedIntv(it); }}
+                onNewIntervention={startInterventionFromDevis}
+                onNewDevisFromIntervention={startDevisFromIntervention}
+                onPickSourceDevis={pickSourceDevis}
+              />
               {intvTab === 'planif' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <DossierDIField

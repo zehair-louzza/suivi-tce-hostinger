@@ -181,3 +181,43 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
     .filter((g) => g.devis || g.travaux.length || g.visites.length)
     .sort((x, y) => y.anomalies.length - x.anomalies.length || (y.devis?.id || 0) - (x.devis?.id || 0));
 }
+
+export type DossierCase = 'sur-devis' | 'directe' | 'devis-suite-intervention' | 'devis-seul';
+
+export const CASE_LABEL: Record<DossierCase, string> = {
+  'sur-devis': 'Intervention sur devis',
+  directe: 'Intervention directe',
+  'devis-suite-intervention': 'Devis suite à intervention',
+  'devis-seul': 'Devis en préparation',
+};
+
+export function isDevisSuiteIntervention(d?: Devis | null): boolean {
+  return Boolean(d) && (low(d!.origine) === 'intervention' || Boolean((d!.refInterventionTexte || '').trim()));
+}
+
+/** Retrouve le dossier (devis + interventions) auquel appartient une fiche. */
+export function findDossier(
+  target: { kind: 'devis' | 'intervention'; id?: number; numeroDI?: string | null; devisId?: number | null },
+  devisList: Devis[],
+  interventionsList: Intervention[],
+): Dossier | undefined {
+  const all = buildDossiers(devisList, interventionsList);
+  const di = normDI(target.numeroDI);
+  if (target.kind === 'devis') {
+    return all.find((g) => g.devis?.id === target.id) || (di ? all.find((g) => g.di === di) : undefined);
+  }
+  return (
+    all.find((g) => [...g.travaux, ...g.visites].some((i) => i.id === target.id)) ||
+    (target.devisId ? all.find((g) => g.devis?.id === target.devisId) : undefined) ||
+    (di ? all.find((g) => g.di === di) : undefined)
+  );
+}
+
+export function dossierCase(kind: 'devis' | 'intervention', dossier?: Dossier): DossierCase {
+  if (kind === 'devis') {
+    if (isDevisSuiteIntervention(dossier?.devis)) return 'devis-suite-intervention';
+    return dossier && dossier.travaux.length + dossier.visites.length > 0 ? 'sur-devis' : 'devis-seul';
+  }
+  if (!dossier?.devis) return 'directe';
+  return isDevisSuiteIntervention(dossier.devis) ? 'devis-suite-intervention' : 'sur-devis';
+}
