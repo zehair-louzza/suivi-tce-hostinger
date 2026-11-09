@@ -8,6 +8,7 @@ import {
   Receipt,
   ArrowRight,
 } from 'lucide-react';
+import type { PeriodeId } from '../../lib/periode';
 import { Devis, Intervention, formatCurrency } from '../../lib/api';
 import { DashboardQueues } from './DashboardSynthese';
 import { DashboardHeader } from './DashboardHeader';
@@ -16,6 +17,10 @@ import toast from 'react-hot-toast';
 interface DashboardOperationsProps {
   devisList: Devis[];
   interventionsList: Intervention[];
+  /** Période du tableau de bord. Les files opérationnelles ne sont pas filtrées :
+   *  une intervention en retard reste à traiter quelle que soit la période choisie. */
+  period?: PeriodeId;
+  onPeriodChange?: (p: PeriodeId) => void;
   techniciensList?: string[];
   queues: DashboardQueues;
   activeTab: 'synthese' | 'operations' | 'analyse';

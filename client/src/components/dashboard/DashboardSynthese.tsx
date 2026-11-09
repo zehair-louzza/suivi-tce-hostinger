@@ -1,4 +1,6 @@
 import { buildLedgerContext, amountOf, isVisite } from '../../lib/dossiers';
+import type { PeriodeId } from '../../lib/periode';
+import { PERIODES, filtrerDevis, filtrerInterventions, periodeLabel, periodeRange } from '../../lib/periode';
 import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
@@ -52,6 +54,9 @@ export interface DashboardQueues {
 interface DashboardSyntheseProps {
   devisList: Devis[];
   interventionsList: Intervention[];
+  /** Période sélectionnée, partagée avec les autres vues du tableau de bord */
+  period?: PeriodeId;
+  onPeriodChange?: (p: PeriodeId) => void;
   techniciensList?: string[];
   queues: DashboardQueues;
   activeTab: 'synthese' | 'operations' | 'analyse';
@@ -96,7 +101,9 @@ function ChartTooltip({ active, payload, label }: any) {
   const val = payload[0].value;
   return (
     <div className="m-chart-tip">
-      <strong>{label} 2026</strong>
+      <strong>
+        {label} {new Date().getFullYear()}
+      </strong>
       <span>{typeof val === 'number' ? formatCurrency(val) : val}</span>
     </div>
   );
@@ -105,6 +112,8 @@ function ChartTooltip({ active, payload, label }: any) {
 export function DashboardSynthese({
   devisList,
   interventionsList,
+  period: periodProp,
+  onPeriodChange,
   techniciensList = [],
   queues,
   activeTab,
@@ -118,8 +127,19 @@ export function DashboardSynthese({
   onFilterInterventions: _onFilterInterventions,
   onOpenSituationModal,
 }: DashboardSyntheseProps) {
-  const [period, setPeriod] = useState('month');
+  const [periodLocal, setPeriodLocal] = useState<PeriodeId>('month');
+  const period = periodProp ?? periodLocal;
+  const setPeriod = (p: PeriodeId) => {
+    setPeriodLocal(p);
+    onPeriodChange?.(p);
+  };
   const [periodOpen, setPeriodOpen] = useState(false);
+
+  // La période filtre réellement les indicateurs. Le contexte comptable reste construit sur
+  // les listes complètes, sinon un devis hors période ne serait plus retrouvé.
+  const range = useMemo(() => periodeRange(period), [period]);
+  const intvPeriode = useMemo(() => filtrerInterventions(interventionsList, range), [interventionsList, range]);
+  const devisPeriode = useMemo(() => filtrerDevis(devisList, range), [devisList, range]);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
 
   // Date du jour formatée en français
@@ -164,21 +184,21 @@ export function DashboardSynthese({
   } = useMemo(() => {
     const ledger = buildLedgerContext(devisList, interventionsList);
     // Les visites de chiffrage ne sont pas du chiffre d'affaires
-    const cloturees = interventionsList.filter(
+    const cloturees = intvPeriode.filter(
       (i) => !isVisite(i) && ['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')
     );
     const caCloture = cloturees.reduce((acc, i) => acc + amountOf(i, ledger), 0);
 
-    const aFacturer = interventionsList.filter(
+    const aFacturer = intvPeriode.filter(
       (i) => !isVisite(i) && i.statutOperationnel === 'Terminée - à valider'
     );
     const caAFacturer = aFacturer.reduce((acc, i) => acc + amountOf(i, ledger), 0);
 
-    const devisAttente = devisList.filter((d) => ['Envoyé', 'En négociation', 'Accepté'].includes(d.statutCommercial || ''));
+    const devisAttente = devisPeriode.filter((d) => ['Envoyé', 'En négociation', 'Accepté'].includes(d.statutCommercial || ''));
     const totalDevisPortefeuille = devisAttente.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
-    const totalDevisNonBrouillon = devisList.filter((d) => d.statutCommercial !== 'À préparer').length;
-    const acceptesCount = devisList.filter((d) => d.statutCommercial === 'Accepté').length;
+    const totalDevisNonBrouillon = devisPeriode.filter((d) => d.statutCommercial !== 'À préparer').length;
+    const acceptesCount = devisPeriode.filter((d) => d.statutCommercial === 'Accepté').length;
     const taux = totalDevisNonBrouillon > 0 ? Math.round((acceptesCount / totalDevisNonBrouillon) * 100) : 0;
 
     return {
@@ -191,7 +211,7 @@ export function DashboardSynthese({
       rapportsAValiderCount: queues.rapportsEnAttente.length,
       clotureesCount: cloturees.length,
     };
-  }, [devisList, interventionsList, queues]);
+  }, [devisList, interventionsList, devisPeriode, intvPeriode, queues]);
 
   // =========================================================================
   // CA MENSUEL RÉEL : interventions terminées / clôturées, par mois de réalisation
@@ -217,15 +237,18 @@ export function DashboardSynthese({
     return vals.length >= 2 ? vals : [0, ...vals, ...(vals.length === 0 ? [0] : [])];
   }, [caMonthlyData]);
 
-  // Variation réelle du mois en cours par rapport au précédent
+  // Variation réelle du mois en cours par rapport au précédent.
+  // Elle n'a de sens que si la période affichée EST le mois : sinon on n'affiche rien
+  // plutôt que de comparer une semaine à un mois.
   const caDeltaPct = useMemo(() => {
+    if (period !== 'month') return null;
     const n = caMonthlyData.length;
     if (n < 2) return null;
     const prev = caMonthlyData[n - 2].ca;
     const cur = caMonthlyData[n - 1].ca;
     if (prev <= 0) return null;
     return Math.round(((cur - prev) / prev) * 100);
-  }, [caMonthlyData]);
+  }, [caMonthlyData, period]);
 
   // =========================================================================
   // LISTE DES PRIORITÉS (HYBRIDE DONNÉES RÉELLES + EXEMPLES STRUCTURELS)
@@ -410,25 +433,12 @@ export function DashboardSynthese({
               data-testid="dashboard-period-dropdown"
             >
               <CalendarDays size={15} style={{ color: 'var(--muted)' }} />
-              <span>
-                {period === 'today'
-                  ? 'Aujourd’hui'
-                  : period === 'week'
-                  ? 'Cette semaine'
-                  : period === 'year'
-                  ? 'Année 2026'
-                  : currentMonthLabel}
-              </span>
+              <span>{periodeLabel(period)}</span>
               <ChevronDown size={14} style={{ color: 'var(--muted)' }} />
             </button>
             {periodOpen && (
               <div className="m-menu m-menu--left">
-                {[
-                  { id: 'today', label: 'Aujourd’hui' },
-                  { id: 'week', label: 'Cette semaine' },
-                  { id: 'month', label: currentMonthLabel },
-                  { id: 'year', label: 'Année 2026' },
-                ].map((opt) => (
+                {PERIODES.map((id) => ({ id, label: periodeLabel(id) })).map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
@@ -573,7 +583,10 @@ export function DashboardSynthese({
             </div>
             <div className="m-kpi-value">{formatCurrency(totalCAClotureHT)}</div>
             <div className="m-kpi-foot">
-              <span className="m-kpi-hint">vs mois précédent · {clotureesCount} clôturées</span>
+              <span className="m-kpi-hint">
+                {periodeLabel(period)} · {clotureesCount} clôturée{clotureesCount > 1 ? 's' : ''}
+                {period === 'month' ? ' · vs mois précédent' : ''}
+              </span>
               <Sparkline data={caSparkline} />
             </div>
           </div>

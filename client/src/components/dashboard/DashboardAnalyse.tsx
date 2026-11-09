@@ -1,4 +1,6 @@
-import { buildLedgerContext, amountOf, isVisite } from '../../lib/dossiers';
+import { buildLedgerContext, amountOf, isVisite, normClient } from '../../lib/dossiers';
+import type { PeriodeId } from '../../lib/periode';
+import { filtrerDevis, filtrerInterventions, periodeLabel, periodeRange } from '../../lib/periode';
 import React, { useMemo } from 'react';
 import {
   ResponsiveContainer,
@@ -19,13 +21,18 @@ import {
   Wrench,
   ArrowRight,
 } from 'lucide-react';
-import { Devis, Intervention, formatCurrency } from '../../lib/api';
+import { ClientProfile, Devis, Intervention, formatCurrency } from '../../lib/api';
 import { DashboardQueues } from './DashboardSynthese';
 import { DashboardHeader } from './DashboardHeader';
 
 interface DashboardAnalyseProps {
   devisList: Devis[];
   interventionsList: Intervention[];
+  /** Période du tableau de bord : filtre réellement les indicateurs de cette vue */
+  period?: PeriodeId;
+  onPeriodChange?: (p: PeriodeId) => void;
+  /** Répertoire clients, pour distinguer un donneur d'ordre d'un particulier */
+  clientProfiles?: ClientProfile[];
   techniciensList?: string[];
   queues: DashboardQueues;
   activeTab: 'synthese' | 'operations' | 'analyse';
@@ -58,6 +65,8 @@ function ChartTip({ active, payload, label }: any) {
 export function DashboardAnalyse({
   devisList = [],
   interventionsList = [],
+  period = 'month',
+  clientProfiles = [],
   queues,
   activeTab,
   onTabChange,
@@ -134,22 +143,21 @@ export function DashboardAnalyse({
     ];
   }, [devisList, interventionsList, queues, onNavigateSection, onGoAdminRapports]);
 
+  const range = useMemo(() => periodeRange(period), [period]);
+  const intvPeriode = useMemo(() => filtrerInterventions(interventionsList, range), [interventionsList, range]);
+  const devisPeriode = useMemo(() => filtrerDevis(devisList, range), [devisList, range]);
+
   // 2. KPIs Pipeline
   const pipelineStats = useMemo(() => {
-    const devisEnCours = devisList.filter(
+    const devisEnCours = devisPeriode.filter(
       (d) => !['Refusé', 'Annulé'].includes(d.statutCommercial || '')
     );
-    const devisAcceptes = devisList.filter((d) => d.statutCommercial === 'Accepté');
+    const devisAcceptes = devisPeriode.filter((d) => d.statutCommercial === 'Accepté');
     const totalPipelineHT = devisEnCours.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
     const totalAccepteHT = devisAcceptes.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
     const tauxTransfo =
-      devisList.length > 0
-        ? Math.round((devisAcceptes.length / devisList.length) * 100)
-        : 0;
-    const panierMoyen =
-      devisList.length > 0
-        ? Math.round(totalPipelineHT / devisList.length)
-        : 0;
+      devisPeriode.length > 0 ? Math.round((devisAcceptes.length / devisPeriode.length) * 100) : 0;
+    const panierMoyen = devisPeriode.length > 0 ? Math.round(totalPipelineHT / devisPeriode.length) : 0;
 
     return {
       pipelineTotal: totalPipelineHT,
@@ -161,23 +169,60 @@ export function DashboardAnalyse({
     };
   }, [devisList]);
 
-  // 3. CA par donneur d'ordre (Graphique Recharts BarChart)
-  const caByClient = useMemo(() => {
-    const totalsByClient: Record<string, number> = {};
+  // 3. CA par donneur d'ordre
+  //
+  // Le regroupement se fait sur le nom normalisé, sinon « Presta maintenance » et
+  // « presta maintenance  » compteraient comme deux clients. Les particuliers et les
+  // interventions sans client sont comptés à part : ce ne sont pas des donneurs d'ordre.
+  const caClients = useMemo(() => {
     const ledger = buildLedgerContext(devisList, interventionsList);
-    interventionsList.forEach((i) => {
+    const typeParNom = new Map<string, string>();
+    clientProfiles.forEach((c) => typeParNom.set(normClient(c.nom), c.type));
+
+    const totaux = new Map<string, { nom: string; ca: number; type: string }>();
+    let caParticuliers = 0;
+    let caSansClient = 0;
+    let nbSansClient = 0;
+
+    intvPeriode.forEach((i) => {
       if (isVisite(i) || !['Terminée - à valider', 'Clôturée'].includes(i.statutOperationnel || '')) return;
-      const name = i.client || 'Sans client';
-      const amount = amountOf(i, ledger);
-      totalsByClient[name] = (totalsByClient[name] || 0) + amount;
+      const montant = amountOf(i, ledger);
+      if (montant <= 0) return;
+      const cle = normClient(i.client);
+      if (cle === '') {
+        caSansClient += montant;
+        nbSansClient += 1;
+        return;
+      }
+      const type = typeParNom.get(cle) || 'INCONNU';
+      if (type === 'PARTICULIER') {
+        caParticuliers += montant;
+        return;
+      }
+      const actuel = totaux.get(cle);
+      if (actuel) actuel.ca += montant;
+      else totaux.set(cle, { nom: (i.client || '').trim(), ca: montant, type });
     });
 
-    return Object.entries(totalsByClient)
-      .map(([name, ca]) => ({ name, ca }))
-      .filter((e) => e.ca > 0)
-      .sort((a, b) => b.ca - a.ca)
-      .slice(0, 6);
-  }, [interventionsList, devisList]);
+    const tries = Array.from(totaux.values()).sort((a, b) => b.ca - a.ca);
+    const tete = tries.slice(0, 6);
+    const reste = tries.slice(6);
+    const barres = tete.map((c) => ({ name: c.nom, ca: c.ca }));
+    if (reste.length > 0) {
+      barres.push({ name: `Autres (${reste.length})`, ca: reste.reduce((acc: number, c) => acc + c.ca, 0) });
+    }
+    return {
+      barres,
+      total: tries.reduce((acc, c) => acc + c.ca, 0),
+      nbClients: tries.length,
+      caParticuliers,
+      caSansClient,
+      nbSansClient,
+      inconnus: tries.filter((c) => c.type === 'INCONNU').length,
+    };
+  }, [intvPeriode, devisList, interventionsList, clientProfiles]);
+
+  const caByClient = caClients.barres;
 
   // 4. Performance par corps d'état
   const corpsStats = useMemo(() => {
@@ -185,7 +230,7 @@ export function DashboardAnalyse({
     const trades = ['Électricité', 'Plomberie', 'Peinture', 'Menuiserie', 'Serrurerie', 'CVC / Climatisation'];
     return trades.map((corps) => {
       const key = corps.toLowerCase();
-      const intvs = interventionsList.filter((i) => !isVisite(i) && (i.corpsEtat || '').toLowerCase().includes(key));
+      const intvs = intvPeriode.filter((i) => !isVisite(i) && (i.corpsEtat || '').toLowerCase().includes(key));
       const actifs = intvs.filter((i) =>
         ['À planifier', 'Planifiée', 'En cours'].includes(i.statutOperationnel || '')
       ).length;
@@ -194,7 +239,7 @@ export function DashboardAnalyse({
       const pct = intvs.length > 0 ? Math.round((done.length / intvs.length) * 100) : 0;
       return { corps, actifs, clotures: done.length, ca, pct };
     });
-  }, [interventionsList, devisList]);
+  }, [intvPeriode, devisList, interventionsList]);
 
   return (
     <div className="m-page" data-testid="atlas-screen-dashboard-analyse">
@@ -313,7 +358,10 @@ export function DashboardAnalyse({
             <header className="m-card-head">
               <div className="m-card-titles">
                 <h2>CA par donneur d’ordre</h2>
-                <p>Année 2026, HT</p>
+                <p>
+                  {periodeLabel(period)}, HT · {caClients.nbClients} client
+                  {caClients.nbClients > 1 ? 's' : ''}
+                </p>
               </div>
             </header>
             <div className="m-card-body">
@@ -352,6 +400,32 @@ export function DashboardAnalyse({
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Ce qui n'est pas dans le graphique doit être dit, sinon le total paraît faux */}
+              {(caClients.caParticuliers > 0 || caClients.caSansClient > 0 || caClients.inconnus > 0) && (
+                <ul
+                  style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+                  data-testid="ca-client-hors-graphique"
+                >
+                  {caClients.caParticuliers > 0 && (
+                    <li style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      Particuliers, comptés à part : <strong>{formatCurrency(caClients.caParticuliers)}</strong>
+                    </li>
+                  )}
+                  {caClients.caSansClient > 0 && (
+                    <li style={{ fontSize: 12.5, color: '#B45309' }}>
+                      <strong>{formatCurrency(caClients.caSansClient)}</strong> sur {caClients.nbSansClient} intervention
+                      {caClients.nbSansClient > 1 ? 's' : ''} sans client renseigné : à rattacher à un donneur d’ordre.
+                    </li>
+                  )}
+                  {caClients.inconnus > 0 && (
+                    <li style={{ fontSize: 12.5, color: '#B45309' }}>
+                      {caClients.inconnus} nom{caClients.inconnus > 1 ? 's' : ''} absent
+                      {caClients.inconnus > 1 ? 's' : ''} du répertoire clients : vérifiez l’orthographe ou créez la fiche.
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
           </section>
 

@@ -49,6 +49,7 @@ import { DonneursOrdreStudioView } from '../components/DonneursOrdreStudioView';
 import { ParametresStudioView } from '../components/ParametresStudioView';
 import { AdminWorkstation } from '../components/AdminWorkstation';
 import { DemandesStudioView } from '../components/DemandesStudioView';
+import type { PeriodeId } from '../lib/periode';
 import { MaFileView } from '../components/MaFileView';
 import { DossierPanel } from '../components/DossierPanel';
 import { DossierDIField } from '../components/DossierDIField';
@@ -169,6 +170,8 @@ export function DashboardPage() {
   };
 
   // Dashboard Sub-Tabs (Synthèse / Opérations / Analyse - Refonte ANELEC)
+  // Période du tableau de bord : partagée par les trois vues, et réellement filtrante
+  const [dashboardPeriod, setDashboardPeriod] = useState<PeriodeId>('month');
   const [dashboardTab, setDashboardTab] = useState<'synthese' | 'operations' | 'analyse'>('synthese');
 
   // Table vs Kanban view modes for Devis & Interventions (Jobber / Linear style)
@@ -939,6 +942,8 @@ export function DashboardPage() {
 
           {dashboardTab === 'synthese' && (
             <DashboardSynthese
+              period={dashboardPeriod}
+              onPeriodChange={setDashboardPeriod}
               devisList={devisList}
               interventionsList={interventionsList}
               techniciensList={techniciensList}
@@ -970,6 +975,8 @@ export function DashboardPage() {
 
           {dashboardTab === 'operations' && (
             <DashboardOperations
+              period={dashboardPeriod}
+              onPeriodChange={setDashboardPeriod}
               devisList={devisList}
               interventionsList={interventionsList}
               techniciensList={techniciensList}
@@ -1011,6 +1018,9 @@ export function DashboardPage() {
 
           {dashboardTab === 'analyse' && (
             <DashboardAnalyse
+              period={dashboardPeriod}
+              onPeriodChange={setDashboardPeriod}
+              clientProfiles={clientProfiles}
               devisList={devisList}
               interventionsList={interventionsList}
               techniciensList={techniciensList}

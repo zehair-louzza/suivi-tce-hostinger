@@ -199,6 +199,12 @@ export function buildDossiers(devisList: Devis[], interventionsList: Interventio
     const sommeTravaux = g.travaux.reduce((s, i) => s + (Number(i.amount) || 0), 0);
     if (g.devis && g.devisMontant > 0 && sommeTravaux > g.devisMontant + TOL) a.push('Interventions supérieures au montant du devis');
     if (g.travaux.some((i) => isDone(i) && amountOf(i, ctx) <= 0)) a.push('Intervention terminée sans montant');
+    // Un DI sans client ne désigne aucun dossier : le numéro vient du donneur d'ordre
+    if (g.di && normClient(g.client) === '') a.push('Numéro de DI sans donneur d’ordre');
+    // Une visite de chiffrage ne se facture pas : un montant facturé dessus fausse les comptes
+    if (g.visites.some((i) => isBilled(i) && Number(i.amount) > 0)) {
+      a.push('Visite de chiffrage portant un montant facturé');
+    }
   });
 
   return list
