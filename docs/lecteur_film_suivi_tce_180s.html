@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Film Officiel « Suivi TCE » • 180s (Sky & Ice)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .clip-btn {
+      transition: all 0.15s ease-out;
+    }
+    .clip-btn:hover {
+      transform: translateY(-2px);
+      border-color: #2378B5;
+    }
+    ::cue {
+      background: rgba(24, 50, 71, 0.88);
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+      font-size: 16px;
+      line-height: 1.4;
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[#183247] antialiased p-4 select-none">
+  <div class="bg-[#FFFFFF] text-[#183247] border border-[#DFE8EF] rounded-2xl p-6 shadow-xl max-w-5xl mx-auto backdrop-blur-xl">
+    
+    <!-- En-tête Sky & Ice -->
+    <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#DFE8EF] mb-5">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-[#F3F7FA] border border-[#DFE8EF] flex items-center justify-center text-xl shadow-sm">
+          🎬
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-[#183247] flex items-center gap-2">
+            Suivi TCE <span class="text-xs px-2.5 py-0.5 rounded-full bg-[#EBF3F8] text-[#2378B5] border border-[#DFE8EF] font-semibold">180s • 3 Minutes</span>
+          </h1>
+          <p class="text-xs text-[#526779]">Film Principal de Présentation • Univers Sky & Ice • Voix Off Naturelle & Sous-Titres Français</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <a 
+          href="film_suivi_tce_180s.mp4" 
+          download="film_suivi_tce_180s.mp4"
+          class="px-3.5 py-1.5 rounded-lg bg-[#F3F7FA] hover:bg-[#EBF3F8] border border-[#DFE8EF] text-xs font-semibold text-[#183247] transition-all flex items-center gap-1.5"
+        >
+          <span>📥</span> Télécharger le Film (180s MP4)
+        </a>
+      </div>
+    </div>
+
+    <!-- Lecteur Vidéo HTML5 avec Sous-titres intégrés -->
+    <div class="relative rounded-xl overflow-hidden bg-[#000000] border border-[#DFE8EF] shadow-lg mb-5">
+      <video 
+        id="filmVideo"
+        src="film_suivi_tce_180s.mp4"
+        controls
+        autoplay
+        playsinline
+        class="w-full h-auto aspect-video max-h-[520px] mx-auto block"
+      >
+        <track src="sous_titres_suivi_tce.vtt" kind="subtitles" srclang="fr" label="Français" default>
+        Votre navigateur ne prend pas en charge la lecture vidéo HTML5.
+      </video>
+    </div>
+
+    <!-- Contrôles et Navigation par Clips -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between text-xs font-bold text-[#526779] uppercase tracking-wider">
+        <span>Navigation par les 18 Clips Autonomes (10s chacun) :</span>
+        <div class="flex items-center gap-1">
+          <span class="text-[#526779]">Vitesse :</span>
+          <button onclick="setSpeed(0.75)" class="px-2 py-0.5 rounded bg-[#F3F7FA] hover:bg-[#EBF3F8] text-[#183247]">0.75x</button>
+          <button onclick="setSpeed(1)" class="px-2 py-0.5 rounded bg-[#2378B5] text-white font-bold">1x</button>
+          <button onclick="setSpeed(1.25)" class="px-2 py-0.5 rounded bg-[#F3F7FA] hover:bg-[#EBF3F8] text-[#183247]">1.25x</button>
+        </div>
+      </div>
+
+      <!-- Grille des 18 Clips cliquables -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-left">
+        <!-- Ch. 1 -->
+        <button onclick="jumpTo(0)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 01 • 00:00</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Plans & Bureau</div>
+        </button>
+        <button onclick="jumpTo(10)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 02 • 00:10</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Planning papier</div>
+        </button>
+        <!-- Ch. 2 -->
+        <button onclick="jumpTo(20)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#8064B1]">Clip 03 • 00:20</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">3 fiches alignées</div>
+        </button>
+        <button onclick="jumpTo(30)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#8064B1]">Clip 04 • 00:30</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Morph Suivi TCE</div>
+        </button>
+        <!-- Ch. 3 -->
+        <button onclick="jumpTo(40)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#238675]">Clip 05 • 00:40</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">KPI CA & Interv.</div>
+        </button>
+        <button onclick="jumpTo(50)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#238675]">Clip 06 • 00:50</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">KPI Devis émis/acc.</div>
+        </button>
+        <!-- Ch. 3 suite & Ch. 4 -->
+        <button onclick="jumpTo(60)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#238675]">Clip 07 • 01:00</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">4 cartes alignées</div>
+        </button>
+        <button onclick="jumpTo(65)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 08 • 01:05</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Tracé 4 courbes</div>
+        </button>
+        <button onclick="jumpTo(75)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 09 • 01:15</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Variations réelles</div>
+        </button>
+        <button onclick="jumpTo(85)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 10 • 01:25</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Ombres surélevées</div>
+        </button>
+        <!-- Ch. 5 -->
+        <button onclick="jumpTo(90)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#AC782D]">Clip 11 • 01:30</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Jours & Semaines</div>
+        </button>
+        <button onclick="jumpTo(100)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#AC782D]">Clip 12 • 01:40</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Infobulle Jeudi 22</div>
+        </button>
+        <!-- Ch. 6 -->
+        <button onclick="jumpTo(115)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 13 • 01:55</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Montants & Volumes</div>
+        </button>
+        <button onclick="jumpTo(125)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 14 • 02:05</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Sélection semaine</div>
+        </button>
+        <button onclick="jumpTo(135)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#2378B5]">Clip 15 • 02:15</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Deux axes séparés</div>
+        </button>
+        <!-- Ch. 7 & 8 -->
+        <button onclick="jumpTo(140)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#238675]">Clip 16 • 02:20</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Interface & Relief</div>
+        </button>
+        <button onclick="jumpTo(150)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#238675]">Clip 17 • 02:30</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Vue Tablette</div>
+        </button>
+        <button onclick="jumpTo(160)" class="clip-btn p-2 rounded-lg bg-[#F8FAFC] border border-[#DFE8EF] text-left">
+          <div class="text-[10px] font-bold text-[#183247]">Clip 18 • 02:40</div>
+          <div class="text-xs font-semibold truncate text-[#183247]">Signature Suivi TCE</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pied de carte -->
+    <div class="mt-5 pt-4 border-t border-[#DFE8EF] flex flex-wrap items-center justify-between text-xs text-[#526779] gap-2">
+      <div>Durée : 180.00s • 1080p Full HD • Voix off FR • Débit 6.5 Mbps • 18 clips de 10s</div>
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-2 h-2 rounded-full bg-[#238675]"></span>
+        <span class="text-[#238675] font-semibold">Mention : Interface illustrative — données fictives</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('filmVideo');
+    function jumpTo(sec) {
+      if (!video) return;
+      video.currentTime = sec;
+      video.play();
+    }
+    function setSpeed(sp) {
+      if (!video) return;
+      video.playbackRate = sp;
+    }
+  </script>
+</body>
+</html>

@@ -57,3 +57,7 @@ scratch/
 credentials.json
 *.key
 .credentials
+
+# Audio & Large media
+*.wav
+docs/audio/

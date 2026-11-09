@@ -356,10 +356,25 @@ function MobileRouteMap({
     const t2 = setTimeout(() => map?.invalidateSize(), 300);
     const t3 = setTimeout(() => map?.invalidateSize(), 600);
 
+    let resizeObs: ResizeObserver | null = null;
+    if (mapContainerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver(() => {
+        mapInstanceRef.current?.invalidateSize();
+      });
+      resizeObs.observe(mapContainerRef.current);
+    }
+
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      resizeObs?.disconnect();
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        layerGroupRef.current = null;
+        polylineRef.current = null;
+      }
     };
   }, []);
 
@@ -752,6 +767,20 @@ export function TechnicianMobileView({
     }
   }, [selectedDate]);
 
+  const monthOptions = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
+    const curYear = new Date().getFullYear();
+    for (let y = curYear - 1; y <= curYear + 1; y++) {
+      for (let m = 1; m <= 12; m++) {
+        const val = `${y}-${String(m).padStart(2, '0')}`;
+        const dt = new Date(y, m - 1, 15);
+        const lbl = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(dt);
+        list.push({ value: val, label: lbl.charAt(0).toUpperCase() + lbl.slice(1) });
+      }
+    }
+    return list;
+  }, []);
+
   // Format complet de la date sélectionnée (ex: "Vendredi 6 novembre")
   const formattedSelectedDate = useMemo(() => {
     try {
@@ -1080,7 +1109,7 @@ export function TechnicianMobileView({
             onClick={handleStartDay}
           >
             <Ic n="play" size={22} />
-            <span>{clockInMut.isPending ? 'Enregistrement…' : 'Commencer ma journée'}</span>
+            <span>{clockInMut.isPending ? 'Enregistrement…' : 'Commencer la journée'}</span>
           </button>
         </>
       ) : (
@@ -1103,7 +1132,7 @@ export function TechnicianMobileView({
               onClick={handleEndDay}
             >
               <Ic n="stop" size={16} />
-              <span>{clockOutMut.isPending ? '…' : 'Finir'}</span>
+              <span>{clockOutMut.isPending ? '…' : 'Finir la journée'}</span>
             </button>
           )}
         </div>
@@ -1114,7 +1143,34 @@ export function TechnicianMobileView({
   const renderDatePicker = () => (
     <section className="t-date-picker" data-testid="terrain-date-picker">
       <div className="t-month-row">
-        <h2 className="t-month-label">{monthTitle}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--color-text, #0f172a)' }}>{monthTitle}</span>
+          <select
+            className="t-select"
+            value={selectedDate.slice(0, 7)}
+            onChange={(e) => {
+              const newMonth = e.target.value;
+              setSelectedDate(`${newMonth}-01`);
+            }}
+            aria-label="Filtre par mois"
+            style={{
+              fontWeight: 700,
+              fontSize: '14.5px',
+              padding: '5px 10px',
+              borderRadius: '8px',
+              border: '1px solid var(--t-border, #cbd5e1)',
+              background: 'var(--color-surface, #ffffff)',
+              color: 'var(--color-text, #0f172a)',
+              cursor: 'pointer',
+            }}
+          >
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="t-month-nav-btns">
           <button type="button" className="t-icon-btn" onClick={handlePrevWeek} aria-label="Semaine précédente">
             <Ic n="left" />

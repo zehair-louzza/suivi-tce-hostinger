@@ -152,6 +152,41 @@ export function ProfileMenu({ open, onClose, onLogout }: ProfileMenuProps) {
           <section>
             <PersonalThemePicker />
           </section>
+
+          <section style={{ borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
+            <strong style={{ fontSize: 13, color: 'var(--color-text)', display: 'block', marginBottom: 6 }}>
+              Affichage & Mode Terrain
+            </strong>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                window.location.href = '/mobile';
+              }}
+              data-testid="profile-switch-mobile-btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid var(--color-primary)',
+                background: 'var(--color-primary-soft, rgba(37,99,235,0.08))',
+                color: 'var(--color-primary)',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                <line x1="12" y1="18" x2="12.01" y2="18" />
+              </svg>
+              <span>Basculer vers l’App Mobile Technicien</span>
+            </button>
+          </section>
         </main>
 
         {/* Pied */}

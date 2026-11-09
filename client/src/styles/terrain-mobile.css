@@ -89,6 +89,22 @@
   --t-nav-active-bg: #1e293b;
   --t-nav-active-text: #ffffff;
 }
+/* Origine Clair */
+:root[data-theme='origin-light'] .t-app {
+  --t-nav-bg: #ffffff;
+  --t-nav-text: #64748b;
+  --t-nav-active-bg: #eff6ff;
+  --t-nav-active-text: #2563eb;
+  --t-radius: 12px;
+}
+/* Origine Sombre */
+:root[data-theme='origin-dark'] .t-app {
+  --t-nav-bg: #0f172a;
+  --t-nav-text: #94a3b8;
+  --t-nav-active-bg: #1e293b;
+  --t-nav-active-text: #38bdf8;
+  --t-radius: 12px;
+}
 /* Mode sombre */
 :root[data-theme='dark'] .t-app {
   --t-on-accent: #04130c;

@@ -51,6 +51,8 @@ model User {
   devis              Devis[]
   interventions      Intervention[]
   conversionRequests ConversionRequest[]
+  pointages          PointageTechnicien[]
+  invitationsSent    CompanyInvitation[] @relation("InvitationsSent")
 
   @@index([companyId], map: "users_companyid_idx")
   @@map("users")
@@ -214,6 +216,7 @@ model PointageTechnicien {
   id                      Int       @id @default(autoincrement())
   technicien              String
   userId                  Int?
+  user                    User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   companyId               Int?
   company                 Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   dateJour                String
@@ -229,6 +232,7 @@ model PointageTechnicien {
 
   @@unique([technicien, dateJour, companyId], map: "pointages_techniciens_technicien_datejour_company_key")
   @@index([companyId], map: "pointages_techniciens_companyid_idx")
+  @@index([userId], map: "pointages_techniciens_userid_idx")
   @@map("pointages_techniciens")
 }
 
@@ -243,6 +247,7 @@ model CompanyInvitation {
   permissionsJson String?
   tokenHash     String    @unique
   invitedById   Int?
+  invitedBy     User?     @relation("InvitationsSent", fields: [invitedById], references: [id], onDelete: SetNull)
   invitedByName String?
   expiresAt     DateTime
   lastSentAt    DateTime?
@@ -252,6 +257,7 @@ model CompanyInvitation {
   updatedAt     DateTime  @updatedAt
 
   @@index([companyId], map: "company_invitations_companyid_idx")
+  @@index([invitedById], map: "company_invitations_invitedbyid_idx")
   @@map("company_invitations")
 }
 
