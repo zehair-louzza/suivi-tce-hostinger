@@ -87,7 +87,7 @@ export async function syncDevisDossier(
 ) {
   const di = devis.numeroDI || null;
   if (!di) return;
-  const ref = devis.referenceMetier || `DEV-2026-${String(devis.id).padStart(3, '0')}`;
+  const ref = devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}`;
 
   // 1. Interventions orphelines portant ce DI : rattachées seulement si le client correspond
   const orphelines = await prisma.intervention.findMany({

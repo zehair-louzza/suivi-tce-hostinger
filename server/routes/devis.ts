@@ -129,8 +129,8 @@ export function transformDevis(d: any) {
 
   return {
     id: d.id,
-    reference: d.referenceMetier || `DEV-2026-${String(d.id).padStart(3, '0')}`,
-    referenceMetier: d.referenceMetier || `DEV-2026-${String(d.id).padStart(3, '0')}`,
+    reference: d.referenceMetier || `DEV-${new Date().getFullYear()}-${String(d.id).padStart(3, '0')}`,
+    referenceMetier: d.referenceMetier || `DEV-${new Date().getFullYear()}-${String(d.id).padStart(3, '0')}`,
     client: d.client,
     site,
     siteAdresse: site,
@@ -210,7 +210,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
 
   if (!needsVisite) return null;
 
-  const refDevis = devis.referenceMetier || `DEV-2026-${String(devis.id).padStart(3, '0')}`;
+  const refDevis = devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}`;
   const devisHist = parseHistorique(devis.historiqueJson);
   const gpsEvt = devisHist.find((h) => h.action === 'CLOTURE_GPS_TERRAIN' && h.details);
   const isDevisVisitDone =
@@ -223,8 +223,12 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
       (devis.statutCommercial || '').trim()
     );
 
+  // La recherche par référence texte doit rester dans la société : les références sont
+  // des séquences par société, donc deux sociétés peuvent porter la même (DEV-2026-001).
+  // Sans ce filtre, l'enregistrement d'un devis pouvait écraser la visite d'une autre société.
   const existingVisite = await prisma.intervention.findFirst({
     where: {
+      companyId: devis.companyId ?? undefined,
       OR: [
         { devisId: devis.id },
         { origineDevisId: devis.id },
@@ -575,7 +579,7 @@ devisRouter.post(
     if (!created.referenceMetier) {
       await prisma.devis.update({
         where: { id: created.id },
-        data: { referenceMetier: `DEV-2026-${String(created.id).padStart(3, '0')}` },
+        data: { referenceMetier: `DEV-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}` },
       });
     }
 
@@ -651,7 +655,7 @@ devisRouter.patch(
         timestamp: b.gpsCloture.timestamp || new Date().toISOString(),
         technicien: String(b.gpsCloture.technicien || b.visiteTechnicien || existing.visiteTechnicien || auteur).trim(),
         missionId: -id,
-        missionRef: String(b.reference || existing.referenceMetier || `DEV-2026-${String(id).padStart(3, '0')}`),
+        missionRef: String(b.reference || existing.referenceMetier || `DEV-${new Date().getFullYear()}-${String(id).padStart(3, '0')}`),
         chantier: String(b.site || existing.siteAdresse || existing.client || ''),
         client: String(b.client || existing.client || ''),
         statut: 'CLOTUREE',
@@ -838,7 +842,7 @@ devisRouter.post(
     }
 
     const isVisite = Boolean(b.isVisiteDevis || b.mode === 'visite');
-    const refDevis = devis.referenceMetier || `DEV-2026-${String(devis.id).padStart(3, '0')}`;
+    const refDevis = devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}`;
     const datePlan = parseDateOrNull(b.datePlanifiee) || devis.visiteDate || new Date();
     const technicien = b.entreprise || devis.visiteTechnicien || null;
     const heureDebut = b.heureDebut || devis.visiteHeureDebut || '08:30';
@@ -846,7 +850,7 @@ devisRouter.post(
 
     const intervention = await prisma.intervention.create({
       data: {
-        referenceMetier: isVisite ? `VIS-2026-${String(devis.id).padStart(3, '0')}` : null,
+        referenceMetier: isVisite ? `VIS-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}` : null,
         refDevisTexte: refDevis,
         numeroDI: devis.numeroDI || null,
         client: devis.client,
@@ -890,11 +894,11 @@ devisRouter.post(
     if (!intervention.referenceMetier) {
       await prisma.intervention.update({
         where: { id: intervention.id },
-        data: { referenceMetier: `INT-2026-${String(intervention.id).padStart(3, '0')}` },
+        data: { referenceMetier: `INT-${new Date().getFullYear()}-${String(intervention.id).padStart(3, '0')}` },
       });
     }
 
-    const refInterv = intervention.referenceMetier || `INT-2026-${String(intervention.id).padStart(3, '0')}`;
+    const refInterv = intervention.referenceMetier || `INT-${new Date().getFullYear()}-${String(intervention.id).padStart(3, '0')}`;
 
     const updatedDevis = await prisma.devis.update({
       where: { id: devisId },

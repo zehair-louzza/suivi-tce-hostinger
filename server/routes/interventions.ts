@@ -119,12 +119,12 @@ export function transformIntervention(i: any) {
     id: i.id,
     reference:
       i.referenceMetier ||
-      (isVisiteDevis ? `VIS-2026-${String(i.id).padStart(3, '0')}` : `INT-2026-${String(i.id).padStart(3, '0')}`),
+      (isVisiteDevis ? `VIS-${new Date().getFullYear()}-${String(i.id).padStart(3, '0')}` : `INT-${new Date().getFullYear()}-${String(i.id).padStart(3, '0')}`),
     referenceMetier:
       i.referenceMetier ||
-      (isVisiteDevis ? `VIS-2026-${String(i.id).padStart(3, '0')}` : `INT-2026-${String(i.id).padStart(3, '0')}`),
+      (isVisiteDevis ? `VIS-${new Date().getFullYear()}-${String(i.id).padStart(3, '0')}` : `INT-${new Date().getFullYear()}-${String(i.id).padStart(3, '0')}`),
     numeroDI: i.numeroDI || null,
-    refDevisTexte: i.refDevisTexte || (i.devisId ? `DEV-2026-${String(i.devisId).padStart(3, '0')}` : null),
+    refDevisTexte: i.refDevisTexte || (i.devisId ? `DEV-${new Date().getFullYear()}-${String(i.devisId).padStart(3, '0')}` : null),
     client: i.client || i.origineDevisClient || null,
     chantier: site,
     siteAdresse: site,
@@ -483,8 +483,8 @@ interventionRouter.post(
 
     if (!created.referenceMetier) {
       const autoRef = isVisiteDevis
-        ? `VIS-2026-${String(created.id).padStart(3, '0')}`
-        : `INT-2026-${String(created.id).padStart(3, '0')}`;
+        ? `VIS-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}`
+        : `INT-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}`;
       await prisma.intervention.update({
         where: { id: created.id },
         data: { referenceMetier: autoRef },
@@ -572,7 +572,7 @@ interventionRouter.patch(
         timestamp: b.gpsCloture.timestamp || new Date().toISOString(),
         technicien: String(b.gpsCloture.technicien || b.entreprise || existing.entreprise || auteur).trim(),
         missionId: id,
-        missionRef: String(b.reference || existing.referenceMetier || `INT-2026-${String(id).padStart(3, '0')}`),
+        missionRef: String(b.reference || existing.referenceMetier || `INT-${new Date().getFullYear()}-${String(id).padStart(3, '0')}`),
         chantier: String(b.chantier || existing.chantier || ''),
         client: String(b.client || existing.client || ''),
         statut: 'CLOTUREE',

@@ -1177,7 +1177,7 @@ export async function sendDevisProposalEmail(params: {
   senderEmail: string;
   companyName: string;
 }): Promise<EmailDeliveryResult> {
-  const ref = params.devis.referenceMetier || `DEV-2026-${String(params.devis.id).padStart(3, '0')}`;
+  const ref = params.devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(params.devis.id).padStart(3, "0")}`;
   const subject =
     params.subject || `[PROPOSITION COMMERCIALE / DEVIS] ${ref} • ${params.devis.client} (${params.companyName})`;
   const amountFormatted = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(
