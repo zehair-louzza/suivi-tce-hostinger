@@ -12,6 +12,7 @@ import './styles/themes.css';
 import './styles/global.css';
 import './styles/layout.css';
 import './styles/terrain-mobile.css';
+import './styles/atlas-clarity.css';
 import { registerServiceWorker } from './components/InstallAppButton';
 
 // Purge service workers pour garantir la dernière version sans cache rémanent

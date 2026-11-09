@@ -368,10 +368,20 @@
   --color-surface: #ffffff;
   --color-surface-subtle: #f3f4f8;
   --color-surface-hover: #eef0f6;
-  --color-sidebar: #0f172a;
-  --color-sidebar-active: #1e293b;
-  --color-sidebar-text: #cbd5e1;
-  --color-sidebar-muted: #94a3b8;
+  --color-sidebar: #ffffff;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #0f172a;
+  --sidebar-border: #e5e7eb;
+  --sidebar-hover-bg: #f3f4f8;
+  --sidebar-hover-text: #0b1220;
+  --sidebar-active-bg: rgba(29, 78, 216, 0.08);
+  --sidebar-active-text: #1d4ed8;
+  --sidebar-accent: #1d4ed8;
+  --sidebar-badge-bg: #f1f5f9;
+  --sidebar-badge-text: #64748b;
+  --color-sidebar-active: rgba(29, 78, 216, 0.08);
+  --color-sidebar-text: #0f172a;
+  --color-sidebar-muted: #64748b;
   --color-text: #0f172a;
   --color-text-secondary: #475569;
   --color-text-muted: #5b6b80;
@@ -700,34 +710,10 @@
   font-weight: 600;
 }
 
-/* — Atlas : un chiffre phare à gauche, 3 indicateurs en pile à droite — */
+/* — Atlas : 4 indicateurs en ligne nette (Design System Atlas Clarity) — */
 :root[data-theme="atlas"] .kpi-grid {
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(84px, auto));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) {
-  grid-row: 1 / span 3;
-  justify-content: center;
-  padding: 24px 28px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:nth-child(1) .kpi-card__value {
-  font-size: clamp(36px, 4.2vw, 52px);
-  color: var(--color-primary);
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  column-gap: 12px;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__label {
-  flex: 1 0 100%;
-}
-:root[data-theme="atlas"] .kpi-grid .kpi-card:not(:first-child) .kpi-card__value {
-  margin-top: 0;
-  font-size: 26px;
 }
 
 /* — Bento : tuile noire large + tuiles de couleur — */
