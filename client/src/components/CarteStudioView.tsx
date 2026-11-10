@@ -24,6 +24,14 @@ import {
 } from './ui';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import {
+  DEFAULT_DEPOT_ADDRESS,
+  DEFAULT_DEPOT_COORDS,
+  geocodeAddress,
+  solveTSP,
+  type CircuitStop,
+  type GeoPoint,
+} from '../lib/geocoding';
 import type { Intervention, Devis } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -37,22 +45,23 @@ interface CarteStudioViewProps {
   onOpenDevis?: (dev: Partial<Devis>) => void;
 }
 
+// Point de départ des tournées : le dépôt du module d'itinéraires. Les anciennes
+// « positions GPS en direct » des techniciens étaient des coordonnées écrites en dur :
+// supprimées — la carte ne montre plus que ce qui est vrai.
 const HQ = {
-  name: 'Siège ANELEC GROUPE',
-  addr: '4 place de l’Opéra, 75002 Paris',
-  pos: [48.8706, 2.3323] as [number, number],
-};
-
-const TECH_COORDS: Record<string, [number, number]> = {
-  Anouar: [48.8566, 2.3522],
-  Karim: [48.8606, 2.3376],
-  Youssef: [48.8738, 2.295],
-  Sofiane: [48.8841, 2.3431],
-  Bilal: [48.8462, 2.3464],
-  Mehdi: [48.8322, 2.3556],
+  name: 'Départ des tournées',
+  addr: DEFAULT_DEPOT_ADDRESS,
+  pos: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng] as [number, number],
 };
 
 const TECH_COLORS = ['#1D4ED8', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0EA5A4'];
+
+/** Adresse à géocoder : l'adresse du site si la fiche en a une, sinon le chantier. */
+const adresseDe = (i: Intervention): string =>
+  String(((i as any).siteAdresse as string | undefined) || i.chantier || '').trim();
+
+/** Cache de géocodage partagé pour la session : une adresse n'est résolue qu'une fois. */
+const geoCache = new Map<string, GeoPoint | null>();
 
 export function CarteStudioView({
   interventions,
@@ -66,6 +75,8 @@ export function CarteStudioView({
   const [mode, setMode] = useState<'positions' | 'route' | 'both'>('both');
   const [tech, setTech] = useState<string>(currentTechnicien || 'all');
   const [full, setFull] = useState(false);
+  /** Ordre recalculé par l'optimiseur (par technicien) ; vide tant qu'on n'a pas optimisé */
+  const [ordreOptimise, setOrdreOptimise] = useState<Record<string, number[]>>({});
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -88,6 +99,34 @@ export function CarteStudioView({
     );
   }, [interventions, tech]);
 
+  // Géocodage réel des chantiers affichés (Base Adresse Nationale, via lib/geocoding).
+  // Une adresse introuvable n'invente pas de point : la fiche est comptée « non localisée ».
+  const [geoVersion, setGeoVersion] = useState(0);
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      for (const i of pendingInterventions) {
+        const adresse = adresseDe(i);
+        if (!adresse || geoCache.has(adresse)) continue;
+        try {
+          const point = await geocodeAddress(adresse);
+          geoCache.set(adresse, point);
+        } catch {
+          geoCache.set(adresse, null);
+        }
+        if (vivant) setGeoVersion((v) => v + 1);
+      }
+    })();
+    return () => {
+      vivant = false;
+    };
+  }, [pendingInterventions]);
+
+  const positionDe = (i: Intervention): GeoPoint | null => {
+    const adresse = adresseDe(i);
+    return adresse ? geoCache.get(adresse) ?? null : null;
+  };
+
   const completedInterventions = useMemo(() => {
     return interventions.filter(
       (i) =>
@@ -109,6 +148,17 @@ export function CarteStudioView({
   // Initialize Leaflet map
   useEffect(() => {
     if (!mapContainerRef.current) return;
+
+    // En plein écran la référence pointe un AUTRE conteneur : la carte doit suivre,
+    // sinon l'écran agrandi reste vide.
+    if (
+      mapInstanceRef.current &&
+      (mapInstanceRef.current as any)._container !== mapContainerRef.current
+    ) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      layerGroupRef.current = null;
+    }
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
@@ -148,37 +198,29 @@ export function CarteStudioView({
 
     const bounds: [number, number][] = [HQ.pos];
 
-    // 2. Add Technician Positions
-    if (mode === 'positions' || mode === 'both') {
-      displayedTechs.forEach((tName, idx) => {
-        const coords = TECH_COORDS[tName] || [48.85 + (idx * 0.01), 2.33 + (idx * 0.01)];
-        bounds.push(coords);
-        const color = TECH_COLORS[idx % TECH_COLORS.length];
-        const techIcon = L.divIcon({
-          className: 'm-map-tech-marker',
-          html: `<div style="background:${color};color:#fff;border-radius:999px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.25);">${tName.slice(0, 2).toUpperCase()}</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-        });
-        L.marker(coords, { icon: techIcon })
-          .bindPopup(`<strong>${tName}</strong><br/>Position en direct (GPS)`)
-          .addTo(layer);
-      });
-    }
+    // Les tournées sont dessinées sur les POSITIONS RÉELLES des chantiers (géocodage BAN).
+    // Avant : étapes posées à des coordonnées dérivées de l'identifiant de la fiche, et
+    // techniciens affichés à des « positions GPS en direct » écrites en dur.
+    displayedTechs.forEach((tName, idx) => {
+      const color = TECH_COLORS[idx % TECH_COLORS.length];
+      let techMissions = pendingInterventions.filter((i) => i.entreprise === tName);
+      const ordre = ordreOptimise[tName];
+      if (ordre?.length) {
+        techMissions = [...techMissions].sort(
+          (a, b) =>
+            (ordre.indexOf(a.id) + 1 || techMissions.length + 1) -
+            (ordre.indexOf(b.id) + 1 || techMissions.length + 1)
+        );
+      }
+      const points: [number, number][] = [HQ.pos];
+      let premier: [number, number] | null = null;
 
-    // 3. Add pending mission stops & route lines
-    if (mode === 'route' || mode === 'both') {
-      displayedTechs.forEach((tName, idx) => {
-        const color = TECH_COLORS[idx % TECH_COLORS.length];
-        const techMissions = pendingInterventions.filter((i) => i.entreprise === tName);
-        const techStart = TECH_COORDS[tName] || HQ.pos;
-
-        const points: [number, number][] = [techStart];
-
+      if (mode === 'route' || mode === 'both') {
         techMissions.forEach((m, mIdx) => {
-          const lat = 48.84 + ((m.id * 17) % 50) * 0.002;
-          const lng = 2.30 + ((m.id * 23) % 50) * 0.003;
-          const pos: [number, number] = [lat, lng];
+          const geo = positionDe(m);
+          if (!geo) return; // adresse non localisée : rien n'est inventé
+          const pos: [number, number] = [geo.lat, geo.lng];
+          if (!premier) premier = pos;
           points.push(pos);
           bounds.push(pos);
 
@@ -190,28 +232,77 @@ export function CarteStudioView({
           });
 
           L.marker(pos, { icon: stopIcon })
-            .bindPopup(`<strong>${m.client || 'Client'}</strong><br/>${m.objet || 'Intervention'}<br/>Étape ${mIdx + 1}`)
+            .bindPopup(
+              `<strong>${m.client || 'Client'}</strong><br/>${m.objet || 'Intervention'}<br/>${m.chantier || ''}`
+            )
             .addTo(layer);
         });
 
         if (points.length > 1) {
-          L.polyline(points, {
-            color,
-            weight: 3,
-            dashArray: '6, 8',
-            opacity: 0.8,
-          }).addTo(layer);
+          L.polyline(points, { color, weight: 3, dashArray: '6, 8', opacity: 0.8 }).addTo(layer);
         }
-      });
-    }
+      }
+
+      // Le badge du technicien se pose sur sa première mission localisée — pas sur un
+      // faux GPS : personne n'est suivi en direct ici.
+      if ((mode === 'positions' || mode === 'both') && premier) {
+        const techIcon = L.divIcon({
+          className: 'm-map-tech-marker',
+          html: `<div style="background:${color};color:#fff;border-radius:999px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.25);">${tName.slice(0, 2).toUpperCase()}</div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 40],
+        });
+        L.marker(premier, { icon: techIcon })
+          .bindPopup(`<strong>${tName}</strong><br/>Première mission planifiée`)
+          .addTo(layer);
+      }
+    });
 
     if (bounds.length > 1) {
       map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 14 });
     }
-  }, [displayedTechs, mode, pendingInterventions]);
 
+    // Le conteneur vient parfois d'être (re)dimensionné : Leaflet doit se re-mesurer,
+    // sinon la carte reste grise ou tronquée.
+    setTimeout(() => map.invalidateSize(), 60);
+  }, [displayedTechs, mode, pendingInterventions, geoVersion, full, ordreOptimise]);
+
+  // Optimisation RÉELLE : plus proche voisin + 2-opt du module d'itinéraires, sur les
+  // chantiers effectivement localisés. L'ancien bouton annonçait « 8,4 km économisés »
+  // sans rien calculer.
   const handleOptimizeTournees = () => {
-    toast.success('Tournées recalculées : 8,4 km et 19 min économisés selon le trafic réel !');
+    const ordres: Record<string, number[]> = {};
+    let kmAvant = 0;
+    let kmApres = 0;
+    displayedTechs.forEach((tName) => {
+      const missions = pendingInterventions.filter((i) => i.entreprise === tName);
+      const stops: CircuitStop[] = missions
+        .map((m) => ({
+          id: m.id,
+          reference: m.reference || `INT-${m.id}`,
+          client: m.client || '',
+          chantierOrSite: m.chantier || '',
+          address: adresseDe(m),
+          coordinates: positionDe(m) || undefined,
+        }))
+        .filter((st) => st.coordinates);
+      if (stops.length < 2) return;
+      const res = solveTSP(DEFAULT_DEPOT_COORDS, stops);
+      ordres[tName] = res.orderedStops.map((st) => Number(st.id));
+      kmAvant += res.originalDistanceKm;
+      kmApres += res.totalDistanceKm;
+    });
+    if (Object.keys(ordres).length === 0) {
+      toast('Pas assez de chantiers localisés pour recalculer une tournée.');
+      return;
+    }
+    setOrdreOptimise(ordres);
+    const gain = Math.max(0, kmAvant - kmApres);
+    toast.success(
+      `Ordre des tournées recalculé — ${kmApres.toFixed(1)} km estimés${
+        gain > 0.1 ? `, ${gain.toFixed(1)} km gagnés sur l'ordre initial` : ''
+      }.`
+    );
   };
 
   const modeCtl = (
@@ -471,7 +562,7 @@ export function CarteStudioView({
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <strong style={{ fontSize: '15px' }}>Cockpit tournées · en direct</strong>
               {modeCtl}
-              <Pill tone="green">{techniciensList.length} techniciens connectés</Pill>
+              <Pill tone="green">{techniciensList.length} techniciens affichés</Pill>
             </div>
             <Btn onClick={() => setFull(false)}>Quitter le plein écran (Échap)</Btn>
           </header>

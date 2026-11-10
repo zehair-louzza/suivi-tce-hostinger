@@ -837,10 +837,13 @@
   }
 }
 
-/* Leaflet container */
+/* Leaflet container.
+   Pas de !important : il écrasait la hauteur posée par l'écran Carte (580 px en ligne),
+   et comme son parent n'a qu'une hauteur minimale, « 100 % » se résolvait à 0 — la carte
+   existait mais ne s'affichait plus. Les écrans qui veulent 100 % le posent eux-mêmes. */
 .leaflet-container {
-  width: 100% !important;
-  height: 100% !important;
+  width: 100%;
+  height: 100%;
   font-family: inherit;
   z-index: 1;
 }

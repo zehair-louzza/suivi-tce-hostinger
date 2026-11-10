@@ -1103,6 +1103,8 @@ export function Layout({
               const shortLabel =
                 item.id === 'aujourdhui'
                   ? 'Pilotage'
+                  : item.id === 'demandes'
+                  ? 'Demandes'
                   : item.id === 'planning'
                   ? 'Planning'
                   : item.id === 'devis'
