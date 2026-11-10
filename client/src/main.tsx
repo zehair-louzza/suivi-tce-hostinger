@@ -31,9 +31,12 @@ registerServiceWorker();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
+      // Les changements d'un autre intervenant doivent se voir vite : données périmées
+      // au bout d'une minute, et rechargées quand on revient sur l'onglet. Le temps réel
+      // (lib/realtime) fait le reste instantanément.
+      staleTime: 60 * 1000,
       retry: 1,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
     },
   },
 });

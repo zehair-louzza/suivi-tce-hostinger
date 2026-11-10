@@ -45,6 +45,8 @@ interface FactuRow {
   type: 'B2B' | 'B2C';
   objet: string;
   tva: number;
+  /** vrai quand le taux vient de la pièce, faux quand c'est la présélection par type de client */
+  tvaChoisie: boolean;
   ht: number;
   bucket: BucketId;
   note: string;
@@ -74,7 +76,9 @@ function eur(v: number): string {
 }
 
 function tvaLabel(r: FactuRow): string {
-  return r.tva === 0 ? 'Autoliquidation (0 %) ?' : `TVA ${String(r.tva).replace('.', ',')} % ?`;
+  const base = r.tva === 0 ? 'Autoliquidation (0 %)' : `TVA ${String(r.tva).replace('.', ',')} %`;
+  // Un taux non choisi sur la pièce est une présélection, pas un fait : on le dit
+  return r.tvaChoisie ? base : `${base} · présélection`;
 }
 
 export function FacturationStudioView({
@@ -136,11 +140,9 @@ export function FacturationStudioView({
         client: i.client || 'Client',
         type: isB2B ? 'B2B' : 'B2C',
         objet: i.objet || i.corpsEtat || 'Travaux TCE',
-        // HYPOTHÈSE à confirmer par l'entreprise : autoliquidation pour le B2B, 10 % pour
-        // les particuliers. L'autoliquidation (CGI art. 283-2 nonies) ne vaut que pour la
-        // sous-traitance BTP ; une facturation B2B directe reste soumise à TVA. Les taux
-        // 5,5 % et 20 % ne sont pas couverts. Le taux n'est pas encore stocké par pièce.
-        tva: isB2B ? 0 : 10,
+        // Le taux choisi à la saisie fait foi ; à défaut, présélection par type de client
+        tva: (i as any).tauxTVA ?? (isB2B ? 0 : 10),
+        tvaChoisie: (i as any).tauxTVA != null,
         ht,
         bucket: bId,
         note,
@@ -308,7 +310,7 @@ export function FacturationStudioView({
     <Page
       testid="screen-facturation"
       title="Facturation"
-      subtitle="Tri des interventions, calcul HT/TTC, relances et bordereaux de facturation clients. Les taux de TVA affichés sont une hypothèse (autoliquidation en B2B, 10 % pour les particuliers) : à confirmer contrat par contrat avant d’émettre une facture."
+      subtitle="Tri des interventions, calcul HT/TTC, relances et bordereaux de facturation clients. Le taux de TVA se choisit sur chaque fiche ; sans choix, présélection : autoliquidation pour un professionnel, 10 % pour un particulier."
       actions={
         <>
           <Segmented

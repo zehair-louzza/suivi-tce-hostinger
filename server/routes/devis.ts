@@ -59,6 +59,14 @@ function parseDateOrNull(val: any): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Taux de TVA : nombre entre 0 et 100, sinon null (présélection à l'affichage). */
+function parseTauxTVA(val: any): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  const n = Number(val);
+  if (Number.isNaN(n)) return null;
+  return Math.min(100, Math.max(0, n));
+}
+
 function parseOptionalFloat(val: any): number | null {
   if (val === undefined || val === null || val === '') return null;
   const n = Number(val);
@@ -148,6 +156,7 @@ export function transformDevis(d: any) {
     status: statusCode,
     amount: rawAmount,
     montantHt: rawAmount != null ? rawAmount.toFixed(2) : null,
+    tauxTVA: d.tauxTVA ?? null,
     validiteJours: d.validiteJours ?? null,
     prochaineAction: d.prochaineAction || null,
     dateRelance,
@@ -553,6 +562,7 @@ devisRouter.post(
         status: statusLegacy,
         amount: amountVal ?? 0,
         montantHt: amountVal,
+        tauxTVA: parseTauxTVA(b.tauxTVA),
         validiteJours: parseOptionalInt(b.validiteJours),
         prochaineAction: b.prochaineAction || 'Chiffrer',
         dateRelance: parseDateOrNull(b.dateRelance),
@@ -718,6 +728,7 @@ devisRouter.patch(
       updateData.traitement = newTraitement;
       updateData.status = traitementToStatusCode(newTraitement).toUpperCase().replace('-', '_');
     }
+    if (b.tauxTVA !== undefined) updateData.tauxTVA = parseTauxTVA(b.tauxTVA);
     if (b.amount !== undefined || b.montantHt !== undefined) {
       const m = parseOptionalFloat(b.amount ?? b.montantHt);
       updateData.montantHt = m;
@@ -743,6 +754,27 @@ devisRouter.patch(
     if (b.visiteHeureFin !== undefined) updateData.visiteHeureFin = b.visiteHeureFin || null;
     if (b.visiteStatut !== undefined) updateData.visiteStatut = b.visiteStatut || null;
     if (b.photos !== undefined) updateData.visitePhotosJson = sanitizePhotosJson(b.photos);
+
+    // ── Saisies automatiques ──────────────────────────────────────────────────
+    // La prochaine action suit l'avancement quand la personne ne l'a pas changée
+    // elle-même : un montant posé sur un devis à préparer => « Envoyer au client » ;
+    // un devis qui passe à Accepté => « Planifier les travaux ».
+    const paSoumise = b.prochaineAction !== undefined ? b.prochaineAction || null : undefined;
+    const paInchangee = paSoumise === undefined || paSoumise === (existing.prochaineAction || null);
+    if (paInchangee) {
+      const statutApres =
+        updateData.statutCommercial !== undefined ? updateData.statutCommercial : existing.statutCommercial;
+      const montantApres = updateData.amount !== undefined ? updateData.amount : existing.amount;
+      if (String(statutApres) === 'Accepté' && String(existing.statutCommercial) !== 'Accepté') {
+        updateData.prochaineAction = 'Planifier les travaux';
+      } else if (
+        Number(montantApres) > 0 &&
+        Number(existing.amount || 0) <= 0 &&
+        ['À préparer', 'En préparation'].includes(String(statutApres || ''))
+      ) {
+        updateData.prochaineAction = 'Envoyer au client';
+      }
+    }
 
     const updated = await prisma.devis.update({
       where: { id },

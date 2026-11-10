@@ -67,6 +67,8 @@ model Devis {
   id                   Int            @id @default(autoincrement())
   client               String
   amount               Float          @default(0)
+  /// Taux de TVA choisi à la saisie ; NULL = présélection selon le type de client
+  tauxTVA              Float?
   dateCreated          DateTime
   echeance             DateTime?
   status               String         @default("A_TRAITER")
@@ -167,6 +169,8 @@ model Intervention {
   chantier           String
   entreprise         String?
   amount             Float               @default(0)
+  /// Taux de TVA choisi à la saisie ; NULL = présélection selon le type de client
+  tauxTVA              Float?
   datePlanifiee      DateTime
   dateReelle         DateTime?
   status             String              @default("A_TRAITER")

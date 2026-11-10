@@ -63,6 +63,14 @@ function parseDateOrNull(val: any): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Taux de TVA : nombre entre 0 et 100, sinon null (présélection à l'affichage). */
+function parseTauxTVA(val: any): number | null {
+  if (val === undefined || val === null || val === '') return null;
+  const n = Number(val);
+  if (Number.isNaN(n)) return null;
+  return Math.min(100, Math.max(0, n));
+}
+
 function parseOptionalFloat(val: any): number | null {
   if (val === undefined || val === null || val === '') return null;
   const n = Number(val);
@@ -153,6 +161,7 @@ export function transformIntervention(i: any) {
     compteRendu: i.compteRendu || null,
     notes: i.notes || null,
     amount: i.amount ?? null,
+    tauxTVA: i.tauxTVA ?? null,
     heureDebut: i.heureDebut || null,
     heureFin: i.heureFin || null,
     heureDebutReelle: i.heureDebutReelle || null,
@@ -459,6 +468,7 @@ interventionRouter.post(
         compteRendu: b.compteRendu || null,
         notes: b.notes || null,
         amount: parseOptionalFloat(b.amount) ?? 0,
+        tauxTVA: parseTauxTVA(b.tauxTVA),
         heureDebut: b.heureDebut || null,
         heureFin: b.heureFin || null,
         heureDebutReelle: b.heureDebutReelle || null,
@@ -658,6 +668,7 @@ interventionRouter.patch(
     if (b.compteRendu !== undefined) updateData.compteRendu = b.compteRendu || null;
     if (b.notes !== undefined) updateData.notes = b.notes || null;
     if (b.amount !== undefined) updateData.amount = parseOptionalFloat(b.amount) ?? 0;
+    if (b.tauxTVA !== undefined) updateData.tauxTVA = parseTauxTVA(b.tauxTVA);
     if (b.heureDebut !== undefined) updateData.heureDebut = b.heureDebut || null;
     if (b.heureFin !== undefined) updateData.heureFin = b.heureFin || null;
     if (b.heureDebutReelle !== undefined) updateData.heureDebutReelle = b.heureDebutReelle || null;
@@ -677,6 +688,31 @@ interventionRouter.patch(
       updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
     }
     if (b.devisId !== undefined) updateData.devisId = await assertOwnDevisId(b.devisId, companyId);
+
+    // ── Saisies automatiques à la clôture ─────────────────────────────────────
+    // Quand l'intervention passe à « Terminée - à valider » ou « Clôturée », ce qui
+    // reste vide se remplit tout seul : la date réelle devient aujourd'hui, les heures
+    // réelles reprennent les heures planifiées. Une valeur saisie n'est jamais écrasée.
+    const DONE = ['Terminée - à valider', 'Clôturée'];
+    const statutApres =
+      b.statutOperationnel !== undefined ? b.statutOperationnel : existing.statutOperationnel;
+    if (DONE.includes(String(statutApres || ''))) {
+      const dateApres =
+        updateData.dateReelle !== undefined ? updateData.dateReelle : existing.dateReelle;
+      if (!dateApres) {
+        updateData.dateReelle = new Date();
+        updateData.dateFin = updateData.dateReelle;
+      }
+      const debutApres =
+        updateData.heureDebutReelle !== undefined ? updateData.heureDebutReelle : existing.heureDebutReelle;
+      const debutPlanifie =
+        updateData.heureDebut !== undefined ? updateData.heureDebut : existing.heureDebut;
+      if (!debutApres && debutPlanifie) updateData.heureDebutReelle = debutPlanifie;
+      const finApres =
+        updateData.heureFinReelle !== undefined ? updateData.heureFinReelle : existing.heureFinReelle;
+      const finPlanifiee = updateData.heureFin !== undefined ? updateData.heureFin : existing.heureFin;
+      if (!finApres && finPlanifiee) updateData.heureFinReelle = finPlanifiee;
+    }
     let patchedDossierDevis: { id: number; numeroDI?: string | null } | null = null;
     if (b.numeroDI !== undefined || b.devisId !== undefined) {
       const nextDI = b.numeroDI !== undefined ? normalizeDI(b.numeroDI) : existing.numeroDI;

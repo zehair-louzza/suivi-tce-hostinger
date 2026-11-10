@@ -218,7 +218,8 @@ demandesRouter.post(
           siteAdresse: demande.site,
           objet: demande.objet,
           corpsEtat: demande.corpsEtat,
-          numeroDI: demande.numeroDI,
+          // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
+          numeroDI: demande.numeroDI || demande.referenceInterne,
           origine: demande.canalReception || 'Client',
           priorite: demande.priorite,
           statutCommercial: 'À préparer',
@@ -247,7 +248,8 @@ demandesRouter.post(
           chantier,
           objet: demande.objet,
           corpsEtat: demande.corpsEtat,
-          numeroDI: demande.numeroDI,
+          // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
+          numeroDI: demande.numeroDI || demande.referenceInterne,
           origine: demande.canalReception,
           priorite: demande.priorite,
           typeIntervention: isVisite ? 'Visite technique devis' : 'Corrective',

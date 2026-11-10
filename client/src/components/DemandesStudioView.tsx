@@ -143,6 +143,8 @@ export function DemandesStudioView({
             setFormOpen(false);
             invalider();
           }}
+          onOpenDevis={onOpenDevis}
+          onOpenIntervention={onOpenIntervention}
         />
       )}
 
@@ -278,19 +280,27 @@ export function DemandesStudioView({
   );
 }
 
-/** Six champs à la saisie ; le reste est demandé à l'étape où il a du sens. */
+/**
+ * Six champs à la saisie ; le reste est demandé à l'étape où il a du sens.
+ * Le choix devis ou intervention est obligatoire : la pièce est créée dans la foulée,
+ * la demande reste dans la file comme trace, déjà orientée.
+ */
 function FormulaireDemande({
   clientProfiles,
   corpsEtatList,
   prioritesList,
   canalList,
   onDone,
+  onOpenDevis,
+  onOpenIntervention,
 }: {
   clientProfiles: ClientProfile[];
   corpsEtatList: string[];
   prioritesList: string[];
   canalList: readonly string[];
   onDone: () => void;
+  onOpenDevis: (id: number) => void;
+  onOpenIntervention: (id: number) => void;
 }) {
   const [type, setType] = useState<TypeDemandeur>('DONNEUR_ORDRE');
   const [client, setClient] = useState('');
@@ -300,6 +310,8 @@ function FormulaireDemande({
   const [corpsEtat, setCorpsEtat] = useState(corpsEtatList[0] || 'Électricité');
   const [priorite, setPriorite] = useState(prioritesList.includes('Normale') ? 'Normale' : prioritesList[0] || 'Normale');
   const [canal, setCanal] = useState(canalList[0] || 'E-mail');
+  /** Ce que la demande appelle : à choisir, rien n'est présupposé */
+  const [nature, setNature] = useState<DecisionDemande | null>(null);
 
   const isB2C = type === 'PARTICULIER';
   const donneurs = clientProfiles.filter((c) => c.type === 'DONNEUR_ORDRE' || c.type === 'ENTREPRISE');
@@ -307,8 +319,8 @@ function FormulaireDemande({
   const suggestions = isB2C ? particuliers : donneurs;
 
   const createMut = useMutation({
-    mutationFn: () =>
-      demandeApi.create({
+    mutationFn: async () => {
+      const creation = await demandeApi.create({
         typeDemandeur: type,
         client: client.trim(),
         numeroDI: isB2C ? null : numeroDI.trim(),
@@ -317,15 +329,21 @@ function FormulaireDemande({
         corpsEtat,
         priorite,
         canalReception: canal,
-      }),
-    onSuccess: (res) => {
-      toast.success(`Demande enregistrée — ${res.data.data.cleDossier}`);
+      });
+      // La demande est orientée dans la foulée : la pièce choisie est créée immédiatement
+      const orientation = await demandeApi.orienter(creation.data.data.id, nature as DecisionDemande);
+      return { demande: creation.data.data, created: orientation.data.created };
+    },
+    onSuccess: ({ demande, created }) => {
+      toast.success(`${created.libelle} créé — dossier ${demande.cleDossier}`);
       onDone();
+      if (created.devisId) onOpenDevis(created.devisId);
+      else if (created.interventionId) onOpenIntervention(created.interventionId);
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Erreur à l’enregistrement'),
   });
 
-  const manquant = !client.trim() || (!isB2C && !numeroDI.trim());
+  const manquant = !client.trim() || (!isB2C && !numeroDI.trim()) || !nature;
 
   return (
     <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -463,6 +481,31 @@ function FormulaireDemande({
         </div>
       </div>
 
+      <div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
+          Cette demande appelle <span style={{ color: '#B91C1C' }}>· choix obligatoire</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {(
+            [
+              ['DEVIS', 'Un devis', 'Chiffrage à préparer, visite possible depuis la fiche'],
+              ['INTERVENTION', 'Une intervention', 'Travaux directs, à planifier'],
+            ] as const
+          ).map(([id, titre, aide]) => (
+            <button
+              key={id}
+              type="button"
+              className={`btn ${nature === id ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setNature(id)}
+              data-testid={`dem-nature-${id.toLowerCase()}`}
+              title={aide}
+            >
+              {titre}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <button
           type="button"
@@ -471,7 +514,13 @@ function FormulaireDemande({
           onClick={() => createMut.mutate()}
           data-testid="dem-submit"
         >
-          {createMut.isPending ? 'Enregistrement…' : 'Enregistrer la demande'}
+          {createMut.isPending
+            ? 'Enregistrement…'
+            : nature === 'DEVIS'
+            ? 'Enregistrer et créer le devis'
+            : nature === 'INTERVENTION'
+            ? 'Enregistrer et créer l’intervention'
+            : 'Enregistrer la demande'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
           Montant, technicien, créneau, photos et facturation sont demandés à leur étape.

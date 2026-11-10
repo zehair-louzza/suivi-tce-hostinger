@@ -52,6 +52,8 @@ import { DemandesStudioView } from '../components/DemandesStudioView';
 import type { PeriodeId } from '../lib/periode';
 import { MaFileView } from '../components/MaFileView';
 import { DossierPanel } from '../components/DossierPanel';
+import { TvaField, tvaParDefaut } from '../components/TvaField';
+import { demarrerTempsReel } from '../lib/realtime';
 import { DossierDIField } from '../components/DossierDIField';
 import { useDevisRealtime, useInterventionRealtime } from '../hooks/useSocket';
 import { useAuth } from '../stores/authStore';
@@ -170,6 +172,11 @@ export function DashboardPage() {
   };
 
   // Dashboard Sub-Tabs (Synthèse / Opérations / Analyse - Refonte ANELEC)
+  // Temps réel : les modifications des autres intervenants invalident les listes affichées
+  useEffect(() => {
+    demarrerTempsReel(queryClient);
+  }, [queryClient]);
+
   // Période du tableau de bord : partagée par les trois vues, et réellement filtrante
   const [dashboardPeriod, setDashboardPeriod] = useState<PeriodeId>('month');
   const [dashboardTab, setDashboardTab] = useState<'synthese' | 'operations' | 'analyse'>('synthese');
@@ -827,6 +834,9 @@ export function DashboardPage() {
     origine: d.origine || undefined,
     refDevisTexte: d.reference || undefined,
     priorite: d.priorite || 'Normale',
+    // Héritage automatique : le montant chiffré et le taux de TVA suivent le devis
+    amount: d.amount || 0,
+    tauxTVA: d.tauxTVA ?? undefined,
   });
   const startInterventionFromDevis = (d: Devis) => {
     setSelectedDevis(null);
@@ -1601,6 +1611,12 @@ export function DashboardPage() {
                       onChange={(e) => setSelectedDevis({ ...selectedDevis, amount: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
+                  <TvaField
+                    value={selectedDevis.tauxTVA}
+                    clientName={selectedDevis.client}
+                    clientProfiles={clientProfiles}
+                    onChange={(taux) => setSelectedDevis({ ...selectedDevis, tauxTVA: taux })}
+                  />
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Origine / Provenance</label>
                     <select
@@ -1810,10 +1826,21 @@ export function DashboardPage() {
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
+                    // Le DI est la clé du suivi : aucune pièce ne se crée sans lui
+                    if (!String(selectedDevis.numeroDI || '').trim()) {
+                      setDevisTab('qualif');
+                      toast.error('Le numéro de DI du donneur d’ordre est obligatoire.');
+                      return;
+                    }
+                    // Le taux affiché en présélection est enregistré tel quel sur la pièce
+                    const payload = {
+                      ...selectedDevis,
+                      tauxTVA: selectedDevis.tauxTVA ?? tvaParDefaut(selectedDevis.client, clientProfiles),
+                    };
                     if (isCreatingDevis || !selectedDevis.id) {
-                      createDevisMut.mutate(selectedDevis);
+                      createDevisMut.mutate(payload);
                     } else {
-                      updateDevisMut.mutate({ id: selectedDevis.id, data: selectedDevis });
+                      updateDevisMut.mutate({ id: selectedDevis.id, data: payload });
                       toast.success('Devis enregistré');
                     }
                   }}
@@ -2446,6 +2473,24 @@ export function DashboardPage() {
               {intvTab === 'facturation' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Montant HT (€) — intervention ou chiffrage issu de la visite
+                    </label>
+                    <input
+                      type="number"
+                      className="input font-mono"
+                      value={selectedIntv.amount ?? ''}
+                      onChange={(e) => setSelectedIntv({ ...selectedIntv, amount: parseFloat(e.target.value) || 0 })}
+                      data-testid="intv-montant"
+                    />
+                  </div>
+                  <TvaField
+                    value={selectedIntv.tauxTVA}
+                    clientName={selectedIntv.client}
+                    clientProfiles={clientProfiles}
+                    onChange={(taux) => setSelectedIntv({ ...selectedIntv, tauxTVA: taux })}
+                  />
+                  <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Statut Facturation</label>
                     <select
                       className="select"
@@ -2550,10 +2595,20 @@ export function DashboardPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
+                  // Le DI est la clé du suivi : aucune pièce ne se crée sans lui
+                  if (!String(selectedIntv.numeroDI || '').trim()) {
+                    setIntvTab('planif');
+                    toast.error('Le numéro de DI du donneur d’ordre est obligatoire.');
+                    return;
+                  }
+                  const payload = {
+                    ...selectedIntv,
+                    tauxTVA: selectedIntv.tauxTVA ?? tvaParDefaut(selectedIntv.client, clientProfiles),
+                  };
                   if (isCreatingIntv || !selectedIntv.id) {
-                    createIntvMut.mutate(selectedIntv);
+                    createIntvMut.mutate(payload);
                   } else {
-                    updateIntvMut.mutate({ id: selectedIntv.id, data: selectedIntv });
+                    updateIntvMut.mutate({ id: selectedIntv.id, data: payload });
                     toast.success('Intervention enregistrée');
                   }
                 }}

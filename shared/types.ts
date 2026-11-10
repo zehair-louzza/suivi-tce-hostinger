@@ -890,6 +890,8 @@ export const DevisSchema = z.object({
   status: z.enum(StatutDevis).default('a-traiter'),
   traitement: z.string().optional().nullable(),
   amount: z.number().nonnegative().optional().nullable(),
+  /** Taux de TVA choisi à la saisie ; null = présélection selon le type de client */
+  tauxTVA: z.number().min(0).max(100).optional().nullable(),
   validiteJours: z.number().int().positive().optional().nullable(),
   prochaineAction: z.string().max(150).optional().nullable(),
   dateRelance: z.string().optional().nullable(),
@@ -939,6 +941,8 @@ export const InterventionSchema = z.object({
   compteRendu: z.string().max(4000).optional().nullable(),
   notes: z.string().max(4000).optional().nullable(),
   amount: z.number().nonnegative().optional().nullable(),
+  /** Taux de TVA choisi à la saisie ; null = présélection selon le type de client */
+  tauxTVA: z.number().min(0).max(100).optional().nullable(),
   heureDebut: z.string().max(10).optional().nullable(),
   heureFin: z.string().max(10).optional().nullable(),
   heureDebutReelle: z.string().max(10).optional().nullable(),
