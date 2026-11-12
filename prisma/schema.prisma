@@ -43,6 +43,8 @@ model User {
   active             Boolean             @default(true)
   emailConfirmed     Boolean             @default(false)
   confirmationToken  String?
+  confirmationCode   String?
+  confirmationCodeExpires DateTime?
   confirmationSentAt DateTime?
   termsAcceptedAt    DateTime?
   termsAcceptedIp    String?

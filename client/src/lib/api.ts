@@ -381,6 +381,14 @@ export const authApi = {
       previewUrl?: string | null;
       activationLink?: string | null;
     }>('/auth/resend-confirmation', { email }),
+  verifyCode: (email: string, code: string) =>
+    api.post<{
+      success?: boolean;
+      alreadyConfirmed?: boolean;
+      message: string;
+      user?: User;
+      accessToken?: string;
+    }>('/auth/verify-code', { email, code }),
   forgotPassword: (email: string) =>
     api.post<{
       message: string;

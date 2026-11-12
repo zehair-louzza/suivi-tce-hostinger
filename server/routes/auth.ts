@@ -295,6 +295,9 @@ authRouter.post(
     // Tout créateur d'espace entreprise est ADMINISTRATEUR de son espace
     const role = 'ADMIN';
 
+    // Génération d'un code unique à 6 chiffres pour la confirmation par e-mail
+    const confirmationCode = String(crypto.randomInt(100000, 999999));
+    const confirmationCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // expire dans 15 min
     const confirmationToken = crypto.randomBytes(32).toString('hex');
     const confirmationSentAt = new Date();
 
@@ -308,12 +311,14 @@ authRouter.post(
         active: false,
         emailConfirmed: false,
         confirmationToken,
+        confirmationCode,
+        confirmationCodeExpires,
         confirmationSentAt,
       },
       select: publicUserSelect,
     });
 
-    // Envoi de l'e-mail officiel d'activation depuis zehair@anelecgroupe.com (avec multi-découverte SMTP + relais Supabase + prévisualisation secours)
+    // Envoi de l'e-mail officiel d'activation avec code 6 chiffres
     const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
     const delivery = await sendConfirmationEmail({
       companyId,
@@ -321,17 +326,14 @@ authRouter.post(
       recipientName: data.name,
       companyName: compName,
       confirmationToken,
+      confirmationCode,
     });
 
     res.status(201).json({
       message:
         delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
-          ? "Demande enregistrée avec succès. Un e-mail de confirmation avec les conditions d'activation a été envoyé à " +
-            data.email +
-            ' depuis zehair@anelecgroupe.com. Veuillez cliquer sur le lien reçu pour activer votre espace entreprise.'
-          : "Demande enregistrée avec succès pour " +
-            data.email +
-            ". L'e-mail de confirmation a été généré via le relais de secours (vous pouvez consulter la prévisualisation de l'e-mail ou activer votre espace directement ci-dessous).",
+          ? `Un code de confirmation à 6 chiffres a été envoyé à ${data.email} depuis zehair@anelecgroupe.com. Saisissez-le pour activer votre espace entreprise.`
+          : `Un code de confirmation a été généré pour ${data.email}. Saisissez-le ci-dessous pour activer votre espace.`,
       emailSent: delivery.sent,
       email: data.email,
       requiresConfirmation: true,
@@ -368,10 +370,14 @@ authRouter.post(
     }
 
     const confirmationToken = user.confirmationToken || crypto.randomBytes(32).toString('hex');
+    const confirmationCode = String(crypto.randomInt(100000, 999999));
+    const confirmationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
     await prisma.user.update({
       where: { id: user.id },
       data: {
         confirmationToken,
+        confirmationCode,
+        confirmationCodeExpires,
         confirmationSentAt: new Date(),
       },
     });
@@ -383,6 +389,7 @@ authRouter.post(
       recipientName: user.name,
       companyName: compName,
       confirmationToken,
+      confirmationCode,
     });
 
     return res.json({
@@ -395,6 +402,82 @@ authRouter.post(
       deliveryChannel: delivery.channel,
       previewUrl: delivery.previewUrl || null,
       activationLink: delivery.activationLink || null,
+    });
+  })
+);
+
+// Vérification du code de confirmation à 6 chiffres
+authRouter.post(
+  '/verify-code',
+  asyncHandler(async (req: Request, res: Response) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || '').trim();
+
+    if (!email || !code) {
+      throw new AppError(400, 'Email et code de confirmation requis', 'MISSING_FIELDS');
+    }
+    if (!/^\d{6}$/.test(code)) {
+      throw new AppError(400, 'Le code doit contenir exactement 6 chiffres', 'INVALID_CODE_FORMAT');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { company: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
+    }
+
+    if (user.emailConfirmed && user.active) {
+      return res.json({
+        alreadyConfirmed: true,
+        message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter.',
+      });
+    }
+
+    // Vérifier le code
+    if (!user.confirmationCode || user.confirmationCode !== code) {
+      throw new AppError(403, 'Code de confirmation incorrect. Vérifiez le code reçu par e-mail.', 'INVALID_CODE');
+    }
+
+    // Vérifier l'expiration (15 min)
+    if (user.confirmationCodeExpires && user.confirmationCodeExpires.getTime() < Date.now()) {
+      throw new AppError(410, 'Ce code a expiré. Cliquez sur « Renvoyer le code » pour en recevoir un nouveau.', 'CODE_EXPIRED');
+    }
+
+    // Activer le compte
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        active: true,
+        emailConfirmed: true,
+        confirmationToken: null,
+        confirmationCode: null,
+        confirmationCodeExpires: null,
+        termsAcceptedAt: new Date(),
+        termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
+      },
+    });
+
+    const companyName = user.company?.name || 'votre entreprise';
+
+    // Générer les tokens et connecter directement l'utilisateur
+    const tokens = generateTokens({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      companyId: user.companyId,
+    });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    const pub = await findPublicUserUnique({ id: user.id });
+
+    res.json({
+      success: true,
+      message: `Votre espace entreprise ${companyName} a été activé avec succès !`,
+      user: pub,
+      accessToken: tokens.accessToken,
     });
   })
 );

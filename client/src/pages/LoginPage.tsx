@@ -1,15 +1,139 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useAuth } from '../stores/authStore';
+import { useAuth, useAuthStore } from '../stores/authStore';
 import { authApi } from '../lib/api';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
 import { LegalTermsModal } from '../components/LegalTermsModal';
-import { ProCheckIcon, ProExternalIcon, ProGlyph, ProLockIcon, ProMailIcon, ProRefreshIcon, ProShieldIcon } from '../components/ProIcons';
+import { ProCheckIcon, ProExternalIcon, ProGlyph, ProLockIcon, ProMailIcon, ProRefreshIcon } from '../components/ProIcons';
+
+/**
+ * Composant OTP à 6 cases inspiré de GitHub / Stripe — chaque chiffre dans sa propre case,
+ * navigation automatique, collage supporté, backspace intelligent.
+ */
+function OtpInput({ length = 6, onComplete, disabled }: { length?: number; onComplete: (code: string) => void; disabled?: boolean }) {
+  const [values, setValues] = useState<string[]>(Array(length).fill(''));
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+
+  const focusInput = useCallback((idx: number) => {
+    const el = inputsRef.current[idx];
+    if (el) { el.focus(); el.select(); }
+  }, []);
+
+  const handleChange = useCallback((idx: number, val: string) => {
+    // Gestion du collage d'un code complet
+    const digits = val.replace(/\D/g, '');
+    if (digits.length >= length) {
+      const filled = digits.slice(0, length).split('');
+      setValues(filled);
+      onComplete(filled.join(''));
+      focusInput(length - 1);
+      return;
+    }
+    if (digits.length > 1) {
+      // Collage partiel
+      const newVals = [...values];
+      for (let i = 0; i < digits.length && idx + i < length; i++) {
+        newVals[idx + i] = digits[i];
+      }
+      setValues(newVals);
+      const nextIdx = Math.min(idx + digits.length, length - 1);
+      focusInput(nextIdx);
+      if (newVals.every(v => v !== '')) onComplete(newVals.join(''));
+      return;
+    }
+    const digit = digits[0] || '';
+    const newVals = [...values];
+    newVals[idx] = digit;
+    setValues(newVals);
+    if (digit && idx < length - 1) focusInput(idx + 1);
+    if (newVals.every(v => v !== '')) onComplete(newVals.join(''));
+  }, [values, length, onComplete, focusInput]);
+
+  const handleKeyDown = useCallback((idx: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace') {
+      if (values[idx]) {
+        const newVals = [...values];
+        newVals[idx] = '';
+        setValues(newVals);
+      } else if (idx > 0) {
+        focusInput(idx - 1);
+        const newVals = [...values];
+        newVals[idx - 1] = '';
+        setValues(newVals);
+      }
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft' && idx > 0) {
+      focusInput(idx - 1);
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight' && idx < length - 1) {
+      focusInput(idx + 1);
+      e.preventDefault();
+    }
+  }, [values, length, focusInput]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '');
+    if (pasted.length > 0) {
+      const filled = pasted.slice(0, length).split('');
+      const newVals = Array(length).fill('');
+      filled.forEach((d, i) => { newVals[i] = d; });
+      setValues(newVals);
+      focusInput(Math.min(filled.length, length - 1));
+      if (newVals.every(v => v !== '')) onComplete(newVals.join(''));
+    }
+  }, [length, onComplete, focusInput]);
+
+  return (
+    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }} onPaste={handlePaste}>
+      {Array.from({ length }, (_, i) => (
+        <input
+          key={i}
+          ref={el => { inputsRef.current[i] = el; }}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={length}
+          value={values[i]}
+          disabled={disabled}
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
+          onChange={e => handleChange(i, e.target.value)}
+          onKeyDown={e => handleKeyDown(i, e)}
+          onFocus={e => e.target.select()}
+          style={{
+            width: '46px',
+            height: '56px',
+            fontSize: '24px',
+            fontWeight: 800,
+            textAlign: 'center',
+            border: values[i] ? '2px solid #00bf63' : '2px solid var(--border-subtle, #e2e8f0)',
+            borderRadius: '10px',
+            background: values[i] ? 'rgba(0, 191, 99, 0.06)' : 'var(--bg-card, #fff)',
+            color: 'var(--text-primary, #0f172a)',
+            outline: 'none',
+            transition: 'border-color 0.15s, background 0.15s, box-shadow 0.15s',
+            caretColor: '#00bf63',
+            boxShadow: 'none',
+            fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+          }}
+          onFocusCapture={e => {
+            (e.target as HTMLInputElement).style.borderColor = '#00bf63';
+            (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(0, 191, 99, 0.15)';
+          }}
+          onBlurCapture={e => {
+            (e.target as HTMLInputElement).style.borderColor = values[i] ? '#00bf63' : 'var(--border-subtle, #e2e8f0)';
+            (e.target as HTMLInputElement).style.boxShadow = 'none';
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 const loginSchema = z.object({
   email: z.string().email('Email invalide'),
@@ -133,8 +257,10 @@ export function LoginPage() {
 
   const [emailConfirmationSentTo, setEmailConfirmationSentTo] = useState<string | null>(null);
   const [lastDeliveryPreviewUrl, setLastDeliveryPreviewUrl] = useState<string | null>(null);
-  const [lastActivationLink, setLastActivationLink] = useState<string | null>(null);
+  // activationLink kept for backward compat with link-based fallback
+  const [_lastActivationLink, setLastActivationLink] = useState<string | null>(null);
   const [isResendingEmail, setIsResendingEmail] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
   // Mot de passe oublié / Réinitialisation
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -442,6 +568,45 @@ export function LoginPage() {
     }
   };
 
+  const handleVerifyCode = useCallback(async (code: string) => {
+    const emailToVerify = emailConfirmationSentTo || loginForm.getValues('email') || '';
+    if (!emailToVerify || code.length !== 6) return;
+    setIsVerifyingCode(true);
+    try {
+      const res = await authApi.verifyCode(emailToVerify, code);
+      if (res.data.alreadyConfirmed) {
+        toast.success(res.data.message || 'Compte déjà activé !');
+        setEmailConfirmationSentTo(null);
+        return;
+      }
+      if (res.data.success && res.data.user && res.data.accessToken) {
+        toast.success(res.data.message || 'Espace entreprise activé avec succès !');
+        setEmailConfirmationSentTo(null);
+        // Set auth state directly — login() takes (email, password) and makes its own API call,
+        // but we already have user + accessToken from verify-code response
+        useAuthStore.setState({
+          user: res.data.user,
+          accessToken: res.data.accessToken,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
+        navigate('/');
+      }
+    } catch (err: any) {
+      const errCode = err.response?.data?.code;
+      if (errCode === 'CODE_EXPIRED') {
+        toast.error('Code expiré. Cliquez sur « Renvoyer le code » pour en recevoir un nouveau.');
+      } else if (errCode === 'INVALID_CODE') {
+        toast.error('Code incorrect. Vérifiez le code reçu par e-mail.');
+      } else {
+        toast.error(err.response?.data?.error || 'Erreur de vérification');
+      }
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  }, [emailConfirmationSentTo, loginForm, navigate]);
+
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail.trim()) {
@@ -628,64 +793,74 @@ export function LoginPage() {
           </div>
         )}
 
-        {/* BANNIÈRE D'ATTENTE DE CONFIRMATION EMAIL + BOUTON RENVOYER */}
+        {/* PANNEAU DE VÉRIFICATION PAR CODE 6 CHIFFRES */}
         {emailConfirmationSentTo && (
           <div
             style={{
-              padding: '14px 16px',
-              borderRadius: '12px',
-              background: 'rgba(0, 191, 99, 0.08)',
+              padding: '24px 20px',
+              borderRadius: '16px',
+              background: 'var(--bg-card, #fff)',
               border: '1px solid rgba(0, 191, 99, 0.3)',
               marginBottom: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              fontSize: '12.5px',
-              color: 'var(--text-primary)',
-              lineHeight: 1.5,
+              textAlign: 'center',
             }}
           >
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <div
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '8px',
-                  background: 'rgba(0, 191, 99, 0.14)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <ProMailIcon size={18} color="#00bf63" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <strong>E-mail de confirmation envoyé à {emailConfirmationSentTo}</strong>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Un e-mail d'activation expédié depuis <strong>zehair@anelecgroupe.com</strong> vous a été adressé.
-                  Cliquez sur le lien reçu pour <strong>valider les conditions et activer votre espace entreprise</strong>.
-                </div>
-              </div>
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'rgba(0, 191, 99, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 14px',
+              }}
+            >
+              <ProMailIcon size={24} color="#00bf63" />
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingLeft: '46px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+              Vérifiez votre e-mail
+            </div>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.5 }}>
+              Un code à 6 chiffres a été envoyé à <strong>{emailConfirmationSentTo}</strong>
+              <br />depuis <strong>zehair@anelecgroupe.com</strong>
+            </div>
+
+            <OtpInput
+              onComplete={handleVerifyCode}
+              disabled={isVerifyingCode}
+            />
+
+            {isVerifyingCode && (
+              <div style={{ fontSize: '12px', color: '#00bf63', marginTop: '12px', fontWeight: 600 }}>
+                Vérification en cours…
+              </div>
+            )}
+
+            <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                className="btn btn-secondary"
                 onClick={() => handleResendConfirmation(emailConfirmationSentTo)}
                 disabled={isResendingEmail}
                 style={{
-                  fontSize: '11.5px',
-                  padding: '6px 12px',
-                  fontWeight: 700,
+                  fontSize: '12px',
+                  padding: '8px 14px',
+                  fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  borderRadius: '8px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
                 }}
               >
                 <ProRefreshIcon size={13} />
-                <span>{isResendingEmail ? 'Renvoi en cours...' : "Renvoyer l'e-mail de confirmation"}</span>
+                <span>{isResendingEmail ? 'Renvoi…' : 'Renvoyer le code'}</span>
               </button>
 
               {lastDeliveryPreviewUrl && (
@@ -693,41 +868,28 @@ export function LoginPage() {
                   href={lastDeliveryPreviewUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn btn-secondary"
                   style={{
-                    fontSize: '11.5px',
-                    padding: '6px 12px',
-                    fontWeight: 700,
+                    fontSize: '12px',
+                    padding: '8px 14px',
+                    fontWeight: 600,
                     textDecoration: 'none',
                     color: '#0284c7',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
+                    border: '1px solid var(--border-subtle, #e2e8f0)',
+                    borderRadius: '8px',
+                    background: 'transparent',
                   }}
                 >
                   <ProExternalIcon size={13} color="#0284c7" />
-                  <span>Visualiser l'e-mail envoyé</span>
+                  <span>Voir l'e-mail</span>
                 </a>
               )}
+            </div>
 
-              {lastActivationLink && (
-                <a
-                  href={lastActivationLink}
-                  className="btn btn-primary"
-                  style={{
-                    fontSize: '11.5px',
-                    padding: '6px 12px',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <ProShieldIcon size={14} color="#ffffff" />
-                  <span>Activer directement mon espace</span>
-                </a>
-              )}
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '14px', opacity: 0.7 }}>
+              Le code expire dans 15 minutes
             </div>
           </div>
         )}
@@ -965,7 +1127,7 @@ export function LoginPage() {
                   textDecoration: 'underline',
                 }}
               >
-                Vous n'avez pas reçu l'e-mail d'activation ? Renvoyer le lien de confirmation
+                Vous n'avez pas reçu le code d'activation ? Renvoyer le code de confirmation
               </button>
             </div>
           </form>

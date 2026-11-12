@@ -752,6 +752,7 @@ export interface SendConfirmationEmailParams {
   recipientName: string;
   companyName: string;
   confirmationToken: string;
+  confirmationCode?: string;
 }
 
 /**
@@ -763,8 +764,11 @@ export async function sendConfirmationEmail({
   recipientName,
   companyName,
   confirmationToken,
+  confirmationCode,
 }: SendConfirmationEmailParams): Promise<EmailDeliveryResult> {
   const activationLink = `${APP_URL}/api/auth/confirm-email?token=${encodeURIComponent(confirmationToken)}`;
+  const codeDisplay = confirmationCode || '------';
+  const codeDigits = codeDisplay.split('');
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -778,7 +782,10 @@ export async function sendConfirmationEmail({
     .badge { display: inline-block; background: #e6f9f0; color: #00bf63; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 999px; margin-bottom: 12px; }
     h1 { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0; }
     p { font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 16px 0; }
-    .btn { display: inline-block; background: #00bf63; color: #ffffff !important; font-weight: 700; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 10px; margin: 18px 0; text-align: center; }
+    .code-box { text-align: center; margin: 24px 0; }
+    .code-digits { display: inline-flex; gap: 8px; }
+    .code-digit { display: inline-block; width: 44px; height: 56px; line-height: 56px; font-size: 28px; font-weight: 800; color: #0f172a; background: #f0fdf4; border: 2px solid #00bf63; border-radius: 10px; text-align: center; letter-spacing: 0; }
+    .code-expiry { font-size: 12px; color: #94a3b8; margin-top: 10px; }
     .terms-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin: 20px 0; font-size: 12px; color: #64748b; line-height: 1.5; }
     .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 28px; border-top: 1px solid #f1f5f9; padding-top: 16px; }
   </style>
@@ -787,7 +794,7 @@ export async function sendConfirmationEmail({
   <div class="card">
     <div class="header">
       <span class="badge">ANELEC GROUPE • ESPACE MULTI-ENTREPRISES</span>
-      <h1>Confirmation d'activation de votre espace entreprise</h1>
+      <h1>Code de confirmation de votre espace entreprise</h1>
     </div>
 
     <p>Bonjour <strong>${esc(recipientName)}</strong>,</p>
@@ -797,23 +804,23 @@ export async function sendConfirmationEmail({
     </p>
 
     <p>
-      Conformément aux règles de sécurité et de conformité légale, votre compte et votre espace entreprise ne sont activables <strong>qu'après confirmation de votre adresse e-mail et acceptation formelle des conditions contractuelles</strong>.
+      Pour confirmer votre adresse e-mail et activer votre espace, saisissez le code ci-dessous sur la page d'inscription :
     </p>
 
-    <div style="text-align: center;">
-      <a href="${activationLink}" class="btn" target="_blank">
-        Accepter les Conditions & Activer mon Espace Entreprise
-      </a>
+    <div class="code-box">
+      <div class="code-digits">
+        ${codeDigits.map((d: string) => `<span class="code-digit">${d}</span>`).join('')}
+      </div>
+      <div class="code-expiry">Ce code expire dans 15 minutes</div>
     </div>
 
     <div class="terms-box">
       <strong>Engagement contractuel et RGPD certifié :</strong><br />
-      En cliquant sur le lien ci-dessus, vous reconnaissez avoir pris connaissance et accepté sans réserve les Conditions Générales d'Utilisation (CGU). Vous confirmez que les données métier saisies dans votre espace (devis, chantiers, factures, clients, plannings) restent la propriété exclusive de <strong>${esc(companyName)}</strong>, sont hébergées sur des serveurs souverains sécurisés en France (Supabase & Hostinger), et ne font l'objet d'aucun traitement ni exploitation par ANELEC GROUPE.
+      En confirmant ce code, vous reconnaissez avoir pris connaissance et accepté sans réserve les Conditions Générales d'Utilisation (CGU). Vous confirmez que les données métier saisies dans votre espace (devis, chantiers, factures, clients, plannings) restent la propriété exclusive de <strong>${esc(companyName)}</strong>, sont hébergées sur des serveurs souverains sécurisés en France (Supabase & Hostinger), et ne font l'objet d'aucun traitement ni exploitation par ANELEC GROUPE.
     </div>
 
     <p style="font-size: 12px; color: #64748b;">
-      Si le bouton ne s'affiche pas correctement, vous pouvez copier-coller ce lien dans votre navigateur :<br />
-      <a href="${activationLink}" style="color: #00bf63; word-break: break-all;">${activationLink}</a>
+      Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.
     </p>
 
     <div class="footer">
@@ -831,9 +838,9 @@ export async function sendConfirmationEmail({
     useCompanyMailbox: false,
     allowPreviewFallback: true,
     toEmail,
-    subject: `[Action Requise] Activez votre espace entreprise ${companyName} - ANELEC TCE`,
+    subject: `${codeDisplay} — Code de confirmation espace entreprise ${companyName} - ANELEC TCE`,
     html: htmlContent,
-    text: `Bonjour ${recipientName},\n\nActivez votre espace entreprise ${companyName} en cliquant sur le lien suivant :\n${activationLink}\n\nEn activant votre compte, vous acceptez les conditions d'utilisation et la politique RGPD.`,
+    text: `Bonjour ${recipientName},\n\nVotre code de confirmation pour activer l'espace entreprise ${companyName} :\n\n${codeDisplay}\n\nCe code expire dans 15 minutes.\n\nSaisissez-le sur la page d'inscription pour activer votre espace.\n\nEn confirmant ce code, vous acceptez les conditions d'utilisation et la politique RGPD.`,
     activationLink,
     recipientName,
     companyName,
