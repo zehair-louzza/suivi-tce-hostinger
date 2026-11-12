@@ -13,6 +13,10 @@ model Company {
   siret                String?
   siren                String?
   active               Boolean              @default(true)
+  /// Adresse du siège / point de départ des tournées
+  siegeAdresse         String?
+  siegeLat             Float?
+  siegeLng             Float?
   defaultTheme         String               @default("light")
   allowThemeOverride   Boolean              @default(true)
   /// Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse

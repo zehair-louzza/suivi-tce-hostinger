@@ -29,11 +29,13 @@ import {
   DEFAULT_DEPOT_COORDS,
   geocodeAddress,
   solveTSP,
+  estimateRoadDistanceAndDuration,
   type CircuitStop,
   type GeoPoint,
 } from '../lib/geocoding';
 import type { Intervention, Devis } from '../lib/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../stores/authStore';
 
 interface CarteStudioViewProps {
   interventions: Intervention[];
@@ -45,11 +47,9 @@ interface CarteStudioViewProps {
   onOpenDevis?: (dev: Partial<Devis>) => void;
 }
 
-// Point de départ des tournées : le dépôt du module d'itinéraires. Les anciennes
-// « positions GPS en direct » des techniciens étaient des coordonnées écrites en dur :
-// supprimées — la carte ne montre plus que ce qui est vrai.
-const HQ = {
-  name: 'Départ des tournées',
+/** Fallback quand l'entreprise n'a pas encore renseigné son adresse. */
+const FALLBACK_HQ = {
+  name: 'Siège (adresse non configurée)',
   addr: DEFAULT_DEPOT_ADDRESS,
   pos: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng] as [number, number],
 };
@@ -72,11 +72,25 @@ export function CarteStudioView({
 }: CarteStudioViewProps) {
   void _devis;
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const [mode, setMode] = useState<'positions' | 'route' | 'both'>('both');
   const [tech, setTech] = useState<string>(currentTechnicien || 'all');
   const [full, setFull] = useState(false);
   /** Ordre recalculé par l'optimiseur (par technicien) ; vide tant qu'on n'a pas optimisé */
   const [ordreOptimise, setOrdreOptimise] = useState<Record<string, number[]>>({});
+
+  // Adresse du siège : priorité à l'adresse configurée par l'entreprise
+  const HQ = useMemo(() => {
+    const company = (user as any)?.company;
+    if (company?.siegeAdresse && company?.siegeLat && company?.siegeLng) {
+      return {
+        name: `Siège ${company.name || ''}`.trim(),
+        addr: company.siegeAdresse as string,
+        pos: [company.siegeLat as number, company.siegeLng as number] as [number, number],
+      };
+    }
+    return FALLBACK_HQ;
+  }, [user]);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -135,6 +149,31 @@ export function CarteStudioView({
     );
   }, [interventions, tech]);
 
+  // KPIs dynamiques : distance et temps calculés à partir des positions réelles
+  const { totalDistKm, totalDurMin } = useMemo(() => {
+    if (pendingInterventions.length === 0) return { totalDistKm: 0, totalDurMin: 0 };
+    const depotGeo: GeoPoint = { lat: HQ.pos[0], lng: HQ.pos[1] };
+    let distKm = 0;
+    let durMin = 0;
+    let prev = depotGeo;
+    for (const intv of pendingInterventions) {
+      const geo = positionDe(intv);
+      if (!geo) continue;
+      const leg = estimateRoadDistanceAndDuration(prev, geo);
+      distKm += leg.distanceKm;
+      durMin += leg.durationMin;
+      prev = geo;
+    }
+    // Retour au siège
+    if (prev !== depotGeo) {
+      const ret = estimateRoadDistanceAndDuration(prev, depotGeo);
+      distKm += ret.distanceKm;
+      durMin += ret.durationMin;
+    }
+    return { totalDistKm: Math.round(distKm * 10) / 10, totalDurMin: Math.round(durMin) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInterventions, geoVersion, HQ]);
+
   // Escape to close fullscreen
   useEffect(() => {
     if (!full) return;
@@ -169,9 +208,9 @@ export function CarteStudioView({
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // Light tiles for Atlas Clarity
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
+      // Tiles OpenStreetMap gratuites (pas de clé API requise)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
       }).addTo(map);
 
@@ -188,9 +227,9 @@ export function CarteStudioView({
     // 1. Add HQ Marker
     const hqIcon = L.divIcon({
       className: 'm-map-hq',
-      html: `<div style="background:#0F172A;color:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,.2);white-space:nowrap;">🏢 Siège ANELEC</div>`,
-      iconSize: [110, 26],
-      iconAnchor: [55, 13],
+      html: `<div style="background:#0F172A;color:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,.2);white-space:nowrap;">🏢 ${HQ.name}</div>`,
+      iconSize: [140, 26],
+      iconAnchor: [70, 13],
     });
     L.marker(HQ.pos, { icon: hqIcon })
       .bindPopup(`<strong>${HQ.name}</strong><br/>${HQ.addr}`)
@@ -274,6 +313,7 @@ export function CarteStudioView({
     const ordres: Record<string, number[]> = {};
     let kmAvant = 0;
     let kmApres = 0;
+    const depotGeo: GeoPoint = { lat: HQ.pos[0], lng: HQ.pos[1] };
     displayedTechs.forEach((tName) => {
       const missions = pendingInterventions.filter((i) => i.entreprise === tName);
       const stops: CircuitStop[] = missions
@@ -287,7 +327,7 @@ export function CarteStudioView({
         }))
         .filter((st) => st.coordinates);
       if (stops.length < 2) return;
-      const res = solveTSP(DEFAULT_DEPOT_COORDS, stops);
+      const res = solveTSP(depotGeo, stops);
       ordres[tName] = res.orderedStops.map((st) => Number(st.id));
       kmAvant += res.originalDistanceKm;
       kmApres += res.totalDistanceKm;
@@ -358,15 +398,15 @@ export function CarteStudioView({
       <div className="m-kpis m-kpis--4 m-kpis--compact">
         <Kpi
           label="Distance restante"
-          value="38 km"
-          hint="Tous techniciens"
+          value={totalDistKm > 0 ? `${totalDistKm} km` : '— km'}
+          hint={tech === 'all' ? 'Tous techniciens' : tech}
           icon={Route}
           tone="blue"
         />
         <Kpi
           label="Temps de trajet estimé"
-          value="1 h 25"
-          hint="Trafic actuel inclus"
+          value={totalDurMin > 0 ? `${Math.floor(totalDurMin / 60)} h ${String(totalDurMin % 60).padStart(2, '0')}` : '— h —'}
+          hint="Estimation routière"
           icon={Clock}
           tone="indigo"
         />

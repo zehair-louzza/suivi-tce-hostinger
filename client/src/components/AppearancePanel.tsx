@@ -9,11 +9,12 @@
  *     à mesure qu'il survole les cartes de thème).
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
-import { api } from '../lib/api';
+import { api, adminApi } from '../lib/api';
+import { geocodeAddress } from '../lib/geocoding';
 import { ProGlyph } from './ProIcons';
 
 interface ThemeCardProps {
@@ -198,6 +199,7 @@ export function AppearancePanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="appearance-panel">
       <AccueilMaFileToggle />
+      <SiegeAddressPanel />
 
       {/* Bandeau introductif */}
       <section
@@ -424,6 +426,214 @@ export function PersonalThemePicker() {
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Section « Adresse du siège » — permet à l'administrateur de définir
+ * le point de départ des tournées (géocodé automatiquement via BAN).
+ */
+function SiegeAddressPanel() {
+  const { user, fetchMe } = useAuth();
+  const company = (user as any)?.company;
+  const currentAddr = company?.siegeAdresse || '';
+
+  const [addr, setAddr] = useState(currentAddr);
+  const [saving, setSaving] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeResult, setGeocodeResult] = useState<{ lat: number; lng: number; label: string } | null>(null);
+
+  // Sync state if user data changes (e.g. after fetchMe)
+  const displayAddr = addr || currentAddr;
+
+  const doGeocode = useCallback(async () => {
+    const trimmed = addr.trim();
+    if (!trimmed || trimmed.length < 5) {
+      toast.error('Veuillez saisir une adresse complète.');
+      return;
+    }
+    setGeocoding(true);
+    setGeocodeResult(null);
+    try {
+      const result = await geocodeAddress(trimmed);
+      if (result) {
+        setGeocodeResult({ lat: result.lat, lng: result.lng, label: result.label || trimmed });
+        toast.success(`Adresse trouvée : ${result.label || trimmed}`);
+      } else {
+        toast.error('Adresse introuvable. Vérifiez et réessayez.');
+      }
+    } catch {
+      toast.error('Erreur de géocodage. Réessayez.');
+    } finally {
+      setGeocoding(false);
+    }
+  }, [addr]);
+
+  const doSave = useCallback(async () => {
+    if (!geocodeResult) {
+      toast.error('Veuillez d\'abord vérifier l\'adresse.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await adminApi.updateSiege({
+        siegeAdresse: geocodeResult.label,
+        siegeLat: geocodeResult.lat,
+        siegeLng: geocodeResult.lng,
+      });
+      await fetchMe();
+      toast.success('Adresse du siège enregistrée avec succès.');
+      setGeocodeResult(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Impossible d\'enregistrer l\'adresse.');
+    } finally {
+      setSaving(false);
+    }
+  }, [geocodeResult, fetchMe]);
+
+  return (
+    <section
+      style={{
+        padding: 18,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--rounded-card, 10px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+      data-testid="siege-address-section"
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            background: 'var(--color-primary-soft)',
+            color: 'var(--color-primary)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 20,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          <ProGlyph name="pin" size={22} />
+        </span>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <strong style={{ fontSize: 16, color: 'var(--color-text)' }}>Adresse du siège</strong>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+            Définissez l'adresse de départ des tournées de votre entreprise. Cette adresse sera utilisée pour le calcul des distances et des temps de trajet sur la carte.
+          </p>
+        </div>
+      </div>
+
+      {/* Adresse actuelle */}
+      {currentAddr && (
+        <div
+          style={{
+            padding: '10px 14px',
+            background: 'var(--color-surface-subtle)',
+            borderRadius: 8,
+            fontSize: 13,
+            color: 'var(--color-text)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Adresse actuelle :</span>
+          <span>{currentAddr}</span>
+        </div>
+      )}
+
+      {/* Champ de saisie */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={displayAddr}
+          onChange={(e) => { setAddr(e.target.value); setGeocodeResult(null); }}
+          placeholder="Ex : 12 Rue de la Paix, 75002 Paris"
+          data-testid="siege-address-input"
+          style={{
+            flex: '1 1 280px',
+            minWidth: 0,
+            padding: '10px 14px',
+            borderRadius: 8,
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            fontSize: 14,
+            outline: 'none',
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') doGeocode(); }}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={doGeocode}
+          disabled={geocoding || !addr.trim()}
+          data-testid="siege-address-geocode"
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {geocoding ? 'Recherche…' : 'Vérifier l\'adresse'}
+        </button>
+      </div>
+
+      {/* Résultat du géocodage */}
+      {geocodeResult && (
+        <div
+          style={{
+            padding: '10px 14px',
+            background: 'var(--color-success-soft, #ecfdf5)',
+            borderRadius: 8,
+            border: '1px solid var(--color-success, #10b981)',
+            fontSize: 13,
+            color: 'var(--color-text)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+          data-testid="siege-geocode-result"
+        >
+          <div>
+            <strong>Adresse vérifiée :</strong> {geocodeResult.label}
+          </div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>
+            Coordonnées : {geocodeResult.lat.toFixed(6)}, {geocodeResult.lng.toFixed(6)}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={doSave}
+            disabled={saving}
+            data-testid="siege-address-save"
+            style={{ alignSelf: 'flex-start', marginTop: 4 }}
+          >
+            {saving ? 'Enregistrement…' : 'Enregistrer cette adresse'}
+          </button>
+        </div>
+      )}
+
+      {/* Note explicative */}
+      {!currentAddr && !geocodeResult && (
+        <div
+          style={{
+            padding: '10px 14px',
+            background: 'var(--color-warning-soft, #fffbeb)',
+            borderRadius: 8,
+            border: '1px dashed var(--color-warning, #f59e0b)',
+            fontSize: 12.5,
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          ⚠️ Aucune adresse de siège n'est configurée. La carte utilisera une adresse par défaut (Paris) comme point de départ des tournées.
+        </div>
+      )}
+    </section>
   );
 }
 

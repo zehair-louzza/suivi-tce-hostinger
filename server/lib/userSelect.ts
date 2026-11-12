@@ -56,6 +56,9 @@ export interface AuthUserRow {
     siren: string | null;
     defaultTheme?: string | null;
     allowThemeOverride?: boolean | null;
+    siegeAdresse?: string | null;
+    siegeLat?: number | null;
+    siegeLng?: number | null;
   } | null;
 }
 
@@ -76,6 +79,9 @@ export const basePublicUserSelect = {
       name: true,
       siret: true,
       siren: true,
+      siegeAdresse: true,
+      siegeLat: true,
+      siegeLng: true,
     },
   },
   createdAt: true,
@@ -89,6 +95,9 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
     name: true,
     siret: true,
     siren: true,
+    siegeAdresse: true,
+    siegeLat: true,
+    siegeLng: true,
   };
   if (themeColumnsAvailable) {
     companySelect.defaultTheme = true;

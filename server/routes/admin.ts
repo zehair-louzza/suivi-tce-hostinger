@@ -933,15 +933,18 @@ adminRouter.get(
       defaultTheme?: string | null;
       allowThemeOverride?: boolean | null;
       accueilMaFile?: boolean | null;
+      siegeAdresse?: string | null;
+      siegeLat?: number | null;
+      siegeLng?: number | null;
     } | null;
     try {
       company = await prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true },
+        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true, siegeAdresse: true, siegeLat: true, siegeLng: true },
       });
     } catch (e) {
       if (!isMissingSchemaError(e)) throw e;
-      // Colonnes d'apparence absentes : on renvoie les valeurs par défaut.
+      // Colonnes absentes : on renvoie les valeurs par défaut.
       company = await prisma.company.findUnique({
         where: { id: companyId },
         select: { id: true, name: true },
@@ -954,6 +957,9 @@ adminRouter.get(
       defaultTheme: company.defaultTheme || 'light',
       allowThemeOverride: company.allowThemeOverride !== false,
       accueilMaFile: company.accueilMaFile === true,
+      siegeAdresse: company.siegeAdresse || null,
+      siegeLat: company.siegeLat || null,
+      siegeLng: company.siegeLng || null,
       availableThemes: ALLOWED_THEMES,
     });
   })
@@ -1009,6 +1015,51 @@ adminRouter.patch(
       allowThemeOverride: updated.allowThemeOverride !== false,
       accueilMaFile: updated.accueilMaFile === true,
       message: "Apparence de l'entreprise mise à jour.",
+    });
+  })
+);
+
+// ============================================================================
+// 8. ADRESSE DU SIÈGE — point de départ des tournées, propre à chaque entreprise
+// ============================================================================
+
+const CompanySiegeSchema = z.object({
+  siegeAdresse: z.string().min(3, 'Adresse trop courte').max(500),
+  siegeLat: z.number().min(-90).max(90),
+  siegeLng: z.number().min(-180).max(180),
+});
+
+/**
+ * PATCH /api/admin/siege
+ * Met à jour l'adresse du siège de l'entreprise connectée.
+ */
+adminRouter.patch(
+  '/siege',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) {
+      throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
+    }
+    const parsed = CompanySiegeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError(400, parsed.error.issues[0]?.message || 'Paramètres invalides', 'INVALID_PAYLOAD');
+    }
+    const { siegeAdresse, siegeLat, siegeLng } = parsed.data;
+    const companyId = caller.companyId || 1;
+
+    const updated = await prisma.company.update({
+      where: { id: companyId },
+      data: { siegeAdresse, siegeLat, siegeLng },
+      select: { id: true, name: true, siegeAdresse: true, siegeLat: true, siegeLng: true },
+    });
+
+    res.json({
+      companyId: updated.id,
+      companyName: updated.name,
+      siegeAdresse: updated.siegeAdresse,
+      siegeLat: updated.siegeLat,
+      siegeLng: updated.siegeLng,
+      message: 'Adresse du siège mise à jour.',
     });
   })
 );

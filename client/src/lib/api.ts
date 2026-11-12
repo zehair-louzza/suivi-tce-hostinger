@@ -506,6 +506,15 @@ export const adminApi = {
   }) => api.post<InvitationSendResult>('/admin/invitations', payload),
   resendInvitation: (id: number) => api.post<InvitationSendResult>(`/admin/invitations/${id}/resend`),
   revokeInvitation: (id: number) => api.delete<{ message: string }>(`/admin/invitations/${id}`),
+  updateSiege: (payload: { siegeAdresse: string; siegeLat: number; siegeLng: number }) =>
+    api.patch<{
+      companyId: number;
+      companyName: string;
+      siegeAdresse: string;
+      siegeLat: number;
+      siegeLng: number;
+      message: string;
+    }>('/admin/siege', payload),
 };
 
 export const healthApi = {
