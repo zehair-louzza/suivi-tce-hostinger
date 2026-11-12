@@ -212,7 +212,9 @@ export function CarteStudioView({
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
+        // OSM refuse les requêtes sans Referer (403 « tile usage policy »)
+        referrerPolicy: 'strict-origin-when-cross-origin',
+      } as L.TileLayerOptions).addTo(map);
 
       layerGroupRef.current = L.layerGroup().addTo(map);
       mapInstanceRef.current = map;
@@ -444,7 +446,7 @@ export function CarteStudioView({
           className="m-muted m-small"
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
-          <Building size={14} /> Départ et retour : siège ANELEC (sans GPS)
+          <Building size={14} /> Départ et retour : {HQ === FALLBACK_HQ ? 'adresse du siège non configurée (Administration → Apparence)' : HQ.name}
         </span>
       </div>
 

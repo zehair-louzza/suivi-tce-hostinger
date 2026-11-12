@@ -36,7 +36,14 @@ export const io = new Server(httpServer, {
 setSocketInstance(io);
 setupSocketHandlers(io);
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, crossOriginOpenerPolicy: false, contentSecurityPolicy: false }));
+// referrerPolicy : helmet envoie « no-referrer » par défaut, ce qui fait bloquer (403) les tuiles
+// OpenStreetMap, dont la politique d'usage exige un en-tête Referer. On n'envoie que l'origine.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+  contentSecurityPolicy: false,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
 app.use(cors({ origin: config.corsOriginList, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
