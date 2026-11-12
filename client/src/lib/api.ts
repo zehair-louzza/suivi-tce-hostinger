@@ -93,7 +93,7 @@ export {
 
 export const api = axios.create({
   baseURL: '/api',
-  timeout: 8000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -370,8 +370,8 @@ export const authApi = {
   acceptInvitation: (payload: { token: string; name: string; password: string; acceptTerms: true }) =>
     api.post<{ user: User; accessToken: string; message: string }>('/auth/invitations/accept', payload),
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  register: (name: string, email: string, password: string) =>
-    api.post('/auth/register', { name, email, password }),
+  register: (name: string, email: string, password: string, companyName?: string, siretOrSiren?: string) =>
+    api.post('/auth/register', { name, email, password, companyName, siretOrSiren }),
   resendConfirmation: (email: string) =>
     api.post<{
       message: string;

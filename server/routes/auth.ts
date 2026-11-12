@@ -118,12 +118,15 @@ function generateTokens(user: { id: number; email: string; role: string; company
 }
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+  const isProduction = process.env.NODE_ENV === 'production';
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     sameSite: 'lax' as const,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
+    // En production, ne pas spécifier de domaine pour que le cookie
+    // soit associé au domaine exact de la requête (fonctionne sur www et non-www)
   };
   res.cookie('accessToken', accessToken, options);
   res.cookie('refreshToken', refreshToken, { ...options, maxAge: 30 * 24 * 60 * 60 * 1000 });
@@ -386,10 +389,12 @@ authRouter.post(
       message:
         delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
           ? `Un nouvel e-mail de confirmation a été envoyé à ${user.email}.`
-          : `Nouvel e-mail de confirmation généré pour ${user.email}.`,
+          : `Nouvel e-mail de confirmation généré pour ${user.email}. Vous pouvez aussi activer directement votre espace ci-dessous.`,
       emailSent: delivery.sent,
       email: user.email,
       deliveryChannel: delivery.channel,
+      previewUrl: delivery.previewUrl || null,
+      activationLink: delivery.activationLink || null,
     });
   })
 );

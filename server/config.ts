@@ -16,8 +16,29 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   
-  // CORS
+  // CORS — accepte l'origine configurée, et en production aussi les variantes www / sans www du domaine
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  corsOriginList: (() => {
+    const env = process.env.CORS_ORIGIN || '';
+    if (!env) return ['http://localhost:5173'];
+    // Construire les variantes : http/https × www/non-www pour le domaine configuré
+    const origins = [env];
+    try {
+      const u = new URL(env);
+      const host = u.hostname;
+      // Ajouter la variante https si http, et vice versa
+      if (u.protocol === 'http:') origins.push(env.replace('http:', 'https:'));
+      else origins.push(env.replace('https:', 'http:'));
+      // Ajouter la variante www / sans www
+      if (host.startsWith('www.')) {
+        const naked = host.slice(4);
+        origins.push(`https://${naked}`, `http://${naked}`);
+      } else {
+        origins.push(`https://www.${host}`, `http://www.${host}`);
+      }
+    } catch { /* URL invalide, garder juste l'env */ }
+    return [...new Set(origins)];
+  })(),
   
   // Rate limiting (3000 requêtes / 15 min par défaut pour éviter tout blocage d'utilisateurs légitimes)
   rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),

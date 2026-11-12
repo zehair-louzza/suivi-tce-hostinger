@@ -37,7 +37,7 @@ setSocketInstance(io);
 setupSocketHandlers(io);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, crossOriginOpenerPolicy: false, contentSecurityPolicy: false }));
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(cors({ origin: config.corsOriginList, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(cookieParser(config.cookieSecret));

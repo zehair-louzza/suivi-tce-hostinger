@@ -13,7 +13,8 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "noEmit": false
+    "noEmit": false,
+    "noEmitOnError": false
   },
   "include": ["server/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist"]
