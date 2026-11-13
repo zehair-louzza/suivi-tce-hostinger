@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -391,7 +392,7 @@ export function AdminWorkstation({
 
   const buildAutoReportFromDeclaration = (intv: Intervention): string => {
     const lines: string[] = [];
-    lines.push(`RAPPORT OFFICIEL D'INTERVENTION — ANELEC GROUPE`);
+    lines.push(`RAPPORT OFFICIEL D'INTERVENTION — ${getCompanyName()}`);
     lines.push(`Référence : ${intv.reference || `INT-${intv.id}`} (${intv.isVisiteDevis ? 'Visite Technique Devis' : intv.typeIntervention || 'Intervention Travaux'})`);
     lines.push(`Client / Donneur d'ordre : ${intv.client || '—'}`);
     lines.push(`Site / Adresse : ${intv.chantier || '—'}`);

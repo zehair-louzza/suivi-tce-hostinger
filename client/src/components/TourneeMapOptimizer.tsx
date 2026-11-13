@@ -600,13 +600,13 @@ export function TourneeMapOptimizer({
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
         {
           maxZoom: 19,
-          attribution: '© Esri & OSM • ANELEC GROUPE',
+          attribution: '© Esri & OSM',
         }
       ).addTo(map);
 
       const osmFrLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap France • ANELEC GROUPE',
+        attribution: '© OpenStreetMap France',
         // OSM France applique la même règle qu'OSM : pas de Referer, pas de tuiles
         referrerPolicy: 'strict-origin-when-cross-origin',
       } as L.TileLayerOptions);
@@ -678,6 +678,7 @@ export function TourneeMapOptimizer({
       popupAnchor: [0, -22],
     });
 
+    if (hq.configured) {
     const depotMarker = L.marker([officeCoords.lat, officeCoords.lng], { icon: depotIcon }).addTo(
       markersLayer
     );
@@ -694,6 +695,7 @@ export function TourneeMapOptimizer({
         </div>
       </div>
     `);
+    }
 
     // B. Affichage des POSITIONS ACTUELLES DES TECHNICIENS (Mode 'positions' ou 'both')
     if (showPositions) {
@@ -901,7 +903,7 @@ export function TourneeMapOptimizer({
     if (hasExtendedBounds) {
       map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
     } else {
-      map.setView([officeCoords.lat, officeCoords.lng], 13);
+      map.setView([officeCoords.lat, officeCoords.lng], hq.configured ? 13 : 6);
     }
 
     map.invalidateSize();
@@ -1749,10 +1751,12 @@ export function TourneeMapOptimizer({
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  Départ : Siège / Bureau ANELEC GROUPE
+                  Départ : {hq.configured ? hq.name : 'Siège non configuré'}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                  {officeAddress} • Point de départ officiel
+                  {hq.configured
+                    ? `${officeAddress} • Point de départ officiel`
+                    : "Renseignez l'adresse du siège (Administration → Apparence) : les distances sont indicatives."}
                 </div>
               </div>
             </div>

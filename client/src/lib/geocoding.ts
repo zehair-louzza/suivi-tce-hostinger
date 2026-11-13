@@ -67,6 +67,15 @@ function getLocalCache(): Record<string, GeoPoint> {
   }
 }
 
+/** Vide le cache d'adresses de cet appareil (appelé quand l'identité connectée change). */
+export function clearGeocodeCache() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    // stockage indisponible : rien à purger
+  }
+}
+
 function setLocalCache(cache: Record<string, GeoPoint>) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));

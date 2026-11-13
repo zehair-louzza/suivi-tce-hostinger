@@ -1,7 +1,8 @@
 // Vite entry point
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import toast, { Toaster, useToasterStore } from 'react-hot-toast';
 import { BrowserRouter } from 'react-router-dom';
@@ -27,19 +28,6 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   });
 }
 registerServiceWorker();
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Les changements d'un autre intervenant doivent se voir vite : données périmées
-      // au bout d'une minute, et rechargées quand on revient sur l'onglet. Le temps réel
-      // (lib/realtime) fait le reste instantanément.
-      staleTime: 60 * 1000,
-      retry: 1,
-      refetchOnWindowFocus: true,
-    },
-  },
-});
 
 /**
  * Gestionnaire de notifications éphémères (Toasts) :

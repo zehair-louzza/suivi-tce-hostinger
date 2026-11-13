@@ -1,6 +1,7 @@
 // Referentiels routes - Administration des listes de choix ANELEC, Compétences Techniciens & Équipes Journalières
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { requireCompanyId } from '../lib/tenant.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -20,7 +21,7 @@ export const referentielsRouter = Router();
 referentielsRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const rows = await prisma.referentiel.findMany({
       where: {
         OR: [{ companyId }, { companyId: null }],
@@ -158,7 +159,7 @@ referentielsRouter.put(
 
     const rawCat = req.params.categorie === 'corpsEtat' ? 'corps_etat' : req.params.categorie;
     const categorie = rawCat as keyof ReferentielsMap;
-    const companyId = caller.companyId || req.user?.companyId || 1;
+    const companyId = requireCompanyId(caller.companyId);
 
     if (categorie === 'technicien_competences') {
       const rawMap = req.body?.competences || req.body?.valeurs || {};
@@ -436,7 +437,7 @@ export async function saveTechnicienGpsPosition(
     }
 
     try {
-      socketEvents.broadcast('technicien:gps_updated', currentMap[techKey]);
+      socketEvents.broadcastCompany(companyId, 'technicien:gps_updated', currentMap[techKey]);
     } catch {
       // ignore socket error
     }
@@ -449,7 +450,7 @@ export async function saveTechnicienGpsPosition(
 referentielsRouter.post(
   '/gps-position',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const b = req.body || {};
     let technicien = String(b.technicien || '').trim();
 

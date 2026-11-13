@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import { useState, useMemo } from 'react';
 import {
   Devis,
@@ -715,13 +716,13 @@ Nous faisons suite à votre demande concernant notre intervention ${ref}${devisS
 Nous restons à votre entière disposition pour vous transmettre le rapport d'attachement complet avec reportage photos.
 
 Cordialement,
-Le Service Exploitation & Facturation — ANELEC GROUPE`
+Le Service Exploitation & Facturation — ${getCompanyName()}`
         : `
 
 Notre équipe reste à votre écoute pour toute question complémentaire.
 
 Bien cordialement,
-Service Client & Facturation — ANELEC GROUPE`;
+Service Client & Facturation — ${getCompanyName()}`;
 
     return `${greeting}${body}${closing}`;
   };

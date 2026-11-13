@@ -2,6 +2,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '../lib/api';
+import { queryClient } from '../lib/queryClient';
+import { clearGeocodeCache } from '../lib/geocoding';
 import { User } from '../../../shared/types';
 import { Fragment } from 'react';
 
@@ -317,3 +319,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 export function useAuth() {
   return useAuthStore();
 }
+
+// Isolation entre entreprises sur un même appareil : dès que l'identité connectée change
+// (déconnexion, autre compte, autre entreprise), on vide toutes les données en cache.
+// Un utilisateur qui se connecte ensuite ne peut jamais voir, même brièvement, celles du précédent.
+const identityOf = (u: { id?: number; companyId?: number | null } | null | undefined) =>
+  u ? `${u.id ?? ''}:${u.companyId ?? ''}` : null;
+
+let lastIdentity = identityOf(useAuthStore.getState().user);
+useAuthStore.subscribe((state) => {
+  const identity = identityOf(state.user);
+  if (identity === lastIdentity) return;
+  lastIdentity = identity;
+  queryClient.clear();
+  clearGeocodeCache();
+});

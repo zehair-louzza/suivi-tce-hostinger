@@ -1076,8 +1076,6 @@ export interface User {
   companySiret?: string | null;
   company?: CompanyInfo | null;
   theme?: UserThemeSettings;
-  /** Super administrateur de la plateforme : main haute sur toutes les entreprises */
-  isSuperAdmin?: boolean;
   createdAt?: number | string;
 }
 

@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
-import { api, adminApi, type SuperAdminCompany } from '../lib/api';
+import { api, adminApi } from '../lib/api';
 import { geocodeAddress } from '../lib/geocoding';
 import { ProGlyph } from './ProIcons';
 
@@ -200,7 +200,6 @@ export function AppearancePanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="appearance-panel">
       <AccueilMaFileToggle />
       <SiegeAddressPanel />
-      {user?.isSuperAdmin === true && <SuperAdminCompaniesPanel />}
 
       {/* Bandeau introductif */}
       <section
@@ -431,17 +430,15 @@ export function PersonalThemePicker() {
 }
 
 /**
- * Saisie, vérification (géocodage BAN) et enregistrement d'une adresse de siège.
- * Utilisé par l'administrateur pour sa propre entreprise, et par le super administrateur pour
- * n'importe quelle entreprise (`companyId`). `onSaved` laisse l'appelant rafraîchir ses données.
+ * Saisie, vérification (géocodage BAN) et enregistrement de l'adresse du siège de l'entreprise
+ * de l'administrateur connecté. Jamais d'autre entreprise : le serveur n'accepte aucun identifiant
+ * d'entreprise, il utilise celle du compte connecté.
  */
 function SiegeEditor({
-  companyId,
   currentAddr,
   onSaved,
   testId = 'siege',
 }: {
-  companyId?: number;
   currentAddr: string;
   onSaved: () => Promise<void> | void;
   testId?: string;
@@ -490,7 +487,6 @@ function SiegeEditor({
         siegeAdresse: geocodeResult.label,
         siegeLat: geocodeResult.lat,
         siegeLng: geocodeResult.lng,
-        ...(companyId !== undefined ? { companyId } : {}),
       });
       await onSaved();
       toast.success('Adresse du siège enregistrée.');
@@ -501,7 +497,7 @@ function SiegeEditor({
     } finally {
       setSaving(false);
     }
-  }, [geocodeResult, companyId, onSaved]);
+  }, [geocodeResult, onSaved]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -660,170 +656,6 @@ function SiegeAddressPanel() {
       )}
 
       <SiegeEditor currentAddr={currentAddr} onSaved={refreshMe} />
-    </section>
-  );
-}
-
-/**
- * Super administration : liste de TOUTES les entreprises, avec pour chacune son adresse de siège et
- * ses réglages d'apparence modifiables. Visible uniquement par le super administrateur ; le serveur
- * refuse de toute façon ces appels à tout autre compte.
- */
-function SuperAdminCompaniesPanel() {
-  const { user, refreshMe } = useAuth();
-  const [companies, setCompanies] = useState<SuperAdminCompany[] | null>(null);
-  const [themeIds, setThemeIds] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await adminApi.listCompanies();
-      setCompanies(res.data.data);
-      setThemeIds(res.data.availableThemes);
-      setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Impossible de charger la liste des entreprises.');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Après une modification : recharger la liste, et mon propre profil si c'est mon entreprise.
-  const afterChange = useCallback(
-    async (companyId: number) => {
-      await load();
-      if (companyId === user?.company?.id) await refreshMe();
-    },
-    [load, refreshMe, user?.company?.id]
-  );
-
-  const patchAppearance = async (
-    c: SuperAdminCompany,
-    payload: { defaultTheme?: string; allowThemeOverride?: boolean; accueilMaFile?: boolean }
-  ) => {
-    setBusyId(c.id);
-    try {
-      await adminApi.updateCompanyAppearance(c.id, payload);
-      await afterChange(c.id);
-      toast.success(`Réglages de « ${c.name} » mis à jour.`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Modification impossible.');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <section
-      style={{
-        padding: 18,
-        background: 'var(--color-surface)',
-        border: '2px solid var(--color-primary)',
-        borderRadius: 'var(--rounded-card, 10px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}
-      data-testid="super-admin-section"
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <strong style={{ fontSize: 16, color: 'var(--color-text)' }}>Super administration · toutes les entreprises</strong>
-        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
-          En tant que super administrateur, vous pouvez régler l'adresse du siège et l'apparence de chaque entreprise.
-          Les membres concernés reçoivent le changement automatiquement, sans se reconnecter.
-        </p>
-      </div>
-
-      {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--color-danger-soft, #fef2f2)', color: 'var(--color-text)', fontSize: 13 }}>
-          {error}
-        </div>
-      )}
-      {!companies && !error && (
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Chargement des entreprises…</div>
-      )}
-
-      {companies?.map((c) => (
-        <div
-          key={c.id}
-          data-testid={`super-admin-company-${c.id}`}
-          style={{
-            padding: 14,
-            border: '1px solid var(--color-border)',
-            borderRadius: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            opacity: busyId === c.id ? 0.7 : 1,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: 15, color: 'var(--color-text)' }}>{c.name}</strong>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-              #{c.id}
-              {c.siren ? ` · SIREN ${c.siren}` : ''} · {c.userCount} membre{c.userCount > 1 ? 's' : ''}
-              {c.active ? '' : ' · désactivée'}
-            </span>
-          </div>
-
-          <div style={{ fontSize: 13, color: 'var(--color-text)' }}>
-            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Siège : </span>
-            {c.siegeAdresse || <em style={{ color: 'var(--color-text-muted)' }}>non configuré</em>}
-          </div>
-          <SiegeEditor
-            companyId={c.id}
-            currentAddr={c.siegeAdresse || ''}
-            onSaved={() => afterChange(c.id)}
-            testId={`super-admin-${c.id}`}
-          />
-
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              Apparence par défaut
-              <select
-                value={c.defaultTheme}
-                disabled={busyId === c.id}
-                onChange={(e) => void patchAppearance(c, { defaultTheme: e.target.value })}
-                data-testid={`super-admin-${c.id}-theme`}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                {themeIds.map((id) => (
-                  <option key={id} value={id}>
-                    {THEMES.find((t) => t.id === id)?.name ?? id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={c.allowThemeOverride}
-                disabled={busyId === c.id}
-                onChange={(e) => void patchAppearance(c, { allowThemeOverride: e.target.checked })}
-              />
-              Personnalisation individuelle
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={c.accueilMaFile}
-                disabled={busyId === c.id}
-                onChange={(e) => void patchAppearance(c, { accueilMaFile: e.target.checked })}
-              />
-              Accueil sur « Ma file »
-            </label>
-          </div>
-        </div>
-      ))}
     </section>
   );
 }

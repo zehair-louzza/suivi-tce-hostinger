@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import React, { useState, useMemo } from 'react';
 import { ClientProfile, ClientProfileType, ClientServiceContact } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -675,7 +676,7 @@ export function ClientsDirectoryView({
 
                 {p.email && (
                   <a
-                    href={`mailto:${p.email}?subject=ANELEC GROUPE - Suivi Technique`}
+                    href={`mailto:${p.email}?subject=${encodeURIComponent(`${getCompanyName()} - Suivi Technique`)}`}
                     className="btn btn-sm"
                     style={{
                       fontSize: '11px',

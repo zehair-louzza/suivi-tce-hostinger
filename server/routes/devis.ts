@@ -2,6 +2,7 @@
 import { Router, Request, Response } from 'express';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
+import { requireCompanyId } from '../lib/tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -342,7 +343,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
         origineDevisDate: devis.dateCreated,
         devisId: devis.id,
         userId,
-        companyId: devis.companyId || 1,
+        companyId: requireCompanyId(devis.companyId),
         historiqueJson: addHistoriqueEvent(
           null,
           auteur,
@@ -361,7 +362,7 @@ devisRouter.get(
     const status = (req.query.status as string) || '';
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 200;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
 
     const where: any = {
       companyId,
@@ -452,7 +453,7 @@ devisRouter.get(
 devisRouter.get(
   '/stats',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const items = await prisma.devis.findMany({ where: { companyId } });
     const transformed = items.map(transformDevis);
 
@@ -492,7 +493,7 @@ devisRouter.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const devis = await prisma.devis.findFirst({
       where: { id, companyId },
       include: { interventions: true },
@@ -510,7 +511,7 @@ devisRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -602,7 +603,7 @@ devisRouter.post(
     });
 
     const transformed = transformDevis(refreshed);
-    notify(() => socketEvents.devisCreated(userId, transformed));
+    notify(() => socketEvents.devisCreated(userId, companyId, transformed));
 
     res.status(201).json({ data: transformed, message: 'Devis créé avec succès' });
   })
@@ -613,7 +614,7 @@ devisRouter.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -791,7 +792,7 @@ devisRouter.patch(
     });
 
     const transformed = transformDevis(refreshed);
-    notify(() => socketEvents.devisUpdated(userId, transformed));
+    notify(() => socketEvents.devisUpdated(userId, companyId, transformed));
 
     res.json({ data: transformed, message: 'Devis mis à jour' });
   })
@@ -802,7 +803,7 @@ devisRouter.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
 
     const existing = await prisma.devis.findFirst({ where: { id, companyId } });
     if (!existing) {
@@ -823,7 +824,7 @@ devisRouter.delete(
     }
 
     await prisma.devis.delete({ where: { id } });
-    notify(() => socketEvents.devisDeleted(userId, { id }));
+    notify(() => socketEvents.devisDeleted(userId, companyId, { id }));
 
     res.json({ message: 'Devis supprimé' });
   })
@@ -834,7 +835,7 @@ devisRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const devisId = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -854,7 +855,7 @@ devisRouter.post(
     const idempotencyKey = req.get('Idempotency-Key');
     if (idempotencyKey && !b.mode && b.isVisiteDevis === undefined) {
       const result = await convertKeepingQuote(userId, devisId, req.body, idempotencyKey);
-      if (!result.replayed) notify(() => socketEvents.interventionCreated(result.ownerId, result.data));
+      if (!result.replayed) notify(() => socketEvents.interventionCreated(result.ownerId, companyId, result.data));
       return res.status(result.replayed ? 200 : 201).json({
         data: result.data,
         replayed: result.replayed,
@@ -958,8 +959,8 @@ devisRouter.post(
       include: { interventions: true },
     });
 
-    notify(() => socketEvents.devisUpdated(userId, transformDevis(updatedDevis)));
-    notify(() => socketEvents.interventionCreated(userId, intervention));
+    notify(() => socketEvents.devisUpdated(userId, companyId, transformDevis(updatedDevis)));
+    notify(() => socketEvents.interventionCreated(userId, companyId, intervention));
 
     return res.status(201).json({
       data: intervention,
@@ -975,7 +976,7 @@ devisRouter.post(
 devisRouter.post(
   '/:id/send-devis-email',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user!.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const devisId = parseInt(req.params.id, 10);
 
     const devis = await prisma.devis.findFirst({

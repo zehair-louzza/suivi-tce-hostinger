@@ -131,7 +131,8 @@ export function CarteStudioView({
 
   // KPIs dynamiques : distance et temps calculés à partir des positions réelles
   const { totalDistKm, totalDurMin } = useMemo(() => {
-    if (pendingInterventions.length === 0) return { totalDistKm: 0, totalDurMin: 0 };
+    // Sans adresse de siège configurée, aucune distance n'est calculée (pas de départ connu)
+    if (!HQ.configured || pendingInterventions.length === 0) return { totalDistKm: 0, totalDurMin: 0 };
     const depotGeo: GeoPoint = { lat: HQ.pos[0], lng: HQ.pos[1] };
     let distKm = 0;
     let durMin = 0;
@@ -215,11 +216,13 @@ export function CarteStudioView({
       iconAnchor: [22, 22],
       popupAnchor: [0, -22],
     });
-    L.marker(HQ.pos, { icon: hqIcon })
-      .bindPopup(`<strong>${escapeHtml(HQ.name)}</strong><br/>${escapeHtml(HQ.addr)}`)
-      .addTo(layer);
+    if (HQ.configured) {
+      L.marker(HQ.pos, { icon: hqIcon })
+        .bindPopup(`<strong>${escapeHtml(HQ.name)}</strong><br/>${escapeHtml(HQ.addr)}`)
+        .addTo(layer);
+    }
 
-    const bounds: [number, number][] = [HQ.pos];
+    const bounds: [number, number][] = HQ.configured ? [HQ.pos] : [];
 
     // Les tournées sont dessinées sur les POSITIONS RÉELLES des chantiers (géocodage BAN).
     // Avant : étapes posées à des coordonnées dérivées de l'identifiant de la fiche, et
@@ -235,7 +238,7 @@ export function CarteStudioView({
             (ordre.indexOf(b.id) + 1 || techMissions.length + 1)
         );
       }
-      const points: [number, number][] = [HQ.pos];
+      const points: [number, number][] = HQ.configured ? [HQ.pos] : [];
       let premier: [number, number] | null = null;
 
       if (mode === 'route' || mode === 'both') {
@@ -256,7 +259,7 @@ export function CarteStudioView({
 
           L.marker(pos, { icon: stopIcon })
             .bindPopup(
-              `<strong>${m.client || 'Client'}</strong><br/>${m.objet || 'Intervention'}<br/>${m.chantier || ''}`
+              `<strong>${escapeHtml(m.client || 'Client')}</strong><br/>${escapeHtml(m.objet || 'Intervention')}<br/>${escapeHtml(m.chantier || '')}`
             )
             .addTo(layer);
         });
@@ -276,13 +279,16 @@ export function CarteStudioView({
           iconAnchor: [16, 40],
         });
         L.marker(premier, { icon: techIcon })
-          .bindPopup(`<strong>${tName}</strong><br/>Première mission planifiée`)
+          .bindPopup(`<strong>${escapeHtml(tName)}</strong><br/>Première mission planifiée`)
           .addTo(layer);
       }
     });
 
     if (bounds.length > 1) {
       map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 14 });
+    } else {
+      // Aucun chantier localisé : on centre sur le siège de l'entreprise, ou sur la France si non configuré
+      map.setView(HQ.pos, HQ.configured ? 12 : 6);
     }
 
     // Le conteneur vient parfois d'être (re)dimensionné : Leaflet doit se re-mesurer,
@@ -295,6 +301,10 @@ export function CarteStudioView({
   // chantiers effectivement localisés. L'ancien bouton annonçait « 8,4 km économisés »
   // sans rien calculer.
   const handleOptimizeTournees = () => {
+    if (!HQ.configured) {
+      toast.error("Renseignez d'abord l'adresse du siège (Administration → Apparence) : elle sert de départ et de retour aux tournées.");
+      return;
+    }
     const ordres: Record<string, number[]> = {};
     let kmAvant = 0;
     let kmApres = 0;
@@ -347,7 +357,11 @@ export function CarteStudioView({
     <Page
       testid="screen-carte"
       title="Carte & tournées"
-      subtitle={`Positions des techniciens et tournées du jour au départ du siège — ${HQ.addr}.`}
+      subtitle={
+        HQ.configured
+          ? `Positions des techniciens et tournées du jour au départ du siège — ${HQ.addr}.`
+          : 'Positions des techniciens et tournées du jour. Renseignez l\'adresse du siège pour calculer distances et trajets.'
+      }
       actions={
         <>
           {!isMobile && (

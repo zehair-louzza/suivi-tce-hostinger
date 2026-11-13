@@ -605,7 +605,7 @@ export function Layout({
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                 {!isMobileTechOnly && (
                   <span className="topbar-breadcrumb-prefix">
-                    {(user?.companyName ? user.companyName.toUpperCase() : 'ANELEC GROUPE')} /
+                    {(user?.companyName ? user.companyName.toUpperCase() : 'MON ENTREPRISE')} /
                   </span>
                 )}
                 <h1

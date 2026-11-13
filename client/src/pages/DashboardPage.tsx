@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -2379,14 +2380,14 @@ export function DashboardPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <label style={{ fontSize: '12px', fontWeight: 700 }}>
-                        Rapport Final Officiel ANELEC GROUPE
+                        Rapport Final Officiel {getCompanyName()}
                       </label>
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
                         onClick={() => {
                           const lines: string[] = [];
-                          lines.push(`RAPPORT OFFICIEL D'INTERVENTION — ANELEC GROUPE`);
+                          lines.push(`RAPPORT OFFICIEL D'INTERVENTION — ${getCompanyName()}`);
                           lines.push(`Référence : ${selectedIntv.reference || `INT-${selectedIntv.id}`}`);
                           lines.push(`Client : ${selectedIntv.client || '—'} • Site : ${selectedIntv.chantier || '—'}`);
                           lines.push(`Technicien : ${selectedIntv.entreprise || 'Non renseigné'}`);

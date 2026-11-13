@@ -1,4 +1,11 @@
-// Socket.io handlers for real-time updates with multi-tenant company isolation
+// Socket.io — temps réel avec isolation STRICTE entre entreprises.
+//
+// Règles :
+//  - une connexion ne rejoint que SA salle d'entreprise et SA salle personnelle, déduites du jeton ;
+//    un jeton sans entreprise est refusé (aucune entreprise de repli) ;
+//  - un client ne peut pas rejoindre une autre salle (join:room ne sert que pour ses propres salles) ;
+//  - chaque événement émis par le serveur nomme explicitement l'entreprise destinataire, et n'est jamais
+//    diffusé à toutes les connexions.
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
@@ -29,23 +36,40 @@ function getIO(): Server {
   return ioInstance;
 }
 
+const companyRoom = (companyId: number) => `company:${companyId}`;
+const userRoom = (userId: number) => `user:${userId}`;
+
+function isValidCompanyId(companyId: unknown): companyId is number {
+  return typeof companyId === 'number' && Number.isInteger(companyId) && companyId > 0;
+}
+
+/** Salles auxquelles une connexion a le droit : les siennes, et uniquement les siennes. */
+export function allowedRoomsFor(user: Pick<TokenPayload, 'userId' | 'companyId'>): string[] {
+  const rooms = [userRoom(user.userId)];
+  if (isValidCompanyId(user.companyId)) rooms.push(companyRoom(user.companyId));
+  return rooms;
+}
+
 export function setupSocketHandlers(io: Server) {
   ioInstance = io;
-  
-  // Authentication middleware for sockets
+
+  // Authentification des sockets : le jeton fixe l'utilisateur ET l'entreprise
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {
-      const token = socket.handshake.auth?.token || 
-        socket.handshake.headers.cookie?.split('; ').find(c => c.startsWith('accessToken='))?.split('=')[1];
-      
+      const token =
+        socket.handshake.auth?.token ||
+        socket.handshake.headers.cookie?.split('; ').find((c) => c.startsWith('accessToken='))?.split('=')[1];
+
       if (!token) {
         return next(new Error('Authentication required'));
       }
 
       const decoded = jwt.verify(token, config.jwtSecret) as TokenPayload;
+      if (!isValidCompanyId(decoded.companyId)) {
+        return next(new Error('Account not attached to a company'));
+      }
       socket.user = decoded;
-      socket.join(`user:${decoded.userId}`);
-      socket.join(`company:${decoded.companyId || 1}`);
+      for (const room of allowedRoomsFor(decoded)) socket.join(room);
       next();
     } catch (err) {
       next(new Error('Invalid token'));
@@ -53,11 +77,13 @@ export function setupSocketHandlers(io: Server) {
   });
 
   io.on('connection', (socket: AuthenticatedSocket) => {
-    console.log(`Socket connected: ${socket.id} (user: ${socket.user?.userId}, company: ${socket.user?.companyId || 1})`);
+    console.log(`Socket connected: ${socket.id} (user: ${socket.user?.userId}, company: ${socket.user?.companyId})`);
 
+    // Un client ne peut rejoindre que ses propres salles : toute autre demande est ignorée.
     socket.on('join:room', (room: string) => {
-      socket.join(room);
-      console.log(`Socket ${socket.id} joined room: ${room}`);
+      if (socket.user && allowedRoomsFor(socket.user).includes(room)) {
+        socket.join(room);
+      }
     });
 
     socket.on('leave:room', (room: string) => {
@@ -66,8 +92,7 @@ export function setupSocketHandlers(io: Server) {
 
     socket.on('subscribe:user', () => {
       if (socket.user) {
-        socket.join(`user:${socket.user.userId}`);
-        socket.join(`company:${socket.user.companyId || 1}`);
+        for (const room of allowedRoomsFor(socket.user)) socket.join(room);
       }
     });
 
@@ -81,53 +106,33 @@ export function setupSocketHandlers(io: Server) {
   });
 }
 
-// Event emitters for use in routes
+/**
+ * Émet un événement à l'utilisateur concerné et à SON entreprise uniquement.
+ * Sans entreprise valide, rien n'est émis (on ne devine jamais un destinataire).
+ */
+function emitScoped(userId: number, companyId: number, event: string, data: unknown) {
+  if (!isValidCompanyId(companyId)) return;
+  getIO().to(userRoom(userId)).to(companyRoom(companyId)).emit(event, data);
+}
+
+// Émetteurs d'événements pour les routes : l'entreprise est TOUJOURS un paramètre explicite.
 export const socketEvents = {
-  // Devis events
-  devisCreated: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('devis:created', data);
-    getIO().to(`company:${compId}`).emit('devis:created', data);
-  },
-  devisUpdated: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('devis:updated', data);
-    getIO().to(`company:${compId}`).emit('devis:updated', data);
-  },
-  devisDeleted: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('devis:deleted', data);
-    getIO().to(`company:${compId}`).emit('devis:deleted', data);
-  },
+  // Devis
+  devisCreated: (userId: number, companyId: number, data: any) => emitScoped(userId, companyId, 'devis:created', data),
+  devisUpdated: (userId: number, companyId: number, data: any) => emitScoped(userId, companyId, 'devis:updated', data),
+  devisDeleted: (userId: number, companyId: number, data: any) => emitScoped(userId, companyId, 'devis:deleted', data),
 
-  // Intervention events
-  interventionCreated: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('intervention:created', data);
-    getIO().to(`company:${compId}`).emit('intervention:created', data);
-  },
-  interventionUpdated: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('intervention:updated', data);
-    getIO().to(`company:${compId}`).emit('intervention:updated', data);
-  },
-  interventionDeleted: (userId: number, data: any) => {
-    const compId = data?.companyId || 1;
-    getIO().to(`user:${userId}`).emit('intervention:deleted', data);
-    getIO().to(`company:${compId}`).emit('intervention:deleted', data);
-  },
+  // Interventions
+  interventionCreated: (userId: number, companyId: number, data: any) =>
+    emitScoped(userId, companyId, 'intervention:created', data),
+  interventionUpdated: (userId: number, companyId: number, data: any) =>
+    emitScoped(userId, companyId, 'intervention:updated', data),
+  interventionDeleted: (userId: number, companyId: number, data: any) =>
+    emitScoped(userId, companyId, 'intervention:deleted', data),
 
-  // Broadcast to company
+  // Diffusion à une seule entreprise
   broadcastCompany: (companyId: number, event: string, data: any) => {
-    getIO().to(`company:${companyId || 1}`).emit(event, data);
-  },
-
-  // Broadcast
-  broadcast: (event: string, data: any, companyId?: number) => {
-    if (companyId) {
-      getIO().to(`company:${companyId}`).emit(event, data);
-    } else {
-      getIO().emit(event, data);
-    }
+    if (!isValidCompanyId(companyId)) return;
+    getIO().to(companyRoom(companyId)).emit(event, data);
   },
 };

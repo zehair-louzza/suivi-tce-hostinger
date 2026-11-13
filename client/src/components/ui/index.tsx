@@ -1,3 +1,4 @@
+import { getCompanyName } from '../../lib/companyHQ';
 import React, { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { X, ChevronDown, Check, Search } from 'lucide-react';
@@ -189,7 +190,7 @@ export function Page({ title, subtitle, eyebrow, actions, subnav, children, test
     <div className="m-page" data-testid={testid}>
       <header className="m-page-head">
         <div className="m-page-titles">
-          <span className="m-eyebrow">{eyebrow || 'ANELEC GROUPE · TCE'}</span>
+          <span className="m-eyebrow">{eyebrow || `${getCompanyName().toUpperCase()} · TCE`}</span>
           <h1>{title}</h1>
           {subtitle && <p>{subtitle}</p>}
         </div>

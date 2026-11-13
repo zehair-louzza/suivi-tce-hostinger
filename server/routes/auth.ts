@@ -2,7 +2,6 @@ import { Router, Request, Response, NextFunction, RequestHandler } from 'express
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
-import { isSuperAdminUser } from '../lib/superAdmin.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -108,7 +107,8 @@ const RegisterSchema = z.object({
 });
 
 function generateTokens(user: { id: number; email: string; role: string; companyId?: number | null }) {
-  const payload = { userId: user.id, email: user.email, role: user.role, companyId: user.companyId || 1 };
+  // Pas d'entreprise de repli : un compte sans entreprise reçoit un jeton sans companyId (donc aucun accès aux données).
+  const payload = { userId: user.id, email: user.email, role: user.role, companyId: user.companyId ?? undefined };
   const accessToken = jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
   });
@@ -162,10 +162,9 @@ export function formatPublicUser(u: {
   } | null;
   createdAt?: Date | string;
 }) {
-  const superAdmin = isSuperAdminUser(u);
-  const effectiveRole = superAdmin ? 'ADMIN' : u.role;
-  const companyId = u.companyId || u.company?.id || 1;
-  const companyName = u.company?.name || (companyId === 1 ? 'ANELEC GROUPE' : `Entreprise #${companyId}`);
+  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
+  const companyId = u.companyId ?? u.company?.id ?? null;
+  const companyName = u.company?.name || (companyId === null ? null : `Entreprise #${companyId}`);
   const companyDefaultTheme = u.company?.defaultTheme || 'light';
   const allowThemeOverride = u.company?.allowThemeOverride !== false;
   const userThemePref = u.themePref || null;
@@ -180,7 +179,7 @@ export function formatPublicUser(u: {
     active: u.active !== false,
     companyId,
     companyName,
-    companySiret: u.company?.siret || (companyId === 1 ? '933 108 607 00021' : null),
+    companySiret: u.company?.siret ?? null,
     company: u.company
       ? {
           id: u.company.id,
@@ -192,8 +191,7 @@ export function formatPublicUser(u: {
           siegeLat: u.company.siegeLat ?? null,
           siegeLng: u.company.siegeLng ?? null,
         }
-      : { id: companyId, name: companyName, accueilMaFile: false, siegeAdresse: null, siegeLat: null, siegeLng: null },
-    isSuperAdmin: superAdmin,
+      : null,
     theme: {
       companyDefault: companyDefaultTheme,
       allowOverride: allowThemeOverride,
@@ -213,9 +211,11 @@ authRouter.post(
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new AppError(409, 'Cet email est déjà utilisé', 'EMAIL_EXISTS');
 
-    let companyId = 1;
+    // Aucune entreprise par défaut : on crée TOUJOURS un espace distinct (ou on refuse). Un nom vide ou composé
+    // d'espaces ne doit jamais rattacher le compte à une entreprise existante.
+    let companyId: number;
 
-    if (data.companyName && data.companyName.trim()) {
+    if (data.companyName && data.companyName.trim().length >= 2) {
       const rawDigits = (data.siretOrSiren || '').replace(/\s+/g, '').replace(/[^0-9]/g, '');
       let cleanSiret: string | null = null;
       let cleanSiren: string | null = null;
@@ -298,6 +298,8 @@ authRouter.post(
       }
 
       companyId = company.id;
+    } else {
+      throw new AppError(400, "Le nom de l'entreprise est obligatoire", 'INVALID_COMPANY');
     }
 
     const password = await bcrypt.hash(data.password, 12);
@@ -328,7 +330,7 @@ authRouter.post(
     });
 
     // Envoi de l'e-mail officiel d'activation avec code 6 chiffres
-    const compName = data.companyName ? data.companyName.trim() : 'ANELEC GROUPE';
+    const compName = data.companyName.trim();
     const delivery = await sendConfirmationEmail({
       companyId,
       toEmail: data.email,
@@ -391,7 +393,7 @@ authRouter.post(
       },
     });
 
-    const compName = user.company?.name || 'ANELEC GROUPE';
+    const compName = user.company?.name || 'votre entreprise';
     const delivery = await sendConfirmationEmail({
       companyId: user.companyId,
       toEmail: user.email,

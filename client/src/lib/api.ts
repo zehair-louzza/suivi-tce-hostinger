@@ -313,21 +313,6 @@ export const referentielsApi = {
     }>('/referentiels/gps-position', payload),
 };
 
-/** Entreprise telle que vue par le super administrateur (GET /admin/companies). */
-export interface SuperAdminCompany {
-  id: number;
-  name: string;
-  siren: string | null;
-  active: boolean;
-  siegeAdresse: string | null;
-  siegeLat: number | null;
-  siegeLng: number | null;
-  defaultTheme: string;
-  allowThemeOverride: boolean;
-  accueilMaFile: boolean;
-  userCount: number;
-}
-
 export interface CompanyInvitationItem {
   id: number;
   email: string;
@@ -521,16 +506,7 @@ export const adminApi = {
   }) => api.post<InvitationSendResult>('/admin/invitations', payload),
   resendInvitation: (id: number) => api.post<InvitationSendResult>(`/admin/invitations/${id}/resend`),
   revokeInvitation: (id: number) => api.delete<{ message: string }>(`/admin/invitations/${id}`),
-  /** Super administrateur : toutes les entreprises de la plateforme avec leurs réglages. */
-  listCompanies: () =>
-    api.get<{ data: SuperAdminCompany[]; availableThemes: string[] }>('/admin/companies'),
-  /** Super administrateur : modifier les réglages d'apparence d'une entreprise donnée. */
-  updateCompanyAppearance: (
-    companyId: number,
-    payload: { defaultTheme?: string; allowThemeOverride?: boolean; accueilMaFile?: boolean }
-  ) => api.patch('/admin/appearance', { ...payload, companyId }),
-  /** `companyId` n'est accepté que pour le super administrateur ; sinon c'est l'entreprise de l'appelant. */
-  updateSiege: (payload: { siegeAdresse: string; siegeLat: number; siegeLng: number; companyId?: number }) =>
+  updateSiege: (payload: { siegeAdresse: string; siegeLat: number; siegeLng: number }) =>
     api.patch<{
       companyId: number;
       companyName: string;

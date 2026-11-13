@@ -4,6 +4,7 @@
 // Un particulier n'a pas de DI, il reçoit une référence interne.
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { requireCompanyId } from '../lib/tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
@@ -69,7 +70,7 @@ const auteurOf = (req: Request) => req.user?.email || 'Utilisateur';
 demandesRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const search = (req.query.search as string) || '';
     const statut = (req.query.statut as string) || '';
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 200, 500);
@@ -99,7 +100,7 @@ demandesRouter.get(
 demandesRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const userId = req.user?.userId;
     if (!userId) throw new AppError(401, 'Authentification requise');
 
@@ -151,7 +152,7 @@ demandesRouter.post(
 demandesRouter.patch(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const id = parseInt(req.params.id, 10);
     const existing = await prisma.demande.findFirst({ where: { id, companyId } });
     if (!existing) throw new AppError(404, 'Demande introuvable');
@@ -192,7 +193,7 @@ demandesRouter.patch(
 demandesRouter.post(
   '/:id/orienter',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const userId = req.user?.userId;
     if (!userId) throw new AppError(401, 'Authentification requise');
 

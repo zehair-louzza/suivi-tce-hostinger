@@ -3,11 +3,11 @@
  * Une seule source pour toutes les vues (carte, optimiseur de tournées, application mobile
  * technicien), ordinateur comme téléphone : chaque entreprise a son adresse, saisie par son
  * administrateur dans Administration → Apparence. Tant qu'elle n'est pas renseignée on retombe
- * sur l'adresse par défaut et `configured` vaut false pour pouvoir le signaler.
+ * sur une valeur neutre et `configured` vaut false pour pouvoir le signaler.
  */
 import { useMemo } from 'react';
-import { useAuth } from '../stores/authStore';
-import { DEFAULT_DEPOT_ADDRESS, DEFAULT_DEPOT_COORDS, type GeoPoint } from './geocoding';
+import { useAuth, useAuthStore } from '../stores/authStore';
+import type { GeoPoint } from './geocoding';
 
 /**
  * À utiliser pour toute valeur saisie par un utilisateur (adresse, nom d'entreprise) placée dans le
@@ -35,11 +35,16 @@ export interface CompanyHQ {
   configured: boolean;
 }
 
+/**
+ * Repli quand l'entreprise n'a pas encore renseigné son siège : valeur NEUTRE (centre de la France),
+ * jamais l'adresse d'une autre entreprise. Les vues n'affichent alors ni marqueur, ni adresse, ni
+ * distance calculée depuis un siège, et invitent l'administrateur à renseigner l'adresse.
+ */
 const FALLBACK_HQ: CompanyHQ = {
-  name: 'Siège (adresse non configurée)',
-  addr: DEFAULT_DEPOT_ADDRESS,
-  pos: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng],
-  coords: { lat: DEFAULT_DEPOT_COORDS.lat, lng: DEFAULT_DEPOT_COORDS.lng },
+  name: 'Siège non configuré',
+  addr: '',
+  pos: [46.6034, 1.8883],
+  coords: { lat: 46.6034, lng: 1.8883 },
   configured: false,
 };
 
@@ -63,4 +68,13 @@ export function useCompanyHQ(): CompanyHQ {
     }
     return FALLBACK_HQ;
   }, [adresse, lat, lng, nom]);
+}
+
+/**
+ * Nom de l'entreprise du compte connecté, à utiliser dans les rapports, e-mails et en-têtes.
+ * Jamais le nom d'une autre entreprise : chaque entreprise ne voit et n'envoie que sa propre identité.
+ */
+export function getCompanyName(): string {
+  const u = useAuthStore.getState().user;
+  return u?.company?.name || u?.companyName || 'Votre entreprise';
 }

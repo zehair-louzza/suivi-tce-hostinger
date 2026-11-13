@@ -2,6 +2,7 @@
 import { Router, Request, Response } from 'express';
 import { normalizeDI, resolveInterventionDossier, pushDIToDevis, findDevisByDI } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
+import { requireCompanyId } from '../lib/tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -218,7 +219,7 @@ interventionRouter.get(
     const technicienParam = (req.query.technicien as string) || '';
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 300;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
 
     // Récupération du profil et des droits de l'appelant pour cloisonnement étanche
     const callerId = req.user?.userId;
@@ -320,7 +321,7 @@ interventionRouter.get(
 interventionRouter.get(
   '/stats',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const items = await prisma.intervention.findMany({ where: { companyId } });
     const transformed = items.map(transformIntervention);
 
@@ -367,7 +368,7 @@ interventionRouter.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const intervention = await prisma.intervention.findFirst({
       where: { id, companyId },
       include: { devis: true },
@@ -385,7 +386,7 @@ interventionRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -504,8 +505,7 @@ interventionRouter.post(
 
     const transformed = transformIntervention(created);
     try {
-      socketEvents.interventionCreated(userId, transformed);
-      socketEvents.broadcast('intervention:created', transformed);
+      socketEvents.interventionCreated(userId, companyId, transformed);
     } catch {
       console.error('Intervention saved; real-time creation notification failed.');
     }
@@ -519,7 +519,7 @@ interventionRouter.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
@@ -806,8 +806,7 @@ interventionRouter.patch(
         });
 
         try {
-          socketEvents.devisUpdated(userId, updatedParentDevis);
-          socketEvents.broadcast('devis:updated', updatedParentDevis);
+          socketEvents.devisUpdated(userId, companyId, updatedParentDevis);
         } catch {
           // ignore
         }
@@ -816,8 +815,7 @@ interventionRouter.patch(
 
     const transformed = transformIntervention(updated);
     try {
-      socketEvents.interventionUpdated(userId, transformed);
-      socketEvents.broadcast('intervention:updated', transformed);
+      socketEvents.interventionUpdated(userId, companyId, transformed);
     } catch {
       console.error('Intervention updated; real-time update notification failed.');
     }
@@ -831,7 +829,7 @@ interventionRouter.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
 
     const existing = await prisma.intervention.findFirst({ where: { id, companyId } });
     if (!existing) {
@@ -853,7 +851,7 @@ interventionRouter.delete(
 
     await prisma.intervention.delete({ where: { id } });
     try {
-      socketEvents.interventionDeleted(userId, { id });
+      socketEvents.interventionDeleted(userId, companyId, { id });
     } catch {
       console.error('Intervention deleted; real-time deletion notification failed.');
     }
@@ -869,7 +867,7 @@ interventionRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
-    const companyId = req.user?.companyId || 1;
+    const companyId = requireCompanyId(req.user?.companyId);
     const userRole = (req.user?.role || 'USER').toUpperCase();
     const isTech = userRole === 'TECHNICIEN';
 
@@ -968,8 +966,7 @@ interventionRouter.post(
 
     const result = transformIntervention(updated);
     try {
-      socketEvents.interventionUpdated(userId, result);
-      socketEvents.broadcast('intervention:updated', result);
+      socketEvents.interventionUpdated(userId, companyId, result);
     } catch {
       // ignore socket notification error
     }

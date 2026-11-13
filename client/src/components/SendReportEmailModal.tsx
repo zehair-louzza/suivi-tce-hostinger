@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import React, { useState, useEffect } from 'react';
 import { Intervention, ClientProfile, SendReportEmailPayload } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -56,7 +57,7 @@ export function SendReportEmailModal({
     setSubject(`[RAPPORT TECHNIQUE] ${ref} • ${intervention.client || 'Client'} • ${intervention.chantier}`);
 
     setCustomMessage(
-      `Bonjour,\n\nVeuillez trouver ci-dessous le rapport officiel d'intervention technique réalisé pour vos services par ANELEC GROUPE sur le site ${intervention.chantier}.\n\nRestant à votre entière disposition pour tout renseignement complémentaire.`
+      `Bonjour,\n\nVeuillez trouver ci-dessous le rapport officiel d'intervention technique réalisé pour vos services par ${getCompanyName()} sur le site ${intervention.chantier}.\n\nRestant à votre entière disposition pour tout renseignement complémentaire.`
     );
 
     const baseReport =

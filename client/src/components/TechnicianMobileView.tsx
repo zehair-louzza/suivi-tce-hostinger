@@ -395,6 +395,7 @@ function MobileRouteMap({
     };
 
     const bounds = L.latLngBounds(hq.pos, hq.pos);
+    let hasStop = false;
 
     // 1. Marqueur du siège : même pastille ronde, pictogramme seul, que sur la carte de bureau
     const hqIcon = L.divIcon({
@@ -405,16 +406,19 @@ function MobileRouteMap({
       popupAnchor: [0, -22],
     });
 
-    L.marker(hq.pos, { icon: hqIcon })
-      .bindPopup(`
-        <div style="font-family: inherit; font-size: 14px; line-height: 1.4;">
-          <strong style="color: #1D4ED8; font-size: 15px;">Point de départ tournée</strong>
-          <div style="color: #475569; font-size: 13px; margin-top: 2px;">${escapeHtml(hq.addr)}</div>
-        </div>
-      `)
-      .addTo(lg);
+    // Sans adresse de siège configurée : aucun marqueur ni point de départ (jamais celui d'une autre entreprise)
+    if (hq.configured) {
+      L.marker(hq.pos, { icon: hqIcon })
+        .bindPopup(`
+          <div style="font-family: inherit; font-size: 14px; line-height: 1.4;">
+            <strong style="color: #1D4ED8; font-size: 15px;">Point de départ tournée</strong>
+            <div style="color: #475569; font-size: 13px; margin-top: 2px;">${escapeHtml(hq.addr)}</div>
+          </div>
+        `)
+        .addTo(lg);
+    }
 
-    const routePoints: [number, number][] = [hq.pos];
+    const routePoints: [number, number][] = hq.configured ? [hq.pos] : [];
 
     // 2. Marqueurs numérotés 1, 2, 3...
     missions.forEach((m, idx) => {
@@ -422,6 +426,13 @@ function MobileRouteMap({
       if (!stopCoord) return; // adresse non localisée : pas de repère inventé
       const latLng: [number, number] = stopCoord.coords;
       routePoints.push(latLng);
+      if (!hasStop && !hq.configured) {
+        // pas de siège : le cadrage ne doit pas inclure le point neutre
+        hasStop = true;
+        bounds.extend(latLng);
+        map.setView(latLng, 13);
+      }
+      hasStop = true;
       bounds.extend(latLng);
 
       const stopNum = idx + 1;
@@ -458,10 +469,10 @@ function MobileRouteMap({
             </span>
           </div>
           <strong style="font-size: 15px; color: #0f172a; display: block; margin-top: 2px;">
-            ${m.client || 'Client TCE'}
+            ${escapeHtml(m.client || 'Client TCE')}
           </strong>
           <div style="color: #475569; font-size: 13px; margin: 2px 0 10px 0;">
-            ${(m.chantier || 'Paris').split(',')[0]}
+            ${escapeHtml((m.chantier || 'Paris').split(',')[0])}
           </div>
           <div style="display: flex; gap: 6px;">
             <button
@@ -493,10 +504,13 @@ function MobileRouteMap({
       }).addTo(map);
     }
 
-    if (missions.length > 0) {
+    if (missions.length > 0 && hasStop && hq.configured) {
       map.fitBounds(bounds, { padding: [35, 35], maxZoom: 15 });
+    } else if (missions.length > 0 && hasStop) {
+      const stopsOnly = L.latLngBounds(routePoints);
+      map.fitBounds(stopsOnly, { padding: [35, 35], maxZoom: 15 });
     } else {
-      map.setView(hq.pos, 13);
+      map.setView(hq.pos, hq.configured ? 13 : 6);
     }
   }, [missions, stopsCoords, technicien, onOpenMission, hq]);
 

@@ -1,3 +1,4 @@
+import { getCompanyName } from '../lib/companyHQ';
 import { useState, useMemo } from 'react';
 import {
   Devis,
@@ -434,7 +435,7 @@ export function RentabiliteKpiView({
   // Copie d'un briefing exécutif dans le presse-papiers
   const handleCopyReport = () => {
     const lines = [
-      `⊞ RAPPORT DE RENTABILITÉ & PERFORMANCE DES TECHNICIENS — ANELEC GROUPE`,
+      `⊞ RAPPORT DE RENTABILITÉ & PERFORMANCE DES TECHNICIENS — ${getCompanyName().toUpperCase()}`,
       `Date : ${formatDateFR(today.toISOString().slice(0, 10))} • Base coût horaire : ${hourlyCostParam} €/h chargé`,
       `--------------------------------------------------------------------------`,
       `• Chiffre d'Affaires Produit Total : ${formatCurrency(globalMetrics.totalCA)} HT`,
