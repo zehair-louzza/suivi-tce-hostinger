@@ -469,14 +469,17 @@ export const authApi = {
   getAuthConfig: () => api.get<{ googleClientId: string }>('/auth/config'),
 };
 
+export type AutomationSettings = {
+  autoTechnicienActif: boolean;
+  autoTechnicienDelaiMinutes: number;
+  autoTechnicienAlerteMinutes: number;
+  autoTechnicienHeuresBureau: boolean;
+};
+
 export const automationApi = {
-  get: () =>
-    api.get<{ data: { autoTechnicienActif: boolean; autoTechnicienDelaiMinutes: number } }>('/admin/automatisations'),
-  update: (payload: { autoTechnicienActif?: boolean; autoTechnicienDelaiMinutes?: number }) =>
-    api.patch<{ data: { autoTechnicienActif: boolean; autoTechnicienDelaiMinutes: number }; message: string }>(
-      '/admin/automatisations',
-      payload
-    ),
+  get: () => api.get<{ data: AutomationSettings }>('/admin/automatisations'),
+  update: (payload: Partial<AutomationSettings>) =>
+    api.patch<{ data: AutomationSettings; message: string }>('/admin/automatisations', payload),
 };
 
 export const adminApi = {

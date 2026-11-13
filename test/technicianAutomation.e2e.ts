@@ -31,7 +31,7 @@ const ADMIN = 101, PLANIF = 103, RAPPORTS = 104, KARIM = 105, SOFIA = 106, ADMIN
 before(async () => {
   db.company.seed([
     { id: 1, name: 'Société 1', active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 120 },
-    { id: 2, name: 'Société 2', active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 120 },
+    { id: 2, name: 'Société 2', active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15 },
   ]);
   db.user.seed([
     user(ADMIN, 'ADMIN'), user(PLANIF, 'CONDUCTEUR_TRAVAUX'), user(RAPPORTS, 'REDACTEUR_RAPPORTS'),
@@ -153,22 +153,34 @@ test('démarrer la mission vaut acceptation', async () => {
   assert.match(row('intervention', 4).historiqueJson, /Automatique — mission acceptée/);
 });
 
-test('RELANCE : après 2 h une relance, 2 h plus tard une alerte au planificateur, jamais deux fois, jamais la nuit', async () => {
+test('RELANCE : à 15 min une relance, 5 min plus tard une alerte au planificateur ET à la direction, jamais deux fois, jamais la nuit', async () => {
+  const comp = { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: true };
   db.intervention.rows.push(intv(20, {
-    entreprise: 'Karim', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(9),
-    company: { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 120 },
+    entreprise: 'Karim', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(9), company: comp,
   }));
   const avant = notifsDe(KARIM).length;
-  assert.deepEqual(await executer(lundi(10, 30)), { relances: 0, alertes: 0 });
+  assert.deepEqual(await executer(lundi(9, 10)), { relances: 0, alertes: 0 });
   assert.deepEqual(await executer(lundi(21, 0)), { relances: 0, alertes: 0 }, 'pas la nuit');
-  assert.deepEqual(await executer(lundi(11, 5)), { relances: 1, alertes: 0 });
+  assert.deepEqual(await executer(lundi(9, 16)), { relances: 1, alertes: 0 });
   assert.equal(notifsDe(KARIM).length, avant + 1);
   assert.match(row('intervention', 20).historiqueJson, /Automatique — relance du technicien/);
-  assert.deepEqual(await executer(lundi(11, 30)), { relances: 0, alertes: 0 }, 'pas de seconde relance');
-  assert.deepEqual(await executer(lundi(13, 10)), { relances: 0, alertes: 1 });
+  assert.match(row('intervention', 20).historiqueJson, /15 min/);
+  assert.deepEqual(await executer(lundi(9, 18)), { relances: 0, alertes: 0 }, 'pas de seconde relance, alerte pas encore due');
+  const nAlertesAvant = notifsDe(ADMIN).filter((n: any) => n.type === 'ALERTE_SANS_REPONSE').length;
+  assert.deepEqual(await executer(lundi(9, 22)), { relances: 0, alertes: 1 });
   assert.ok(notifsDe(PLANIF).some((n: any) => n.type === 'ALERTE_SANS_REPONSE'));
+  assert.equal(notifsDe(ADMIN).filter((n: any) => n.type === 'ALERTE_SANS_REPONSE').length, nAlertesAvant + 1, 'la direction aussi');
   assert.match(row('intervention', 20).historiqueJson, /Automatique — alerte au planificateur/);
   assert.deepEqual(await executer(lundi(17, 0)), { relances: 0, alertes: 0 }, 'une seule alerte');
+});
+
+test('heures de bureau désactivées : la relance part aussi la nuit', async () => {
+  db.intervention.rows.push(intv(22, {
+    entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(21, 0),
+    company: { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: false },
+  }));
+  assert.deepEqual(await executer(lundi(21, 20)), { relances: 1, alertes: 0 });
+  assert.ok(notifsDe(SOFIA).some((n: any) => n.type === 'RELANCE_TECHNICIEN'));
 });
 
 test('réglage société : automatisation désactivée → aucune attente ouverte, aucune relance', async () => {
@@ -177,7 +189,7 @@ test('réglage société : automatisation désactivée → aucune attente ouvert
   assert.equal(row('intervention', 5).reponseTechnicien ?? null, null);
   db.intervention.rows.push(intv(21, {
     entreprise: 'Karim', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(8, 30),
-    company: { active: true, autoTechnicienActif: false, autoTechnicienDelaiMinutes: 120 },
+    company: { active: true, autoTechnicienActif: false, autoTechnicienDelaiMinutes: 15 },
   }));
   assert.deepEqual(await executer(lundi(15, 0)), { relances: 0, alertes: 0 });
   row('company', 1).autoTechnicienActif = true;

@@ -6,7 +6,13 @@ import toast from 'react-hot-toast';
 import { interventionApi } from '../lib/api';
 import type { Intervention } from '../../../shared/types';
 
-export function MissionResponseCard({ mission }: { mission: Pick<Intervention, 'id' | 'reponseTechnicien' | 'affecteLe'> }) {
+type Props = {
+  mission: Pick<Intervention, 'id' | 'reponseTechnicien' | 'affecteLe'>;
+  /** 'banner' : simple bandeau d'information en haut de la fiche ; 'actions' : boutons Accepter / Refuser (barre du bas). */
+  variant?: 'banner' | 'actions';
+};
+
+export function MissionResponseCard({ mission, variant = 'actions' }: Props) {
   const queryClient = useQueryClient();
   const [refus, setRefus] = useState(false);
   const [motif, setMotif] = useState('');
@@ -24,12 +30,30 @@ export function MissionResponseCard({ mission }: { mission: Pick<Intervention, '
   if (mission.reponseTechnicien !== 'EN_ATTENTE') return null;
   const motifValide = motif.trim().length >= 3;
 
+  if (variant === 'banner') {
+    return (
+      <div
+        role="status"
+        data-testid="mission-response-card"
+        style={{ border: '1.5px solid #f59e0b', background: 'rgba(245, 158, 11, 0.12)', borderRadius: '14px', padding: '12px 14px' }}
+      >
+        <strong style={{ fontSize: '15px' }}>Mission à confirmer</strong>
+        <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.9 }}>
+          Cette mission vous a été affectée. Utilisez le bouton « Accepter la mission » en bas de l’écran, ou refusez-la en indiquant le motif.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       role="region"
       aria-label="Mission à confirmer"
-      data-testid="mission-response-card"
+      data-testid="mission-response-actions"
       style={{
+        maxHeight: '70vh',
+        overflowY: 'auto',
+        width: '100%',
         border: '1.5px solid #f59e0b',
         background: 'rgba(245, 158, 11, 0.10)',
         borderRadius: '14px',
@@ -39,23 +63,18 @@ export function MissionResponseCard({ mission }: { mission: Pick<Intervention, '
         gap: '10px',
       }}
     >
-      <div>
-        <strong style={{ fontSize: '15px' }}>Mission à confirmer</strong>
-        <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.85 }}>
-          Cette mission vous a été affectée. Acceptez-la, ou refusez-la en indiquant pourquoi : le planificateur sera prévenu tout de suite.
-        </p>
-      </div>
+      <strong style={{ fontSize: '15px' }}>Mission à confirmer</strong>
       {!refus ? (
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             className="btn btn-primary"
-            style={{ flex: 1, minHeight: '46px' }}
+            style={{ flex: '2 1 160px', minHeight: '54px', fontSize: '16px', fontWeight: 800 }}
             disabled={mut.isPending}
             data-testid="mission-accepter"
             onClick={() => mut.mutate({ reponse: 'ACCEPTEE' })}
           >
-            Accepter
+            ✓ Accepter la mission
           </button>
           <button
             type="button"
@@ -65,11 +84,21 @@ export function MissionResponseCard({ mission }: { mission: Pick<Intervention, '
             data-testid="mission-refuser"
             onClick={() => setRefus(true)}
           >
-            Refuser…
+            Refuser
           </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ minHeight: '54px', fontSize: '16px', fontWeight: 800 }}
+            disabled={mut.isPending}
+            data-testid="mission-accepter"
+            onClick={() => mut.mutate({ reponse: 'ACCEPTEE' })}
+          >
+            ✓ Accepter la mission
+          </button>
           <label htmlFor={`motif-${mission.id}`} style={{ fontSize: '13px', fontWeight: 600 }}>
             Motif du refus
           </label>

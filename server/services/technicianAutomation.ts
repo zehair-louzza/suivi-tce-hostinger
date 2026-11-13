@@ -2,6 +2,7 @@
 //
 // Garde-fous (validés avec Zee) :
 //  - rien n'est envoyé à l'extérieur : seuls des collaborateurs de la MÊME société sont prévenus ;
+//  - le technicien n'est prévenu que dans l'application (cloche + temps réel), jamais par e-mail ;
 //  - seules les NOUVELLES affectations sont concernées (rien sur l'existant) ;
 //  - chaque action automatique est écrite dans l'historique de l'intervention : « Automatique — raison » ;
 //  - aucune suppression automatique ; réglable (actif / délai) par société.
@@ -9,7 +10,7 @@ import { prisma } from '../lib/prisma.js';
 import { techMatches } from '../lib/access.js';
 import { socketEvents } from '../socket/index.js';
 import { sendAutomationEmail } from './emailService.js';
-import { prochaineAction, normaliserDelai, suggererRemplacants, type CandidatTechnicien } from '../domain/technicianResponse.js';
+import { prochaineAction, normaliserDelai, normaliserDelaiAlerte, suggererRemplacants, type CandidatTechnicien } from '../domain/technicianResponse.js';
 
 const db = prisma as any;
 
@@ -89,6 +90,12 @@ export async function notifier(
       /* temps réel indisponible : la cloche se met à jour au prochain rafraîchissement */
     }
   }
+}
+
+function libelleDuree(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.round((min / 60) * 10) / 10;
+  return `${h} h`;
 }
 
 function libelleMission(i: { referenceMetier?: string | null; chantier?: string | null; client?: string | null; id: number }): string {
@@ -187,7 +194,7 @@ export async function executerAutomatisationsTechnicien(maintenant: Date = new D
         affecteLe: true,
         relanceTechnicienLe: true,
         alertePlanificateurLe: true,
-        company: { select: { autoTechnicienDelaiMinutes: true } },
+        company: { select: { autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true } },
       },
       take: 500,
     });
@@ -206,6 +213,8 @@ export async function executerAutomatisationsTechnicien(maintenant: Date = new D
         alerteLe: i.alertePlanificateurLe,
         maintenant,
         delaiMinutes: i.company?.autoTechnicienDelaiMinutes,
+        delaiAlerteMinutes: i.company?.autoTechnicienAlerteMinutes,
+        heuresBureauSeulement: i.company?.autoTechnicienHeuresBureau !== false,
       });
       if (action === 'aucune') continue;
 
@@ -215,25 +224,14 @@ export async function executerAutomatisationsTechnicien(maintenant: Date = new D
         await notifier(companyId, comptes, {
           type: 'RELANCE_TECHNICIEN',
           titre: 'Mission en attente de votre réponse',
-          message: `${libelleMission(i)} attend votre réponse depuis plus de ${Math.round(delai / 60 * 10) / 10} h.`,
+          message: `${libelleMission(i)} attend votre réponse depuis plus de ${libelleDuree(delai)}.`,
           interventionId: i.id,
         });
-        for (const u of comptes) {
-          sendAutomationEmail({
-            companyId,
-            toEmail: u.email,
-            recipientName: u.name || u.technicienNom || 'collègue',
-            subject: 'Mission en attente de votre réponse',
-            heading: 'Mission en attente de votre réponse',
-            lines: [`La mission ${libelleMission(i)} vous a été affectée et attend votre réponse.`, 'Merci de l\'accepter ou de la refuser avec un motif.'],
-            linkPath: '/',
-          }).catch(() => undefined);
-        }
         await db.intervention.update({
           where: { id: i.id },
           data: {
             relanceTechnicienLe: maintenant,
-            historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — relance du technicien', `${i.entreprise} n'a pas répondu à son affectation depuis ${Math.round(delai / 60 * 10) / 10} h`),
+            historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — relance du technicien', `${i.entreprise} n'a pas répondu à son affectation depuis ${libelleDuree(delai)}`),
           },
         });
         bilan.relances++;
@@ -272,12 +270,12 @@ export async function executerAutomatisationsTechnicien(maintenant: Date = new D
   return bilan;
 }
 
-/** Démarre la passe périodique (toutes les 5 minutes). Jamais lancée pendant les tests. */
+/** Démarre la passe périodique (toutes les 2 minutes). Jamais lancée pendant les tests. */
 export function demarrerPlanificateurTechnicien(): void {
-  const intervalle = 5 * 60 * 1000;
+  const intervalle = 2 * 60 * 1000;
   const timer = setInterval(() => {
     executerAutomatisationsTechnicien().catch((e) => console.error('⚠ Automatisation technicien :', e?.message || e));
   }, intervalle);
   timer.unref?.();
-  console.log('⏱ Automatisation technicien : passe toutes les 5 minutes');
+  console.log('⏱ Automatisation technicien : passe toutes les 2 minutes');
 }

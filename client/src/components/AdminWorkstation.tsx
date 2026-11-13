@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   adminApi,
   automationApi,
+  type AutomationSettings,
   interventionApi,
   User,
   UserPermissions,
@@ -110,7 +111,7 @@ function AutomationsPanel() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['automatisations'], queryFn: async () => (await automationApi.get()).data.data });
   const mut = useMutation({
-    mutationFn: (p: { autoTechnicienActif?: boolean; autoTechnicienDelaiMinutes?: number }) => automationApi.update(p),
+    mutationFn: (p: Partial<AutomationSettings>) => automationApi.update(p),
     onSuccess: () => {
       toast.success('Automatisations mises à jour');
       queryClient.invalidateQueries({ queryKey: ['automatisations'] });
@@ -118,14 +119,19 @@ function AutomationsPanel() {
     onError: (err: any) => toast.error(err?.response?.data?.error || 'Modification impossible'),
   });
   const actif = query.data?.autoTechnicienActif !== false;
-  const delai = query.data?.autoTechnicienDelaiMinutes ?? 120;
+  const delai = query.data?.autoTechnicienDelaiMinutes ?? 15;
+  const delaiAlerte = query.data?.autoTechnicienAlerteMinutes ?? 5;
+  const heuresBureau = query.data?.autoTechnicienHeuresBureau !== false;
+  const dureeLabel = (m: number) => (m < 60 ? `${m} minutes` : `${m / 60} heure${m >= 120 ? 's' : ''}`);
+  const optionsDelai = Array.from(new Set([5, 10, 15, 30, 60, 120, 240, 480, delai])).sort((a, b) => a - b);
+  const optionsAlerte = Array.from(new Set([5, 10, 15, 30, 60, delaiAlerte])).sort((a, b) => a - b);
   return (
     <div className="pro-table-container" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }} data-testid="admin-automations-section">
       <div>
         <h3 style={{ margin: 0, fontSize: '16px' }}>Réponse des techniciens aux affectations</h3>
         <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
           Quand un technicien est affecté à une mission, il l'accepte ou la refuse (avec un motif). S'il ne répond pas, il est relancé, puis le
-          planificateur est alerté. Rien n'est envoyé hors de votre société, seules les nouvelles affectations sont concernées, et chaque action
+          planificateur et la direction sont alertés. Rien n'est envoyé hors de votre société, seules les nouvelles affectations sont concernées, et chaque action
           automatique est inscrite dans l'historique de la mission.
         </p>
       </div>
@@ -139,21 +145,44 @@ function AutomationsPanel() {
         />
         Activer la confirmation des missions par les techniciens
       </label>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '320px', fontWeight: 600, fontSize: '13px' }}>
-        Délai avant relance (puis alerte au planificateur après le même délai)
+      <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '360px', fontWeight: 600, fontSize: '13px' }}>
+        Sans réponse, relancer le technicien après
         <select
           value={delai}
           disabled={!actif || query.isLoading || mut.isPending}
           onChange={(e) => mut.mutate({ autoTechnicienDelaiMinutes: Number(e.target.value) })}
           data-testid="auto-technicien-delai"
         >
-          {[30, 60, 120, 240, 480].map((m) => (
-            <option key={m} value={m}>{m < 60 ? `${m} minutes` : `${m / 60} heure${m >= 120 ? 's' : ''}`}</option>
+          {optionsDelai.map((m) => (
+            <option key={m} value={m}>{dureeLabel(m)}</option>
           ))}
         </select>
       </label>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '360px', fontWeight: 600, fontSize: '13px' }}>
+        Toujours sans réponse, alerter le planificateur et la direction après la relance, au bout de
+        <select
+          value={delaiAlerte}
+          disabled={!actif || query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoTechnicienAlerteMinutes: Number(e.target.value) })}
+          data-testid="auto-technicien-alerte"
+        >
+          {optionsAlerte.map((m) => (
+            <option key={m} value={m}>{dureeLabel(m)}</option>
+          ))}
+        </select>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: 600 }}>
+        <input
+          type="checkbox"
+          checked={heuresBureau}
+          disabled={!actif || query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoTechnicienHeuresBureau: e.target.checked })}
+          data-testid="auto-technicien-heures"
+        />
+        Envoyer les relances et alertes uniquement du lundi au samedi, de 8 h à 19 h (heure de Paris)
+      </label>
       <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
-        Les relances ne partent que du lundi au samedi, de 8 h à 19 h (heure de Paris).
+        Le technicien est prévenu et relancé uniquement dans l'application (cloche), sans e-mail. Le planificateur et la direction reçoivent l'alerte dans l'application et par e-mail.
       </p>
     </div>
   );

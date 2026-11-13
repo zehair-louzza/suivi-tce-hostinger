@@ -23,8 +23,12 @@ model Company {
   accueilMaFile        Boolean              @default(false)
   /// Automatisations « technicien » : acceptation de mission, relance, alerte au planificateur
   autoTechnicienActif        Boolean        @default(true)
-  /// Délai avant relance d'un technicien qui n'a pas répondu (minutes)
-  autoTechnicienDelaiMinutes Int            @default(120)
+  /// Délai avant relance d'un technicien qui n'a pas répondu (minutes, 15 par défaut)
+  autoTechnicienDelaiMinutes Int            @default(15)
+  /// Délai entre la relance du technicien et l'alerte au planificateur / à la direction (minutes)
+  autoTechnicienAlerteMinutes Int           @default(5)
+  /// Relances limitées aux heures de bureau (lun–sam, 8 h–19 h, heure de Paris)
+  autoTechnicienHeuresBureau Boolean        @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   users                User[]

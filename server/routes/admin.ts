@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
-import { normaliserDelai } from '../domain/technicianResponse.js';
+import { normaliserDelai, normaliserDelaiAlerte } from '../domain/technicianResponse.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
@@ -1122,12 +1122,14 @@ adminRouter.get(
     if (!caller.isAdmin) throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     const c = await (prisma as any).company.findUnique({
       where: { id: tenantOf(caller) },
-      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true },
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true },
     });
     res.json({
       data: {
         autoTechnicienActif: c ? c.autoTechnicienActif !== false : true,
         autoTechnicienDelaiMinutes: normaliserDelai(c?.autoTechnicienDelaiMinutes),
+        autoTechnicienAlerteMinutes: normaliserDelaiAlerte(c?.autoTechnicienAlerteMinutes),
+        autoTechnicienHeuresBureau: c ? c.autoTechnicienHeuresBureau !== false : true,
       },
     });
   })
@@ -1140,9 +1142,14 @@ adminRouter.patch(
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     const parsed = z
-      .object({ autoTechnicienActif: z.boolean().optional(), autoTechnicienDelaiMinutes: z.number().int().optional() })
+      .object({
+        autoTechnicienActif: z.boolean().optional(),
+        autoTechnicienDelaiMinutes: z.number().int().optional(),
+        autoTechnicienAlerteMinutes: z.number().int().optional(),
+        autoTechnicienHeuresBureau: z.boolean().optional(),
+      })
       .safeParse(req.body ?? {});
-    if (!parsed.success || (parsed.data.autoTechnicienActif === undefined && parsed.data.autoTechnicienDelaiMinutes === undefined)) {
+    if (!parsed.success || Object.values(parsed.data).every((v) => v === undefined)) {
       throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
     }
     const data: any = {};
@@ -1150,10 +1157,14 @@ adminRouter.patch(
     if (parsed.data.autoTechnicienDelaiMinutes !== undefined) {
       data.autoTechnicienDelaiMinutes = normaliserDelai(parsed.data.autoTechnicienDelaiMinutes);
     }
+    if (parsed.data.autoTechnicienAlerteMinutes !== undefined) {
+      data.autoTechnicienAlerteMinutes = normaliserDelaiAlerte(parsed.data.autoTechnicienAlerteMinutes);
+    }
+    if (parsed.data.autoTechnicienHeuresBureau !== undefined) data.autoTechnicienHeuresBureau = parsed.data.autoTechnicienHeuresBureau;
     const updated = await (prisma as any).company.update({
       where: { id: tenantOf(caller) },
       data,
-      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true },
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true },
     });
     res.json({ data: updated, message: 'Automatisations mises à jour' });
   })

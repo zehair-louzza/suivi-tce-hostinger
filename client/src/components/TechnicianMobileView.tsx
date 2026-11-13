@@ -1302,7 +1302,18 @@ export function TechnicianMobileView({
               </span>
             </button>
 
-            {!done && !live && (
+            {!done && !live && m.reponseTechnicien === 'EN_ATTENTE' && (
+              <button
+                type="button"
+                className="t-btn t-btn--primary t-btn--lg t-btn--block"
+                data-testid="mission-repondre"
+                onClick={() => openMission(m.id)}
+              >
+                <Ic n="checkCircle" size={20} />
+                <span>Accepter ou refuser</span>
+              </button>
+            )}
+            {!done && !live && m.reponseTechnicien !== 'EN_ATTENTE' && (
               <button
                 type="button"
                 className="t-btn t-btn--primary t-btn--lg t-btn--block"
@@ -1380,7 +1391,7 @@ export function TechnicianMobileView({
         {!embedded && <Header title="Mission" subtitle={m.reference || undefined} onBack={() => setOpenMissionId(null)} />}
 
         <div className="t-detail-body">
-          <MissionResponseCard mission={m} />
+          <MissionResponseCard mission={m} variant="banner" />
           <div className="t-mission-top">
             <span className="t-ref">{m.reference}</span>
             <StatusPill status={statusOf(m)} />
@@ -1527,7 +1538,8 @@ export function TechnicianMobileView({
               Mission clôturée
             </p>
           )}
-          {!done && !live && (
+          {!done && m.reponseTechnicien === 'EN_ATTENTE' && <MissionResponseCard mission={m} variant="actions" />}
+          {!done && !live && m.reponseTechnicien !== 'EN_ATTENTE' && (
             <button type="button" className="t-btn t-btn--primary t-btn--xl t-btn--block" onClick={() => handleStartMission(m)}>
               <Ic n="play" size={22} />
               <span>Démarrer sur site</span>

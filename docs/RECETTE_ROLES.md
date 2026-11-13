@@ -22,6 +22,7 @@ Tests automatiques : `npm run test:roles` (vraies routes, base simulée, 2 soci�
 2. Le technicien ouvre la mission : carte « Mission à confirmer » avec **Accepter** / **Refuser…** (motif obligatoire).
 3. Refus → la mission retourne dans « À planifier » sans technicien ; Planificateur et Direction reçoivent une notification avec le motif et des remplaçants suggérés ; bloc « Réponses des techniciens » dans Mon travail.
 4. Acceptation → statut « Affectée » ; le Planificateur est prévenu. Démarrer la mission sans répondre vaut acceptation.
-5. Sans réponse : relance du technicien après le délai (2 h par défaut), puis alerte au Planificateur après le même délai. Uniquement lundi–samedi, 8 h–19 h (Paris). Chaque action est écrite dans l'historique : « Automatique — … ».
-6. Direction → Utilisateurs et accès → **Automatisations** : activer/désactiver, délai. Désactivé : aucune nouvelle attente, aucune relance.
-7. Isolation : un technicien d'une autre société ne reçoit rien et ne peut pas répondre.
+5. Sans réponse : relance du technicien après 15 min (dans l'application uniquement, jamais par e-mail), puis alerte au Planificateur ET à la direction 5 min après la relance (application + e-mail). Par défaut uniquement lundi–samedi, 8 h–19 h (Paris), réglable. Chaque action est écrite dans l'historique : « Automatique — … ».
+6. Direction → Utilisateurs et accès → **Automatisations** : activer/désactiver, délai de relance, délai d'alerte, option « heures de bureau seulement ». Désactivé : aucune nouvelle attente, aucune relance.
+7. Téléphone du technicien : sur la fiche d'une mission « À confirmer », le bouton **✓ Accepter la mission** est collé en bas de l'écran (avec « Refuser »), et reste visible même quand le motif de refus est ouvert.
+8. Isolation : un technicien d'une autre société ne reçoit rien et ne peut pas répondre.
