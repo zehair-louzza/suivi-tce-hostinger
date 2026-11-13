@@ -315,6 +315,57 @@ export interface DevisEnvoiClient {
   } | null;
 }
 
+export interface RapportEnvoiClient {
+  statutRapport: string | null;
+  envoiPossible: boolean;
+  envoiRefus: string | null;
+  photos: Array<{ id: string; caption?: string | null; category?: string | null }>;
+  nbPhotosTotal: number;
+  documentDepose: { id: number; nomFichier: string; taille: number; deposeLe: string; deposePar: string | null } | null;
+  ficheTrouvee: boolean;
+  adresses: Array<{ email: string; libelle: string; suggeree: boolean }>;
+  lien: {
+    etat: 'actif' | 'repondu' | 'revoque' | 'expire';
+    creeLe: string;
+    expireLe: string;
+    destinataires: string[];
+    nbPhotos: number;
+    reponse: 'VALIDE' | 'RESERVES' | null;
+    motif: string | null;
+    repondantNom: string | null;
+    reponduLe: string | null;
+    revoqueRaison: string | null;
+    relanceJ3Le: string | null;
+    relanceJ7Le: string | null;
+  } | null;
+}
+
+export interface RapportEnvoiPayload {
+  confirme: boolean;
+  source: 'GENERE' | 'DEPOSE';
+  toutesPhotos?: boolean;
+  photoIds?: string[];
+  emails?: string[];
+}
+
+export const rapportClientApi = {
+  suivi: (id: number) => api.get<{ data: RapportEnvoiClient }>(`/interventions/${id}/rapport-client`),
+  deposer: (id: number, nomFichier: string, contenuBase64: string) =>
+    api.post<{ data: { id: number; nomFichier: string }; lienRevoque: boolean; message: string }>(
+      `/interventions/${id}/rapport-document`,
+      { nomFichier, contenuBase64 },
+      { timeout: 60000 }
+    ),
+  telecharger: (id: number, origine: 'GENERE' | 'DEPOSE') =>
+    api.get<Blob>(`/interventions/${id}/rapport-document`, { params: { origine }, responseType: 'blob', timeout: 60000 }),
+  apercu: (id: number, payload: { toutesPhotos?: boolean; photoIds?: string[] }) =>
+    api.post<Blob>(`/interventions/${id}/rapport-apercu`, payload, { responseType: 'blob', timeout: 60000 }),
+  miniature: (id: number, photoId: string) =>
+    api.get<Blob>(`/interventions/${id}/rapport-photos/${encodeURIComponent(photoId)}`, { responseType: 'blob', timeout: 60000 }),
+  envoyer: (id: number, payload: RapportEnvoiPayload) =>
+    api.post<{ message: string }>(`/interventions/${id}/rapport-envoyer-client`, payload, { timeout: 60000 }),
+};
+
 export interface AppNotification {
   devisId?: number | null;
   id: number;
@@ -350,17 +401,6 @@ export const interventionApi = {
   respond: (id: number, payload: { reponse: 'ACCEPTEE' | 'REFUSEE'; motif?: string }) =>
     api.post<{ data: Intervention; message: string }>(`/interventions/${id}/reponse`, payload),
 
-  sendReportEmail: (id: number, payload: SendReportEmailPayload) =>
-    api.post<{
-      success: boolean;
-      data: Intervention;
-      deliveryChannel?: string;
-      previewUrl?: string | null;
-      message: string;
-    }>(
-      `/interventions/${id}/send-report-email`,
-      payload
-    ),
 };
 
 export const referentielsApi = {
@@ -514,6 +554,7 @@ export const authApi = {
 
 export type AutomationSettings = {
   autoDevisActif: boolean;
+  autoRapportActif: boolean;
   autoTechnicienActif: boolean;
   autoTechnicienDelaiMinutes: number;
   autoTechnicienAlerteMinutes: number;

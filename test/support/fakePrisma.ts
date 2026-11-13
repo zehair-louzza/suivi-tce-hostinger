@@ -65,6 +65,7 @@ class Table {
   async create(a: Row) {
     const row = { id: ++this.seq, createdAt: new Date(), updatedAt: new Date(), version: 1, ...a.data };
     this.rows.push(row);
+    if (a.select) return Object.fromEntries(Object.keys(a.select).filter((k) => a.select[k] === true).map((k) => [k, row[k]]));
     return { ...row };
   }
   async update(a: Row) {
@@ -98,6 +99,8 @@ export function createFakeDb() {
     companyInvitation: new Table('companyInvitation'),
     devisDocument: new Table('devisDocument'),
     devisLienClient: new Table('devisLienClient'),
+    rapportDocument: new Table('rapportDocument'),
+    rapportLienClient: new Table('rapportLienClient'),
     $transaction: async (x: any) => (typeof x === 'function' ? x(db) : Promise.all(x)),
   };
   return db;

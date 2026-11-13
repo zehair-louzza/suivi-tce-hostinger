@@ -264,7 +264,7 @@ export function TourneeMapOptimizer({
             (i.traitement || '').trim()
           ) ||
           i.status === 'traite' ||
-          ['Validé par technicien', 'Validé & Clôturé', 'Envoyé au client'].includes(
+          ['Validé par technicien', 'Validé & Clôturé', 'Envoyé au client', 'Validé par le client', 'Réserves client'].includes(
             (i.statutRapport || '').trim()
           ) ||
           (isVisite && parentDevisDone);

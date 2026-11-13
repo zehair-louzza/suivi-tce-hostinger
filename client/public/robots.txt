@@ -6,6 +6,7 @@ Allow: /
 Disallow: /api/
 Disallow: /socket.io/
 Disallow: /devis-client/
+Disallow: /rapport-client/
 Disallow: /invitation
 
 # Moteurs de Recherche IA & Génératifs (GEO / AEO / SAIO)

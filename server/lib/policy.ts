@@ -44,6 +44,14 @@ export const POLICY = {
   // Réponse du technicien à son affectation (accepter / refuser) : le terrain uniquement, sur SES missions
   'interventions.respond': (a) => a.isFieldOnly,
   'interventions.delete': (a) => a.isAdmin || a.perms.canDeleteRecords,
+  // Rapport client par lien sécurisé : PDF (généré ou déposé), envoi, suivi des réponses
+  'rapports.document': (a) =>
+    a.isAdmin ||
+    (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
+  'rapports.sendClient': (a) =>
+    a.isAdmin ||
+    (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
+  'rapports.suiviClient': (a) => !a.isFieldOnly,
   'interventions.sendReport': (a) =>
     a.isAdmin ||
     (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
@@ -110,6 +118,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   'interventions.respond': 'répondre à une affectation de mission',
   'interventions.delete': 'supprimer une intervention',
   'interventions.sendReport': 'envoyer un rapport par email',
+  'rapports.document': 'déposer ou générer le PDF d’un rapport',
+  'rapports.sendClient': 'envoyer un rapport au client par lien sécurisé',
+  'rapports.suiviClient': 'suivre les réponses du client à un rapport',
   'notifications.list': 'consulter les notifications',
   'notifications.update': 'marquer les notifications comme lues',
   'demandes.list': 'consulter les demandes reçues',

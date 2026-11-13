@@ -12,7 +12,6 @@ import {
   DEFAULT_REFERENTIELS,
   DEFAULT_TECHNICIEN_COMPETENCES,
   ClientProfile,
-  SendReportEmailPayload,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
   PROCHAINES_ACTIONS_DEVIS,
@@ -33,7 +32,7 @@ import { Layout, AppSection } from '../components/Layout';
 import { TechnicianMobileView } from '../components/TechnicianMobileView';
 
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
-import { SendReportEmailModal } from '../components/SendReportEmailModal';
+import { RapportClientPanel } from '../components/RapportClientPanel';
 
 import { SituationReportModal } from '../components/SituationReportModal';
 import { exportSituationInterventionsExcel, exportSituationDevisExcel } from '../lib/exportSituationExcel';
@@ -65,6 +64,7 @@ import {
   canUserAccessSection,
   canUserCreateIntervention,
   canUserCreateDevis,
+  canUserSendRapportClient,
   espaceRoleOf,
   canUserCloseIntervention,
   getDefaultAuthorizedSection,
@@ -646,18 +646,6 @@ export function DashboardPage() {
       toast.error(err?.response?.data?.error || 'Erreur lors de la mise à jour des fiches clients'),
   });
 
-  const sendReportEmailMut = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: SendReportEmailPayload }) =>
-      interventionApi.sendReportEmail(id, payload),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['interventions'] });
-      queryClient.invalidateQueries({ queryKey: ['devis'] });
-      if (selectedIntv && selectedIntv.id === res.data.data.id) {
-        setSelectedIntv(res.data.data);
-      }
-    },
-  });
-
   // =========================================================================
   // BUSINESS QUEUES & KPI CALCULATIONS (ANELEC SPEC)
   // =========================================================================
@@ -705,8 +693,8 @@ export function DashboardPage() {
     const rapportsEnAttente = interventionsList.filter(
       (i) =>
         i.statutRapport === 'Déclaré par technicien' ||
-        (Boolean(i.photos && i.photos.length > 0) && i.statutRapport !== 'Validé & Clôturé') ||
-        (Boolean(i.actionsRealisees && i.actionsRealisees.length > 0) && i.statutRapport !== 'Validé & Clôturé') ||
+        (Boolean(i.photos && i.photos.length > 0) && !['Validé & Clôturé', 'Envoyé au client', 'Validé par le client', 'Réserves client'].includes(i.statutRapport || '')) ||
+        (Boolean(i.actionsRealisees && i.actionsRealisees.length > 0) && !['Validé & Clôturé', 'Envoyé au client', 'Validé par le client', 'Réserves client'].includes(i.statutRapport || '')) ||
         i.statutOperationnel === 'Terminée - à valider'
     );
 
@@ -2223,9 +2211,9 @@ export function DashboardPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                         <span
                           className={`badge ${
-                            selectedIntv.statutRapport === 'Validé & Clôturé'
+                            selectedIntv.statutRapport === 'Validé & Clôturé' || selectedIntv.statutRapport === 'Validé par le client'
                               ? 'badge-success'
-                              : selectedIntv.statutRapport === 'Déclaré par technicien'
+                              : selectedIntv.statutRapport === 'Déclaré par technicien' || selectedIntv.statutRapport === 'Réserves client'
                               ? 'badge-warning'
                               : 'badge-neutral'
                           }`}
@@ -2514,6 +2502,10 @@ export function DashboardPage() {
                           <option value="Rapport rédigé">Rapport rédigé (en attente)</option>
                           <option value="Validé & Clôturé">Validé & Clôturé</option>
                           <option value="Envoyé au client">Envoyé au client</option>
+                          {/* Posés uniquement par la réponse du client sur son lien : affichés, jamais saisissables */}
+                          {['Validé par le client', 'Réserves client'].includes(selectedIntv.statutRapport || '') && (
+                            <option value={selectedIntv.statutRapport || ''} disabled>{selectedIntv.statutRapport} (réponse du client)</option>
+                          )}
                         </select>
                       </div>
 
@@ -2536,7 +2528,7 @@ export function DashboardPage() {
                             setReportEmailIntv(selectedIntv as Intervention);
                           }}
                         >
-                          Envoyer le Rapport par Email
+                          Envoyer le rapport au client
                         </button>
                       )}
                     </div>
@@ -2840,17 +2832,30 @@ export function DashboardPage() {
         />
       )}
 
-      {/* Modale d'envoi du Rapport Officiel d'Intervention par e-mail */}
+      {/* Envoi du rapport au client par lien sécurisé (PDF généré ou déposé, photos choisies, adresse confirmée) */}
       {reportEmailIntv && (
-        <SendReportEmailModal
-          isOpen={Boolean(reportEmailIntv)}
-          onClose={() => setReportEmailIntv(null)}
-          intervention={reportEmailIntv}
-          clientProfiles={clientProfiles}
-          onSendEmail={async (payload) => {
-            await sendReportEmailMut.mutateAsync({ id: reportEmailIntv.id, payload });
-          }}
-        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Rapport client"
+          data-testid="rapport-client-modale"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1900, padding: 16 }}
+          onClick={(e) => e.target === e.currentTarget && setReportEmailIntv(null)}
+        >
+          <div style={{ background: 'var(--surface, #fff)', color: 'var(--text-primary, #0f172a)', borderRadius: 16, padding: 20, width: 'min(560px, 100%)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <strong style={{ fontSize: 16 }}>
+                Rapport {reportEmailIntv.reference || ''} — {reportEmailIntv.client}
+              </strong>
+              <button type="button" className="btn btn-secondary" onClick={() => setReportEmailIntv(null)}>Fermer</button>
+            </div>
+            <RapportClientPanel
+              interventionId={reportEmailIntv.id}
+              referenceMetier={reportEmailIntv.reference}
+              canManage={canUserSendRapportClient(user)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Modale des Rapports de Situation & Avancement en 1 Clic (Excel) */}
@@ -3154,6 +3159,8 @@ function StatusPill({ statut }: { statut: string }) {
     'En cours': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
     'En attente technicien': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
     'Envoyé au client': { bg: '#f8fafc', fg: '#0f172a', dot: '#00bf63', border: '#cbd5e1' },
+    'Validé par le client': { bg: '#ecfdf5', fg: '#047857', dot: '#00bf63', border: '#a7f3d0' },
+    'Réserves client': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
     'En négociation': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
     'À planifier': { bg: '#fffbeb', fg: '#b45309', dot: '#ffcc00', border: '#fde68a' },
     Suspendue: { bg: '#fef2f2', fg: '#b91c1c', dot: '#ff0000', border: '#fecaca' },

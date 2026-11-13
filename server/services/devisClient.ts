@@ -112,7 +112,7 @@ export async function lienParJeton(jeton: unknown): Promise<any | null> {
 // Destinataires internes
 // ---------------------------------------------------------------------------
 
-async function comptesParRoles(companyId: number, roles: string[], inclure?: number[]): Promise<Destinataire[]> {
+export async function comptesParRoles(companyId: number, roles: string[], inclure?: number[]): Promise<Destinataire[]> {
   const users: Destinataire[] = await db.user.findMany({
     where: { companyId, active: true, role: { in: roles } },
     select: { id: true, name: true, email: true, role: true, technicienNom: true },

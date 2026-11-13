@@ -29,7 +29,7 @@ export type FicheClientLike = {
   nom?: string;
   email?: string;
   active?: boolean;
-  services?: Array<{ nomService?: string; email?: string; contactNom?: string; recevoirDevis?: boolean }>;
+  services?: Array<{ nomService?: string; email?: string; contactNom?: string; recevoirDevis?: boolean; recevoirRapports?: boolean }>;
 };
 
 export type AdresseClient = { email: string; libelle: string; suggeree: boolean };
@@ -49,7 +49,11 @@ export function trouverFiche<T extends FicheClientLike>(fiches: T[], nomClient?:
  * Adresses connues pour ce client, sans doublon. « suggeree » = service marqué « reçoit les devis ».
  * Règle : une seule adresse communiquée → envoi direct ; plusieurs → l'utilisateur doit confirmer laquelle (ou lesquelles).
  */
-export function adressesDepuisFiche(fiche: FicheClientLike | null): AdresseClient[] {
+export function adressesDepuisFiche(
+  fiche: FicheClientLike | null,
+  /** Service « reçoit les devis » (défaut) ou « reçoit les rapports » */
+  drapeau: 'recevoirDevis' | 'recevoirRapports' = 'recevoirDevis'
+): AdresseClient[] {
   if (!fiche) return [];
   const vues = new Set<string>();
   const out: AdresseClient[] = [];
@@ -68,7 +72,7 @@ export function adressesDepuisFiche(fiche: FicheClientLike | null): AdresseClien
   };
   for (const s of fiche.services || []) {
     const nom = [s.nomService, s.contactNom].filter(Boolean).join(' — ') || 'Service';
-    ajouter(s.email, nom, s.recevoirDevis === true);
+    ajouter(s.email, nom, s[drapeau] === true);
   }
   ajouter(fiche.email, 'Adresse principale', false);
   return out.sort((a, b) => Number(b.suggeree) - Number(a.suggeree));
@@ -82,14 +86,14 @@ export type ChoixDestinataires =
  * Valide les adresses choisies par l'utilisateur. Seules les adresses de la fiche client sont acceptées.
  * Une seule adresse connue : elle est utilisée sans confirmation. Plusieurs : au moins une doit être confirmée.
  */
-export function choisirDestinataires(connues: AdresseClient[], demandees: unknown): ChoixDestinataires {
+export function choisirDestinataires(connues: AdresseClient[], demandees: unknown, objet = 'le devis'): ChoixDestinataires {
   if (connues.length === 0) {
     return { ok: false, code: 'AUCUNE_ADRESSE', message: "Aucune adresse e-mail sur la fiche de ce client. Complétez la fiche client avant l'envoi." };
   }
   if (connues.length === 1) return { ok: true, emails: [connues[0].email] };
   const liste = Array.isArray(demandees) ? demandees.map((e) => String(e || '').trim().toLowerCase()).filter(Boolean) : [];
   if (liste.length === 0) {
-    return { ok: false, code: 'CONFIRMATION_REQUISE', message: "Ce client a plusieurs adresses : confirmez celle (ou celles) à qui envoyer le devis." };
+    return { ok: false, code: 'CONFIRMATION_REQUISE', message: `Ce client a plusieurs adresses : confirmez celle (ou celles) à qui envoyer ${objet}.` };
   }
   const uniques = Array.from(new Set(liste));
   if (uniques.length > MAX_DESTINATAIRES) {
@@ -223,12 +227,12 @@ export function prochaineActionDevis(e: EtatDevisEnvoye): ActionDevis {
 // Dépôt du PDF
 // ---------------------------------------------------------------------------
 
-export function validerPdf(nomFichier: unknown, contenuBase64: unknown):
+export function validerPdf(nomFichier: unknown, contenuBase64: unknown, libelle = 'devis'):
   | { ok: true; nom: string; octets: Buffer; sha256: string }
   | { ok: false; message: string } {
   const brut = String(nomFichier || '').trim();
-  const nom = brut.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 150) || 'devis.pdf';
-  if (!/\.pdf$/i.test(nom)) return { ok: false, message: 'Le devis doit être un fichier PDF (.pdf).' };
+  const nom = brut.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 150) || `${libelle}.pdf`;
+  if (!/\.pdf$/i.test(nom)) return { ok: false, message: `Le ${libelle} doit être un fichier PDF (.pdf).` };
   const b64 = String(contenuBase64 || '').replace(/^data:[^;]*;base64,/, '').replace(/\s/g, '');
   if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return { ok: false, message: 'Fichier illisible, réessayez.' };
   const octets = Buffer.from(b64, 'base64');

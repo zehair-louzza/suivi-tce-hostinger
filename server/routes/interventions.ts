@@ -31,6 +31,37 @@ import {
 } from '../../shared/types.js';
 
 import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
+import { validerPdf } from '../domain/devisClient.js';
+import {
+  STATUT_RESERVES,
+  STATUT_VALIDE_CLIENT,
+  choisirPhotos,
+  contenuRapportModifie,
+  envoiRapportAutorise,
+} from '../domain/rapportClient.js';
+import {
+  adressesPourRapport,
+  dernierDocumentRapport,
+  envoyerRapportAuClient,
+  etatLien as etatLienRapport,
+  fabriquerPdf,
+  liensDuRapport,
+  photosDisponibles,
+  revoquerLiensRapportActifs,
+} from '../services/rapportClient.js';
+
+/** Statuts posés UNIQUEMENT par la réponse du client sur son lien : jamais saisis à la main (pas de validation à sa place). */
+const STATUTS_REPONSE_CLIENT = [STATUT_VALIDE_CLIENT, STATUT_RESERVES];
+function refuserStatutClient(nouveau: unknown, actuel: unknown): void {
+  const s = String(nouveau || '');
+  if (STATUTS_REPONSE_CLIENT.includes(s) && s !== String(actuel || '')) {
+    throw new AppError(
+      403,
+      `Le statut « ${s} » est posé uniquement par la réponse du client sur le lien envoyé : il ne peut pas être saisi à la main.`,
+      'FORBIDDEN'
+    );
+  }
+}
 
 export const interventionRouter = secureRouter('interventions');
 
@@ -517,7 +548,7 @@ interventionRouter.post(
         photosJson: sanitizePhotosJson(b.photos),
         elementsChiffrage: b.elementsChiffrage || null,
         rapportFinal: b.rapportFinal || null,
-        statutRapport: b.statutRapport || null,
+        statutRapport: (refuserStatutClient(b.statutRapport, null), b.statutRapport || null),
         isVisiteDevis,
         origineDevisId: safeOrigineDevisId,
         origineDevisClient: b.origineDevisClient || b.client || null,
@@ -831,7 +862,10 @@ interventionRouter.patch(
     }
     if (b.elementsChiffrage !== undefined) updateData.elementsChiffrage = b.elementsChiffrage || null;
     if (b.rapportFinal !== undefined) updateData.rapportFinal = b.rapportFinal || null;
-    if (b.statutRapport !== undefined) updateData.statutRapport = b.statutRapport || null;
+    if (b.statutRapport !== undefined) {
+      refuserStatutClient(b.statutRapport, existing.statutRapport);
+      updateData.statutRapport = b.statutRapport || null;
+    }
     if (b.isVisiteDevis !== undefined) {
       updateData.isVisiteDevis = Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true');
     }
@@ -889,6 +923,27 @@ interventionRouter.patch(
     });
 
     await pushDIToDevis(patchedDossierDevis, updated.numeroDI || null);
+
+    // Rapport modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué
+    if (contenuRapportModifie(existing as any, updated as any)) {
+      const revoques = await revoquerLiensRapportActifs(companyId, id, 'Rapport modifié après envoi');
+      const dejaValide = String(existing.statutRapport || '') === STATUT_VALIDE_CLIENT;
+      if (revoques > 0 || dejaValide) {
+        await prisma.intervention.update({
+          where: { id },
+          data: {
+            historiqueJson: ajouterHistorique(
+              updated.historiqueJson,
+              'Automatique',
+              revoques > 0 ? 'Automatique — lien du rapport révoqué' : 'Automatique — rapport modifié après validation du client',
+              revoques > 0
+                ? "Le rapport a été modifié après son envoi : renvoyez-le au client pour qu'il réponde sur la bonne version"
+                : 'La version validée par le client n’est plus identique au rapport actuel'
+            ),
+          },
+        });
+      }
+    }
 
     if (nouvelleAffectation) {
       await notifierAffectation(companyId, updated).catch((e) => console.error('Notification affectation :', e?.message));
@@ -1017,124 +1072,202 @@ interventionRouter.delete(
   })
 );
 
-// POST /api/interventions/:id/send-report-email - Envoi direct du rapport officiel par e-mail
-// Règle stricte : réservé à l'équipe bureau / administration (les techniciens ne peuvent pas envoyer par email).
+// POST /api/interventions/:id/send-report-email — ANCIEN envoi direct, retiré.
+// Il passait le rapport à « Envoyé au client » sans lien sécurisé ni réponse du client. Remplacé par
+// POST /api/interventions/:id/rapport-envoyer-client (lien personnel, validation ou réserves, relances).
 interventionRouter.post(
   '/:id/send-report-email',
   policy('interventions.sendReport'),
-  asyncHandler(async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
-    const userId = req.user!.userId;
-    const companyId = requireCompanyId(req.user?.companyId);
-    const userRole = (req.user?.role || 'USER').toUpperCase();
-    const isTech = userRole === 'TECHNICIEN';
-
-    // Règle de conformité demandée :
-    // "Les techniciens ne peuvent pas envoyer ces rapports par email, ils peuvent envoyer les rapports que pour l'équipe bureau sur l'application direct."
-    if (isTech) {
-      throw new AppError(
-        403,
-        "Les techniciens terrain ne sont pas autorisés à envoyer des rapports par e-mail aux donneurs d'ordre. Veuillez transmettre votre compte rendu à l'équipe bureau directement sur l'application.",
-        'FORBIDDEN'
-      );
-    }
-
-    const intv = await prisma.intervention.findFirst({
-      where: { id, companyId },
-      include: { company: true },
-    });
-    if (!intv) {
-      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
-    }
-
-    const { toEmail, ccEmail, subject, customMessage, rapportFinal, includePhotos } = req.body || {};
-    const rawTo = String(toEmail || '').trim();
-    const validEmails = rawTo
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter((e) => e.includes('@'));
-
-    if (validEmails.length === 0) {
-      throw new AppError(
-        400,
-        "Une adresse e-mail de destinataire valide est obligatoire pour l'envoi du rapport",
-        'VALIDATION_ERROR'
-      );
-    }
-
-    const transformed = transformIntervention(intv);
-    const finalReportText =
-      rapportFinal ||
-      transformed.rapportFinal ||
-      transformed.compteRendu ||
-      'Travaux terminés et vérifiés conformément aux exigences techniques.';
-
-    const senderEmail = req.user?.email || 'zehair@anelecgroupe.com';
-    const senderName = req.user?.email ? req.user.email.split('@')[0] : 'Direction Technique';
-    const companyName = intv.company?.name || 'ANELEC GROUPE';
-
-    // Envoi sécurisé via emailService (Zoho Mail multi-hôtes ou prévisualisation secours)
-    const delivery = await sendInterventionReportEmail({
-      companyId,
-      toEmail: validEmails.join(', '),
-      ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
-      subject: subject || `[RAPPORT INTERVENTION] ${transformed.reference} • ${transformed.client} • ${transformed.chantier}`,
-      customMessage: customMessage || undefined,
-      intervention: {
-        id: transformed.id,
-        referenceMetier: transformed.reference,
-        client: transformed.client,
-        chantier: transformed.chantier,
-        entreprise: transformed.entreprise,
-        corpsEtat: transformed.corpsEtat,
-        typeIntervention: transformed.typeIntervention,
-        datePlanifiee: transformed.datePlanifiee || new Date().toISOString(),
-        dateReelle: transformed.dateReelle,
-        actionsRealisees: transformed.actionsRealisees,
-        photos: includePhotos !== false ? transformed.photos : [],
-        elementsChiffrage: transformed.elementsChiffrage,
-        rapportFinal: finalReportText,
-        statutRapport: 'Envoyé au client',
-      },
-      senderName,
-      senderEmail,
-      companyName,
-    });
-
-    if (!delivery.sent) {
-      throw new AppError(500, `Échec de l'envoi de l'e-mail du rapport : ${delivery.error || 'Erreur SMTP'}`, 'EMAIL_ERROR');
-    }
-
-    // Traçabilité & Historique ANELEC
-    const historyEntry = addHistoriqueEvent(
-      intv.historiqueJson,
-      senderName,
-      "Rapport officiel envoyé par e-mail au donneur d'ordre / client",
-      `Destinataire : ${toEmail}${ccEmail ? ` (CC: ${ccEmail})` : ''} • Canal : ${delivery.channel}`
+  asyncHandler(async () => {
+    throw new AppError(
+      410,
+      'Cet envoi direct n’existe plus : utilisez « Envoyer le rapport au client » (lien sécurisé avec validation ou réserves du client).',
+      'ENVOI_DIRECT_RETIRE'
     );
+  })
+);
 
-    const updated = await prisma.intervention.update({
-      where: { id },
+
+// ============================================================================
+// RAPPORT CLIENT — PDF généré ou déposé, envoi par lien sécurisé, suivi des réponses
+// ============================================================================
+
+async function interventionPourRapport(req: Request) {
+  const companyId = requireCompanyId(req.user?.companyId);
+  const id = parseInt(req.params.id, 10);
+  const acc = await loadAccess(req);
+  const intervention = await prisma.intervention.findFirst({ where: { id, companyId } });
+  if (!intervention || !canReadIntervention(acc, intervention)) {
+    throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+  }
+  return { companyId, intervention: intervention as any, acc };
+}
+
+const auteurDe = (req: Request) => req.user!.email.split('@')[0] || 'Utilisateur';
+
+// Dépôt manuel du PDF du rapport (JSON base64 : pas de dépendance d'envoi de fichiers)
+interventionRouter.post(
+  '/:id/rapport-document',
+  policy('rapports.document'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, intervention } = await interventionPourRapport(req);
+    const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64, 'rapport');
+    if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
+    const auteur = auteurDe(req);
+    const doc = await (prisma as any).rapportDocument.create({
       data: {
-        statutRapport: 'Envoyé au client',
-        rapportFinal: finalReportText,
-        historiqueJson: historyEntry,
+        companyId, interventionId: intervention.id, nomFichier: v.nom, taille: v.octets.length, sha256: v.sha256,
+        contenu: v.octets, origine: 'DEPOSE', deposePar: auteur,
+      },
+      select: { id: true, nomFichier: true, taille: true, origine: true, createdAt: true, deposePar: true },
+    });
+    // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
+    const revoques = await revoquerLiensRapportActifs(companyId, intervention.id, 'Nouveau PDF déposé après envoi');
+    await prisma.intervention.update({
+      where: { id: intervention.id },
+      data: {
+        historiqueJson: ajouterHistorique(
+          intervention.historiqueJson,
+          auteur,
+          'PDF du rapport déposé',
+          `${v.nom} (${Math.round(v.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le rapport' : '')
+        ),
       },
     });
+    res.status(201).json({ data: doc, lienRevoque: revoques > 0, message: 'PDF du rapport enregistré' });
+  })
+);
 
-    const result = transformIntervention(updated);
-    try {
-      socketEvents.interventionUpdated(userId, companyId, result);
-    } catch {
-      // ignore socket notification error
-    }
+// Téléchargement du dernier PDF (déposé ou généré) par l'équipe
+interventionRouter.get(
+  '/:id/rapport-document',
+  policy('rapports.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, intervention } = await interventionPourRapport(req);
+    const origine = req.query.origine === 'GENERE' || req.query.origine === 'DEPOSE' ? (req.query.origine as 'GENERE' | 'DEPOSE') : undefined;
+    const meta = await dernierDocumentRapport(companyId, intervention.id, origine);
+    if (!meta) throw new AppError(404, 'Aucun PDF pour ce rapport', 'NOT_FOUND');
+    const doc = await (prisma as any).rapportDocument.findFirst({ where: { id: meta.id, companyId, interventionId: intervention.id } });
+    if (!doc) throw new AppError(404, 'Aucun PDF pour ce rapport', 'NOT_FOUND');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.nomFichier)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(Buffer.from(doc.contenu));
+  })
+);
 
+// Aperçu du PDF qui serait généré avec les photos cochées (rien n'est enregistré ni envoyé)
+interventionRouter.post(
+  '/:id/rapport-apercu',
+  policy('rapports.document'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, intervention } = await interventionPourRapport(req);
+    const dispo = photosDisponibles(intervention);
+    const choix = choisirPhotos(dispo, { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds });
+    if (!choix.ok) throw new AppError(422, choix.message, 'PHOTO_INCONNUE');
+    const pdf = await fabriquerPdf(companyId, intervention, dispo.filter((p) => choix.ids.includes(p.id)));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="apercu-rapport.pdf"');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
+  })
+);
+
+// Suivi : photos, PDF déposé, adresses de la fiche client, état du lien, relances, réponse du client
+interventionRouter.get(
+  '/:id/rapport-client',
+  policy('rapports.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, intervention } = await interventionPourRapport(req);
+    const [deposee, adr, liens] = await Promise.all([
+      dernierDocumentRapport(companyId, intervention.id, 'DEPOSE'),
+      adressesPourRapport(companyId, intervention.client),
+      liensDuRapport(companyId, intervention.id),
+    ]);
+    const dernier = liens[0] || null;
+    const autorise = envoiRapportAutorise(intervention.statutRapport);
     res.json({
-      success: true,
-      data: result,
-      deliveryChannel: delivery.channel,
-      previewUrl: delivery.previewUrl || null,
-      message: `Rapport d'intervention envoyé avec succès par e-mail à ${toEmail}`,
+      data: {
+        statutRapport: intervention.statutRapport || null,
+        envoiPossible: autorise.ok,
+        envoiRefus: autorise.ok ? null : autorise.message,
+        photos: photosDisponibles(intervention).map((p) => ({ id: p.id, caption: p.caption, category: p.category, url: undefined })),
+        nbPhotosTotal: (() => { try { const a = JSON.parse(intervention.photosJson || '[]'); return Array.isArray(a) ? a.length : 0; } catch { return 0; } })(),
+        documentDepose: deposee
+          ? { id: deposee.id, nomFichier: deposee.nomFichier, taille: deposee.taille, deposeLe: deposee.createdAt, deposePar: deposee.deposePar }
+          : null,
+        ficheTrouvee: adr.ficheTrouvee,
+        adresses: adr.adresses,
+        lien: dernier
+          ? {
+              etat: etatLienRapport(dernier),
+              creeLe: dernier.createdAt,
+              expireLe: dernier.expireLe,
+              destinataires: (() => { try { return JSON.parse(dernier.destinataires || '[]'); } catch { return []; } })(),
+              nbPhotos: (() => { try { return (JSON.parse(dernier.contenuJson || '{}').photos || []).length; } catch { return 0; } })(),
+              reponse: dernier.reponse,
+              motif: dernier.motif,
+              repondantNom: dernier.repondantNom,
+              reponduLe: dernier.reponduLe,
+              revoqueRaison: dernier.revoqueRaison,
+              relanceJ3Le: intervention.relanceClientJ3Le,
+              relanceJ7Le: intervention.relanceClientJ7Le,
+            }
+          : null,
+      },
+    });
+  })
+);
+
+// Photo (miniature) pour l'équipe : sert la sélection « Tout cocher / photos choisies »
+interventionRouter.get(
+  '/:id/rapport-photos/:photoId',
+  policy('rapports.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intervention } = await interventionPourRapport(req);
+    const { octetsPhoto } = await import('../services/rapportClient.js');
+    const photo = octetsPhoto(intervention, String(req.params.photoId || ''));
+    if (!photo) throw new AppError(404, 'Photo introuvable', 'NOT_FOUND');
+    res.setHeader('Content-Type', `image/${photo.type}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(photo.octets);
+  })
+);
+
+// Envoi au client : toujours un geste humain, avec confirmation de l'utilisateur
+interventionRouter.post(
+  '/:id/rapport-envoyer-client',
+  policy('rapports.sendClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, intervention } = await interventionPourRapport(req);
+    if (req.body?.confirme !== true) {
+      throw new AppError(400, "Confirmez avoir vérifié le rapport avant de l'envoyer au client.", 'CONFIRMATION_REQUISE');
+    }
+    const source = req.body?.source === 'DEPOSE' ? 'DEPOSE' : 'GENERE';
+    const r = await envoyerRapportAuClient({
+      companyId,
+      intervention,
+      source,
+      photos: { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds },
+      adresseChoisies: req.body?.emails,
+      auteur: auteurDe(req),
+      replyTo: req.user?.email,
+    });
+    const refreshed = await prisma.intervention.findUnique({ where: { id: intervention.id } });
+    const transformed = transformIntervention(refreshed);
+    try {
+      socketEvents.interventionUpdated(req.user!.userId, companyId, transformed);
+    } catch {
+      /* temps réel facultatif */
+    }
+    res.json({
+      data: transformed,
+      envoyes: r.envoyes,
+      echecs: r.echecs,
+      message: `Rapport envoyé à ${r.envoyes.join(', ')}` + (r.echecs.length ? ` (échec pour ${r.echecs.join(', ')})` : ''),
     });
   })
 );

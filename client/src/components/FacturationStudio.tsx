@@ -312,6 +312,7 @@ export function FacturationStudio({
         statutOp === 'Clôturée' ||
         statutOp === 'Terminée - à valider' ||
         intv.statutRapport === 'Validé & Clôturé' ||
+        intv.statutRapport === 'Validé par le client' ||
         intv.statutRapport === 'Déclaré par technicien';
 
       let category: BillingEligibilityCategory = 'NE_PAS_FACTURER';

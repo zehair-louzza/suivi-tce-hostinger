@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './stores/authStore';
 import { LoginPage } from './pages/LoginPage';
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
 import { DevisClientPage } from './pages/DevisClientPage';
+import { RapportClientPage } from './pages/RapportClientPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PromoVideoShowcase } from './components/PromoVideoShowcase';
@@ -75,6 +76,7 @@ function AppRoutes() {
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/invitation" element={<AcceptInvitationPage />} />
       <Route path="/devis-client/:jeton" element={<DevisClientPage />} />
+      <Route path="/rapport-client/:jeton" element={<RapportClientPage />} />
       <Route path="/showcase" element={<PromoVideoShowcase />} />
       <Route path="/video" element={<PromoVideoShowcase />} />
       <Route path="/promo" element={<PromoVideoShowcase />} />

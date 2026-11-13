@@ -500,7 +500,7 @@ export function InterventionsStudioView({
                   setSelectedItem(null);
                 }}
               >
-                Envoyer le rapport
+                Envoyer le rapport au client
               </Btn>
               {canClose !== false && normalizeStatus(selectedItem.statutOperationnel) === 'Terminée — à valider' && (
                 <Btn

@@ -123,6 +123,7 @@ function AutomationsPanel() {
   const delaiAlerte = query.data?.autoTechnicienAlerteMinutes ?? 5;
   const heuresBureau = query.data?.autoTechnicienHeuresBureau !== false;
   const devisActif = query.data?.autoDevisActif !== false;
+  const rapportActif = query.data?.autoRapportActif !== false;
   const dureeLabel = (m: number) => (m < 60 ? `${m} minutes` : `${m / 60} heure${m >= 120 ? 's' : ''}`);
   const optionsDelai = Array.from(new Set([5, 10, 15, 30, 60, 120, 240, 480, delai])).sort((a, b) => a - b);
   const optionsAlerte = Array.from(new Set([5, 10, 15, 30, 60, delaiAlerte])).sort((a, b) => a - b);
@@ -204,6 +205,24 @@ function AutomationsPanel() {
           data-testid="auto-devis-toggle"
         />
         Relancer automatiquement les clients (J+3 / J+7) et marquer les devis « Expiré » au bout de 30 jours
+      </label>
+      <div>
+        <h3 style={{ margin: '8px 0 0', fontSize: '16px' }}>Rapports envoyés aux clients</h3>
+        <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Le rapport n'est envoyé qu'après validation en interne, toujours à la main (adresse confirmée, rapport vérifié). Le client le valide ou émet
+          des réserves via un lien personnel valable 30 jours. Sans réponse, il est relancé à J+3 et J+7 (du lundi au samedi, de 8 h à 19 h, heure de
+          Paris), puis la direction est alertée. Un silence n'est jamais une validation, et rien n'est supprimé.
+        </p>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+        <input
+          type="checkbox"
+          checked={rapportActif}
+          disabled={query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoRapportActif: e.target.checked })}
+          data-testid="auto-rapport-toggle"
+        />
+        Relancer automatiquement les clients (J+3 / J+7) sur les rapports sans réponse et alerter à l'expiration du lien
       </label>
     </div>
   );
@@ -622,7 +641,7 @@ export function AdminWorkstation({
   const pendingDeclarationsCount = declarationsList.filter(
     (i) =>
       i.statutRapport === 'Déclaré par technicien' ||
-      (Boolean(i.photos && i.photos.length > 0) && i.statutRapport !== 'Validé & Clôturé')
+      (Boolean(i.photos && i.photos.length > 0) && !['Validé & Clôturé', 'Envoyé au client', 'Validé par le client', 'Réserves client'].includes(i.statutRapport || ''))
   ).length;
 
   return (
@@ -1606,7 +1625,7 @@ export function AdminWorkstation({
                         <td>
                           <span
                             className={`badge ${
-                              intv.statutRapport === 'Validé & Clôturé'
+                              ['Validé & Clôturé', 'Validé par le client'].includes(intv.statutRapport || '')
                                 ? 'badge-success'
                                 : intv.compteRendu || (intv.actionsRealisees && intv.actionsRealisees.length > 0)
                                 ? 'badge-warning'
@@ -3004,7 +3023,7 @@ export function AdminWorkstation({
                         });
                       }}
                     >
-                      Envoyer au Client par Email
+                      Envoyer au client (lien sécurisé)
                     </button>
                   )}
                   <button

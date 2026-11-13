@@ -31,6 +31,8 @@ model Company {
   autoTechnicienHeuresBureau Boolean        @default(true)
   /// Automatisation « devis client » : relances J+3 / J+7 et expiration à 30 jours (l'envoi initial reste toujours manuel)
   autoDevisActif       Boolean              @default(true)
+  /// Automatisation « rapport client » : relances J+3 / J+7 et expiration à 30 jours (l'envoi initial reste toujours manuel)
+  autoRapportActif     Boolean              @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   users                User[]
@@ -45,6 +47,8 @@ model Company {
   notifications        Notification[]
   devisDocuments       DevisDocument[]
   devisLiensClient     DevisLienClient[]
+  rapportDocuments     RapportDocument[]
+  rapportLiensClient   RapportLienClient[]
 
   @@map("companies")
 }
@@ -263,6 +267,12 @@ model Intervention {
   affecteLe            DateTime?
   relanceTechnicienLe  DateTime?
   alertePlanificateurLe DateTime?
+  /// Rapport envoyé au client par lien sécurisé (voir RapportLienClient) et relances J+3 / J+7
+  envoiClientLe        DateTime?
+  relanceClientJ3Le    DateTime?
+  relanceClientJ7Le    DateTime?
+  rapportDocuments     RapportDocument[]
+  rapportLiensClient   RapportLienClient[]
 
   demandes           Demande[]
 
@@ -459,4 +469,54 @@ model DevisLienClient {
   @@index([devisId], map: "devis_liens_client_devisid_idx")
   @@index([companyId], map: "devis_liens_client_companyid_idx")
   @@map("devis_liens_client")
+}
+
+/// PDF du rapport d'intervention : généré par l'application ou déposé à la main. Stocké en base.
+model RapportDocument {
+  id             Int          @id @default(autoincrement())
+  companyId      Int
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  interventionId Int
+  intervention   Intervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  nomFichier     String
+  taille         Int
+  sha256         String
+  contenu        Bytes
+  /// GENERE | DEPOSE
+  origine        String       @default("DEPOSE")
+  deposePar      String?
+  createdAt      DateTime     @default(now())
+
+  @@index([interventionId], map: "rapport_documents_interventionid_idx")
+  @@index([companyId], map: "rapport_documents_companyid_idx")
+  @@map("rapport_documents")
+}
+
+/// Lien sécurisé envoyé au client pour un rapport : limité dans le temps, à usage unique pour la réponse,
+/// lié à la société et à l'intervention. contenuJson = ce que le client voit, figé à l'envoi.
+model RapportLienClient {
+  id             Int          @id @default(autoincrement())
+  companyId      Int
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  interventionId Int
+  intervention   Intervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  documentId     Int?
+  sel            String
+  destinataires  String
+  contenuJson    String
+  expireLe       DateTime
+  /// VALIDE | RESERVES
+  reponse        String?
+  motif          String?
+  repondantNom   String?
+  reponduLe      DateTime?
+  revoqueLe      DateTime?
+  revoqueRaison  String?
+  creePar        String?
+  dernierAccesLe DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([interventionId], map: "rapport_liens_client_interventionid_idx")
+  @@index([companyId], map: "rapport_liens_client_companyid_idx")
+  @@map("rapport_liens_client")
 }

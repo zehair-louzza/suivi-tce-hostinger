@@ -1516,6 +1516,15 @@ export function canUserCreateDevis(user?: User | null): boolean {
   return isAdmin || Boolean(perms.canEditDevis);
 }
 
+/** Droit de déposer / envoyer un rapport au client par lien sécurisé : même règle que le serveur (rapports.sendClient). */
+export function canUserSendRapportClient(user?: User | null): boolean {
+  if (!user || isUserMobileOnly(user)) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  return isAdmin || Boolean(perms.canWriteReports || perms.canEditInterventions || perms.canManageBilling);
+}
+
 /**
  * Périmètre de chaque profil, en langage métier : ce qu'il valide, ce qu'il ne valide pas (et qui s'en charge).
  * Affiché dans « Mon travail » pour que chacun sache où s'arrête sa responsabilité.

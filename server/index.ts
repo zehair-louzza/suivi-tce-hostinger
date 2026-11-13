@@ -24,6 +24,8 @@ import { notificationsRouter } from './routes/notifications.js';
 import { demarrerPlanificateurTechnicien } from './services/technicianAutomation.js';
 import { demarrerPlanificateurDevis } from './services/devisClient.js';
 import { devisClientPublicRouter, limiteurDevisClient } from './routes/devisClientPublic.js';
+import { demarrerPlanificateurRapport } from './services/rapportClient.js';
+import { rapportClientPublicRouter, limiteurRapportClient } from './routes/rapportClientPublic.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -96,6 +98,8 @@ app.use('/api/admin', authMiddleware, adminRouter);
 app.use('/api/notifications', authMiddleware, notificationsRouter);
 // Page publique du devis client : sans compte, jeton signé, limitée par adresse IP
 app.use('/api/public/devis', limiteurDevisClient, devisClientPublicRouter);
+// Page publique du rapport client : même principe (sans compte, jeton signé, limitée par adresse IP)
+app.use('/api/public/rapport', limiteurRapportClient, rapportClientPublicRouter);
 
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');
@@ -176,6 +180,7 @@ function applyPendingMigrations() {
 applyPendingMigrations();
 demarrerPlanificateurTechnicien();
 demarrerPlanificateurDevis();
+demarrerPlanificateurRapport();
 
 httpServer.listen(config.port, () => {
   console.log(`→ Server running on port ${config.port} (${config.nodeEnv})`);

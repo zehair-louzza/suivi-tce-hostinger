@@ -38,6 +38,24 @@ Tests automatiques : `npm run test:roles` (vraies routes, base simulée, 2 soci�
 7. Direction → Automatisations → « Devis envoyés aux clients » : coche pour activer/désactiver les relances et l'expiration (l'envoi initial reste toujours manuel).
 8. Isolation : le lien est lié à une société et à un devis ; un jeton falsifié, ou d'une autre société, n'ouvre rien.
 
+## Automatisation C — rapport client par lien sécurisé
+
+Le rapport doit d'abord être **« Validé & Clôturé »** en interne (statut rapport). Tant qu'il ne l'est pas, l'envoi est refusé et la raison est affichée.
+
+1. Direction / Planificateur / Rapports et facturation → intervention → onglet **2. Dossier Terrain & Photos** (ou « Envoyer le rapport au client » depuis la liste) → bloc **Rapport client — lien sécurisé**. Chargé d'études et Technicien : ni dépôt ni envoi.
+2. **Document vu par le client** : soit **PDF généré** à partir du rapport validé (bouton « Voir l'aperçu du PDF »), soit **PDF déposé à la main** (PDF réel, 8 Mo maximum, comme pour les devis).
+3. **Photos** : cases individuelles + case **« Tout cocher »**. Seules les photos cochées sont montrées au client (page publique et PDF généré). Aucune case cochée = aucune photo. Les photos liées à une adresse externe ne sont jamais transmises.
+4. **Destinataire** : adresses de la **fiche client** (services « reçoit les rapports » présélectionnés). Une seule adresse → envoi direct à celle-ci ; plusieurs → confirmation du choix ; aucune → refus. Case de confirmation obligatoire : rien ne part tout seul.
+5. Le client reçoit un lien personnel (30 jours) → page sans compte : texte du rapport, actions, photos choisies, PDF. Il **valide** ou **formule des réserves** (texte obligatoire, nom obligatoire). Réponse à usage unique.
+6. Réponse : statut **« Validé par le client »** (facturable) ou **« Réserves client »** ; Direction, Planificateur et rédacteur sont notifiés (jamais le technicien). Ces deux statuts ne peuvent **pas** être saisis à la main. Après réserves : corriger puis renvoyer (nouveau lien, l'ancien est fermé). Après validation : plus de renvoi.
+7. **Pas de validation tacite** : sans réponse, relance J+3 puis J+7 (lundi–samedi, 8 h–19 h). À 30 jours le lien est fermé, le rapport **reste « Envoyé au client »** et une alerte « lien expiré » part au bureau. Rien n'est supprimé ; chaque action automatique est écrite dans l'historique (« Automatique — … »).
+8. Rapport modifié après envoi (texte, actions, photos, client, site…) ou nouveau PDF déposé → lien révoqué ; une note interne ne révoque rien.
+9. Direction → Automatisations : interrupteur par entreprise pour les relances et l'expiration (l'envoi initial reste toujours manuel).
+10. Isolation : lien lié à une société et à une intervention ; un jeton falsifié, d'une autre société ou d'un devis n'ouvre rien ; les photos non cochées ne sont pas accessibles même avec un lien valide.
+11. L'ancien envoi direct par e-mail (« Envoyer le rapport par Email ») est supprimé : la route répond 410.
+
+Base de données : migration `20261114120000_rapport_client_lien_securise` (tables `rapport_documents`, `rapport_liens_client`, colonnes d'envoi/relances sur `interventions`, interrupteur `companies.autoRapportActif`).
+
 ## Un même e-mail dans plusieurs entreprises
 
 Un compte = **e-mail + entreprise**. La même adresse peut avoir un compte dans « Sirène » et un autre dans « Sirette » : deux comptes distincts, avec chacun son mot de passe, son rôle et ses données. Rien n'est partagé entre les deux.

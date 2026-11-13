@@ -8,6 +8,8 @@ export const STATUS_TONE: Record<string, 'slate' | 'blue' | 'green' | 'amber' | 
   'À préparer': 'slate',
   'Envoyé': 'blue',
   'Envoyé au client': 'blue',
+  'Validé par le client': 'green',
+  'Réserves client': 'amber',
   'À valider en interne': 'amber',
   'En préparation': 'slate',
   'Expiré': 'slate',

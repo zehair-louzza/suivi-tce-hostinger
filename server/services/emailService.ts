@@ -1408,3 +1408,55 @@ export async function sendDevisClientLinkEmail(params: {
     recipientName: params.devis.client,
   });
 }
+
+/**
+ * E-mail au CLIENT : lien sécurisé vers le rapport d'intervention (envoi initial ou relance J+3 / J+7).
+ * Part de la boîte mail de la société si elle est configurée ; jamais vers un service de prévisualisation tiers.
+ */
+export async function sendRapportClientLinkEmail(params: {
+  companyId: number;
+  companyName: string;
+  toEmail: string;
+  replyTo?: string;
+  rapport: { reference: string; client?: string | null; chantier?: string | null; siteAdresse?: string | null };
+  lien: string;
+  expireLe: Date;
+  relance?: 'J3' | 'J7' | null;
+}): Promise<EmailDeliveryResult> {
+  const ref = params.rapport.reference;
+  const expire = params.expireLe.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: 'long', year: 'numeric' });
+  const rappel = params.relance
+    ? `Nous revenons vers vous au sujet du rapport d'intervention ${ref}, qui attend toujours votre réponse.`
+    : `Veuillez trouver le rapport de notre intervention ${ref}.`;
+  const subject = params.relance
+    ? `Rappel — rapport d'intervention ${ref} en attente de votre réponse (${params.companyName})`
+    : `Rapport d'intervention ${ref} — ${params.companyName}`;
+  const lignes = [
+    params.rapport.chantier ? `Intervention : ${params.rapport.chantier}` : '',
+    params.rapport.siteAdresse ? `Site : ${params.rapport.siteAdresse}` : '',
+    `Ce lien est personnel et valable jusqu'au ${expire}.`,
+  ].filter(Boolean);
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#0f172a;padding:20px;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;">
+    <h2 style="margin-top:0;">${esc(params.relance ? 'Rappel : rapport en attente' : 'Votre rapport d\'intervention')} ${esc(ref)}</h2>
+    <p>Bonjour,</p>
+    <p>${esc(rappel)}</p>
+    ${lignes.map((l) => `<p style="margin:6px 0;color:#334155;">${esc(l)}</p>`).join('')}
+    <p style="margin:22px 0;"><a href="${esc(params.lien)}" style="display:inline-block;background:#00bf63;color:#fff;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:10px;">Consulter et répondre au rapport</a></p>
+    <p style="font-size:13px;color:#475569;">Vous pourrez valider le rapport ou émettre des réserves. Sans réponse de votre part, le rapport n'est pas considéré comme validé.</p>
+    <p style="font-size:12px;color:#64748b;">Envoyé par ${esc(params.companyName)}. Si vous n'êtes pas concerné par ce message, vous pouvez l'ignorer.</p>
+  </div></body></html>`;
+  const text = `Bonjour,\n\n${rappel}\n${lignes.join('\n')}\n\nConsulter et répondre : ${params.lien}\n\nSans réponse de votre part, le rapport n'est pas considéré comme validé.\n\n${params.companyName}`;
+  return dispatchEmailWithFallback({
+    type: 'RAPPORT_INTERVENTION',
+    companyId: params.companyId,
+    companyName: params.companyName,
+    toEmail: params.toEmail,
+    replyTo: params.replyTo,
+    subject,
+    html,
+    text,
+    recipientName: params.rapport.client || undefined,
+  });
+}
