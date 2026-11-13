@@ -82,6 +82,7 @@ const row = (table: string, id: number) => db[table].rows.find((r: any) => r.id 
 const notifsDe = (userId: number) => db.notification.rows.filter((n: any) => n.userId === userId);
 // Lundi 16 novembre 2026, heure de Paris (UTC+1)
 const lundi = (h: number, m = 0) => new Date(Date.UTC(2026, 10, 16, h - 1, m));
+const dimanche = (h: number, m = 0) => new Date(Date.UTC(2026, 10, 15, h - 1, m));
 
 test('affectation : le planificateur désigne Karim → attente de réponse + notification à Karim seulement', async () => {
   const r = await call(PLANIF, 'PATCH', '/api/interventions/1', { entreprise: 'Karim' });
@@ -153,14 +154,13 @@ test('démarrer la mission vaut acceptation', async () => {
   assert.match(row('intervention', 4).historiqueJson, /Automatique — mission acceptée/);
 });
 
-test('RELANCE : à 15 min une relance, 5 min plus tard une alerte au planificateur ET à la direction, jamais deux fois, jamais la nuit', async () => {
+test('RELANCE : à 15 min une relance, 5 min plus tard une alerte au planificateur ET à la direction, jamais deux fois', async () => {
   const comp = { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: true };
   db.intervention.rows.push(intv(20, {
     entreprise: 'Karim', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(9), company: comp,
   }));
   const avant = notifsDe(KARIM).length;
   assert.deepEqual(await executer(lundi(9, 10)), { relances: 0, alertes: 0 });
-  assert.deepEqual(await executer(lundi(21, 0)), { relances: 0, alertes: 0 }, 'pas la nuit');
   assert.deepEqual(await executer(lundi(9, 16)), { relances: 1, alertes: 0 });
   assert.equal(notifsDe(KARIM).length, avant + 1);
   assert.match(row('intervention', 20).historiqueJson, /Automatique — relance du technicien/);
@@ -174,13 +174,24 @@ test('RELANCE : à 15 min une relance, 5 min plus tard une alerte au planificate
   assert.deepEqual(await executer(lundi(17, 0)), { relances: 0, alertes: 0 }, 'une seule alerte');
 });
 
-test('heures de bureau désactivées : la relance part aussi la nuit', async () => {
+test('la nuit : la relance part aussi (seul le dimanche est exclu)', async () => {
   db.intervention.rows.push(intv(22, {
     entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: lundi(21, 0),
-    company: { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: false },
+    company: { active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: true },
   }));
   assert.deepEqual(await executer(lundi(21, 20)), { relances: 1, alertes: 0 });
   assert.ok(notifsDe(SOFIA).some((n: any) => n.type === 'RELANCE_TECHNICIEN'));
+});
+
+test('dimanche : rien ne part, sauf si la société a désactivé cette restriction', async () => {
+  const comp = (pasLeDimanche: boolean) => ({ active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: pasLeDimanche });
+  db.intervention.rows.push(intv(23, {
+    entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: dimanche(9), company: comp(true),
+  }));
+  assert.deepEqual(await executer(dimanche(10)), { relances: 0, alertes: 0 });
+  row('intervention', 23).company = comp(false);
+  assert.deepEqual(await executer(dimanche(10)), { relances: 1, alertes: 0 });
+  row('intervention', 23).reponseTechnicien = 'ACCEPTEE'; // referme l'attente pour les tests suivants
 });
 
 test('réglage société : automatisation désactivée → aucune attente ouverte, aucune relance', async () => {

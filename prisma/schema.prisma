@@ -27,7 +27,7 @@ model Company {
   autoTechnicienDelaiMinutes Int            @default(15)
   /// Délai entre la relance du technicien et l'alerte au planificateur / à la direction (minutes)
   autoTechnicienAlerteMinutes Int           @default(5)
-  /// Relances limitées aux heures de bureau (lun–sam, 8 h–19 h, heure de Paris)
+  /// Pas de relance ni d'alerte le dimanche (jour et nuit les autres jours, heure de Paris). Nom historique de colonne.
   autoTechnicienHeuresBureau Boolean        @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt

@@ -5,7 +5,7 @@
 //   affectation → EN_ATTENTE → (ACCEPTEE | REFUSEE)
 //   EN_ATTENTE sans réponse : relance après `delaiMinutes` (15 min par défaut), puis alerte au planificateur
 //   et à la direction `delaiAlerteMinutes` après la relance (5 min par défaut). Par défaut, les relances
-//   ne partent que pendant les heures de bureau (réglable par société).
+//   partent jour et nuit, sauf le dimanche (réglable par société).
 
 export type ReponseTechnicien = 'EN_ATTENTE' | 'ACCEPTEE' | 'REFUSEE';
 
@@ -13,9 +13,6 @@ export const DELAI_RELANCE_DEFAUT_MIN = 15;
 export const DELAI_RELANCE_MIN = 5;
 export const DELAI_ALERTE_DEFAUT_MIN = 5;
 export const DELAI_RELANCE_MAX = 24 * 60;
-
-/** Heures de bureau (heure de Paris) : du lundi au samedi, de 8 h à 19 h. */
-export const HEURES_BUREAU = { debut: 8, fin: 19 } as const;
 
 /** Délai valide en minutes (entier borné), sinon valeur par défaut. */
 export function normaliserDelai(valeur: unknown): number {
@@ -57,10 +54,9 @@ function partiesParis(date: Date): { jour: number; heure: number } {
   return { jour: jours[wd] ?? 1, heure: h };
 }
 
-export function dansHeuresBureau(date: Date): boolean {
-  const { jour, heure } = partiesParis(date);
-  if (jour === 0) return false;
-  return heure >= HEURES_BUREAU.debut && heure < HEURES_BUREAU.fin;
+/** Relances et alertes : jour et nuit, du lundi au samedi (jamais le dimanche, heure de Paris). */
+export function envoiAutorise(date: Date): boolean {
+  return partiesParis(date).jour !== 0;
 }
 
 export type EtatRelance = {
@@ -72,15 +68,15 @@ export type EtatRelance = {
   delaiMinutes: number;
   /** Délai entre la relance et l'alerte (défaut : 5 min). */
   delaiAlerteMinutes?: number;
-  /** Relances limitées aux heures de bureau (défaut : oui). */
-  heuresBureauSeulement?: boolean;
+  /** Aucune relance ni alerte le dimanche (défaut : oui). */
+  pasLeDimanche?: boolean;
 };
 
 export type ActionRelance = 'aucune' | 'relancer_technicien' | 'alerter_planificateur';
 
 /**
  * Décide la prochaine action automatique pour une affectation en attente.
- *  - rien si la réponse est donnée, ou hors heures de bureau ;
+ *  - rien si la réponse est donnée, ou si on est dimanche (sauf réglage contraire) ;
  *  - relance du technicien après `delaiMinutes` sans réponse ;
  *  - alerte au planificateur et à la direction `delaiAlerteMinutes` après la relance, si toujours sans réponse.
  * Chaque étape n'est déclenchée qu'une fois (relanceLe / alerteLe servent de verrou).
@@ -88,7 +84,7 @@ export type ActionRelance = 'aucune' | 'relancer_technicien' | 'alerter_planific
 export function prochaineAction(e: EtatRelance): ActionRelance {
   if (e.reponse !== 'EN_ATTENTE') return 'aucune';
   if (!e.affecteLe) return 'aucune';
-  if (e.heuresBureauSeulement !== false && !dansHeuresBureau(e.maintenant)) return 'aucune';
+  if (e.pasLeDimanche !== false && !envoiAutorise(e.maintenant)) return 'aucune';
   const delaiMs = normaliserDelai(e.delaiMinutes) * 60_000;
   const delaiAlerteMs = normaliserDelaiAlerte(e.delaiAlerteMinutes) * 60_000;
   const now = e.maintenant.getTime();

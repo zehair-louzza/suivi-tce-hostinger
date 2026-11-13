@@ -179,7 +179,7 @@ function AutomationsPanel() {
           onChange={(e) => mut.mutate({ autoTechnicienHeuresBureau: e.target.checked })}
           data-testid="auto-technicien-heures"
         />
-        Envoyer les relances et alertes uniquement du lundi au samedi, de 8 h à 19 h (heure de Paris)
+        Ne jamais envoyer de relance ni d'alerte le dimanche (jour et nuit les autres jours, heure de Paris)
       </label>
       <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
         Le technicien est prévenu et relancé uniquement dans l'application (cloche), sans e-mail. Le planificateur et la direction reçoivent l'alerte dans l'application et par e-mail.

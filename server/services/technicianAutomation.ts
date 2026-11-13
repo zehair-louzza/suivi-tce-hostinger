@@ -214,7 +214,7 @@ export async function executerAutomatisationsTechnicien(maintenant: Date = new D
         maintenant,
         delaiMinutes: i.company?.autoTechnicienDelaiMinutes,
         delaiAlerteMinutes: i.company?.autoTechnicienAlerteMinutes,
-        heuresBureauSeulement: i.company?.autoTechnicienHeuresBureau !== false,
+        pasLeDimanche: i.company?.autoTechnicienHeuresBureau !== false,
       });
       if (action === 'aucune') continue;
 
