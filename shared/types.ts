@@ -1262,15 +1262,15 @@ export interface RoleDefinition {
 export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   ADMIN: {
     code: 'ADMIN',
-    label: 'Super-Administrateur / Direction',
+    label: 'Direction (administrateur de la société)',
     badgeColor: '#dc2626',
     summary:
-      'Contrôle intégral : gestion des utilisateurs et permissions, référentiels, compétences métier, chiffrage devis HT, planning Gantt, rapports et facturation.',
+      'Dirige sa société et elle seule : comptes et droits de ses collaborateurs, paramètres, validation avant facturation, facturation et rentabilité. Aucun accès aux autres sociétés.',
     keyResponsibilities: [
-      'Créer et désigner les utilisateurs avec attribution granulaire des droits de modification',
-      'Configurer les compétences métier des techniciens et les référentiels ANELEC',
-      'Superviser les pointages journaliers (arrivée bureau matin / fin dernière intervention soir)',
-      'Valider et modifier sans restriction les Devis (22 col.), Interventions (23 col.), Rapports et Factures',
+      'Créer les comptes de sa société et leur attribuer un profil (les droits restent bornés par le profil)',
+      'Configurer les techniciens, compétences et paramètres métier de sa société',
+      'Trier les demandes entrantes (accepter, refuser, orienter) et superviser les pointages',
+      'Valider les rapports terminés, suivre la facturation et la rentabilité',
     ],
     defaultPermissions: {
       canManageUsers: true,
@@ -1289,15 +1289,15 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
   CHIFFRAGE_DEVIS: {
     code: 'CHIFFRAGE_DEVIS',
-    label: 'Chargé d’Études & Chiffrage Devis',
+    label: 'Chargé d’études (chiffrage)',
     badgeColor: '#2563eb',
     summary:
-      'Spécialiste du pipeline Devis et du chiffrage : exploite les relevés techniques, métrés et photos des visites techniciens pour chiffrer et convertir les devis.',
+      'Prépare et chiffre les devis. Ne voit des interventions que celles liées à ses devis ou à ses visites de chiffrage ; l’exécution des travaux ne le concerne pas.',
     keyResponsibilities: [
-      'Créer, chiffrer (Montants HT, validité) et suivre les relances des Devis (22 colonnes)',
-      'Déclencher des demandes de Visite Technique Devis et consulter les éléments de chiffrage & photos terrain',
-      'Convertir les Devis acceptés en Interventions opérationnelles',
-      'Consulter le planning pour coordonner les visites de chiffrage',
+      'Créer, chiffrer (montants HT, validité) et envoyer les devis, puis suivre leurs relances',
+      'Planifier ses visites de chiffrage et consulter les relevés et photos de ces visites',
+      'Transformer un devis accepté en intervention',
+      'Jamais : planning des équipes, rapports, facturation, comptes et droits',
     ],
     defaultPermissions: {
       canManageUsers: false,
@@ -1316,15 +1316,15 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
   CONDUCTEUR_TRAVAUX: {
     code: 'CONDUCTEUR_TRAVAUX',
-    label: 'Conducteur de Travaux / Dispatcher',
+    label: 'Conducteur de travaux',
     badgeColor: '#7c3aed',
     summary:
-      'Pilote opérationnel du Planning Gantt et des équipes terrain : affecte les missions selon les compétences, suit les pointages et débloque les chantiers.',
+      'Pilote l’exécution : planifie et affecte les techniciens, suit le terrain, débloque les retards et clôture les interventions terminées. Voit les montants en lecture, sans chiffrer ni facturer.',
     keyResponsibilities: [
-      'Gérer le Planning Gantt, l’auto-planification par moindre compétence et la Bourse de Dispatch',
-      'Créer et modifier les fiches Interventions (23 colonnes), affecter les techniciens et gérer les urgences',
-      'Suivre en direct l’activation/désactivation des missions et les pointages matin/soir des techniciens',
-      'Valider techniquement les travaux réalisés avant rédaction du rapport final',
+      'Planifier, affecter et replanifier les interventions (planning Gantt, auto-planification par compétence)',
+      'Créer et modifier les fiches d’intervention, sauf la partie facturation',
+      'Suivre les missions et les pointages des techniciens, débloquer les interventions en retard',
+      'Clôturer une intervention terminée. Jamais : chiffrage des devis, facturation, comptes et droits',
     ],
     defaultPermissions: {
       canManageUsers: false,
@@ -1343,15 +1343,15 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
   REDACTEUR_RAPPORTS: {
     code: 'REDACTEUR_RAPPORTS',
-    label: 'Chargé de Rapports, Qualité & Facturation',
+    label: 'Rapports et facturation',
     badgeColor: '#059669',
     summary:
-      'Exploite les déclarations terrain des techniciens (comptes rendus, actions pré-remplies, photos, horaires réels) pour rédiger les rapports officiels et facturer.',
+      'Transforme les déclarations du terrain en rapports officiels, puis renseigne la facturation des interventions clôturées. Ne touche ni au planning ni aux devis.',
     keyResponsibilities: [
-      'Réceptionner les déclarations terrain des techniciens (actions cochées, observations, photos Avant/Après)',
-      'Rédiger, mettre en forme et valider le Rapport Final d’Intervention pour le client / donneur d’ordre',
-      'Clôturer les interventions validées et renseigner le numéro et statut de Facturation',
-      'Contrôler la complétude documentaire (photos, résultat technique, levée de réserves)',
+      'Relire les comptes rendus et photos des techniciens, rédiger et valider le rapport final',
+      'Clôturer les rapports validés et envoyer le rapport au client',
+      'Renseigner le numéro et le statut de facture des interventions clôturées',
+      'Jamais : planning, affectations, devis et chiffrage, comptes et droits',
     ],
     defaultPermissions: {
       canManageUsers: false,
@@ -1370,15 +1370,15 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
   TECHNICIEN: {
     code: 'TECHNICIEN',
-    label: 'Technicien Terrain (App Mobile Dédiée)',
+    label: 'Technicien (sur ses propres missions)',
     badgeColor: '#d97706',
     summary:
-      'Interface mobile dédiée : pointage arrivée bureau matin / fin de journée soir, activation/désactivation des interventions & visites devis, actions pré-remplies et photos.',
+      'Application mobile dédiée : ne voit que SES missions, sans montants, sans facturation ni historique. Pointe, démarre et termine ses interventions, renseigne son compte rendu et ses photos.',
     keyResponsibilities: [
-      'Activer son heure d’arrivée au bureau chaque matin et désactiver sa journée le soir après la dernière intervention',
-      'Activer (Démarrer) et Désactiver (Terminer) chaque intervention ou visite de devis en temps réel',
-      'Remplir les petits comptes rendus avec actions pré-remplies en 1 clic + éléments utiles au chiffrage',
-      'Prendre ou joindre des photos (Avant / Après / Relevé pour devis) directement depuis son smartphone',
+      'Pointer son arrivée le matin et la fin de sa journée le soir',
+      'Démarrer et terminer ses interventions et ses visites de chiffrage en temps réel',
+      'Remplir son compte rendu (actions pré-remplies) et joindre ses photos Avant / Après / Relevé',
+      'Jamais : les missions des autres, les montants, la facturation, le planning',
     ],
     defaultPermissions: {
       canManageUsers: false,
@@ -1404,7 +1404,8 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
 const NEVER_FOR_NON_ADMIN: (keyof UserPermissions)[] = ['canManageUsers', 'canDeleteRecords'];
 
 export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[]> = {
-  ADMIN: [],
+  // La direction ne peut pas être réduite à l'interface mobile (elle se verrouillerait hors de l'application)
+  ADMIN: ['mobileOnly'],
   CHIFFRAGE_DEVIS: [
     ...NEVER_FOR_NON_ADMIN,
     'canManageBilling',
@@ -1431,6 +1432,15 @@ export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[
     'canWriteReports',
     'canManageBilling',
   ],
+};
+
+/** Profil (espace de travail) correspondant à chaque rôle — pour afficher périmètre et limites côté administration. */
+export const ROLE_ESPACE: Record<string, EspaceRole> = {
+  ADMIN: 'direction',
+  CHIFFRAGE_DEVIS: 'chiffrage',
+  CONDUCTEUR_TRAVAUX: 'travaux',
+  REDACTEUR_RAPPORTS: 'rapports',
+  TECHNICIEN: 'terrain',
 };
 
 /** Ce droit peut-il être accordé à ce rôle ? (utilisé par l'écran d'administration pour griser les cases) */

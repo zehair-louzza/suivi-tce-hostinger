@@ -96,7 +96,7 @@ adminRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
-      throw new AppError(403, 'Accès réservé exclusivement au Super-Administrateur', 'FORBIDDEN');
+      throw new AppError(403, 'Accès réservé à la direction de la société', 'FORBIDDEN');
     }
 
     const where = { companyId: tenantOf(caller) };
@@ -118,7 +118,7 @@ adminRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
-      throw new AppError(403, 'Action réservée exclusivement au Super-Administrateur', 'FORBIDDEN');
+      throw new AppError(403, 'Action réservée à la direction de la société', 'FORBIDDEN');
     }
 
     const { email, password, name, role, technicienNom, permissions } = req.body || {};
@@ -180,7 +180,7 @@ adminRouter.put(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
-      throw new AppError(403, 'Modification des droits réservée au Super-Administrateur', 'FORBIDDEN');
+      throw new AppError(403, 'Modification des droits réservée à la direction de la société', 'FORBIDDEN');
     }
 
     const id = parseInt(req.params.id, 10);
@@ -245,12 +245,12 @@ adminRouter.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
-      throw new AppError(403, 'Suppression réservée au Super-Administrateur', 'FORBIDDEN');
+      throw new AppError(403, 'Suppression réservée à la direction de la société', 'FORBIDDEN');
     }
 
     const id = parseInt(req.params.id, 10);
     if (id === 1 || id === req.user?.userId) {
-      throw new AppError(400, 'Impossible de supprimer le compte Super-Administrateur principal', 'FORBIDDEN');
+      throw new AppError(400, 'Impossible de supprimer le compte fondateur de la société', 'FORBIDDEN');
     }
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) {

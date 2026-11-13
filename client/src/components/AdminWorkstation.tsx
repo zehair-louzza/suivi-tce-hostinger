@@ -20,6 +20,7 @@ import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
 import { useAuth } from '../stores/authStore';
 import { AppearancePanel } from './AppearancePanel';
 import { ProAlertIcon, ProFileTextIcon, ProMailIcon } from './ProIcons';
+import { ROLE_ESPACE, ROLE_PERIMETRE, canUserAccessSection } from '../../../shared/types';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -94,6 +95,7 @@ const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: str
   { key: 'canManageUsers', label: 'Workstation Admin', short: 'Admin', color: '#ef4444' },
   { key: 'canEditDevis', label: 'Devis', short: 'Devis', color: '#0284c7' },
   { key: 'canViewFinancials', label: 'Chiffrage HT', short: 'Chiffrage', color: '#0284c7' },
+  { key: 'canConvertDevis', label: 'Conversion devis → intervention', short: 'Conversion', color: '#0ea5e9' },
   { key: 'canEditPlanning', label: 'Planning Gantt', short: 'Planning', color: '#8b5cf6' },
   { key: 'canEditInterventions', label: 'Interventions', short: 'Interv.', color: '#10b981' },
   { key: 'canWriteReports', label: 'Rapports', short: 'Rapports', color: '#10b981' },
@@ -101,6 +103,70 @@ const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: str
   { key: 'canManageReferentiels', label: 'Référentiels', short: 'Référentiels', color: '#6366f1' },
   { key: 'mobileOnly', label: 'App Mobile', short: 'Mobile', color: '#64748b' },
 ];
+
+const MATRIX_SECTIONS: { id: any; label: string }[] = [
+  { id: 'aujourdhui', label: 'Mon travail / Tableau de bord' },
+  { id: 'demandes', label: 'Demandes reçues' },
+  { id: 'planning', label: 'Planning' },
+  { id: 'devis', label: 'Devis' },
+  { id: 'interventions', label: 'Interventions' },
+  { id: 'carte', label: 'Carte et tournées' },
+  { id: 'facturation', label: 'Facturation' },
+  { id: 'rentabilite', label: 'Comptabilité & équipe' },
+  { id: 'clients', label: 'Profils & donneurs d’ordre' },
+  { id: 'referentiels', label: 'Paramètres métier' },
+  { id: 'admin', label: 'Utilisateurs et accès' },
+  { id: 'mobile_tech', label: 'App mobile technicien' },
+];
+
+/** Tableau « qui voit quoi » : calculé avec les mêmes règles que le menu réel, sur les droits par défaut de chaque profil. */
+function RolesMatrix() {
+  const roles = Object.values(ROLE_DEFINITIONS);
+  const fakeUser = (code: string): any => ({
+    id: 999,
+    role: code,
+    name: 'x',
+    technicienNom: code === 'TECHNICIEN' ? 'x' : null,
+    permissions: getEffectivePermissions(code, null),
+  });
+  return (
+    <div className="pro-table-container pro-table-scroll" style={{ overflowX: 'auto' }} data-testid="roles-matrix">
+      <table className="pro-table" style={{ width: '100%', minWidth: '640px' }}>
+        <thead>
+          <tr>
+            <th>Écran du menu</th>
+            {roles.map((r) => (
+              <th key={r.code} style={{ textAlign: 'center', color: r.badgeColor }}>{r.label.split('(')[0].trim()}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {MATRIX_SECTIONS.map((sec) => (
+            <tr key={sec.id}>
+              <td style={{ fontSize: '12px', fontWeight: 600 }}>{sec.label}</td>
+              {roles.map((r) => {
+                const ok = canUserAccessSection(sec.id, fakeUser(r.code));
+                return (
+                  <td key={r.code} style={{ textAlign: 'center', color: ok ? '#059669' : '#cbd5e1', fontWeight: 700 }}>
+                    {ok ? '✓' : '—'}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '8px 12px 10px' }}>
+        Droits par défaut de chaque profil. Les réglages individuels peuvent retirer un accès, jamais dépasser le plafond du profil.
+      </p>
+    </div>
+  );
+}
+
+/** Droits réellement appliqués à un utilisateur : ses réglages, bornés par le plafond de son profil. */
+function effectivePermsOf(u: User): UserPermissions {
+  return getEffectivePermissions(u.role, u.permissions ? JSON.stringify(u.permissions) : null);
+}
 
 export function AdminWorkstation({
   techniciens,
@@ -370,7 +436,11 @@ export function AdminWorkstation({
 
   const handleToggleSinglePermission = async (u: User, permKey: keyof UserPermissions, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const current = u.permissions || getEffectivePermissions(u.role, null);
+    if (!isPermissionAllowedForRole(u.role, permKey)) {
+      toast.error(`Ce droit ne peut pas être accordé au profil « ${ROLE_DEFINITIONS[u.role]?.label || u.role} ».`);
+      return;
+    }
+    const current = effectivePermsOf(u);
     const updated = { ...current, [permKey]: !current[permKey] };
     try {
       await updateUserMut.mutateAsync({
@@ -379,7 +449,7 @@ export function AdminWorkstation({
           permissions: updated,
         },
       });
-      toast.success(`Droit « ${permKey} » mis à jour pour ${u.name}`);
+      toast.success(`Droit « ${PERMISSION_LABELS.find((x) => x.key === permKey)?.label || permKey} » mis à jour pour ${u.name}`);
     } catch {
       toast.error('Erreur mise à jour droit');
     }
@@ -390,7 +460,7 @@ export function AdminWorkstation({
     setEditRole(u.role);
     setEditTechNom(u.technicienNom || '');
     setEditPassword('');
-    setEditPerms(u.permissions || getEffectivePermissions(u.role, null));
+    setEditPerms(effectivePermsOf(u));
   };
 
   const buildAutoReportFromDeclaration = (intv: Intervention): string => {
@@ -614,8 +684,8 @@ export function AdminWorkstation({
               </thead>
               <tbody>
                 {users.map((u) => {
-                  const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.ADMIN;
-                  const perms = u.permissions || getEffectivePermissions(u.role, null);
+                  const roleDef = ROLE_DEFINITIONS[u.role];
+                  const perms = effectivePermsOf(u);
 
                   return (
                     <tr key={u.id}>
@@ -665,29 +735,36 @@ export function AdminWorkstation({
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '420px' }}>
                           {INTERACTIVE_PERMS.map((p) => {
-                            const isGranted = Boolean(perms[p.key]);
+                            const allowed = isPermissionAllowedForRole(u.role, p.key);
+                            const isGranted = allowed && Boolean(perms[p.key]);
                             return (
                               <button
                                 key={p.key}
                                 type="button"
+                                disabled={!allowed}
+                                data-locked={!allowed ? 'true' : undefined}
                                 onClick={(e) => handleToggleSinglePermission(u, p.key, e)}
-                                title={`Cliquer pour ${isGranted ? 'retirer' : 'attribuer'} le droit : ${p.label}`}
+                                title={
+                                  allowed
+                                    ? `Cliquer pour ${isGranted ? 'retirer' : 'attribuer'} le droit : ${p.label}`
+                                    : `Droit non attribuable au profil « ${roleDef?.label || u.role} » : ${p.label}`
+                                }
                                 style={{
-                                  border: isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
-                                  background: isGranted ? `${p.color}15` : '#f8fafc',
-                                  color: isGranted ? p.color : '#94a3b8',
+                                  border: !allowed ? '1px solid #e2e8f0' : isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
+                                  background: !allowed ? '#f1f5f9' : isGranted ? `${p.color}15` : '#f8fafc',
+                                  color: !allowed ? '#b6c0cc' : isGranted ? p.color : '#94a3b8',
                                   borderRadius: '6px',
                                   padding: '2px 6px',
                                   fontSize: '10.5px',
                                   fontWeight: isGranted ? 700 : 500,
-                                  cursor: 'pointer',
+                                  cursor: allowed ? 'pointer' : 'not-allowed',
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '3px',
                                   transition: 'all 0.15s ease',
                                 }}
                               >
-                                <span>{isGranted ? '✓' : '+'}</span>
+                                <span>{!allowed ? '🔒' : isGranted ? '✓' : '+'}</span>
                                 <span>{p.short}</span>
                               </button>
                             );
@@ -757,8 +834,8 @@ export function AdminWorkstation({
           {/* Cartes Mobile Utilisateurs Admin */}
           <div className="mobile-only-block mobile-card-grid" style={{ width: '100%', maxWidth: '100%' }}>
             {users.map((u) => {
-              const roleDef = ROLE_DEFINITIONS[u.role] || ROLE_DEFINITIONS.ADMIN;
-              const perms = u.permissions || getEffectivePermissions(u.role, null);
+              const roleDef = ROLE_DEFINITIONS[u.role];
+              const perms = effectivePermsOf(u);
               const activePermCount = Object.entries(perms).filter(
                 ([k, v]) => k !== 'mobileOnly' && Boolean(v)
               ).length;
@@ -799,28 +876,30 @@ export function AdminWorkstation({
                   {/* Boutons d'activation directe des droits sur mobile */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
                     {INTERACTIVE_PERMS.map((p) => {
-                      const isGranted = Boolean(perms[p.key]);
+                      const allowed = isPermissionAllowedForRole(u.role, p.key);
+                      const isGranted = allowed && Boolean(perms[p.key]);
                       return (
                         <button
                           key={p.key}
                           type="button"
+                          disabled={!allowed}
                           onClick={(e) => handleToggleSinglePermission(u, p.key, e)}
-                          title={`Cliquer pour ${isGranted ? 'désactiver' : 'activer'} ${p.label}`}
+                          title={allowed ? `Cliquer pour ${isGranted ? 'désactiver' : 'activer'} ${p.label}` : `Droit non attribuable à ce profil : ${p.label}`}
                           style={{
-                            border: isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
-                            background: isGranted ? `${p.color}15` : '#f8fafc',
-                            color: isGranted ? p.color : '#94a3b8',
+                            border: !allowed ? '1px solid #e2e8f0' : isGranted ? `1px solid ${p.color}60` : '1px dashed #cbd5e1',
+                            background: !allowed ? '#f1f5f9' : isGranted ? `${p.color}15` : '#f8fafc',
+                            color: !allowed ? '#b6c0cc' : isGranted ? p.color : '#94a3b8',
                             borderRadius: '6px',
                             padding: '3px 7px',
                             fontSize: '10.5px',
                             fontWeight: isGranted ? 700 : 500,
-                            cursor: 'pointer',
+                            cursor: allowed ? 'pointer' : 'not-allowed',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '3px',
                           }}
                         >
-                          <span>{isGranted ? '✓' : '+'}</span>
+                          <span>{!allowed ? '🔒' : isGranted ? '✓' : '+'}</span>
                           <span>{p.short}</span>
                         </button>
                       );
@@ -994,7 +1073,9 @@ export function AdminWorkstation({
           SOUS-ONGLET 2 : DÉFINITION COMPLÈTE DES RÔLES & DROITS PAR INTERVENANT
          ===================================================================== */}
       {subTab === 'roles_guide' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', maxWidth: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '100%' }}>
+        <RolesMatrix />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px', maxWidth: '100%' }}>
           {Object.values(ROLE_DEFINITIONS).map((r) => (
             <div
               key={r.code}
@@ -1040,23 +1121,50 @@ export function AdminWorkstation({
                 ))}
               </ul>
 
-              <div style={{ marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {ROLE_ESPACE[r.code] && (
+                <>
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+                    Ce profil valide :
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {ROLE_PERIMETRE[ROLE_ESPACE[r.code]].vousValidez.map((t, idx) => (
+                      <li key={idx} style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{t}</li>
+                    ))}
+                  </ul>
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
+                    Hors de son périmètre :
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {ROLE_PERIMETRE[ROLE_ESPACE[r.code]].horsPerimetre.map((t, idx) => (
+                      <li key={idx} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <div style={{ marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Pré-configuré dans la matrice IAM
+                  Droits non attribuables à ce profil :{' '}
+                  {(() => {
+                    const locked = PERMISSION_LABELS.filter((x) => !isPermissionAllowedForRole(r.code, x.key)).map((x) => x.label);
+                    return locked.length ? locked.join(' · ') : 'aucun';
+                  })()}
                 </span>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
+                  style={{ alignSelf: 'flex-start' }}
                   onClick={() => {
                     handleSelectRoleForCreate(r.code);
                     setShowCreateModal(true);
                   }}
                 >
-                  Créer un compte « {r.label.split('/')[0].trim()} »
+                  Créer un compte « {r.label.split('(')[0].split('/')[0].trim()} »
                 </button>
               </div>
             </div>
           ))}
+        </div>
         </div>
       )}
 
@@ -1594,7 +1702,7 @@ export function AdminWorkstation({
                 GOUVERNANCE & RÈGLES FINANCIÈRES
               </span>
               <h3 style={{ fontSize: '17px', fontWeight: 800, marginTop: '6px' }}>
-                Règles de Facturation & Clôture Comptable ANELEC
+                Règles de Facturation & Clôture Comptable
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
                 Configurez les directives appliquées par les agents de facturation pour le tri des dossiers éligibles et le traitement des créances B2B et B2C.
@@ -1617,7 +1725,7 @@ export function AdminWorkstation({
                 </strong>
               </div>
               <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.5 }}>
-                Dans le modèle de gestion TCE d'ANELEC GROUPE, un <strong>devis est une offre préalable</strong> (avec ou sans visite de repérage), tandis que la <strong>facture sanctionne des travaux réels exécutés et contrôlés</strong>. Par conséquent, les devis non convertis en intervention ne sont jamais proposés à la facturation client.
+                Dans le modèle de gestion TCE, un <strong>devis est une offre préalable</strong> (avec ou sans visite de repérage), tandis que la <strong>facture sanctionne des travaux réels exécutés et contrôlés</strong>. Par conséquent, les devis non convertis en intervention ne sont jamais proposés à la facturation client.
               </p>
             </div>
 
@@ -2306,7 +2414,7 @@ export function AdminWorkstation({
               Désigner un Nouvel Utilisateur & Configurer ses Droits
             </h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-              Sélectionnez un profil métier ANELEC puis ajustez finement ses autorisations de modification.
+              Choisissez un profil métier puis ajustez ses droits. Les droits grisés ne peuvent pas être accordés à ce profil.
             </p>
 
             <form
@@ -2346,7 +2454,7 @@ export function AdminWorkstation({
                     type="email"
                     className="input"
                     required
-                    placeholder="prenom@anelecgroupe.com"
+                    placeholder="prenom.nom@votre-entreprise.fr"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                   />
@@ -2370,7 +2478,7 @@ export function AdminWorkstation({
                   <PasswordRules password={newPassword} context={{ email: newEmail, name: newName }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Rôle Métier ANELEC *</label>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Profil métier *</label>
                   <select
                     className="select"
                     value={newRole}
@@ -2420,7 +2528,7 @@ export function AdminWorkstation({
                       title={
                         isPermissionAllowedForRole(newRole, p.key)
                           ? undefined
-                          : 'Ce droit ne peut pas être accordé à ce rôle'
+                          : 'Ce droit ne peut pas être accordé à ce profil (plafond du profil)'
                       }
                       style={{
                         display: 'flex',
@@ -2511,7 +2619,7 @@ export function AdminWorkstation({
             >
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Rôle Métier ANELEC</label>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Profil métier</label>
                   <select
                     className="select"
                     value={editRole}
@@ -2580,7 +2688,7 @@ export function AdminWorkstation({
                       title={
                         isPermissionAllowedForRole(editRole, p.key)
                           ? undefined
-                          : 'Ce droit ne peut pas être accordé à ce rôle'
+                          : 'Ce droit ne peut pas être accordé à ce profil (plafond du profil)'
                       }
                       style={{
                         display: 'flex',

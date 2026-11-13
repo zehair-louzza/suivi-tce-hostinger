@@ -264,3 +264,18 @@ test('Mon travail : un profil par rôle, avec ce qu\'il valide et ce qui est hor
     assert.ok(r.vousValidez.length > 0 && r.horsPerimetre.length > 0);
   }
 });
+
+test('fiches de rôles : droits par défaut dans le plafond, libellés sans « Super-Administrateur », périmètre pour chaque rôle', () => {
+  for (const [code, def] of Object.entries(ROLE_DEFINITIONS)) {
+    for (const [k, v] of Object.entries(def.defaultPermissions)) {
+      if (v) assert.equal(isPermissionAllowedForRole(code, k as any), true, `${code} reçoit par défaut ${k} alors que son plafond l'interdit`);
+    }
+    assert.ok(!/super/i.test(def.label), `${code} : le libellé ne doit pas parler de super-administrateur`);
+    assert.ok(ROLE_ESPACE[code], `${code} : pas d'espace de travail associé`);
+    assert.ok(def.keyResponsibilities.length >= 3);
+  }
+  // La direction ne peut pas se verrouiller hors de l'application web
+  assert.equal(isPermissionAllowedForRole('ADMIN', 'mobileOnly'), false);
+  assert.equal(getEffectivePermissions('ADMIN', JSON.stringify({ mobileOnly: true })).mobileOnly, false);
+});
+import { ROLE_DEFINITIONS, ROLE_ESPACE } from '../shared/types.js';
