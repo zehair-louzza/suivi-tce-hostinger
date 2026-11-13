@@ -549,7 +549,7 @@ export function Layout({
                 color: '#10b981',
                 fontWeight: 700,
               }}>
-                {user?.name || user?.email} · {roleLabel}
+                {user?.name || user?.email} · {roleLabel}{user?.companyName ? ` · ${user.companyName}` : ''}
               </span>
             </div>
             <button

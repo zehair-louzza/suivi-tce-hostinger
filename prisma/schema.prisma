@@ -51,7 +51,9 @@ model Company {
 
 model User {
   id                 Int                 @id @default(autoincrement())
-  email              String              @unique
+  /// Un même e-mail peut exister dans plusieurs entreprises : unicité (e-mail, entreprise) assurée par
+  /// l'index SQL users_email_companyid_key (voir migration 20261114090000), pas par Prisma.
+  email              String
   password           String
   name               String
   role               String              @default("USER")

@@ -37,3 +37,20 @@ Tests automatiques : `npm run test:roles` (vraies routes, base simulée, 2 soci�
 6. Devis modifié après envoi (montant, objet, client, site, corps d'état, TVA) ou nouveau PDF déposé → lien révoqué ; renvoyer le devis crée un nouveau lien et révoque l'ancien. Une note interne ne révoque rien.
 7. Direction → Automatisations → « Devis envoyés aux clients » : coche pour activer/désactiver les relances et l'expiration (l'envoi initial reste toujours manuel).
 8. Isolation : le lien est lié à une société et à un devis ; un jeton falsifié, ou d'une autre société, n'ouvre rien.
+
+## Un même e-mail dans plusieurs entreprises
+
+Un compte = **e-mail + entreprise**. La même adresse peut avoir un compte dans « Sirène » et un autre dans « Sirette » : deux comptes distincts, avec chacun son mot de passe, son rôle et ses données. Rien n'est partagé entre les deux.
+
+À vérifier avec une adresse qui existe dans deux entreprises :
+1. **Connexion, mots de passe différents** : le mot de passe saisi ouvre l'entreprise correspondante, directement.
+2. **Connexion, même mot de passe dans les deux** : après le mot de passe, l'écran propose la liste « nom de l'entreprise + SIRET/SIREN » ; un clic ouvre l'entreprise choisie. Un mauvais mot de passe ne montre jamais cette liste.
+3. **En-tête / menu profil** : le nom de l'entreprise s'affiche à côté du nom et du rôle.
+4. **Mot de passe oublié** : un e-mail par entreprise (chacun nomme l'entreprise) ; changer le mot de passe d'une entreprise ne change pas l'autre.
+5. **Invitation** : inviter une adresse qui a déjà un compte ailleurs fonctionne ; l'e-mail précise que ce nouvel accès est distinct. Inviter une adresse déjà présente **dans la même entreprise** est refusé.
+6. **Création d'utilisateur par la direction** : même règle (doublon refusé seulement dans sa propre entreprise).
+7. **Création d'un espace** avec une adresse déjà utilisée ailleurs : acceptée, le nouvel espace a son propre mot de passe (confirmation par code envoyé à cette adresse).
+8. **Google** : un seul compte → connexion directe ; plusieurs → même écran de choix d'entreprise.
+9. **Isolation** : connecté à Sirène, aucune donnée, aucun utilisateur ni aucune notification de Sirette n'est visible (et inversement).
+
+Base de données : l'unicité globale de `users.email` a été remplacée par une unicité (e-mail sans tenir compte de la casse, entreprise) — migration `20261114090000_utilisateur_multi_entreprises`.

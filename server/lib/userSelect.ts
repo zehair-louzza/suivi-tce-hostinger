@@ -159,3 +159,51 @@ export async function findPublicUserFirst(
   );
   return row as unknown as AuthUserRow | null;
 }
+
+// ----------------------------------------------------------------------------
+// Un même e-mail peut avoir UN compte par entreprise
+// ----------------------------------------------------------------------------
+// Un compte est identifié par le couple (e-mail, entreprise). Il n'existe donc plus de recherche
+// « par e-mail seul » qui renvoie un compte unique : on récupère la liste des comptes portant cet e-mail
+// et l'appelant choisit (mot de passe, entreprise choisie, jeton…).
+
+/** Normalise une adresse e-mail saisie (espaces, casse). */
+export function normaliserEmail(email: unknown): string {
+  return String(email ?? '').trim().toLowerCase();
+}
+
+/** Filtre « e-mail égal, sans tenir compte de la casse ». */
+export function emailEgal(email: string): { equals: string; mode: 'insensitive' } {
+  return { equals: normaliserEmail(email), mode: 'insensitive' };
+}
+
+/** Tous les comptes portant cet e-mail (un par entreprise au maximum), du plus ancien au plus récent. */
+export async function findPublicUsersByEmail(
+  email: string,
+  opts: SelectOpts & { companyId?: number | null } = {}
+): Promise<AuthUserRow[]> {
+  const where: Record<string, unknown> = { email: emailEgal(email) };
+  if (opts.companyId != null) where.companyId = opts.companyId;
+  const rows = await withThemeFallback(() =>
+    prisma.user.findMany({ where, select: buildSelect(opts), orderBy: { id: 'asc' } })
+  );
+  return rows as unknown as AuthUserRow[];
+}
+
+/** Le compte (e-mail, entreprise) s'il existe : sert aux contrôles de doublon, qui se font PAR entreprise. */
+export async function findUserInCompany(email: string, companyId: number): Promise<{ id: number } | null> {
+  return (await prisma.user.findFirst({
+    where: { email: emailEgal(email), companyId },
+    select: { id: true },
+  })) as { id: number } | null;
+}
+
+/** Entreprise telle que présentée à l'utilisateur pour choisir son compte : nom + SIREN / SIRET. */
+export function descriptionEntreprise(u: Pick<AuthUserRow, 'companyId' | 'company'>) {
+  return {
+    companyId: u.companyId,
+    nom: u.company?.name ?? 'Sans entreprise',
+    siren: u.company?.siren ?? null,
+    siret: u.company?.siret ?? null,
+  };
+}

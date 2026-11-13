@@ -14,6 +14,11 @@ import {
   basePublicUserSelect,
   findPublicUserUnique,
   findPublicUserFirst,
+  findPublicUsersByEmail,
+  findUserInCompany,
+  normaliserEmail,
+  descriptionEntreprise,
+  type AuthUserRow,
   areThemeColumnsAvailable,
   isMissingSchemaError,
 } from '../lib/userSelect.js';
@@ -97,7 +102,22 @@ function asyncHandler(handler: (req: Request, res: Response, next: NextFunction)
 const LoginSchema = z.object({
   email: z.string().email('Email invalide'),
   password: z.string().min(6, 'Mot de passe trop court'),
+  /** Entreprise choisie quand le même e-mail a un compte dans plusieurs entreprises. */
+  companyId: z.number().int().positive().optional(),
 });
+
+/** Hachage factice : on dépense le même temps de calcul quand l'e-mail est inconnu (pas d'énumération par la durée). */
+const HASH_FACTICE = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12);
+
+/** Erreur « plusieurs comptes pour cet e-mail » : l'appelant doit préciser l'entreprise. */
+function choixEntrepriseRequis(comptes: AuthUserRow[]) {
+  return new AppError(
+    409,
+    'Cette adresse e-mail a un compte dans plusieurs entreprises. Choisissez l’entreprise à ouvrir.',
+    'COMPANY_CHOICE_REQUIRED',
+    { entreprises: comptes.map(descriptionEntreprise) }
+  );
+}
 
 const RegisterSchema = z.object({
   name: z.string().min(1, 'Nom du responsable requis').max(100),
@@ -209,8 +229,9 @@ authRouter.post(
   '/register',
   asyncHandler(async (req, res) => {
     const data = RegisterSchema.parse(req.body);
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existing) throw new AppError(409, 'Cet email est déjà utilisé', 'EMAIL_EXISTS');
+    // Un même e-mail peut avoir un compte dans plusieurs entreprises : l'inscription crée TOUJOURS une nouvelle
+    // entreprise (voir plus bas), donc aucun doublon (e-mail, entreprise) n'est possible ici.
+    data.email = normaliserEmail(data.email);
 
     // Aucune entreprise par défaut : on crée TOUJOURS un espace distinct (ou on refuse). Un nom vide ou composé
     // d'espaces ne doit jamais rattacher le compte à une entreprise existante.
@@ -343,6 +364,8 @@ authRouter.post(
     });
 
     res.status(201).json({
+      companyId,
+      companyName: compName,
       message:
         delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
           ? `Un code de confirmation à 6 chiffres a été envoyé à ${data.email} depuis zehair@anelecgroupe.com. Saisissez-le pour activer votre espace entreprise.`
@@ -366,44 +389,54 @@ authRouter.post(
       throw new AppError(400, 'Adresse e-mail requise', 'EMAIL_REQUIRED');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const companyIdDemande = Number.isInteger(req.body?.companyId) ? Number(req.body.companyId) : null;
+    const comptes = await prisma.user.findMany({
+      where: { email: { equals: email, mode: 'insensitive' }, ...(companyIdDemande ? { companyId: companyIdDemande } : {}) },
       include: { company: true },
+      orderBy: { id: 'asc' },
     });
 
-    if (!user) {
+    if (comptes.length === 0) {
       throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
     }
 
-    if (user.emailConfirmed) {
+    // Un même e-mail peut avoir un compte en attente dans plusieurs entreprises : on renvoie un code POUR CHACUN,
+    // chaque e-mail nommant son entreprise (rien n'est dévoilé à l'écran, seul le propriétaire de la boîte mail les voit).
+    const enAttente = comptes.filter((c: any) => !c.emailConfirmed);
+    if (enAttente.length === 0) {
       return res.json({
         alreadyConfirmed: true,
         message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter directement.',
       });
     }
 
-    const confirmationToken = user.confirmationToken || crypto.randomBytes(32).toString('hex');
-    const confirmationCode = String(crypto.randomInt(100000, 999999));
-    const confirmationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
+    let delivery: Awaited<ReturnType<typeof sendConfirmationEmail>> | null = null;
+    for (const user of enAttente as any[]) {
+      const confirmationToken = user.confirmationToken || crypto.randomBytes(32).toString('hex');
+      const confirmationCode = String(crypto.randomInt(100000, 999999));
+      const confirmationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          confirmationToken,
+          confirmationCode,
+          confirmationCodeExpires,
+          confirmationSentAt: new Date(),
+        },
+      });
+
+      const compName = user.company?.name || 'votre entreprise';
+      delivery = await sendConfirmationEmail({
+        companyId: user.companyId,
+        toEmail: user.email,
+        recipientName: user.name,
+        companyName: compName,
         confirmationToken,
         confirmationCode,
-        confirmationCodeExpires,
-        confirmationSentAt: new Date(),
-      },
-    });
-
-    const compName = user.company?.name || 'votre entreprise';
-    const delivery = await sendConfirmationEmail({
-      companyId: user.companyId,
-      toEmail: user.email,
-      recipientName: user.name,
-      companyName: compName,
-      confirmationToken,
-      confirmationCode,
-    });
+      });
+    }
+    const user = enAttente[0] as any;
+    if (!delivery) throw new AppError(500, 'Envoi impossible', 'SEND_FAILED');
 
     return res.json({
       message:
@@ -433,24 +466,27 @@ authRouter.post(
       throw new AppError(400, 'Le code doit contenir exactement 6 chiffres', 'INVALID_CODE_FORMAT');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const companyIdDemande = Number.isInteger(req.body?.companyId) ? Number(req.body.companyId) : null;
+    const comptes: any[] = await prisma.user.findMany({
+      where: { email: { equals: email, mode: 'insensitive' }, ...(companyIdDemande ? { companyId: companyIdDemande } : {}) },
       include: { company: true },
+      orderBy: { id: 'asc' },
     });
 
-    if (!user) {
+    if (comptes.length === 0) {
       throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
     }
 
-    if (user.emailConfirmed && user.active) {
-      return res.json({
-        alreadyConfirmed: true,
-        message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter.',
-      });
-    }
-
-    // Vérifier le code
-    if (!user.confirmationCode || user.confirmationCode !== code) {
+    // Plusieurs entreprises peuvent attendre une confirmation pour le même e-mail : chaque code est propre à une
+    // entreprise, c'est donc le code saisi qui désigne le compte à activer.
+    const user = comptes.find((c) => !(c.emailConfirmed && c.active) && c.confirmationCode && c.confirmationCode === code);
+    if (!user) {
+      if (comptes.every((c) => c.emailConfirmed && c.active)) {
+        return res.json({
+          alreadyConfirmed: true,
+          message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter.',
+        });
+      }
       throw new AppError(403, 'Code de confirmation incorrect. Vérifiez le code reçu par e-mail.', 'INVALID_CODE');
     }
 
@@ -504,32 +540,35 @@ authRouter.post(
       throw new AppError(400, 'Adresse e-mail requise', 'EMAIL_REQUIRED');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Un même e-mail peut avoir un compte dans plusieurs entreprises : un lien PAR compte, chaque e-mail nommant son
+    // entreprise. Le mot de passe d'une entreprise ne modifie jamais celui d'une autre.
+    const comptes: any[] = await prisma.user.findMany({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      include: { company: { select: { name: true } } },
+      orderBy: { id: 'asc' },
     });
 
     // Réponse identique que le compte existe ou non (pas d'énumération de comptes).
     // Le lien n'est JAMAIS renvoyé dans la réponse : il part uniquement par e-mail.
     const genericMessage = `Si un compte existe pour ${email}, un e-mail de réinitialisation vient d'être envoyé.`;
-    if (!user) {
-      return res.json({ message: genericMessage, emailSent: true });
+    for (const user of comptes) {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          confirmationToken: resetToken,
+          confirmationSentAt: new Date(),
+        },
+      });
+
+      await sendPasswordResetEmail({
+        companyId: user.companyId,
+        toEmail: user.email,
+        recipientName: user.name,
+        resetToken,
+        companyName: user.company?.name ?? null,
+      });
     }
-
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        confirmationToken: resetToken,
-        confirmationSentAt: new Date(),
-      },
-    });
-
-    await sendPasswordResetEmail({
-      companyId: user.companyId,
-      toEmail: user.email,
-      recipientName: user.name,
-      resetToken,
-    });
 
     return res.json({ message: genericMessage, emailSent: true });
   })
@@ -613,11 +652,16 @@ authRouter.post(
       throw new AppError(400, 'Adresse e-mail introuvable dans le jeton Supabase', 'EMAIL_MISSING');
     }
 
-    const user = await findPublicUserUnique({ email });
-
-    if (!user) {
+    const companyIdDemande = Number.isInteger(req.body?.companyId) ? Number(req.body.companyId) : null;
+    const comptes = await findPublicUsersByEmail(email, { companyId: companyIdDemande });
+    if (comptes.length === 0) {
       throw new AppError(404, `Aucun compte trouvé pour ${email}`, 'USER_NOT_FOUND');
     }
+    // Le jeton prouve la propriété de l'e-mail ; plusieurs entreprises → on demande laquelle activer.
+    const enAttente = comptes.filter((c) => !c.emailConfirmed);
+    const candidats = enAttente.length > 0 ? enAttente : comptes;
+    if (candidats.length > 1) throw choixEntrepriseRequis(candidats);
+    const user = candidats[0];
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -646,15 +690,24 @@ authRouter.post(
   '/login',
   asyncHandler(async (req, res) => {
     const data = LoginSchema.parse(req.body);
-    const user = await findPublicUserUnique({ email: data.email }, { withPassword: true });
-
-    if (!user || !user.password || !(await bcrypt.compare(data.password, user.password))) {
+    // Un compte = (e-mail, entreprise). Le mot de passe désigne le(s) compte(s) de cet e-mail ; si plusieurs
+    // entreprises correspondent, on demande laquelle ouvrir — mais SEULEMENT après un mot de passe valide, pour ne
+    // jamais révéler à un tiers dans quelles entreprises une adresse est inscrite.
+    const comptes = await findPublicUsersByEmail(data.email, { withPassword: true, companyId: data.companyId ?? null });
+    const valides: AuthUserRow[] = [];
+    for (const c of comptes) {
+      if (c.password && (await bcrypt.compare(data.password, c.password))) valides.push(c);
+    }
+    if (comptes.length === 0) await bcrypt.compare(data.password, HASH_FACTICE);
+    if (valides.length === 0) {
       throw new AppError(401, 'Email ou mot de passe incorrect', 'INVALID_CREDENTIALS');
     }
+    if (valides.length > 1) throw choixEntrepriseRequis(valides);
+    const user = valides[0];
     if ((user as any).emailConfirmed === false && user.id !== 1) {
       throw new AppError(
         403,
-        "Votre espace entreprise est en attente d'activation. Veuillez consulter votre boîte mail (" + user.email + ") et cliquer sur le lien de confirmation envoyé par zehair@anelecgroupe.com pour accepter les conditions et activer votre compte.",
+        "Votre espace entreprise" + (user.company?.name ? ` « ${user.company.name} »` : '') + " est en attente d'activation. Veuillez consulter votre boîte mail (" + user.email + ") et cliquer sur le lien de confirmation envoyé par zehair@anelecgroupe.com pour accepter les conditions et activer votre compte.",
         'EMAIL_NOT_CONFIRMED'
       );
     }
@@ -860,9 +913,10 @@ authRouter.post(
     if (!inv) throw INVALID_INVITATION;
 
     const email = inv.email.trim().toLowerCase();
-    const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    // Doublon PAR entreprise : un compte dans une autre entreprise n'empêche pas d'accepter cette invitation.
+    const taken = await findUserInCompany(email, inv.companyId);
     if (taken) {
-      throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous.', 'EMAIL_EXISTS');
+      throw new AppError(409, `Vous avez déjà un compte dans l'entreprise ${inv.company.name}. Connectez-vous.`, 'EMAIL_EXISTS');
     }
 
     const role = (ROLE_DEFINITIONS as any)[inv.role] ? inv.role : 'CONDUCTEUR_TRAVAUX';
@@ -899,7 +953,7 @@ authRouter.post(
       });
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail. Connectez-vous.', 'EMAIL_EXISTS');
+        throw new AppError(409, `Vous avez déjà un compte dans l'entreprise ${inv.company.name}. Connectez-vous.`, 'EMAIL_EXISTS');
       }
       throw e;
     }
@@ -931,6 +985,8 @@ const GoogleAuthSchema = z.object({
   companyName: z.string().optional(),
   siretOrSiren: z.string().optional(),
   acceptTerms: z.boolean().optional(),
+  /** Entreprise choisie quand l'e-mail Google a un compte dans plusieurs entreprises. */
+  companyId: z.number().int().positive().optional(),
 });
 
 // ============================================================================
@@ -998,10 +1054,25 @@ authRouter.post(
       name = data.name.trim();
     }
 
-    // 1. L'utilisateur existe déjà : Connexion directe
-    let user = await findPublicUserUnique({ email }, { withPassword: true });
+    // Création d'un espace : demandée explicitement par la présence du nom d'entreprise. Un e-mail déjà inscrit dans
+    // une autre entreprise peut ainsi ouvrir un NOUVEL espace (compte distinct) sans être connecté à l'ancien.
+    const creationDemandee = !!(data.companyName && data.companyName.trim());
 
-    if (user) {
+    // 1. L'utilisateur existe déjà : Connexion directe (un compte par entreprise)
+    const comptes = creationDemandee ? [] : await findPublicUsersByEmail(email, { withPassword: true });
+
+    if (comptes.length > 0) {
+      let user: AuthUserRow | undefined;
+      if (data.companyId != null) {
+        user = comptes.find((c) => c.companyId === data.companyId);
+        if (!user) throw new AppError(404, 'Aucun compte Google dans cette entreprise', 'USER_NOT_FOUND');
+      } else if (comptes.length === 1) {
+        user = comptes[0];
+      } else {
+        // Plusieurs entreprises : le jeton Google prouve l'identité, l'utilisateur choisit l'entreprise à ouvrir.
+        throw choixEntrepriseRequis(comptes);
+      }
+
       if (user.active === false && user.id !== 1) {
         throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
       }

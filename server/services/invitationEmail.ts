@@ -39,6 +39,7 @@ export function buildInvitationEmail(params: InvitationEmailParams): { subject: 
   <div class="card">
     <h2 style="margin-top:0;color:#0f172a;">Vous êtes invité(e) à rejoindre ${company}</h2>
     <p><strong>${esc(params.inviterName)}</strong> vous invite à rejoindre l'espace <strong>${company}</strong> sur la plateforme ANELEC TCE avec le profil <strong>${esc(params.roleLabel)}</strong>.</p>
+    <p style="font-size:13px;">Cet accès est propre à l'entreprise <strong>${company}</strong>. Si vous utilisez déjà cette adresse e-mail dans une autre entreprise, ce compte-là reste distinct : mot de passe séparé et données séparées. À la connexion, vous choisirez l'entreprise.</p>
     <div style="text-align:center;">
       <a href="${esc(params.inviteLink)}" class="btn" target="_blank">Accepter l'invitation et créer mon accès</a>
     </div>
@@ -58,6 +59,7 @@ export function buildInvitationEmail(params: InvitationEmailParams): { subject: 
 
   const text = [
       `${params.inviterName} vous invite à rejoindre l'espace ${params.companyName} (profil : ${params.roleLabel}).`,
+      `Cet accès est propre à l'entreprise ${params.companyName}. Si vous utilisez déjà cette adresse e-mail dans une autre entreprise, ce compte-là reste distinct (mot de passe et données séparés) ; à la connexion, vous choisirez l'entreprise.`,
       `Accepter l'invitation : ${params.inviteLink}`,
       `Lien personnel valable jusqu'au ${expires}.`,
       '',

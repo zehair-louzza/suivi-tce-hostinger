@@ -10,7 +10,7 @@ import { formatPublicUser } from './auth.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { normaliserDelai, normaliserDelaiAlerte } from '../domain/technicianResponse.js';
-import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
+import { basePublicUserSelect, findUserInCompany, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
   APP_URL,
@@ -130,9 +130,10 @@ adminRouter.post(
       throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
     }
     const cleanEmail = String(email).trim().toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    // Doublon PAR entreprise : la même adresse peut avoir un compte dans une autre entreprise (compte distinct).
+    const existing = await findUserInCompany(cleanEmail, tenantOf(caller));
     if (existing) {
-      throw new AppError(409, 'Cet email est déjà attribué à un utilisateur', 'EMAIL_EXISTS');
+      throw new AppError(409, 'Cet email est déjà attribué à un utilisateur de votre entreprise', 'EMAIL_EXISTS');
     }
 
     assertStrongPassword(String(password), { email: cleanEmail, name: String(name) });
@@ -834,9 +835,10 @@ adminRouter.post(
     }
 
     const companyId = tenantOf(caller);
-    const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    // Doublon PAR entreprise : un compte dans une autre entreprise n'empêche pas l'invitation (compte distinct).
+    const existingUser = await findUserInCompany(email, companyId);
     if (existingUser) {
-      throw new AppError(409, 'Un compte existe déjà avec cette adresse e-mail', 'EMAIL_EXISTS');
+      throw new AppError(409, 'Un compte existe déjà dans votre entreprise avec cette adresse e-mail', 'EMAIL_EXISTS');
     }
 
     const pending = await prisma.companyInvitation.findMany({

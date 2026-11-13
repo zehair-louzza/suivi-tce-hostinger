@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth, useAuthStore } from '../stores/authStore';
-import { authApi } from '../lib/api';
+import { authApi, type EntrepriseChoix } from '../lib/api';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
@@ -223,6 +223,12 @@ function decodeJwtPayload(token: string): { email?: string; name?: string; pictu
   }
 }
 
+/** « 933108607 » → « 933 108 607 » ; SIRET : « 933 108 607 00021 » (lisible pour reconnaître son entreprise). */
+function formaterNumero(n: string): string {
+  const d = n.replace(/\D/g, '');
+  return d.length === 14 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}` : d.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+}
+
 export function LoginPage() {
   const { login, register, loginWithGoogle, confirmSupabaseToken } = useAuth();
   const navigate = useNavigate();
@@ -301,6 +307,11 @@ export function LoginPage() {
     )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=${Date.now()}&prompt=select_account&state=${tab}`;
   };
 
+  // Même e-mail dans plusieurs entreprises : choix du compte à ouvrir (nom + SIREN), après identification
+  const [choixEntreprise, setChoixEntreprise] = useState<{
+    entreprises: EntrepriseChoix[];
+    via: { type: 'password'; email: string; password: string } | { type: 'google'; credential: string };
+  } | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [googleOnboardingError, setGoogleOnboardingError] = useState<string | null>(null);
 
@@ -440,7 +451,8 @@ export function LoginPage() {
 
   const handleGoogleCredential = async (
     credential: string,
-    extraCompanyInfo?: { name?: string; companyName: string; siretOrSiren: string; acceptTerms: boolean }
+    extraCompanyInfo?: { name?: string; companyName: string; siretOrSiren: string; acceptTerms: boolean },
+    companyIdChoisi?: number
   ) => {
     setIsGoogleLoading(true);
     setGoogleOnboardingError(null);
@@ -451,12 +463,16 @@ export function LoginPage() {
       const termsVal = extraCompanyInfo?.acceptTerms ?? Boolean(regValues.acceptTerms);
       const userName = extraCompanyInfo?.name || regValues.name || undefined;
 
+      // Depuis l'onglet de connexion, on ne transmet JAMAIS d'infos entreprise : sinon une saisie restée dans le
+      // formulaire de création ferait créer un espace au lieu de simplement ouvrir le compte existant.
+      const creation = !!extraCompanyInfo || activeTab === 'register';
       const payload = {
         credential,
         name: userName,
-        companyName: compName.trim() || undefined,
-        siretOrSiren: siretVal.trim() || undefined,
-        acceptTerms: termsVal,
+        companyName: creation ? compName.trim() || undefined : undefined,
+        siretOrSiren: creation ? siretVal.trim() || undefined : undefined,
+        acceptTerms: creation ? termsVal : undefined,
+        ...(companyIdChoisi ? { companyId: companyIdChoisi } : {}),
       };
 
       const res = await loginWithGoogle(payload);
@@ -492,6 +508,10 @@ export function LoginPage() {
         navigate(from, { replace: true });
       }
     } catch (err: any) {
+      if (err.response?.data?.code === 'COMPANY_CHOICE_REQUIRED') {
+        setChoixEntreprise({ entreprises: err.response.data.details?.entreprises || [], via: { type: 'google', credential } });
+        return;
+      }
       const msg = err.response?.data?.error || 'Erreur lors de l’authentification Google';
       setGoogleOnboardingError(msg);
       toast.error(msg);
@@ -500,13 +520,21 @@ export function LoginPage() {
     }
   };
 
-  const onLoginSubmit = async (data: LoginForm) => {
+  const onLoginSubmit = async (data: LoginForm, companyId?: number) => {
     try {
-      await login(data.email, data.password);
+      await login(data.email, data.password, companyId);
+      setChoixEntreprise(null);
       toast.success('Connexion réussie');
       navigate(from, { replace: true });
     } catch (err: any) {
       const code = err.response?.data?.code;
+      if (code === 'COMPANY_CHOICE_REQUIRED') {
+        setChoixEntreprise({
+          entreprises: err.response.data.details?.entreprises || [],
+          via: { type: 'password', email: data.email, password: data.password },
+        });
+        return;
+      }
       const errMsg = err.response?.data?.error || 'Erreur de connexion';
       if (code === 'EMAIL_NOT_CONFIRMED') {
         setEmailConfirmationSentTo(data.email.trim());
@@ -981,7 +1009,7 @@ export function LoginPage() {
         {/* ONGLET 1 : CONNEXION */}
         {activeTab === 'login' && (
           <form
-            onSubmit={loginForm.handleSubmit(onLoginSubmit)}
+            onSubmit={loginForm.handleSubmit((d) => onLoginSubmit(d))}
             style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
             noValidate
           >
@@ -1101,6 +1129,65 @@ export function LoginPage() {
                 </p>
               )}
             </div>
+
+            {choixEntreprise && (
+              <div
+                role="group"
+                aria-label="Choisir l’entreprise"
+                data-testid="choix-entreprise"
+                style={{
+                  padding: '14px',
+                  borderRadius: '12px',
+                  border: '1.5px solid var(--color-primary, #0284c7)',
+                  background: 'var(--color-primary-soft, rgba(2,132,199,0.08))',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <strong style={{ fontSize: '13.5px' }}>Cette adresse a un compte dans plusieurs entreprises</strong>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Choisissez l’entreprise à ouvrir. Chaque entreprise est un compte distinct, avec ses propres données.
+                </span>
+                {choixEntreprise.entreprises.map((e) => (
+                  <button
+                    key={e.companyId ?? e.nom}
+                    type="button"
+                    className="btn"
+                    data-testid={`choix-entreprise-${e.companyId}`}
+                    disabled={loginForm.formState.isSubmitting || isGoogleLoading}
+                    onClick={async () => {
+                      const via = choixEntreprise.via;
+                      if (via.type === 'password') {
+                        await onLoginSubmit({ email: via.email, password: via.password }, e.companyId ?? undefined);
+                      } else {
+                        await handleGoogleCredential(via.credential, undefined, e.companyId ?? undefined);
+                      }
+                    }}
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      minHeight: '48px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, fontSize: '13.5px' }}>{e.nom}</span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      {e.siret ? `SIRET ${formaterNumero(e.siret)}` : e.siren ? `SIREN ${formaterNumero(e.siren)}` : 'SIREN non renseigné'}
+                    </span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setChoixEntreprise(null)}
+                  style={{ background: 'none', border: 'none', fontSize: '11.5px', textDecoration: 'underline', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                >
+                  Annuler
+                </button>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -1446,6 +1533,9 @@ export function LoginPage() {
                   {registerForm.formState.errors.email.message}
                 </p>
               )}
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Déjà inscrit dans une autre entreprise avec cette adresse ? Aucun souci : ce nouvel espace aura son propre compte et son propre mot de passe, séparés de l’autre.
+              </p>
             </div>
 
             {/* Masquer les champs mot de passe si le compte est déjà authentifié par Google */}

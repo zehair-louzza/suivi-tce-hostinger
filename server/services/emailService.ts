@@ -858,6 +858,8 @@ export async function sendPasswordResetEmail(params: {
   toEmail: string;
   recipientName: string;
   resetToken: string;
+  /** Entreprise du compte concerné : un même e-mail peut avoir un compte dans plusieurs entreprises. */
+  companyName?: string | null;
 }): Promise<EmailDeliveryResult> {
   const resetLink = `${APP_URL}/login?resetToken=${encodeURIComponent(params.resetToken)}&email=${encodeURIComponent(
     params.toEmail
@@ -878,7 +880,8 @@ export async function sendPasswordResetEmail(params: {
   <div class="card">
     <h2 style="margin-top:0;color:#0f172a;">Réinitialisation de votre mot de passe ANELEC TCE</h2>
     <p>Bonjour <strong>${esc(params.recipientName)}</strong>,</p>
-    <p>Vous avez demandé la réinitialisation du mot de passe de votre compte <strong>${esc(params.toEmail)}</strong>.</p>
+    <p>Vous avez demandé la réinitialisation du mot de passe de votre compte <strong>${esc(params.toEmail)}</strong>${params.companyName ? ` dans l'entreprise <strong>${esc(params.companyName)}</strong>` : ''}.</p>
+    ${params.companyName ? `<p style="font-size:12px;color:#64748b;">Ce lien ne concerne que l'entreprise ${esc(params.companyName)} : vos comptes dans d'autres entreprises gardent leur propre mot de passe.</p>` : ''}
     <div style="text-align:center;">
       <a href="${resetLink}" class="btn" target="_blank">Choisir un nouveau mot de passe</a>
     </div>
@@ -893,9 +896,9 @@ export async function sendPasswordResetEmail(params: {
     useCompanyMailbox: false,
     allowPreviewFallback: true,
     toEmail: params.toEmail,
-    subject: `[Sécurité ANELEC TCE] Réinitialisation de votre mot de passe`,
+    subject: `[Sécurité ANELEC TCE] Réinitialisation de votre mot de passe${params.companyName ? ` — ${params.companyName}` : ''}`,
     html: htmlContent,
-    text: `Bonjour ${params.recipientName},\n\nCliquez sur ce lien pour réinitialiser votre mot de passe :\n${resetLink}`,
+    text: `Bonjour ${params.recipientName},\n\n${params.companyName ? `Compte de l'entreprise ${params.companyName}.\n` : ''}Cliquez sur ce lien pour réinitialiser votre mot de passe :\n${resetLink}`,
     activationLink: resetLink,
     recipientName: params.recipientName,
     allowSupabaseRelay: true,
@@ -932,9 +935,11 @@ export async function sendWelcomeUserEmail(params: {
     <p>Bonjour <strong>${esc(params.recipientName)}</strong>,</p>
     <p>Votre compte collaborateur (profil : <strong>${esc(params.roleLabel)}</strong>) a été créé et activé par votre administrateur.</p>
     <div class="creds">
-      <div><strong>Identifiant (E-mail) :</strong> ${esc(params.toEmail)}</div>
+      <div><strong>Entreprise :</strong> ${esc(params.companyName)}</div>
+      <div style="margin-top:6px;"><strong>Identifiant (E-mail) :</strong> ${esc(params.toEmail)}</div>
       <div style="margin-top:6px;"><strong>Mot de passe initial :</strong> <code>${esc(params.tempPassword)}</code></div>
     </div>
+    <p style="font-size:12px;color:#64748b;">Ce compte est propre à l'entreprise ${esc(params.companyName)}. Si vous utilisez déjà cette adresse e-mail dans une autre entreprise, ce compte-là reste distinct (mot de passe et données séparés) ; à la connexion, vous choisirez l'entreprise.</p>
     <a href="${loginLink}" class="btn" target="_blank">Se connecter à la plateforme</a>
   </div>
 </body>
@@ -946,7 +951,7 @@ export async function sendWelcomeUserEmail(params: {
     toEmail: params.toEmail,
     subject: `[Accès Collaborateur] Vos identifiants ANELEC TCE (${params.companyName})`,
     html: htmlContent,
-    text: `Bonjour ${params.recipientName},\nVotre compte (${params.roleLabel}) est actif sur ${loginLink}\nIdentifiant : ${params.toEmail}\nMot de passe : ${params.tempPassword}`,
+    text: `Bonjour ${params.recipientName},\nVotre compte (${params.roleLabel}) pour l'entreprise ${params.companyName} est actif sur ${loginLink}\nIdentifiant : ${params.toEmail}\nMot de passe : ${params.tempPassword}`,
     activationLink: loginLink,
     recipientName: params.recipientName,
     companyName: params.companyName,

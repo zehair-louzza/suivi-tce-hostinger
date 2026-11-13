@@ -15,7 +15,7 @@ interface AuthState {
   error: string | null;
   
   // Actions
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, companyId?: number) => Promise<void>;
   register: (
     name: string,
     email: string,
@@ -29,6 +29,7 @@ interface AuthState {
     companyName?: string;
     siretOrSiren?: string;
     acceptTerms?: boolean;
+    companyId?: number;
   }) => Promise<{ requiresCompanyInfo?: boolean; googleProfile?: any; message?: string }>;
   confirmSupabaseToken: (accessToken: string) => Promise<any>;
   logout: () => Promise<void>;
@@ -58,10 +59,10 @@ export const useAuthStore = create<AuthState>()(
 
       clearError: () => set({ error: null }),
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string, companyId?: number) => {
         set({ error: null });
         try {
-          const response = await api.post('/auth/login', { email, password });
+          const response = await api.post('/auth/login', { email, password, ...(companyId ? { companyId } : {}) });
           const { user, accessToken } = response.data;
           
           set({
@@ -71,6 +72,11 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
         } catch (err: any) {
+          // Plusieurs entreprises pour cet e-mail : ce n'est pas une erreur, l'écran propose le choix
+          if (err.response?.data?.code === 'COMPANY_CHOICE_REQUIRED') {
+            set({ error: null, isLoading: false, isAuthenticated: false });
+            throw err;
+          }
           const message = err.response?.data?.error || 'Erreur de connexion';
           set({ error: message, isLoading: false, isAuthenticated: false });
           throw err;
@@ -127,6 +133,7 @@ export const useAuthStore = create<AuthState>()(
         companyName?: string;
         siretOrSiren?: string;
         acceptTerms?: boolean;
+        companyId?: number;
       }) => {
         // IMPORTANT : Ne pas activer isLoading: true ici pour ne pas démonter <LoginPage />
         // lorsque Google retourne requiresCompanyInfo: true (inscription rapide Google) !
@@ -145,6 +152,10 @@ export const useAuthStore = create<AuthState>()(
           });
           return { requiresCompanyInfo: false, googleProfile, message };
         } catch (err: any) {
+          if (err.response?.data?.code === 'COMPANY_CHOICE_REQUIRED') {
+            set({ error: null, isLoading: false, isAuthenticated: false });
+            throw err;
+          }
           const message = err.response?.data?.error || 'Erreur lors de la connexion Google';
           set({ error: message, isLoading: false, isAuthenticated: false });
           throw err;

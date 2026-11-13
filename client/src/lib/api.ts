@@ -436,6 +436,14 @@ export interface MailConfigView {
   companyName: string;
 }
 
+/** Entreprise proposée quand un même e-mail a un compte dans plusieurs entreprises. */
+export interface EntrepriseChoix {
+  companyId: number | null;
+  nom: string;
+  siren: string | null;
+  siret: string | null;
+}
+
 export const authApi = {
   getInvitation: (token: string) =>
     api.get<{
@@ -448,7 +456,8 @@ export const authApi = {
     }>(`/auth/invitations/${encodeURIComponent(token)}`),
   acceptInvitation: (payload: { token: string; name: string; password: string; acceptTerms: true }) =>
     api.post<{ user: User; accessToken: string; message: string }>('/auth/invitations/accept', payload),
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
+  login: (email: string, password: string, companyId?: number) =>
+    api.post('/auth/login', { email, password, ...(companyId ? { companyId } : {}) }),
   register: (name: string, email: string, password: string, companyName?: string, siretOrSiren?: string) =>
     api.post('/auth/register', { name, email, password, companyName, siretOrSiren }),
   resendConfirmation: (email: string) =>
@@ -491,6 +500,7 @@ export const authApi = {
     companyName?: string;
     siretOrSiren?: string;
     acceptTerms?: boolean;
+    companyId?: number;
   }) =>
     api.post<{
       user?: User;
