@@ -2,8 +2,9 @@
 //
 // Le numéro de DI est émis par le client : la clé de suivi est le couple (client + numeroDI).
 // Un particulier n'a pas de DI, il reçoit une référence interne.
-import { Router, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { policy, secureRouter } from '../lib/guard.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
 import type { Access } from '../lib/access.js';
@@ -11,7 +12,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
 
-export const demandesRouter = Router();
+export const demandesRouter = secureRouter('demandes');
 
 const STATUTS = ['A_DECIDER', 'ORIENTEE', 'ANNULEE'] as const;
 const TYPES = ['DONNEUR_ORDRE', 'ENTREPRISE', 'PARTICULIER', 'SOUS_TRAITANT'] as const;
@@ -86,6 +87,7 @@ const auteurOf = (req: Request) => req.user?.email || 'Utilisateur';
 
 demandesRouter.get(
   '/',
+  policy('demandes.list'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     requireTriage(acc);
@@ -118,6 +120,7 @@ demandesRouter.get(
 
 demandesRouter.post(
   '/',
+  policy('demandes.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     requireTriage(acc);
@@ -172,6 +175,7 @@ demandesRouter.post(
 
 demandesRouter.patch(
   '/:id',
+  policy('demandes.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     requireTriage(acc);
@@ -215,6 +219,7 @@ demandesRouter.patch(
  */
 demandesRouter.post(
   '/:id/orienter',
+  policy('demandes.orienter'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     requireTriage(acc);

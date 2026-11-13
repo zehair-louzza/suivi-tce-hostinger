@@ -2,10 +2,11 @@
 //
 // Principe (OWASP « deny by default ») : le serveur décide, jamais l'écran. Chaque route qui lit ou modifie
 // une donnée métier passe par ces fonctions. Les droits sont toujours relus dans la base à chaque requête.
-import { getEffectivePermissions, type UserPermissions } from '../../shared/types.js';
+import { getEffectivePermissions, ROLE_DEFINITIONS, type UserPermissions } from '../../shared/types.js';
 
 export interface AccessUser {
   id: number;
+  email?: string | null;
   role?: string | null;
   name?: string | null;
   technicienNom?: string | null;
@@ -29,10 +30,31 @@ export interface Access {
   canSeeTeam: boolean;
 }
 
+const NO_PERMISSIONS: UserPermissions = {
+  canManageUsers: false,
+  canManageReferentiels: false,
+  canEditDevis: false,
+  canViewFinancials: false,
+  canConvertDevis: false,
+  canEditPlanning: false,
+  canEditInterventions: false,
+  canWriteReports: false,
+  canManageBilling: false,
+  canDeleteRecords: false,
+  canAccessMobileTech: false,
+  mobileOnly: false,
+};
+
+const OWNER_EMAIL = 'louzza.zehair@gmail.com';
+
 export function accessFor(user: AccessUser | null | undefined, tokenRole?: string | null): Access {
-  const role = ((user?.role || tokenRole || '') as string).toUpperCase();
-  const perms = getEffectivePermissions(role, user?.permissionsJson);
-  const isAdmin = user?.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  const baseRole = ((user?.role || tokenRole || '') as string).toUpperCase();
+  // Même règle que le reste de l'application : le compte fondateur est administrateur de SA seule entreprise
+  const isOwner = user?.id === 1 || (user?.email || '').toLowerCase() === OWNER_EMAIL;
+  const role = isOwner ? 'ADMIN' : baseRole;
+  // Rôle inconnu = aucun droit (refus par défaut). Avant, un rôle inconnu héritait des droits du conducteur.
+  const perms = ROLE_DEFINITIONS[role] ? getEffectivePermissions(role, user?.permissionsJson) : { ...NO_PERMISSIONS };
+  const isAdmin = isOwner || role === 'ADMIN' || Boolean(perms.canManageUsers);
   const isMobileOnly =
     !isAdmin &&
     (role === 'TECHNICIEN' ||

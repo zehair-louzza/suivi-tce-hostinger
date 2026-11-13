@@ -1,6 +1,7 @@
 // Interventions routes - Full 23 ANELEC columns + Planning horaire + Synchronisation Visite Devis + Historique + PostgreSQL compatibility
-import { Router, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { normalizeDI, resolveInterventionDossier, pushDIToDevis, findDevisByDI } from '../lib/dossierDI.js';
+import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
@@ -21,7 +22,7 @@ import {
 
 import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
 
-export const interventionRouter = Router();
+export const interventionRouter = secureRouter('interventions');
 
 function parseJsonArray<T = any>(json?: string | null): T[] {
   if (!json) return [];
@@ -215,6 +216,7 @@ async function assertOwnDevisId(raw: unknown, companyId: number): Promise<number
 
 interventionRouter.get(
   '/',
+  policy('interventions.list'),
   asyncHandler(async (req: Request, res: Response) => {
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || '';
@@ -318,6 +320,7 @@ interventionRouter.get(
 
 interventionRouter.get(
   '/stats',
+  policy('interventions.stats'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     if (acc.isFieldOnly) {
@@ -368,6 +371,7 @@ interventionRouter.get(
 
 interventionRouter.get(
   '/:id',
+  policy('interventions.read'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const companyId = requireCompanyId(req.user?.companyId);
@@ -389,6 +393,7 @@ interventionRouter.get(
 
 interventionRouter.post(
   '/',
+  policy('interventions.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const companyId = requireCompanyId(req.user?.companyId);
@@ -524,6 +529,7 @@ interventionRouter.post(
 
 interventionRouter.patch(
   '/:id',
+  policy('interventions.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
@@ -837,6 +843,7 @@ interventionRouter.patch(
 
 interventionRouter.delete(
   '/:id',
+  policy('interventions.delete'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
@@ -875,6 +882,7 @@ interventionRouter.delete(
 // Règle stricte : réservé à l'équipe bureau / administration (les techniciens ne peuvent pas envoyer par email).
 interventionRouter.post(
   '/:id/send-report-email',
+  policy('interventions.sendReport'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;

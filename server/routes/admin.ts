@@ -1,8 +1,9 @@
-import { Router, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { policy, secureRouter } from '../lib/guard.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
@@ -21,7 +22,7 @@ import {
   verifyAndTestSmtpConfig,
 } from '../services/emailService.js';
 
-export const adminRouter = Router();
+export const adminRouter = secureRouter('admin');
 
 // Sélection publique SANS colonnes d'apparence (robuste même si la migration
 // de thème n'a pas encore été appliquée à la base). Les valeurs d'apparence
@@ -91,6 +92,7 @@ function tenantOf(caller: { companyId?: number | null }): number {
 
 adminRouter.get(
   '/users',
+  policy('admin.users.list'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -112,6 +114,7 @@ adminRouter.get(
 
 adminRouter.post(
   '/users',
+  policy('admin.users.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -168,6 +171,7 @@ adminRouter.post(
 
 adminRouter.put(
   '/users/:id',
+  policy('admin.users.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -218,6 +222,7 @@ adminRouter.put(
 
 adminRouter.delete(
   '/users/:id',
+  policy('admin.users.delete'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -246,6 +251,7 @@ adminRouter.delete(
 
 adminRouter.get(
   '/pointages',
+  policy('admin.pointages.read'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     const dateJour = (req.query.dateJour as string) || '';
@@ -291,6 +297,7 @@ adminRouter.get(
 
 adminRouter.post(
   '/pointages/clock-in',
+  policy('admin.pointages.clock'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     const { parisDateISO, parisHHMM, now } = getParisNow();
@@ -407,6 +414,7 @@ adminRouter.post(
 
 adminRouter.post(
   '/pointages/clock-out',
+  policy('admin.pointages.clock'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     const { parisDateISO, parisHHMM, now } = getParisNow();
@@ -533,6 +541,7 @@ adminRouter.post(
 // ============================================================================
 adminRouter.delete(
   '/company/destroy',
+  policy('admin.company.destroy'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
 
@@ -601,6 +610,7 @@ adminRouter.delete(
 // ============================================================================
 adminRouter.get(
   '/smtp-status',
+  policy('admin.smtp.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -614,6 +624,7 @@ adminRouter.get(
 
 adminRouter.put(
   '/smtp-config',
+  policy('admin.smtp.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -635,6 +646,7 @@ adminRouter.put(
 // Retour à l'expéditeur plateforme
 adminRouter.delete(
   '/smtp-config',
+  policy('admin.smtp.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -651,6 +663,7 @@ adminRouter.delete(
 
 adminRouter.post(
   '/smtp-test',
+  policy('admin.smtp.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -750,6 +763,7 @@ async function issueAndSendInvitation(
 
 adminRouter.get(
   '/invitations',
+  policy('admin.invitations.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -766,6 +780,7 @@ adminRouter.get(
 
 adminRouter.post(
   '/invitations',
+  policy('admin.invitations.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -867,6 +882,7 @@ adminRouter.post(
 
 adminRouter.post(
   '/invitations/:id/resend',
+  policy('admin.invitations.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -896,6 +912,7 @@ adminRouter.post(
 
 adminRouter.delete(
   '/invitations/:id',
+  policy('admin.invitations.manage'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -929,6 +946,7 @@ const CompanyAppearanceSchema = z.object({
  */
 adminRouter.get(
   '/appearance',
+  policy('admin.appearance.read'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -979,6 +997,7 @@ adminRouter.get(
  */
 adminRouter.patch(
   '/appearance',
+  policy('admin.appearance.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {
@@ -1043,6 +1062,7 @@ const CompanySiegeSchema = z.object({
  */
 adminRouter.patch(
   '/siege',
+  policy('admin.siege.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const caller = await getCallerUser(req);
     if (!caller.isAdmin) {

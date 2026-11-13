@@ -1,6 +1,7 @@
 // Referentiels routes - Administration des listes de choix ANELEC, Compétences Techniciens & Équipes Journalières
-import { Router, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { policy, secureRouter } from '../lib/guard.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
 import { techMatches } from '../lib/access.js';
@@ -17,11 +18,12 @@ import {
   getEffectivePermissions,
 } from '../../shared/types.js';
 
-export const referentielsRouter = Router();
+export const referentielsRouter = secureRouter('referentiels');
 
 // GET /api/referentiels - Retourne toutes les listes de choix métier ANELEC + compétences + équipes journalières
 referentielsRouter.get(
   '/',
+  policy('referentiels.read'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     const companyId = acc.companyId;
@@ -145,6 +147,7 @@ referentielsRouter.get(
 // PUT /api/referentiels/:categorie - Met à jour une liste de choix, la matrice technicien_competences ou equipes_journalieres
 referentielsRouter.put(
   '/:categorie',
+  policy('referentiels.write'),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.user?.userId) {
       throw new AppError(401, 'Authentification requise', 'UNAUTHORIZED');
@@ -466,6 +469,7 @@ export async function saveTechnicienGpsPosition(
 // POST /api/referentiels/gps-position - Enregistre et diffuse en temps réel la position GPS actuelle d'un technicien
 referentielsRouter.post(
   '/gps-position',
+  policy('gps.post'),
   asyncHandler(async (req: Request, res: Response) => {
     const companyId = requireCompanyId(req.user?.companyId);
     const b = req.body || {};

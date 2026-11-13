@@ -1,6 +1,7 @@
 // Devis routes - Full 22 ANELEC columns + Auto-planning Visite Devis + Non-destructive linked interventions + History + PostgreSQL compatibility
-import { Router, Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
+import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
@@ -21,7 +22,7 @@ import {
   getEffectivePermissions,
 } from '../../shared/types.js';
 
-export const devisRouter = Router();
+export const devisRouter = secureRouter('devis');
 
 function parseHistorique(json?: string | null): HistoriqueEvent[] {
   if (!json) return [];
@@ -359,6 +360,7 @@ async function syncVisiteDevisIntervention(devis: any, userId: number, auteur: s
 
 devisRouter.get(
   '/',
+  policy('devis.list'),
   asyncHandler(async (req: Request, res: Response) => {
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || '';
@@ -446,6 +448,7 @@ devisRouter.get(
 
 devisRouter.get(
   '/stats',
+  policy('devis.stats'),
   asyncHandler(async (req: Request, res: Response) => {
     const acc = await loadAccess(req);
     if (acc.isFieldOnly) {
@@ -489,6 +492,7 @@ devisRouter.get(
 
 devisRouter.get(
   '/:id',
+  policy('devis.read'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const companyId = requireCompanyId(req.user?.companyId);
@@ -510,6 +514,7 @@ devisRouter.get(
 
 devisRouter.post(
   '/',
+  policy('devis.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const companyId = requireCompanyId(req.user?.companyId);
@@ -615,6 +620,7 @@ devisRouter.post(
 
 devisRouter.patch(
   '/:id',
+  policy('devis.update'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
@@ -807,6 +813,7 @@ devisRouter.patch(
 
 devisRouter.delete(
   '/:id',
+  policy('devis.delete'),
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
@@ -839,6 +846,7 @@ devisRouter.delete(
 
 devisRouter.post(
   '/:id/convert',
+  policy('devis.convert'),
   asyncHandler(async (req: Request, res: Response) => {
     const devisId = parseInt(req.params.id, 10);
     const userId = req.user!.userId;
@@ -982,6 +990,7 @@ devisRouter.post(
 // Envoi de proposition commerciale / devis par e-mail au client
 devisRouter.post(
   '/:id/send-devis-email',
+  policy('devis.sendEmail'),
   asyncHandler(async (req: Request, res: Response) => {
     const companyId = requireCompanyId(req.user?.companyId);
     const devisId = parseInt(req.params.id, 10);
