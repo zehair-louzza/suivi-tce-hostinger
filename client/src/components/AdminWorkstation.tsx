@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   adminApi,
+  automationApi,
   interventionApi,
   User,
   UserPermissions,
@@ -29,7 +30,7 @@ interface AdminWorkstationProps {
   onOpenInterventionDrawer: (intv: Intervention) => void;
   onOpenDevisDrawer: (devis: Devis) => void;
   onSwitchToMobilePreview: (technicien: string) => void;
-  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance';
+  initialSubTab?: 'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance' | 'automations';
   onOpenSendReportEmail?: (intv: Intervention) => void;
 }
 
@@ -103,6 +104,60 @@ const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: str
   { key: 'canManageReferentiels', label: 'Référentiels', short: 'Référentiels', color: '#6366f1' },
   { key: 'mobileOnly', label: 'App Mobile', short: 'Mobile', color: '#64748b' },
 ];
+
+/** Réglages des automatisations « technicien » de la société. */
+function AutomationsPanel() {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ['automatisations'], queryFn: async () => (await automationApi.get()).data.data });
+  const mut = useMutation({
+    mutationFn: (p: { autoTechnicienActif?: boolean; autoTechnicienDelaiMinutes?: number }) => automationApi.update(p),
+    onSuccess: () => {
+      toast.success('Automatisations mises à jour');
+      queryClient.invalidateQueries({ queryKey: ['automatisations'] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Modification impossible'),
+  });
+  const actif = query.data?.autoTechnicienActif !== false;
+  const delai = query.data?.autoTechnicienDelaiMinutes ?? 120;
+  return (
+    <div className="pro-table-container" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }} data-testid="admin-automations-section">
+      <div>
+        <h3 style={{ margin: 0, fontSize: '16px' }}>Réponse des techniciens aux affectations</h3>
+        <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Quand un technicien est affecté à une mission, il l'accepte ou la refuse (avec un motif). S'il ne répond pas, il est relancé, puis le
+          planificateur est alerté. Rien n'est envoyé hors de votre société, seules les nouvelles affectations sont concernées, et chaque action
+          automatique est inscrite dans l'historique de la mission.
+        </p>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+        <input
+          type="checkbox"
+          checked={actif}
+          disabled={query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoTechnicienActif: e.target.checked })}
+          data-testid="auto-technicien-toggle"
+        />
+        Activer la confirmation des missions par les techniciens
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '320px', fontWeight: 600, fontSize: '13px' }}>
+        Délai avant relance (puis alerte au planificateur après le même délai)
+        <select
+          value={delai}
+          disabled={!actif || query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoTechnicienDelaiMinutes: Number(e.target.value) })}
+          data-testid="auto-technicien-delai"
+        >
+          {[30, 60, 120, 240, 480].map((m) => (
+            <option key={m} value={m}>{m < 60 ? `${m} minutes` : `${m / 60} heure${m >= 120 ? 's' : ''}`}</option>
+          ))}
+        </select>
+      </label>
+      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+        Les relances ne partent que du lundi au samedi, de 8 h à 19 h (heure de Paris).
+      </p>
+    </div>
+  );
+}
 
 const MATRIX_SECTIONS: { id: any; label: string }[] = [
   { id: 'aujourdhui', label: 'Mon travail / Tableau de bord' },
@@ -181,7 +236,7 @@ export function AdminWorkstation({
   const queryClient = useQueryClient();
   const { user, logout } = useAuth();
   const [subTab, setSubTab] = useState<
-    'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance'
+    'users' | 'roles_guide' | 'pointages' | 'rapports' | 'billing_rules' | 'emails_smtp' | 'danger_zone' | 'appearance' | 'automations'
   >(initialSubTab || 'users');
   const [showDestroyModal, setShowDestroyModal] = useState(false);
 
@@ -613,6 +668,16 @@ export function AdminWorkstation({
             >
               <span className="desktop-only-el">E-mails & SMTP ({smtpStatusQuery.data?.logs?.length || 0})</span>
               <span className="mobile-only-el">E-mails</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-btn ${subTab === 'automations' ? 'active' : ''}`}
+              onClick={() => setSubTab('automations')}
+              style={{ flexShrink: 0 }}
+              data-testid="admin-tab-automations"
+            >
+              <span className="desktop-only-el">Automatisations</span>
+              <span className="mobile-only-el">Auto</span>
             </button>
             <button
               type="button"
@@ -2220,6 +2285,8 @@ export function AdminWorkstation({
       {/* =====================================================================
           SOUS-ONGLET 7 : APPARENCE & THÈMES — défaut entreprise + personnalisation
          ===================================================================== */}
+      {subTab === 'automations' && <AutomationsPanel />}
+
       {subTab === 'appearance' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} data-testid="admin-appearance-section">
           <AppearancePanel />

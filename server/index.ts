@@ -20,6 +20,8 @@ import { demandesRouter } from './routes/demandes.js';
 import { interventionRouter } from './routes/interventions.js';
 import { referentielsRouter } from './routes/referentiels.js';
 import { adminRouter } from './routes/admin.js';
+import { notificationsRouter } from './routes/notifications.js';
+import { demarrerPlanificateurTechnicien } from './services/technicianAutomation.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -89,6 +91,7 @@ app.use('/api/demandes', authMiddleware, demandesRouter);
 app.use('/api/interventions', authMiddleware, interventionRouter);
 app.use('/api/referentiels', authMiddleware, referentielsRouter);
 app.use('/api/admin', authMiddleware, adminRouter);
+app.use('/api/notifications', authMiddleware, notificationsRouter);
 
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');
@@ -167,6 +170,7 @@ function applyPendingMigrations() {
 }
 
 applyPendingMigrations();
+demarrerPlanificateurTechnicien();
 
 httpServer.listen(config.port, () => {
   console.log(`→ Server running on port ${config.port} (${config.nodeEnv})`);

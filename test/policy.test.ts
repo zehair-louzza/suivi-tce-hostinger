@@ -31,6 +31,7 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'interventions.stats': [true, true, true, true, false],
   'interventions.create': [true, true, true, false, false],
   'interventions.update': [true, true, true, true, true],
+  'interventions.respond': [false, false, false, false, true],
   'interventions.delete': [true, false, false, false, false],
   'interventions.sendReport': [true, false, true, true, false],
   'demandes.list': [true, true, true, false, false],
@@ -50,6 +51,9 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'admin.appearance.read': [true, false, false, false, false],
   'admin.appearance.update': [true, false, false, false, false],
   'admin.siege.update': [true, false, false, false, false],
+  'admin.automations.manage': [true, false, false, false, false],
+  'notifications.list': [true, true, true, true, true],
+  'notifications.update': [true, true, true, true, true],
   'admin.pointages.read': [true, true, true, true, true],
   'admin.pointages.clock': [true, true, true, true, true],
 };
@@ -128,7 +132,7 @@ test('de bout en bout : la garde renvoie 403 aux rôles refusés et laisse passe
 test('analyse du code : chaque route des routeurs protégés déclare une règle qui existe', () => {
   const FICHIERS: Record<string, string> = {
     devisRouter: 'devis', interventionRouter: 'interventions', demandesRouter: 'demandes',
-    referentielsRouter: 'referentiels', adminRouter: 'admin',
+    referentielsRouter: 'referentiels', adminRouter: 'admin', notificationsRouter: 'notifications',
   };
   const utilisees = new Set<string>();
   for (const [routeur, fichier] of Object.entries(FICHIERS)) {

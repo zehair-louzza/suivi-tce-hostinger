@@ -72,6 +72,7 @@ export interface EmailLogEntry {
     | 'INVITATION_COLLABORATEUR'
     | 'RAPPORT_INTERVENTION'
     | 'PROPOSITION_DEVIS'
+    | 'NOTIFICATION_AUTO'
     | 'TEST_SMTP';
   toEmail: string;
   ccEmail?: string;
@@ -1312,4 +1313,41 @@ export async function verifyAndTestSmtpConfig(
   }
 
   return { config: await getPublicMailConfig(companyId), delivery };
+}
+
+
+/**
+ * E-mail interne d'une automatisation (relance technicien, alerte planificateur…).
+ * Destinataire = un collaborateur de la société ; part de la boîte de la société si elle est configurée.
+ */
+export async function sendAutomationEmail(params: {
+  companyId: number;
+  toEmail: string;
+  recipientName: string;
+  subject: string;
+  heading: string;
+  lines: string[];
+  linkPath?: string;
+}): Promise<EmailDeliveryResult> {
+  const link = `${APP_URL}${params.linkPath || '/'}`;
+  const body = params.lines.map((l) => `<p style="margin:8px 0;">${esc(l)}</p>`).join('');
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#0f172a;padding:20px;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;">
+    <h2 style="margin-top:0;">${esc(params.heading)}</h2>
+    <p>Bonjour <strong>${esc(params.recipientName)}</strong>,</p>
+    ${body}
+    <p><a href="${esc(link)}" style="display:inline-block;background:#00bf63;color:#fff;font-weight:700;text-decoration:none;padding:11px 22px;border-radius:10px;">Ouvrir l'application</a></p>
+    <p style="font-size:12px;color:#64748b;">Message automatique. Vous pouvez désactiver ces automatisations dans les paramètres de votre société.</p>
+  </div></body></html>`;
+  const text = `Bonjour ${params.recipientName},\n\n${params.lines.join('\n')}\n\n${link}`;
+  return dispatchEmailWithFallback({
+    type: 'NOTIFICATION_AUTO',
+    companyId: params.companyId,
+    toEmail: params.toEmail,
+    recipientName: params.recipientName,
+    subject: params.subject,
+    html,
+    text,
+  });
 }

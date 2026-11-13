@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
+import { normaliserDelai } from '../domain/technicianResponse.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
@@ -1108,5 +1109,52 @@ adminRouter.patch(
       siegeLng: updated.siegeLng,
       message: 'Adresse du siège mise à jour.',
     });
+  })
+);
+
+
+/** Réglages des automatisations « technicien » de la société (direction uniquement). */
+adminRouter.get(
+  '/automatisations',
+  policy('admin.automations.manage'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
+    const c = await (prisma as any).company.findUnique({
+      where: { id: tenantOf(caller) },
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true },
+    });
+    res.json({
+      data: {
+        autoTechnicienActif: c ? c.autoTechnicienActif !== false : true,
+        autoTechnicienDelaiMinutes: normaliserDelai(c?.autoTechnicienDelaiMinutes),
+      },
+    });
+  })
+);
+
+adminRouter.patch(
+  '/automatisations',
+  policy('admin.automations.manage'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin) throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
+    const parsed = z
+      .object({ autoTechnicienActif: z.boolean().optional(), autoTechnicienDelaiMinutes: z.number().int().optional() })
+      .safeParse(req.body ?? {});
+    if (!parsed.success || (parsed.data.autoTechnicienActif === undefined && parsed.data.autoTechnicienDelaiMinutes === undefined)) {
+      throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
+    }
+    const data: any = {};
+    if (parsed.data.autoTechnicienActif !== undefined) data.autoTechnicienActif = parsed.data.autoTechnicienActif;
+    if (parsed.data.autoTechnicienDelaiMinutes !== undefined) {
+      data.autoTechnicienDelaiMinutes = normaliserDelai(parsed.data.autoTechnicienDelaiMinutes);
+    }
+    const updated = await (prisma as any).company.update({
+      where: { id: tenantOf(caller) },
+      data,
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true },
+    });
+    res.json({ data: updated, message: 'Automatisations mises à jour' });
   })
 );

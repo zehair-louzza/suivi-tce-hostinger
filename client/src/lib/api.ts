@@ -283,6 +283,22 @@ export const devisApi = {
     }>(`/devis/${id}/send-devis-email`, payload),
 };
 
+export interface AppNotification {
+  id: number;
+  type: string;
+  titre: string;
+  message?: string | null;
+  interventionId?: number | null;
+  lu: boolean;
+  createdAt: string;
+}
+
+export const notificationApi = {
+  list: () => api.get<{ data: AppNotification[]; nonLues: number }>('/notifications'),
+  read: (id: number) => api.post<{ ok: boolean }>(`/notifications/${id}/lire`),
+  readAll: () => api.post<{ ok: boolean }>('/notifications/lire-tout'),
+};
+
 export const interventionApi = {
   list: (params?: { search?: string; status?: string; technicien?: string; page?: number; limit?: number }) =>
     api.get<PaginatedResponse<Intervention>>('/interventions', { params }),
@@ -296,6 +312,10 @@ export const interventionApi = {
   update: (id: number, data: any) => api.patch<{ data: Intervention; message: string }>(`/interventions/${id}`, data),
 
   delete: (id: number) => api.delete<{ message: string }>(`/interventions/${id}`),
+
+  /** Réponse du technicien à son affectation (acceptée / refusée avec motif). */
+  respond: (id: number, payload: { reponse: 'ACCEPTEE' | 'REFUSEE'; motif?: string }) =>
+    api.post<{ data: Intervention; message: string }>(`/interventions/${id}/reponse`, payload),
 
   sendReportEmail: (id: number, payload: SendReportEmailPayload) =>
     api.post<{
@@ -447,6 +467,16 @@ export const authApi = {
       message: string;
     }>('/auth/google', payload),
   getAuthConfig: () => api.get<{ googleClientId: string }>('/auth/config'),
+};
+
+export const automationApi = {
+  get: () =>
+    api.get<{ data: { autoTechnicienActif: boolean; autoTechnicienDelaiMinutes: number } }>('/admin/automatisations'),
+  update: (payload: { autoTechnicienActif?: boolean; autoTechnicienDelaiMinutes?: number }) =>
+    api.patch<{ data: { autoTechnicienActif: boolean; autoTechnicienDelaiMinutes: number }; message: string }>(
+      '/admin/automatisations',
+      payload
+    ),
 };
 
 export const adminApi = {

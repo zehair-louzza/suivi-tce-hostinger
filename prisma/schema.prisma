@@ -21,6 +21,10 @@ model Company {
   allowThemeOverride   Boolean              @default(true)
   /// Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse
   accueilMaFile        Boolean              @default(false)
+  /// Automatisations « technicien » : acceptation de mission, relance, alerte au planificateur
+  autoTechnicienActif        Boolean        @default(true)
+  /// Délai avant relance d'un technicien qui n'a pas répondu (minutes)
+  autoTechnicienDelaiMinutes Int            @default(120)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   users                User[]
@@ -32,6 +36,7 @@ model Company {
   demandes             Demande[]
   mailSettings         CompanyMailSettings?
   emailLogs            EmailLog[]
+  notifications        Notification[]
 
   @@map("companies")
 }
@@ -61,6 +66,7 @@ model User {
   interventions      Intervention[]
   conversionRequests ConversionRequest[]
   pointages          PointageTechnicien[]
+  notifications      Notification[]
   invitationsSent    CompanyInvitation[] @relation("InvitationsSent")
 
   demandes             Demande[]
@@ -233,9 +239,18 @@ model Intervention {
   rapportFinal         String?
   statutRapport        String?
 
+  // Réponse du technicien à son affectation (EN_ATTENTE | ACCEPTEE | REFUSEE ; NULL = non concerné)
+  reponseTechnicien    String?
+  reponseLe            DateTime?
+  motifRefus           String?
+  affecteLe            DateTime?
+  relanceTechnicienLe  DateTime?
+  alertePlanificateurLe DateTime?
+
   demandes           Demande[]
 
   @@index([userId])
+  @@index([companyId, reponseTechnicien], map: "interventions_companyid_reponse_idx")
   @@index([companyId], map: "interventions_companyid_idx")
   @@index([companyId, numeroDI], map: "interventions_companyid_numerodi_idx")
   @@index([status])
@@ -360,4 +375,23 @@ model EmailLog {
 
   @@index([companyId, createdAt], map: "email_logs_companyid_createdat_idx")
   @@map("email_logs")
+}
+
+/// Notifications dans l'application : une ligne par destinataire, toujours rattachée à sa société.
+model Notification {
+  id             Int      @id @default(autoincrement())
+  companyId      Int
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           String
+  titre          String
+  message        String?
+  interventionId Int?
+  lu             Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([userId, lu, createdAt], map: "notifications_user_lu_idx")
+  @@index([companyId], map: "notifications_companyid_idx")
+  @@map("notifications")
 }

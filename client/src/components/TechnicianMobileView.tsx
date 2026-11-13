@@ -16,6 +16,8 @@ import { useTheme } from '../stores/themeStore';
 import type { ThemeId } from '../stores/themeStore';
 import { compressAndOptimizeImage } from '../lib/imageOptimizer';
 import { TourneeMapOptimizer } from './TourneeMapOptimizer';
+import { MissionResponseCard } from './MissionResponseCard';
+import { NotificationBell } from './NotificationBell';
 import { geocodeAddress } from '../lib/geocoding';
 import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
 
@@ -184,6 +186,15 @@ function Header({
   subtitle?: string;
   onBack?: () => void;
 }) {
+  const { user } = useAuth();
+  const companyInitials =
+    String(user?.companyName || 'E')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'E';
   return (
     <header className="t-head">
       {onBack ? (
@@ -192,12 +203,19 @@ function Header({
           <span>Retour</span>
         </button>
       ) : (
-        <img src="/brand/anelec-mark.png" alt="ANELEC" className="t-head-logo" />
+        <span
+          className="t-head-logo"
+          aria-hidden="true"
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'var(--t-accent, #00a35a)', color: '#fff', fontWeight: 800, fontSize: 13 }}
+        >
+          {companyInitials}
+        </span>
       )}
       <div className="t-head-text">
         <h1>{title}</h1>
         {subtitle && <span>{subtitle}</span>}
       </div>
+      <NotificationBell />
     </header>
   );
 }
@@ -1265,6 +1283,14 @@ export function TechnicianMobileView({
                 <span className="t-card-time">{slotOf(m)}</span>
                 <StatusPill status={statusOf(m)} />
               </span>
+              {m.reponseTechnicien === 'EN_ATTENTE' && (
+                <span
+                  data-testid="mission-a-confirmer"
+                  style={{ alignSelf: 'flex-start', background: '#f59e0b', color: '#111827', fontWeight: 800, fontSize: 12, borderRadius: 999, padding: '3px 10px' }}
+                >
+                  À confirmer
+                </span>
+              )}
               <strong className="t-card-client">{m.client || 'Client'}</strong>
               <span className="t-card-objet">
                 {m.corpsEtat || 'Tous corps d’état'} · {m.objet || 'Prestation sur site'}
@@ -1354,6 +1380,7 @@ export function TechnicianMobileView({
         {!embedded && <Header title="Mission" subtitle={m.reference || undefined} onBack={() => setOpenMissionId(null)} />}
 
         <div className="t-detail-body">
+          <MissionResponseCard mission={m} />
           <div className="t-mission-top">
             <span className="t-ref">{m.reference}</span>
             <StatusPill status={statusOf(m)} />

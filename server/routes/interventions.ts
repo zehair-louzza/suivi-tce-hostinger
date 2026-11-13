@@ -12,6 +12,16 @@ import { socketEvents } from '../socket/index.js';
 import { sendInterventionReportEmail } from '../services/emailService.js';
 import { saveTechnicienGpsPosition } from './referentiels.js';
 import {
+  ajouterHistorique,
+  comptesTechnicien,
+  notifier,
+  notifierAffectation,
+  notifierRefus,
+  reglagesSociete,
+  comptesPlanification,
+} from '../services/technicianAutomation.js';
+import { estNouvelleAffectation, validerReponse } from '../domain/technicianResponse.js';
+import {
   computeInterventionCalculations,
   traitementToStatusCode,
   statusCodeToTraitement,
@@ -23,6 +33,30 @@ import {
 import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
 
 export const interventionRouter = secureRouter('interventions');
+
+/**
+ * Une NOUVELLE affectation ouvre l'attente de réponse du technicien, si l'automatisation est active pour la
+ * société et que le technicien a un compte (sinon personne ne pourrait répondre : on ne bloque rien).
+ */
+async function attenteReponseSiAffectation(
+  companyId: number,
+  ancien: string | null | undefined,
+  nouveau: string | null | undefined
+): Promise<boolean> {
+  if (!estNouvelleAffectation(ancien, nouveau)) return false;
+  const reglages = await reglagesSociete(companyId);
+  if (!reglages.actif) return false;
+  return (await comptesTechnicien(companyId, String(nouveau))).length > 0;
+}
+
+const REPONSE_VIDE = {
+  reponseTechnicien: null,
+  reponseLe: null,
+  motifRefus: null,
+  affecteLe: null,
+  relanceTechnicienLe: null,
+  alertePlanificateurLe: null,
+};
 
 function parseJsonArray<T = any>(json?: string | null): T[] {
   if (!json) return [];
@@ -175,6 +209,10 @@ export function transformIntervention(i: any) {
     elementsChiffrage: i.elementsChiffrage || null,
     rapportFinal: i.rapportFinal || null,
     statutRapport: i.statutRapport || (i.rapportFinal ? 'Validé & Clôturé' : i.compteRendu ? 'Déclaré par technicien' : 'Brouillon'),
+    reponseTechnicien: i.reponseTechnicien || null,
+    reponseLe: i.reponseLe ? new Date(i.reponseLe).toISOString() : null,
+    motifRefus: i.motifRefus || null,
+    affecteLe: i.affecteLe ? new Date(i.affecteLe).toISOString() : null,
     isVisiteDevis,
     origineDevisId: i.origineDevisId || i.devisId || null,
     origineDevisClient: i.origineDevisClient || i.client || null,
@@ -436,8 +474,10 @@ interventionRouter.post(
     const safeDevisId = dossier.devisId;
     const safeOrigineDevisId = dossier.devisId;
 
+    const ouvreAttente = await attenteReponseSiAffectation(companyId, null, tech);
     const created = await prisma.intervention.create({
       data: {
+        ...(ouvreAttente ? { reponseTechnicien: 'EN_ATTENTE', affecteLe: new Date() } : {}),
         referenceMetier: b.reference || b.referenceMetier ? String(b.reference || b.referenceMetier).trim() : null,
         refDevisTexte: b.refDevisTexte || dossier.devis?.referenceMetier || null,
         numeroDI: dossier.numeroDI,
@@ -502,6 +542,10 @@ interventionRouter.post(
       created.referenceMetier = autoRef;
     }
 
+    if (ouvreAttente) {
+      await notifierAffectation(companyId, created).catch((e) => console.error('Notification affectation :', e?.message));
+    }
+
     const transformed = transformIntervention(created);
     try {
       socketEvents.interventionCreated(userId, companyId, transformed);
@@ -512,6 +556,89 @@ interventionRouter.post(
     res.status(201).json({
       data: shapeIntervention(acc, transformed),
       message: 'Intervention créée avec succès',
+    });
+  })
+);
+
+interventionRouter.post(
+  '/:id/reponse',
+  policy('interventions.respond'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    const userId = req.user!.userId;
+    const companyId = requireCompanyId(req.user?.companyId);
+
+    const existing: any = await prisma.intervention.findFirst({ where: { id, companyId } });
+    if (!existing) {
+      throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+    }
+    const acc = await loadAccess(req);
+    // Le technicien ne répond que pour SES missions
+    if (!canReadIntervention(acc, existing)) {
+      throw new AppError(403, 'Vous ne pouvez répondre que pour les missions qui vous sont attribuées', 'FORBIDDEN');
+    }
+    if (existing.reponseTechnicien !== 'EN_ATTENTE') {
+      throw new AppError(409, 'Cette mission n\'attend plus de réponse de votre part.', 'NO_PENDING_RESPONSE');
+    }
+    const parsed = validerReponse(req.body);
+    if (!parsed.ok) {
+      throw new AppError(400, parsed.message, 'VALIDATION_ERROR');
+    }
+    const { reponse, motif } = parsed.value;
+    const nom = acc.boundTech || String(existing.entreprise || '');
+    const maintenant = new Date();
+
+    let data: any;
+    if (reponse === 'ACCEPTEE') {
+      data = {
+        reponseTechnicien: 'ACCEPTEE',
+        reponseLe: maintenant,
+        motifRefus: null,
+        statutOperationnel: ['À planifier', 'Planifiée', 'Nouvelle demande'].includes(String(existing.statutOperationnel || 'Planifiée'))
+          ? 'Affectée'
+          : existing.statutOperationnel,
+        historiqueJson: ajouterHistorique(existing.historiqueJson, nom, 'Mission acceptée par le technicien', `${nom} a accepté la mission`),
+        version: { increment: 1 },
+      };
+    } else {
+      data = {
+        reponseTechnicien: 'REFUSEE',
+        reponseLe: maintenant,
+        motifRefus: motif,
+        entreprise: null,
+        technicien: null,
+        statutOperationnel: 'À planifier',
+        relanceTechnicienLe: null,
+        alertePlanificateurLe: null,
+        historiqueJson: ajouterHistorique(existing.historiqueJson, nom, 'Mission refusée par le technicien', `Motif : ${motif} • Retour au bac « À planifier »`),
+        version: { increment: 1 },
+      };
+    }
+    const updated: any = await prisma.intervention.update({ where: { id }, data });
+
+    let remplacants: string[] = [];
+    if (reponse === 'REFUSEE') {
+      remplacants = await notifierRefus(companyId, existing, nom, motif).catch(() => []);
+    } else {
+      const planif = await comptesPlanification(companyId);
+      await notifier(companyId, planif, {
+        type: 'MISSION_ACCEPTEE',
+        titre: 'Mission acceptée',
+        message: `${nom} a accepté ${existing.referenceMetier || `INT-${id}`}.`,
+        interventionId: id,
+      }).catch(() => undefined);
+    }
+
+    const result = transformIntervention(updated);
+    try {
+      socketEvents.interventionUpdated(userId, companyId, result);
+    } catch {
+      // ignore socket notification error
+    }
+    res.json({
+      data: shapeIntervention(acc, result),
+      remplacantsSuggeres: acc.isFieldOnly ? undefined : remplacants,
+      message: reponse === 'ACCEPTEE' ? 'Mission acceptée' : 'Mission refusée : le planificateur est prévenu',
     });
   })
 );
@@ -642,10 +769,36 @@ interventionRouter.patch(
       updateData.traitement = newTraitement;
       updateData.status = traitementToStatusCode(newTraitement).toUpperCase().replace('-', '_');
     }
+    // Démarrer la mission vaut acceptation : l'attente de réponse se referme d'elle-même
+    if (
+      acc.isFieldOnly &&
+      (existing as any).reponseTechnicien === 'EN_ATTENTE' &&
+      ['En route', 'Sur site', 'En cours', 'Terminée - à valider'].includes(String(b.statutOperationnel || ''))
+    ) {
+      updateData.reponseTechnicien = 'ACCEPTEE';
+      updateData.reponseLe = new Date();
+      updateData.historiqueJson = ajouterHistorique(
+        updateData.historiqueJson,
+        'Automatique',
+        'Automatique — mission acceptée',
+        `${existing.entreprise || 'Le technicien'} a démarré la mission sans répondre : considérée comme acceptée`
+      );
+    }
+
+    let nouvelleAffectation = false;
     if (b.entreprise !== undefined || b.technicien !== undefined) {
       const t = b.entreprise ?? b.technicien ?? null;
       updateData.entreprise = t;
       updateData.technicien = t;
+      // Changement de technicien : l'ancienne réponse ne vaut plus ; une nouvelle attente s'ouvre si besoin
+      if (estNouvelleAffectation(existing.entreprise, t) || (!t && existing.entreprise)) {
+        Object.assign(updateData, REPONSE_VIDE);
+        if (await attenteReponseSiAffectation(companyId, existing.entreprise, t)) {
+          updateData.reponseTechnicien = 'EN_ATTENTE';
+          updateData.affecteLe = new Date();
+          nouvelleAffectation = true;
+        }
+      }
     }
     if (b.dateDebut !== undefined) updateData.dateDebut = parseDateOrNull(b.dateDebut);
     if (b.dateReelle !== undefined || b.dateFin !== undefined) {
@@ -736,6 +889,10 @@ interventionRouter.patch(
     });
 
     await pushDIToDevis(patchedDossierDevis, updated.numeroDI || null);
+
+    if (nouvelleAffectation) {
+      await notifierAffectation(companyId, updated).catch((e) => console.error('Notification affectation :', e?.message));
+    }
 
     const linkedDevisId = updated.devisId || updated.origineDevisId;
     let parentDevis = linkedDevisId

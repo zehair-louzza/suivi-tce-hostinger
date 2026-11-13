@@ -37,10 +37,16 @@ export const POLICY = {
     a.perms.canWriteReports ||
     a.perms.canEditPlanning ||
     a.perms.canManageBilling,
+  // Réponse du technicien à son affectation (accepter / refuser) : le terrain uniquement, sur SES missions
+  'interventions.respond': (a) => a.isFieldOnly,
   'interventions.delete': (a) => a.isAdmin || a.perms.canDeleteRecords,
   'interventions.sendReport': (a) =>
     a.isAdmin ||
     (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
+
+  // --- Notifications : chacun ne lit et ne marque que les siennes (filtré par utilisateur dans la route)
+  'notifications.list': anyMember,
+  'notifications.update': anyMember,
 
   // --- Demandes reçues
   'demandes.list': (a) => a.canTriageDemandes,
@@ -64,6 +70,7 @@ export const POLICY = {
   'admin.appearance.read': admin,
   'admin.appearance.update': admin,
   'admin.siege.update': admin,
+  'admin.automations.manage': admin,
   'admin.pointages.read': anyMember, // direction et planificateur : l'équipe ; les autres : le leur (filtré dans la route)
   'admin.pointages.clock': anyMember, // chacun pointe pour lui-même (forcé côté serveur)
 } satisfies Record<string, Rule>;
@@ -93,8 +100,11 @@ export const ACTION_LABELS: Record<Action, string> = {
   'interventions.stats': 'consulter les statistiques des interventions',
   'interventions.create': 'créer une intervention',
   'interventions.update': 'modifier cette intervention',
+  'interventions.respond': 'répondre à une affectation de mission',
   'interventions.delete': 'supprimer une intervention',
   'interventions.sendReport': 'envoyer un rapport par email',
+  'notifications.list': 'consulter les notifications',
+  'notifications.update': 'marquer les notifications comme lues',
   'demandes.list': 'consulter les demandes reçues',
   'demandes.create': 'enregistrer une demande',
   'demandes.update': 'modifier une demande',
@@ -112,6 +122,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   'admin.appearance.read': 'consulter l\'apparence de la société',
   'admin.appearance.update': 'modifier l\'apparence de la société',
   'admin.siege.update': 'modifier le siège de la société',
+  'admin.automations.manage': 'régler les automatisations de la société',
   'admin.pointages.read': 'consulter les pointages',
   'admin.pointages.clock': 'pointer',
 };

@@ -141,6 +141,11 @@ export const socketEvents = {
   interventionDeleted: (userId: number, companyId: number, data: any) =>
     emitScoped(userId, companyId, 'intervention:deleted', data),
 
+  // Notification personnelle : seul le destinataire est prévenu (signal sans contenu)
+  notificationNew: (userId: number, data: any) => {
+    getIO().to(userRoom(userId)).emit('notification:new', signalOf(data));
+  },
+
   // Diffusion à une seule entreprise
   broadcastCompany: (companyId: number, event: string, data: any) => {
     if (!isValidCompanyId(companyId)) return;

@@ -106,6 +106,10 @@ export function MaFileView({
     (i) => i.statutOperationnel === 'Terminée - à valider' || i.statutRapport === 'Déclaré par technicien'
   );
   const rapportsARediger = queues.rapportsEnAttente.filter((i) => !rapportsAValider.includes(i));
+  const reponsesRefusees = interventionsList.filter(
+    (i) => i.reponseTechnicien === 'REFUSEE' && !i.entreprise && !['Clôturée', 'Annulée'].includes(String(i.statutOperationnel))
+  );
+  const reponsesEnAttente = interventionsList.filter((i) => i.reponseTechnicien === 'EN_ATTENTE');
 
   const blocs: Record<RoleFile, Bloc[]> = {
     chiffrage: [
@@ -136,6 +140,20 @@ export function MaFileView({
       },
     ],
     travaux: [
+      {
+        id: 'tr',
+        titre: 'Réponses des techniciens',
+        genre: 'traiter',
+        aide: 'Missions refusées à réaffecter, ou affectées sans réponse du technicien.',
+        items: [
+          ...reponsesRefusees.map((i) =>
+            intvItem(i, 'refusée — à réaffecter', [i.motifRefus ? `Motif : ${i.motifRefus}` : '', i.chantier].filter(Boolean).join(' · '))
+          ),
+          ...reponsesEnAttente.map((i) =>
+            intvItem(i, 'en attente de réponse', [i.entreprise, i.chantier].filter(Boolean).join(' · '))
+          ),
+        ],
+      },
       {
         id: 'tv',
         titre: 'Interventions terminées à clôturer',
@@ -207,6 +225,20 @@ export function MaFileView({
       },
     ],
     direction: [
+      {
+        id: 'dr',
+        titre: 'Réponses des techniciens',
+        genre: 'traiter',
+        aide: 'Missions refusées à réaffecter, ou affectées sans réponse du technicien.',
+        items: [
+          ...reponsesRefusees.map((i) =>
+            intvItem(i, 'refusée — à réaffecter', [i.motifRefus ? `Motif : ${i.motifRefus}` : '', i.chantier].filter(Boolean).join(' · '))
+          ),
+          ...reponsesEnAttente.map((i) =>
+            intvItem(i, 'en attente de réponse', [i.entreprise, i.chantier].filter(Boolean).join(' · '))
+          ),
+        ],
+      },
       {
         id: 'dv',
         titre: 'À valider',

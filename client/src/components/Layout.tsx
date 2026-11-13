@@ -8,6 +8,7 @@ import { InstallAppButton } from './InstallAppButton';
 import { ProfileMenu } from './ProfileMenu';
 import { isUserMobileOnly, canUserAccessSection, canUserCreateIntervention, canUserCreateDevis, espaceRoleOf, ROLE_PERIMETRE } from '../../../shared/types';
 import { ProGlyph } from './ProIcons';
+import { NotificationBell } from './NotificationBell';
 
 export type AppSection =
   | 'aujourdhui'
@@ -40,6 +41,8 @@ interface LayoutProps {
   onQuickNewDevis?: () => void;
   onQuickNewIntervention?: () => void;
   onOpenSituationReport?: () => void;
+  /** Ouvre une intervention à partir d'une notification. */
+  onOpenInterventionById?: (id: number) => void;
 }
 
 export function Layout({
@@ -51,6 +54,7 @@ export function Layout({
   onQuickNewDevis,
   onQuickNewIntervention,
   onOpenSituationReport,
+  onOpenInterventionById,
 }: LayoutProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -721,6 +725,8 @@ export function Layout({
                 <span className="topbar-compact-label">Situation Excel</span>
               </button>
             )}
+
+            <NotificationBell onOpenIntervention={onOpenInterventionById} />
 
             {!isMobileTechOnly && canUserAccessSection('mobile_tech', user) && (
               <button

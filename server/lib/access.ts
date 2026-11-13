@@ -147,6 +147,7 @@ const FIELD_VIEW_KEYS = [
   'resultatTechnique', 'motifBlocage', 'compteRendu', 'notes', 'heureDebut', 'heureFin',
   'heureDebutReelle', 'heureFinReelle', 'actionsRealisees', 'photos', 'elementsChiffrage', 'statutRapport',
   'isVisiteDevis', 'origineDevisId', 'devisId', 'gpsCloture', 'version', 'createdAt', 'updatedAt',
+  'reponseTechnicien', 'reponseLe', 'motifRefus', 'affecteLe',
 ] as const;
 
 export function fieldViewIntervention<T extends Record<string, any>>(i: T): Partial<T> {

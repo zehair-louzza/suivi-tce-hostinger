@@ -1,0 +1,131 @@
+// Automatisation A — réponse du technicien à son affectation.
+// Fonctions PURES (sans base de données) : testées dans test/technicianResponse.test.ts.
+//
+// Cycle d'une affectation :
+//   affectation → EN_ATTENTE → (ACCEPTEE | REFUSEE)
+//   EN_ATTENTE sans réponse : relance après `delaiMinutes`, puis alerte au planificateur
+//   après un second délai identique. Les relances ne partent que pendant les heures de bureau.
+
+export type ReponseTechnicien = 'EN_ATTENTE' | 'ACCEPTEE' | 'REFUSEE';
+
+export const DELAI_RELANCE_DEFAUT_MIN = 120;
+export const DELAI_RELANCE_MIN = 15;
+export const DELAI_RELANCE_MAX = 24 * 60;
+
+/** Heures de bureau (heure de Paris) : du lundi au samedi, de 8 h à 19 h. */
+export const HEURES_BUREAU = { debut: 8, fin: 19 } as const;
+
+/** Délai valide en minutes (entier borné), sinon valeur par défaut. */
+export function normaliserDelai(valeur: unknown): number {
+  const n = Number(valeur);
+  if (!Number.isFinite(n)) return DELAI_RELANCE_DEFAUT_MIN;
+  return Math.min(DELAI_RELANCE_MAX, Math.max(DELAI_RELANCE_MIN, Math.round(n)));
+}
+
+function normaliserNom(v?: string | null): string {
+  return (v || '').trim().toLowerCase();
+}
+
+/** Une affectation est « nouvelle » quand un technicien est désigné et diffère de l'ancien. */
+export function estNouvelleAffectation(ancien?: string | null, suivant?: string | null): boolean {
+  const s = normaliserNom(suivant);
+  if (!s) return false;
+  return s !== normaliserNom(ancien);
+}
+
+/** Jour de la semaine (0 = dimanche) et heure à Paris pour une date donnée. */
+function partiesParis(date: Date): { jour: number; heure: number } {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Paris',
+    weekday: 'short',
+    hour: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(date);
+  const wd = parts.find((p) => p.type === 'weekday')?.value || 'Mon';
+  const h = Number(parts.find((p) => p.type === 'hour')?.value || '0') % 24;
+  const jours: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { jour: jours[wd] ?? 1, heure: h };
+}
+
+export function dansHeuresBureau(date: Date): boolean {
+  const { jour, heure } = partiesParis(date);
+  if (jour === 0) return false;
+  return heure >= HEURES_BUREAU.debut && heure < HEURES_BUREAU.fin;
+}
+
+export type EtatRelance = {
+  reponse: string | null | undefined;
+  affecteLe: Date | null | undefined;
+  relanceLe: Date | null | undefined;
+  alerteLe: Date | null | undefined;
+  maintenant: Date;
+  delaiMinutes: number;
+};
+
+export type ActionRelance = 'aucune' | 'relancer_technicien' | 'alerter_planificateur';
+
+/**
+ * Décide la prochaine action automatique pour une affectation en attente.
+ *  - rien si la réponse est donnée, ou hors heures de bureau ;
+ *  - relance du technicien après `delaiMinutes` sans réponse ;
+ *  - alerte au planificateur `delaiMinutes` après la relance, si toujours sans réponse.
+ * Chaque étape n'est déclenchée qu'une fois (relanceLe / alerteLe servent de verrou).
+ */
+export function prochaineAction(e: EtatRelance): ActionRelance {
+  if (e.reponse !== 'EN_ATTENTE') return 'aucune';
+  if (!e.affecteLe) return 'aucune';
+  if (!dansHeuresBureau(e.maintenant)) return 'aucune';
+  const delaiMs = normaliserDelai(e.delaiMinutes) * 60_000;
+  const now = e.maintenant.getTime();
+  if (!e.relanceLe) {
+    return now - e.affecteLe.getTime() >= delaiMs ? 'relancer_technicien' : 'aucune';
+  }
+  if (!e.alerteLe) {
+    return now - e.relanceLe.getTime() >= delaiMs ? 'alerter_planificateur' : 'aucune';
+  }
+  return 'aucune';
+}
+
+export type CandidatTechnicien = { nom: string; chargeDuJour: number; competences?: string[] };
+
+/**
+ * Techniciens suggérés pour remplacer celui qui refuse : on écarte le refusant, puis on classe
+ * ceux qui ont la compétence demandée en premier, puis par charge du jour croissante.
+ */
+export function suggererRemplacants(
+  candidats: CandidatTechnicien[],
+  refusant: string,
+  corpsEtat?: string | null,
+  max = 3
+): CandidatTechnicien[] {
+  const ref = normaliserNom(refusant);
+  const corps = normaliserNom(corpsEtat);
+  const aLaCompetence = (c: CandidatTechnicien) =>
+    Boolean(corps) && (c.competences || []).some((x) => normaliserNom(x) === corps);
+  return candidats
+    .filter((c) => normaliserNom(c.nom) && normaliserNom(c.nom) !== ref)
+    .sort((a, b) => {
+      const ca = aLaCompetence(a) ? 0 : 1;
+      const cb = aLaCompetence(b) ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      if (a.chargeDuJour !== b.chargeDuJour) return a.chargeDuJour - b.chargeDuJour;
+      return a.nom.localeCompare(b.nom, 'fr');
+    })
+    .slice(0, max);
+}
+
+export type ReponseDemandee = { reponse: 'ACCEPTEE' | 'REFUSEE'; motif: string };
+
+/** Valide le corps d'une réponse : refus = motif obligatoire (3 à 300 caractères). */
+export function validerReponse(body: any): { ok: true; value: ReponseDemandee } | { ok: false; message: string } {
+  const reponse = String(body?.reponse || '').toUpperCase();
+  if (reponse !== 'ACCEPTEE' && reponse !== 'REFUSEE') {
+    return { ok: false, message: 'Réponse attendue : « acceptée » ou « refusée ».' };
+  }
+  const motif = String(body?.motif ?? '').trim().slice(0, 300);
+  if (reponse === 'REFUSEE' && motif.length < 3) {
+    return { ok: false, message: 'Indiquez le motif de votre refus (3 caractères au minimum).' };
+  }
+  return { ok: true, value: { reponse, motif } };
+}

@@ -906,6 +906,17 @@ export function DashboardPage() {
 
   // Pastilles du menu : chacune compte ce que CE profil doit traiter dans la section (mêmes files que « Mon travail »),
   // jamais le total brut de la liste.
+  const openInterventionById = async (id: number) => {
+    const i =
+      interventionsList.find((x) => x.id === id) ||
+      (await interventionApi.get(id).then((r) => r.data.data).catch(() => null));
+    if (!i) return;
+    handleSectionChange('interventions');
+    setIsCreatingIntv(false);
+    setIntvTab('planif');
+    setSelectedIntv(i);
+  };
+
   const sidebarBadges = (() => {
     const espace = espaceRoleOf(user);
     const aValiderInterne = devisList.filter((d) => d.statutCommercial === 'À valider en interne').length;
@@ -916,16 +927,21 @@ export function DashboardPage() {
     const aPlanifier = queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length;
     const devisATraiter = aValiderInterne + queues.devisARelancer.length + queues.devisAcceptesSansIntv.length;
     const intvATraiter = queues.intvEnRetard.length + queues.intvAPlanifier.length + rapportsAValider;
+    const reponsesATraiter = interventionsList.filter(
+      (i) =>
+        (i.reponseTechnicien === 'REFUSEE' && !i.entreprise && !['Clôturée', 'Annulée'].includes(String(i.statutOperationnel))) ||
+        i.reponseTechnicien === 'EN_ATTENTE'
+    ).length;
     const monTravail =
       espace === 'chiffrage'
         ? devisATraiter + queues.visitesDevisAPlanifier.length
         : espace === 'travaux'
-        ? rapportsAValider + queues.devisAcceptesSansIntv.length + queues.intvAPlanifier.length + queues.intvEnRetard.length
+        ? rapportsAValider + queues.devisAcceptesSansIntv.length + queues.intvAPlanifier.length + queues.intvEnRetard.length + reponsesATraiter
         : espace === 'rapports'
         ? aFacturer + queues.rapportsEnAttente.length
         : espace === 'terrain'
         ? queues.rapportsEnAttente.length
-        : rapportsAValider + queues.intvAFacturer.length;
+        : rapportsAValider + queues.intvAFacturer.length + reponsesATraiter;
     return {
       aujourdhui: monTravail,
       planning: aPlanifier,
@@ -946,6 +962,7 @@ export function DashboardPage() {
       onQuickNewDevis={openNewDevisDrawer}
       onQuickNewIntervention={openNewIntvDrawer}
       onOpenSituationReport={() => setIsSituationModalOpen(true)}
+      onOpenInterventionById={openInterventionById}
     >
       {/* =====================================================================
           SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI" / TABLEAU DE BORD)

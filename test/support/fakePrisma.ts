@@ -14,6 +14,7 @@ function matchValue(actual: any, cond: any): boolean {
       case 'equals': if (a !== e) return false; break;
       case 'contains': if (typeof a !== 'string' || !a.includes(String(e))) return false; break;
       case 'startsWith': if (typeof a !== 'string' || !a.startsWith(String(e))) return false; break;
+      case 'is': if (!matches((actual as Row) || {}, v as Row)) return false; break;
       case 'in': if (!(v as any[]).includes(actual)) return false; break;
       case 'notIn': if ((v as any[]).includes(actual)) return false; break;
       case 'not': if (v === null ? actual == null : matchValue(actual, v)) return false; break;
@@ -90,6 +91,7 @@ export function createFakeDb() {
     intervention: new Table('intervention'),
     referentiel: new Table('referentiel'),
     company: new Table('company'),
+    notification: new Table('notification'),
     $transaction: async (x: any) => (typeof x === 'function' ? x(db) : Promise.all(x)),
   };
   return db;
