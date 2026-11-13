@@ -5,8 +5,6 @@ import 'leaflet/dist/leaflet.css';
 import {
   CircuitStop,
   GeoPoint,
-  DEFAULT_DEPOT_ADDRESS,
-  DEFAULT_DEPOT_COORDS,
   geocodeAddress,
   solveTSP,
   fetchOsrmPolyline,
@@ -17,6 +15,7 @@ import {
 } from '../lib/geocoding';
 import { Intervention, Devis, GpsPositionPayload, referentielsApi } from '../lib/api';
 import { ProGlyph } from './ProIcons';
+import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
 
 interface TourneeMapOptimizerProps {
   interventions: Intervention[];
@@ -110,8 +109,10 @@ export function TourneeMapOptimizer({
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
 
-  const officeAddress = DEFAULT_DEPOT_ADDRESS; // '9 Rue des Colonnes, 75002 Paris'
-  const officeCoords = DEFAULT_DEPOT_COORDS;   // { lat: 48.869742, lng: 2.339379 }
+  // Siège de l'entreprise (réglé par son administrateur) : départ et retour des tournées
+  const hq = useCompanyHQ();
+  const officeAddress = hq.addr;
+  const officeCoords = hq.coords;
 
   // Récupération temps réel des positions GPS transmises par les techniciens
   const referentielsQuery = useQuery({
@@ -437,7 +438,7 @@ export function TourneeMapOptimizer({
         };
         let statusLabel = 'Au bureau / Prêt au départ';
         let statusColor = '#475569';
-        let sourceLabel = 'Siège ANELEC';
+        let sourceLabel = hq.configured ? hq.name : 'Siège';
         let lastTimestamp: string | undefined;
         let accuracy: number | undefined;
 
@@ -582,7 +583,7 @@ export function TourneeMapOptimizer({
     return () => {
       isCancelled = true;
     };
-  }, [allFilteredMissions, remainingMissions, completedMissions, positionsGpsMap, techFilter, techniciensList]);
+  }, [allFilteredMissions, remainingMissions, completedMissions, positionsGpsMap, techFilter, techniciensList, hq]);
 
   // 3. INITIALISATION ET GESTION ROBUSTE DE LA CARTE LEAFLET
   useEffect(() => {
@@ -606,7 +607,9 @@ export function TourneeMapOptimizer({
       const osmFrLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap France • ANELEC GROUPE',
-      });
+        // OSM France applique la même règle qu'OSM : pas de Referer, pas de tuiles
+        referrerPolicy: 'strict-origin-when-cross-origin',
+      } as L.TileLayerOptions);
 
       L.control
         .layers(
@@ -666,19 +669,13 @@ export function TourneeMapOptimizer({
     const showTrajet = displayMode === 'trajet' || displayMode === 'both';
     const showPositions = displayMode === 'positions' || displayMode === 'both';
 
-    // A. Marqueur Fixe : Siège & Bureau ANELEC GROUPE
+    // A. Marqueur fixe du siège : pastille ronde, pictogramme seul (comme sur la carte principale)
     const depotIcon = L.divIcon({
       className: 'anelec-map-depot-pin',
-      html: `
-        <div style="
-          width: 36px; height: 36px; border-radius: 50%;
-          background: #0a0f1d; border: 3px solid #ffcc00;
-          color: #ffcc00; display: flex; align-items: center; justify-content: center;
-          font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        "><span style="display:block;width:12px;height:12px;background:#ffcc00;border-radius:2px;"></span></div>
-      `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18],
+      html: `<div style="width:44px;height:44px;background:#0F172A;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;box-shadow:0 3px 10px rgba(0,0,0,.35);">🏢</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22],
     });
 
     const depotMarker = L.marker([officeCoords.lat, officeCoords.lng], { icon: depotIcon }).addTo(
@@ -687,10 +684,10 @@ export function TourneeMapOptimizer({
     depotMarker.bindPopup(`
       <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 200px;">
         <div style="font-weight: 800; font-size: 13px; color: #0a0f1d; margin-bottom: 2px;">
-          Bureau ANELEC GROUPE
+          ${escapeHtml(hq.configured ? hq.name : 'Siège')}
         </div>
         <div style="color: #64748b; font-size: 11.5px; margin-bottom: 6px;">
-          ${officeAddress}
+          ${escapeHtml(officeAddress)}
         </div>
         <div style="background: #f1f5f9; padding: 4px 8px; border-radius: 6px; font-weight: 700; color: #0f172a; font-size: 11px;">
           Point officiel de départ et retour de tournée
@@ -915,6 +912,7 @@ export function TourneeMapOptimizer({
     completedStopsWithCoords,
     displayMode,
     showCompletedPinsOnMap,
+    hq,
   ]);
 
   // Centrer la carte sur un technicien spécifique au clic
@@ -942,7 +940,7 @@ export function TourneeMapOptimizer({
   // URL Google Maps globale de l'itinéraire restant de la journée
   const fullTourUrl = useMemo(() => {
     return getFullTourGoogleMapsUrl(officeCoords, optimizedStops);
-  }, [optimizedStops]);
+  }, [optimizedStops, officeCoords]);
 
   const totalMissionsCount = allFilteredMissions.length;
   const completedCount = completedMissions.length;

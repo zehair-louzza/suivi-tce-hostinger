@@ -25,17 +25,15 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
-  DEFAULT_DEPOT_ADDRESS,
-  DEFAULT_DEPOT_COORDS,
   geocodeAddress,
   solveTSP,
   estimateRoadDistanceAndDuration,
   type CircuitStop,
   type GeoPoint,
 } from '../lib/geocoding';
+import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
 import type { Intervention, Devis } from '../lib/api';
 import toast from 'react-hot-toast';
-import { useAuth } from '../stores/authStore';
 
 interface CarteStudioViewProps {
   interventions: Intervention[];
@@ -46,13 +44,6 @@ interface CarteStudioViewProps {
   onOpenIntervention?: (intv: Partial<Intervention>) => void;
   onOpenDevis?: (dev: Partial<Devis>) => void;
 }
-
-/** Fallback quand l'entreprise n'a pas encore renseigné son adresse. */
-const FALLBACK_HQ = {
-  name: 'Siège (adresse non configurée)',
-  addr: DEFAULT_DEPOT_ADDRESS,
-  pos: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng] as [number, number],
-};
 
 const TECH_COLORS = ['#1D4ED8', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0EA5A4'];
 
@@ -72,25 +63,14 @@ export function CarteStudioView({
 }: CarteStudioViewProps) {
   void _devis;
   const isMobile = useIsMobile();
-  const { user } = useAuth();
   const [mode, setMode] = useState<'positions' | 'route' | 'both'>('both');
   const [tech, setTech] = useState<string>(currentTechnicien || 'all');
   const [full, setFull] = useState(false);
   /** Ordre recalculé par l'optimiseur (par technicien) ; vide tant qu'on n'a pas optimisé */
   const [ordreOptimise, setOrdreOptimise] = useState<Record<string, number[]>>({});
 
-  // Adresse du siège : priorité à l'adresse configurée par l'entreprise
-  const HQ = useMemo(() => {
-    const company = (user as any)?.company;
-    if (company?.siegeAdresse && company?.siegeLat && company?.siegeLng) {
-      return {
-        name: `Siège ${company.name || ''}`.trim(),
-        addr: company.siegeAdresse as string,
-        pos: [company.siegeLat as number, company.siegeLng as number] as [number, number],
-      };
-    }
-    return FALLBACK_HQ;
-  }, [user]);
+  // Adresse du siège propre à l'entreprise (même source que l'application mobile et l'optimiseur)
+  const HQ = useCompanyHQ();
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -236,7 +216,7 @@ export function CarteStudioView({
       popupAnchor: [0, -22],
     });
     L.marker(HQ.pos, { icon: hqIcon })
-      .bindPopup(`<strong>${HQ.name}</strong><br/>${HQ.addr}`)
+      .bindPopup(`<strong>${escapeHtml(HQ.name)}</strong><br/>${escapeHtml(HQ.addr)}`)
       .addTo(layer);
 
     const bounds: [number, number][] = [HQ.pos];
@@ -308,7 +288,8 @@ export function CarteStudioView({
     // Le conteneur vient parfois d'être (re)dimensionné : Leaflet doit se re-mesurer,
     // sinon la carte reste grise ou tronquée.
     setTimeout(() => map.invalidateSize(), 60);
-  }, [displayedTechs, mode, pendingInterventions, geoVersion, full, ordreOptimise]);
+    // HQ en dépendance : quand l'administrateur change l'adresse du siège, la carte des membres se redessine.
+  }, [displayedTechs, mode, pendingInterventions, geoVersion, full, ordreOptimise, HQ]);
 
   // Optimisation RÉELLE : plus proche voisin + 2-opt du module d'itinéraires, sur les
   // chantiers effectivement localisés. L'ancien bouton annonçait « 8,4 km économisés »
@@ -448,7 +429,7 @@ export function CarteStudioView({
           className="m-muted m-small"
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
-          <Building size={14} /> Départ et retour : {HQ === FALLBACK_HQ ? 'adresse du siège non configurée (Administration → Apparence)' : HQ.name}
+          <Building size={14} /> Départ et retour : {HQ.configured ? HQ.name : 'adresse du siège non configurée (Administration → Apparence)'}
         </span>
       </div>
 
@@ -476,8 +457,9 @@ export function CarteStudioView({
             ref={mapContainerRef}
             style={{ width: '100%', height: isMobile ? '420px' : '580px' }}
           />
-          {/* Bouton plein écran directement sur la carte : reste visible même quand l'en-tête de page défile */}
-          {!full && (
+          {/* Bouton plein écran sur la carte (ordinateur uniquement) : reste visible quand l'en-tête défile.
+              Sur téléphone la carte garde sa taille actuelle, pas de plein écran. */}
+          {!full && !isMobile && (
             <button
               type="button"
               onClick={() => setFull(true)}

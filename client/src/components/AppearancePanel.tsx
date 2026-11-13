@@ -9,11 +9,11 @@
  *     à mesure qu'il survole les cartes de thème).
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
 import { useAuth } from '../stores/authStore';
-import { api, adminApi } from '../lib/api';
+import { api, adminApi, type SuperAdminCompany } from '../lib/api';
 import { geocodeAddress } from '../lib/geocoding';
 import { ProGlyph } from './ProIcons';
 
@@ -200,6 +200,7 @@ export function AppearancePanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-testid="appearance-panel">
       <AccueilMaFileToggle />
       <SiegeAddressPanel />
+      {user?.isSuperAdmin === true && <SuperAdminCompaniesPanel />}
 
       {/* Bandeau introductif */}
       <section
@@ -430,25 +431,35 @@ export function PersonalThemePicker() {
 }
 
 /**
- * Section « Adresse du siège » — permet à l'administrateur de définir
- * le point de départ des tournées (géocodé automatiquement via BAN).
+ * Saisie, vérification (géocodage BAN) et enregistrement d'une adresse de siège.
+ * Utilisé par l'administrateur pour sa propre entreprise, et par le super administrateur pour
+ * n'importe quelle entreprise (`companyId`). `onSaved` laisse l'appelant rafraîchir ses données.
  */
-function SiegeAddressPanel() {
-  const { user, fetchMe } = useAuth();
-  const company = (user as any)?.company;
-  const currentAddr = company?.siegeAdresse || '';
-
+function SiegeEditor({
+  companyId,
+  currentAddr,
+  onSaved,
+  testId = 'siege',
+}: {
+  companyId?: number;
+  currentAddr: string;
+  onSaved: () => Promise<void> | void;
+  testId?: string;
+}) {
   const [addr, setAddr] = useState(currentAddr);
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeResult, setGeocodeResult] = useState<{ lat: number; lng: number; label: string } | null>(null);
 
-  // Sync state if user data changes (e.g. after fetchMe)
-  const displayAddr = addr || currentAddr;
+  // Tant que l'on n'a pas touché au champ, il suit l'adresse enregistrée (ex. après un rafraîchissement).
+  useEffect(() => {
+    if (!dirty) setAddr(currentAddr);
+  }, [currentAddr, dirty]);
 
   const doGeocode = useCallback(async () => {
     const trimmed = addr.trim();
-    if (!trimmed || trimmed.length < 5) {
+    if (trimmed.length < 5) {
       toast.error('Veuillez saisir une adresse complète.');
       return;
     }
@@ -458,7 +469,6 @@ function SiegeAddressPanel() {
       const result = await geocodeAddress(trimmed);
       if (result) {
         setGeocodeResult({ lat: result.lat, lng: result.lng, label: result.label || trimmed });
-        toast.success(`Adresse trouvée : ${result.label || trimmed}`);
       } else {
         toast.error('Adresse introuvable. Vérifiez et réessayez.');
       }
@@ -471,7 +481,7 @@ function SiegeAddressPanel() {
 
   const doSave = useCallback(async () => {
     if (!geocodeResult) {
-      toast.error('Veuillez d\'abord vérifier l\'adresse.');
+      toast.error("Veuillez d'abord vérifier l'adresse.");
       return;
     }
     setSaving(true);
@@ -480,16 +490,103 @@ function SiegeAddressPanel() {
         siegeAdresse: geocodeResult.label,
         siegeLat: geocodeResult.lat,
         siegeLng: geocodeResult.lng,
+        ...(companyId !== undefined ? { companyId } : {}),
       });
-      await fetchMe();
-      toast.success('Adresse du siège enregistrée avec succès.');
+      await onSaved();
+      toast.success('Adresse du siège enregistrée.');
       setGeocodeResult(null);
+      setDirty(false);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Impossible d\'enregistrer l\'adresse.');
+      toast.error(err?.response?.data?.error || "Impossible d'enregistrer l'adresse.");
     } finally {
       setSaving(false);
     }
-  }, [geocodeResult, fetchMe]);
+  }, [geocodeResult, companyId, onSaved]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={addr}
+          onChange={(e) => {
+            setAddr(e.target.value);
+            setDirty(true);
+            setGeocodeResult(null);
+          }}
+          placeholder="Ex : 12 Rue de la Paix, 75002 Paris"
+          data-testid={`${testId}-address-input`}
+          style={{
+            flex: '1 1 260px',
+            minWidth: 0,
+            padding: '10px 14px',
+            borderRadius: 8,
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            fontSize: 14,
+            outline: 'none',
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void doGeocode();
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={doGeocode}
+          disabled={geocoding || !addr.trim()}
+          data-testid={`${testId}-address-geocode`}
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {geocoding ? 'Recherche…' : "Vérifier l'adresse"}
+        </button>
+      </div>
+
+      {geocodeResult && (
+        <div
+          style={{
+            padding: '10px 14px',
+            background: 'var(--color-success-soft, #ecfdf5)',
+            borderRadius: 8,
+            border: '1px solid var(--color-success, #10b981)',
+            fontSize: 13,
+            color: 'var(--color-text)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+          data-testid={`${testId}-geocode-result`}
+        >
+          <div>
+            <strong>Adresse vérifiée :</strong> {geocodeResult.label}
+          </div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>
+            Coordonnées : {geocodeResult.lat.toFixed(6)}, {geocodeResult.lng.toFixed(6)}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={doSave}
+            disabled={saving}
+            data-testid={`${testId}-address-save`}
+            style={{ alignSelf: 'flex-start', marginTop: 4 }}
+          >
+            {saving ? 'Enregistrement…' : 'Enregistrer cette adresse'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Section « Adresse du siège » — l'administrateur définit le point de départ des tournées de SON
+ * entreprise. Les membres de l'équipe (ordinateur et téléphone) reçoivent le changement automatiquement.
+ */
+function SiegeAddressPanel() {
+  const { user, refreshMe } = useAuth();
+  const currentAddr = user?.company?.siegeAdresse || '';
 
   return (
     <section
@@ -516,8 +613,6 @@ function SiegeAddressPanel() {
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 20,
-            fontWeight: 700,
             flexShrink: 0,
           }}
         >
@@ -526,13 +621,13 @@ function SiegeAddressPanel() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <strong style={{ fontSize: 16, color: 'var(--color-text)' }}>Adresse du siège</strong>
           <p style={{ margin: 0, fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
-            Définissez l'adresse de départ des tournées de votre entreprise. Cette adresse sera utilisée pour le calcul des distances et des temps de trajet sur la carte.
+            Définissez l'adresse de départ des tournées de votre entreprise. Elle sert au calcul des distances et
+            des temps de trajet, et s'affiche chez tous les membres de l'équipe, sur ordinateur comme sur téléphone.
           </p>
         </div>
       </div>
 
-      {/* Adresse actuelle */}
-      {currentAddr && (
+      {currentAddr ? (
         <div
           style={{
             padding: '10px 14px',
@@ -543,83 +638,13 @@ function SiegeAddressPanel() {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
+            flexWrap: 'wrap',
           }}
         >
           <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Adresse actuelle :</span>
           <span>{currentAddr}</span>
         </div>
-      )}
-
-      {/* Champ de saisie */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          value={displayAddr}
-          onChange={(e) => { setAddr(e.target.value); setGeocodeResult(null); }}
-          placeholder="Ex : 12 Rue de la Paix, 75002 Paris"
-          data-testid="siege-address-input"
-          style={{
-            flex: '1 1 280px',
-            minWidth: 0,
-            padding: '10px 14px',
-            borderRadius: 8,
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text)',
-            fontSize: 14,
-            outline: 'none',
-          }}
-          onKeyDown={(e) => { if (e.key === 'Enter') doGeocode(); }}
-        />
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={doGeocode}
-          disabled={geocoding || !addr.trim()}
-          data-testid="siege-address-geocode"
-          style={{ whiteSpace: 'nowrap' }}
-        >
-          {geocoding ? 'Recherche…' : 'Vérifier l\'adresse'}
-        </button>
-      </div>
-
-      {/* Résultat du géocodage */}
-      {geocodeResult && (
-        <div
-          style={{
-            padding: '10px 14px',
-            background: 'var(--color-success-soft, #ecfdf5)',
-            borderRadius: 8,
-            border: '1px solid var(--color-success, #10b981)',
-            fontSize: 13,
-            color: 'var(--color-text)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
-          data-testid="siege-geocode-result"
-        >
-          <div>
-            <strong>Adresse vérifiée :</strong> {geocodeResult.label}
-          </div>
-          <div style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>
-            Coordonnées : {geocodeResult.lat.toFixed(6)}, {geocodeResult.lng.toFixed(6)}
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={doSave}
-            disabled={saving}
-            data-testid="siege-address-save"
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          >
-            {saving ? 'Enregistrement…' : 'Enregistrer cette adresse'}
-          </button>
-        </div>
-      )}
-
-      {/* Note explicative */}
-      {!currentAddr && !geocodeResult && (
+      ) : (
         <div
           style={{
             padding: '10px 14px',
@@ -630,9 +655,175 @@ function SiegeAddressPanel() {
             color: 'var(--color-text-secondary)',
           }}
         >
-          ⚠️ Aucune adresse de siège n'est configurée. La carte utilisera une adresse par défaut (Paris) comme point de départ des tournées.
+          Aucune adresse de siège n'est configurée : la carte utilise une adresse par défaut (Paris) comme point de départ.
         </div>
       )}
+
+      <SiegeEditor currentAddr={currentAddr} onSaved={refreshMe} />
+    </section>
+  );
+}
+
+/**
+ * Super administration : liste de TOUTES les entreprises, avec pour chacune son adresse de siège et
+ * ses réglages d'apparence modifiables. Visible uniquement par le super administrateur ; le serveur
+ * refuse de toute façon ces appels à tout autre compte.
+ */
+function SuperAdminCompaniesPanel() {
+  const { user, refreshMe } = useAuth();
+  const [companies, setCompanies] = useState<SuperAdminCompany[] | null>(null);
+  const [themeIds, setThemeIds] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await adminApi.listCompanies();
+      setCompanies(res.data.data);
+      setThemeIds(res.data.availableThemes);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Impossible de charger la liste des entreprises.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Après une modification : recharger la liste, et mon propre profil si c'est mon entreprise.
+  const afterChange = useCallback(
+    async (companyId: number) => {
+      await load();
+      if (companyId === user?.company?.id) await refreshMe();
+    },
+    [load, refreshMe, user?.company?.id]
+  );
+
+  const patchAppearance = async (
+    c: SuperAdminCompany,
+    payload: { defaultTheme?: string; allowThemeOverride?: boolean; accueilMaFile?: boolean }
+  ) => {
+    setBusyId(c.id);
+    try {
+      await adminApi.updateCompanyAppearance(c.id, payload);
+      await afterChange(c.id);
+      toast.success(`Réglages de « ${c.name} » mis à jour.`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Modification impossible.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section
+      style={{
+        padding: 18,
+        background: 'var(--color-surface)',
+        border: '2px solid var(--color-primary)',
+        borderRadius: 'var(--rounded-card, 10px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+      data-testid="super-admin-section"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <strong style={{ fontSize: 16, color: 'var(--color-text)' }}>Super administration · toutes les entreprises</strong>
+        <p style={{ margin: 0, fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+          En tant que super administrateur, vous pouvez régler l'adresse du siège et l'apparence de chaque entreprise.
+          Les membres concernés reçoivent le changement automatiquement, sans se reconnecter.
+        </p>
+      </div>
+
+      {error && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--color-danger-soft, #fef2f2)', color: 'var(--color-text)', fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+      {!companies && !error && (
+        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Chargement des entreprises…</div>
+      )}
+
+      {companies?.map((c) => (
+        <div
+          key={c.id}
+          data-testid={`super-admin-company-${c.id}`}
+          style={{
+            padding: 14,
+            border: '1px solid var(--color-border)',
+            borderRadius: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            opacity: busyId === c.id ? 0.7 : 1,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 15, color: 'var(--color-text)' }}>{c.name}</strong>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              #{c.id}
+              {c.siren ? ` · SIREN ${c.siren}` : ''} · {c.userCount} membre{c.userCount > 1 ? 's' : ''}
+              {c.active ? '' : ' · désactivée'}
+            </span>
+          </div>
+
+          <div style={{ fontSize: 13, color: 'var(--color-text)' }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Siège : </span>
+            {c.siegeAdresse || <em style={{ color: 'var(--color-text-muted)' }}>non configuré</em>}
+          </div>
+          <SiegeEditor
+            companyId={c.id}
+            currentAddr={c.siegeAdresse || ''}
+            onSaved={() => afterChange(c.id)}
+            testId={`super-admin-${c.id}`}
+          />
+
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              Apparence par défaut
+              <select
+                value={c.defaultTheme}
+                disabled={busyId === c.id}
+                onChange={(e) => void patchAppearance(c, { defaultTheme: e.target.value })}
+                data-testid={`super-admin-${c.id}-theme`}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                }}
+              >
+                {themeIds.map((id) => (
+                  <option key={id} value={id}>
+                    {THEMES.find((t) => t.id === id)?.name ?? id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={c.allowThemeOverride}
+                disabled={busyId === c.id}
+                onChange={(e) => void patchAppearance(c, { allowThemeOverride: e.target.checked })}
+              />
+              Personnalisation individuelle
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={c.accueilMaFile}
+                disabled={busyId === c.id}
+                onChange={(e) => void patchAppearance(c, { accueilMaFile: e.target.checked })}
+              />
+              Accueil sur « Ma file »
+            </label>
+          </div>
+        </div>
+      ))}
     </section>
   );
 }

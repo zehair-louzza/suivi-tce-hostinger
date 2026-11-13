@@ -16,11 +16,8 @@ import { useTheme } from '../stores/themeStore';
 import type { ThemeId } from '../stores/themeStore';
 import { compressAndOptimizeImage } from '../lib/imageOptimizer';
 import { TourneeMapOptimizer } from './TourneeMapOptimizer';
-import {
-  DEFAULT_DEPOT_ADDRESS,
-  DEFAULT_DEPOT_COORDS,
-  geocodeAddress,
-} from '../lib/geocoding';
+import { geocodeAddress } from '../lib/geocoding';
+import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
 
 interface TechnicianMobileViewProps {
   techniciens: string[];
@@ -278,6 +275,8 @@ function MobileRouteMap({
   selectedDate: string;
   onOpenMission: (id: number) => void;
 }) {
+  // Point de départ = siège de l'entreprise du technicien (réglé par son administrateur)
+  const hq = useCompanyHQ();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
@@ -333,7 +332,7 @@ function MobileRouteMap({
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
-        center: [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng],
+        center: hq.pos,
         zoom: 13,
         zoomControl: true,
         attributionControl: false,
@@ -395,40 +394,27 @@ function MobileRouteMap({
       onOpenMission(id);
     };
 
-    const bounds = L.latLngBounds(
-      [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng],
-      [DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng]
-    );
+    const bounds = L.latLngBounds(hq.pos, hq.pos);
 
-    // 1. Marqueur Siège / Technicien
-    const initials = (technicien || 'TE').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
-    const techPinIcon = L.divIcon({
-      className: 't-leaflet-tech-pin',
-      html: `
-        <div style="
-          width: 34px; height: 34px; border-radius: 50%;
-          background: #1D4ED8; color: #ffffff;
-          display: flex; align-items: center; justify-content: center;
-          font-weight: 800; font-size: 13px;
-          border: 3px solid #ffffff; box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.25), 0 3px 8px rgba(0,0,0,0.3);
-        ">
-          ${initials}
-        </div>
-      `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
+    // 1. Marqueur du siège : même pastille ronde, pictogramme seul, que sur la carte de bureau
+    const hqIcon = L.divIcon({
+      className: 'm-map-hq',
+      html: `<div style="width:44px;height:44px;background:#0F172A;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;box-shadow:0 3px 10px rgba(0,0,0,.35);">🏢</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22],
     });
 
-    L.marker([DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng], { icon: techPinIcon })
+    L.marker(hq.pos, { icon: hqIcon })
       .bindPopup(`
         <div style="font-family: inherit; font-size: 14px; line-height: 1.4;">
           <strong style="color: #1D4ED8; font-size: 15px;">Point de départ tournée</strong>
-          <div style="color: #475569; font-size: 13px; margin-top: 2px;">${DEFAULT_DEPOT_ADDRESS}</div>
+          <div style="color: #475569; font-size: 13px; margin-top: 2px;">${escapeHtml(hq.addr)}</div>
         </div>
       `)
       .addTo(lg);
 
-    const routePoints: [number, number][] = [[DEFAULT_DEPOT_COORDS.lat, DEFAULT_DEPOT_COORDS.lng]];
+    const routePoints: [number, number][] = [hq.pos];
 
     // 2. Marqueurs numérotés 1, 2, 3...
     missions.forEach((m, idx) => {
@@ -509,8 +495,10 @@ function MobileRouteMap({
 
     if (missions.length > 0) {
       map.fitBounds(bounds, { padding: [35, 35], maxZoom: 15 });
+    } else {
+      map.setView(hq.pos, 13);
     }
-  }, [missions, stopsCoords, technicien, onOpenMission]);
+  }, [missions, stopsCoords, technicien, onOpenMission, hq]);
 
   const unlocated = resolved ? missions.length - stopsCoords.length : 0;
 

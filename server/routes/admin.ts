@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
+import { isSuperAdminUser } from '../lib/superAdmin.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
 import {
@@ -72,12 +73,33 @@ async function getCallerUser(req: Request) {
   const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' || u.role === 'ADMIN' ? 'ADMIN' : u.role;
   const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
   const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
-  return { ...u, effectiveRole, isAdmin, perms };
+  const isSuperAdmin = isSuperAdminUser(u);
+  return { ...u, effectiveRole, isAdmin: isAdmin || isSuperAdmin, isSuperAdmin, perms };
 }
 
 /** Entreprise sur laquelle l'appelant agit : toujours la sienne, jamais une valeur fournie par le client. */
 function tenantOf(caller: { companyId?: number | null }): number {
   return caller.companyId ?? 1;
+}
+
+/**
+ * Entreprise ciblée par une action de réglage.
+ * - Administrateur d'entreprise : uniquement la sienne ; viser une autre entreprise est refusé.
+ * - Super administrateur : peut viser n'importe quelle entreprise existante.
+ * Sans identifiant fourni, on retombe sur l'entreprise de l'appelant.
+ */
+async function resolveTargetCompanyId(
+  caller: { companyId?: number | null; isSuperAdmin: boolean },
+  requested?: number | null
+): Promise<number> {
+  const own = caller.companyId || 1;
+  if (requested === undefined || requested === null || requested === own) return own;
+  if (!caller.isSuperAdmin) {
+    throw new AppError(403, "Vous ne pouvez modifier que les réglages de votre propre entreprise", 'FORBIDDEN');
+  }
+  const exists = await prisma.company.findUnique({ where: { id: requested }, select: { id: true } });
+  if (!exists) throw new AppError(404, 'Entreprise introuvable', 'COMPANY_NOT_FOUND');
+  return requested;
 }
 
 // ============================================================================
@@ -913,11 +935,24 @@ const CompanyAppearanceSchema = z.object({
   allowThemeOverride: z.boolean().optional(),
   /** Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse */
   accueilMaFile: z.boolean().optional(),
+  /** Réservé au super administrateur : entreprise visée (sinon la sienne) */
+  companyId: z.number().int().positive().optional(),
 });
+
+/** Lit un identifiant d'entreprise optionnel dans une query string. */
+function parseCompanyIdParam(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new AppError(400, "Identifiant d'entreprise invalide", 'INVALID_PAYLOAD');
+  }
+  return n;
+}
 
 /**
  * GET /api/admin/appearance
- * Renvoie le défaut et l'autorisation actuels de l'entreprise connectée.
+ * Renvoie le défaut et l'autorisation actuels de l'entreprise connectée
+ * (ou, pour le super administrateur, de l'entreprise demandée via ?companyId=).
  */
 adminRouter.get(
   '/appearance',
@@ -926,7 +961,7 @@ adminRouter.get(
     if (!caller.isAdmin) {
       throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     }
-    const companyId = caller.companyId || 1;
+    const companyId = await resolveTargetCompanyId(caller, parseCompanyIdParam(req.query.companyId));
     let company: {
       id: number;
       name: string;
@@ -980,12 +1015,12 @@ adminRouter.patch(
     if (!parsed.success) {
       throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
     }
-    const { defaultTheme, allowThemeOverride, accueilMaFile } = parsed.data;
+    const { defaultTheme, allowThemeOverride, accueilMaFile, companyId: requestedCompanyId } = parsed.data;
     if (defaultTheme === undefined && allowThemeOverride === undefined && accueilMaFile === undefined) {
       throw new AppError(400, 'Rien à mettre à jour', 'EMPTY_PAYLOAD');
     }
 
-    const companyId = caller.companyId || 1;
+    const companyId = await resolveTargetCompanyId(caller, requestedCompanyId);
     let updated;
     try {
       updated = await prisma.company.update({
@@ -1027,11 +1062,14 @@ const CompanySiegeSchema = z.object({
   siegeAdresse: z.string().min(3, 'Adresse trop courte').max(500),
   siegeLat: z.number().min(-90).max(90),
   siegeLng: z.number().min(-180).max(180),
+  /** Réservé au super administrateur : entreprise visée (sinon la sienne) */
+  companyId: z.number().int().positive().optional(),
 });
 
 /**
  * PATCH /api/admin/siege
- * Met à jour l'adresse du siège de l'entreprise connectée.
+ * Met à jour l'adresse du siège de l'entreprise connectée
+ * (ou, pour le super administrateur, de l'entreprise indiquée par companyId).
  */
 adminRouter.patch(
   '/siege',
@@ -1044,8 +1082,8 @@ adminRouter.patch(
     if (!parsed.success) {
       throw new AppError(400, parsed.error.issues[0]?.message || 'Paramètres invalides', 'INVALID_PAYLOAD');
     }
-    const { siegeAdresse, siegeLat, siegeLng } = parsed.data;
-    const companyId = caller.companyId || 1;
+    const { siegeAdresse, siegeLat, siegeLng, companyId: requestedCompanyId } = parsed.data;
+    const companyId = await resolveTargetCompanyId(caller, requestedCompanyId);
 
     const updated = await prisma.company.update({
       where: { id: companyId },
@@ -1060,6 +1098,57 @@ adminRouter.patch(
       siegeLat: updated.siegeLat,
       siegeLng: updated.siegeLng,
       message: 'Adresse du siège mise à jour.',
+    });
+  })
+);
+
+// ============================================================================
+// 9. SUPER ADMINISTRATION — vue d'ensemble de toutes les entreprises
+// ============================================================================
+
+/**
+ * GET /api/admin/companies
+ * Liste toutes les entreprises de la plateforme avec leurs réglages.
+ * Réservé au super administrateur : un administrateur d'entreprise reçoit un 403.
+ */
+adminRouter.get(
+  '/companies',
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isSuperAdmin) {
+      throw new AppError(403, 'Accès réservé au super administrateur', 'FORBIDDEN');
+    }
+    const companies = await prisma.company.findMany({
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        siren: true,
+        active: true,
+        siegeAdresse: true,
+        siegeLat: true,
+        siegeLng: true,
+        defaultTheme: true,
+        allowThemeOverride: true,
+        accueilMaFile: true,
+        _count: { select: { users: true } },
+      },
+    });
+    res.json({
+      data: companies.map((c) => ({
+        id: c.id,
+        name: c.name,
+        siren: c.siren,
+        active: c.active !== false,
+        siegeAdresse: c.siegeAdresse || null,
+        siegeLat: c.siegeLat ?? null,
+        siegeLng: c.siegeLng ?? null,
+        defaultTheme: c.defaultTheme || 'light',
+        allowThemeOverride: c.allowThemeOverride !== false,
+        accueilMaFile: c.accueilMaFile === true,
+        userCount: c._count.users,
+      })),
+      availableThemes: ALLOWED_THEMES,
     });
   })
 );

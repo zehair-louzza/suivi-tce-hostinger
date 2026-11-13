@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction, RequestHandler } from 'express
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
+import { isSuperAdminUser } from '../lib/superAdmin.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -155,10 +156,14 @@ export function formatPublicUser(u: {
     defaultTheme?: string | null;
     allowThemeOverride?: boolean | null;
     accueilMaFile?: boolean | null;
+    siegeAdresse?: string | null;
+    siegeLat?: number | null;
+    siegeLng?: number | null;
   } | null;
   createdAt?: Date | string;
 }) {
-  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
+  const superAdmin = isSuperAdminUser(u);
+  const effectiveRole = superAdmin ? 'ADMIN' : u.role;
   const companyId = u.companyId || u.company?.id || 1;
   const companyName = u.company?.name || (companyId === 1 ? 'ANELEC GROUPE' : `Entreprise #${companyId}`);
   const companyDefaultTheme = u.company?.defaultTheme || 'light';
@@ -183,8 +188,12 @@ export function formatPublicUser(u: {
           siret: u.company.siret,
           siren: u.company.siren,
           accueilMaFile: u.company.accueilMaFile === true,
+          siegeAdresse: u.company.siegeAdresse ?? null,
+          siegeLat: u.company.siegeLat ?? null,
+          siegeLng: u.company.siegeLng ?? null,
         }
-      : { id: companyId, name: companyName, accueilMaFile: false },
+      : { id: companyId, name: companyName, accueilMaFile: false, siegeAdresse: null, siegeLat: null, siegeLng: null },
+    isSuperAdmin: superAdmin,
     theme: {
       companyDefault: companyDefaultTheme,
       allowOverride: allowThemeOverride,

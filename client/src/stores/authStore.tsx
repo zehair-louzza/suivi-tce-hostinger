@@ -32,6 +32,13 @@ interface AuthState {
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   fetchMe: () => Promise<void>;
+  /**
+   * Rafraîchit le profil en arrière-plan, sans écran de chargement et sans déconnecter en cas
+   * d'échec réseau. Ne met à jour le store que si quelque chose a changé : c'est ce qui fait
+   * arriver chez les membres les réglages modifiés par leur administrateur (siège, thème,
+   * droits, options), sur ordinateur comme sur téléphone.
+   */
+  refreshMe: () => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
 }
@@ -198,6 +205,20 @@ export const useAuthStore = create<AuthState>()(
           set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
+
+      refreshMe: async () => {
+        if (!get().isAuthenticated) return;
+        try {
+          const response = await api.get('/auth/me');
+          const next = response.data?.user;
+          if (!next) return;
+          if (JSON.stringify(get().user) !== JSON.stringify(next)) {
+            set({ user: next });
+          }
+        } catch {
+          // Échec silencieux (réseau coupé, etc.) : on garde le profil actuel, on réessaiera.
+        }
+      },
     }),
     {
       name: 'auth-storage',
@@ -267,6 +288,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => clearTimeout(safetyTimer);
   }, [isAuthenticated, fetchMe]);
+
+  // Les membres d'une équipe reçoivent en direct les modifications faites par leur administrateur :
+  // rafraîchissement toutes les 30 s tant que l'application est visible, et dès que l'on revient
+  // dessus (téléphone sorti de veille, onglet réactivé, réseau retrouvé).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void useAuthStore.getState().refreshMe();
+    };
+    const timer = setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [isAuthenticated]);
 
   return <Fragment>{children}</Fragment>;
 }

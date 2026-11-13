@@ -1048,6 +1048,10 @@ export interface CompanyInfo {
   siren?: string | null;
   /** Ouvrir le tableau de bord sur « Ma file » (réglage de la société) */
   accueilMaFile?: boolean | null;
+  /** Adresse du siège : point de départ des tournées, propre à chaque entreprise */
+  siegeAdresse?: string | null;
+  siegeLat?: number | null;
+  siegeLng?: number | null;
 }
 
 export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';
@@ -1072,6 +1076,8 @@ export interface User {
   companySiret?: string | null;
   company?: CompanyInfo | null;
   theme?: UserThemeSettings;
+  /** Super administrateur de la plateforme : main haute sur toutes les entreprises */
+  isSuperAdmin?: boolean;
   createdAt?: number | string;
 }
 
