@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 import { normalizeDI, resolveInterventionDossier, pushDIToDevis, findDevisByDI } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { loadAccess } from '../lib/loadAccess.js';
+import { canReadIntervention, censorIntervention } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -293,11 +295,7 @@ interventionRouter.get(
 
     // Si l'utilisateur n'a pas le droit d'accès aux données financières, masquer les montants HT
     if (!isAdmin && !callerPerms.canViewFinancials) {
-      transformed = transformed.map((i) => ({
-        ...i,
-        amount: 0,
-        montantHt: null,
-      }));
+      transformed = transformed.map((i) => censorIntervention(i));
     }
 
     if (status) {
@@ -321,7 +319,11 @@ interventionRouter.get(
 interventionRouter.get(
   '/stats',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    if (acc.isFieldOnly) {
+      throw new AppError(403, 'Statistiques non accessibles avec votre profil', 'FORBIDDEN');
+    }
+    const companyId = acc.companyId;
     const items = await prisma.intervention.findMany({ where: { companyId } });
     const transformed = items.map(transformIntervention);
 
@@ -369,16 +371,19 @@ interventionRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
     const intervention = await prisma.intervention.findFirst({
       where: { id, companyId },
       include: { devis: true },
     });
 
-    if (!intervention) {
+    // Même règle que la liste : un profil terrain ne lit que ses missions ; les autres n'ont pas de montants sans droit
+    if (!intervention || !canReadIntervention(acc, intervention)) {
       throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
     }
 
-    res.json({ data: transformIntervention(intervention) });
+    const dto = transformIntervention(intervention);
+    res.json({ data: acc.canSeeAmounts ? dto : censorIntervention(dto) });
   })
 );
 
@@ -510,7 +515,10 @@ interventionRouter.post(
       console.error('Intervention saved; real-time creation notification failed.');
     }
 
-    res.status(201).json({ data: transformed, message: 'Intervention créée avec succès' });
+    res.status(201).json({
+      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorIntervention(transformed),
+      message: 'Intervention créée avec succès',
+    });
   })
 );
 
@@ -820,7 +828,10 @@ interventionRouter.patch(
       console.error('Intervention updated; real-time update notification failed.');
     }
 
-    res.json({ data: transformed, message: 'Intervention mise à jour' });
+    res.json({
+      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorIntervention(transformed),
+      message: 'Intervention mise à jour',
+    });
   })
 );
 

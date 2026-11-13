@@ -4,6 +4,7 @@
 //  - une connexion ne rejoint que SA salle d'entreprise et SA salle personnelle, déduites du jeton ;
 //    un jeton sans entreprise est refusé (aucune entreprise de repli) ;
 //  - un client ne peut pas rejoindre une autre salle (join:room ne sert que pour ses propres salles) ;
+//  - le temps réel ne transporte aucune donnée métier, seulement un signal (voir signalOf) ;
 //  - chaque événement émis par le serveur nomme explicitement l'entreprise destinataire, et n'est jamais
 //    diffusé à toutes les connexions.
 import { Server, Socket } from 'socket.io';
@@ -112,7 +113,17 @@ export function setupSocketHandlers(io: Server) {
  */
 function emitScoped(userId: number, companyId: number, event: string, data: unknown) {
   if (!isValidCompanyId(companyId)) return;
-  getIO().to(userRoom(userId)).to(companyRoom(companyId)).emit(event, data);
+  getIO().to(userRoom(userId)).to(companyRoom(companyId)).emit(event, signalOf(data));
+}
+
+/**
+ * Le temps réel ne transporte JAMAIS de données métier : seulement un signal « quelque chose a changé »
+ * avec l'identifiant concerné. Chaque écran recharge ensuite, par l'API, ce que son rôle a le droit de voir.
+ * (Avant, le devis ou l'intervention complet, montants compris, partait à toute l'entreprise.)
+ */
+export function signalOf(data: unknown): { id: number | null } {
+  const id = (data as { id?: unknown } | null | undefined)?.id;
+  return { id: typeof id === 'number' && Number.isInteger(id) ? id : null };
 }
 
 // Émetteurs d'événements pour les routes : l'entreprise est TOUJOURS un paramètre explicite.
@@ -133,6 +144,6 @@ export const socketEvents = {
   // Diffusion à une seule entreprise
   broadcastCompany: (companyId: number, event: string, data: any) => {
     if (!isValidCompanyId(companyId)) return;
-    getIO().to(companyRoom(companyId)).emit(event, data);
+    getIO().to(companyRoom(companyId)).emit(event, signalOf(data));
   },
 };

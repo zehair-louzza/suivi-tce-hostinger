@@ -251,8 +251,9 @@ adminRouter.get(
     const dateJour = (req.query.dateJour as string) || '';
     let technicien = (req.query.technicien as string) || '';
 
-    // Un technicien ne peut voir QUE ses propres pointages (sauf si Admin ou Conducteur avec canEditPlanning)
-    if (!caller.isAdmin && !caller.perms.canEditPlanning) {
+    // Pointages de toute l'équipe : direction et conducteur uniquement. Tous les autres, y compris le
+    // chargé d'études, ne voient que le leur.
+    if (!caller.isAdmin && caller.effectiveRole !== 'CONDUCTEUR_TRAVAUX') {
       technicien = (caller.technicienNom || caller.name || '').trim();
     }
 

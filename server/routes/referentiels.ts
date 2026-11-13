@@ -2,6 +2,8 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { loadAccess } from '../lib/loadAccess.js';
+import { techMatches } from '../lib/access.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -21,10 +23,11 @@ export const referentielsRouter = Router();
 referentielsRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    const companyId = acc.companyId;
     const rows = await prisma.referentiel.findMany({
       where: {
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
       },
       orderBy: { id: 'asc' },
     });
@@ -130,6 +133,11 @@ referentielsRouter.get(
     }
     result.technicien_competences = compMap;
 
+    // Positions GPS de l'équipe : direction et conducteur seulement ; les autres ne voient que la leur
+    if (!acc.canSeeTeam) {
+      result.positions_gps_techniciens = ownGpsOnly(result.positions_gps_techniciens, acc.boundTech);
+    }
+
     res.json({ data: result });
   })
 );
@@ -177,7 +185,7 @@ referentielsRouter.put(
       const existing = await prisma.referentiel.findFirst({
         where: {
           categorie: 'technicien_competences',
-          OR: [{ companyId }, { companyId: null }],
+          companyId,
         },
       });
 
@@ -232,7 +240,7 @@ referentielsRouter.put(
       const existing = await prisma.referentiel.findFirst({
         where: {
           categorie: 'equipes_journalieres',
-          OR: [{ companyId }, { companyId: null }],
+          companyId,
         },
       });
 
@@ -307,7 +315,7 @@ referentielsRouter.put(
       const existing = await prisma.referentiel.findFirst({
         where: {
           categorie: 'clients_fiches',
-          OR: [{ companyId }, { companyId: null }],
+          companyId,
         },
       });
 
@@ -332,7 +340,7 @@ referentielsRouter.put(
       const clientNames = cleanedFiches.filter((f) => f.active).map((f) => f.nom);
       if (clientNames.length > 0) {
         const existingClientsRow = await prisma.referentiel.findFirst({
-          where: { categorie: 'clients', OR: [{ companyId }, { companyId: null }] },
+          where: { categorie: 'clients', companyId },
         });
         const currentList: string[] = existingClientsRow
           ? JSON.parse(existingClientsRow.valeurs)
@@ -362,7 +370,7 @@ referentielsRouter.put(
     const existing = await prisma.referentiel.findFirst({
       where: {
         categorie,
-        OR: [{ companyId }, { companyId: null }],
+        companyId,
       },
     });
 
@@ -390,6 +398,15 @@ referentielsRouter.put(
   })
 );
 
+/** Ne garde que la position du technicien lui-même (jamais celle de ses collègues). */
+function ownGpsOnly<T extends Record<string, { technicien?: string } | any>>(map: T | undefined, boundTech: string): T {
+  const out: Record<string, any> = {};
+  for (const [key, entry] of Object.entries(map || {})) {
+    if (techMatches(boundTech, key) || techMatches(boundTech, (entry as any)?.technicien)) out[key] = entry;
+  }
+  return out as T;
+}
+
 export async function saveTechnicienGpsPosition(
   companyId: number,
   payload: GpsPositionPayload
@@ -397,7 +414,7 @@ export async function saveTechnicienGpsPosition(
   const existing = await prisma.referentiel.findFirst({
     where: {
       categorie: 'positions_gps_techniciens',
-      OR: [{ companyId }, { companyId: null }],
+      companyId,
     },
   });
 
@@ -487,9 +504,10 @@ referentielsRouter.post(
     };
 
     const updatedMap = await saveTechnicienGpsPosition(companyId, payload);
+    const acc = await loadAccess(req);
     res.json({
       data: payload,
-      positions_gps_techniciens: updatedMap,
+      positions_gps_techniciens: acc.canSeeTeam ? updatedMap : ownGpsOnly(updatedMap, acc.boundTech),
       message: `Position GPS de ${technicien} transmise au bureau`,
     });
   })

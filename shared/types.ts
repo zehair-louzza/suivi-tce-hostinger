@@ -1480,10 +1480,8 @@ export function canUserAccessSection(
       return Boolean(perms.canManageReferentiels);
 
     case 'demandes':
-      // La file d'entrée est partagée : chiffrage, planification et interventions y puisent
-      return (
-        Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning) || Boolean(perms.canEditInterventions)
-      );
+      // La file d'entrée est triée par la direction, le chiffrage et le conducteur (même règle que le serveur)
+      return Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning);
 
     case 'devis':
       return Boolean(perms.canEditDevis);

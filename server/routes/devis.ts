@@ -3,6 +3,8 @@ import { Router, Request, Response } from 'express';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { loadAccess } from '../lib/loadAccess.js';
+import { canReadDevis, censorDevis } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -422,15 +424,7 @@ devisRouter.get(
 
     // Censure des montants financiers si l'utilisateur n'a pas la permission canViewFinancials
     if (!isAdmin && !callerPerms.canViewFinancials) {
-      transformed = transformed.map((d) => ({
-        ...d,
-        amount: null,
-        montantHt: null,
-        computed: {
-          ...d.computed,
-          totalFactureHt: 0,
-        },
-      }));
+      transformed = transformed.map((d) => censorDevis(d));
     }
     if (status) {
       transformed = transformed.filter(
@@ -453,7 +447,11 @@ devisRouter.get(
 devisRouter.get(
   '/stats',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    if (acc.isFieldOnly) {
+      throw new AppError(403, 'Statistiques non accessibles avec votre profil', 'FORBIDDEN');
+    }
+    const companyId = acc.companyId;
     const items = await prisma.devis.findMany({ where: { companyId } });
     const transformed = items.map(transformDevis);
 
@@ -494,16 +492,19 @@ devisRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
     const devis = await prisma.devis.findFirst({
       where: { id, companyId },
       include: { interventions: true },
     });
 
-    if (!devis) {
+    // Même règle que la liste : un devis qui n'est pas dans mon périmètre « n'existe pas » pour moi
+    if (!devis || !canReadDevis(acc, devis)) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
     }
 
-    res.json({ data: transformDevis(devis) });
+    const dto = transformDevis(devis);
+    res.json({ data: acc.canSeeAmounts ? dto : censorDevis(dto) });
   })
 );
 
@@ -605,7 +606,10 @@ devisRouter.post(
     const transformed = transformDevis(refreshed);
     notify(() => socketEvents.devisCreated(userId, companyId, transformed));
 
-    res.status(201).json({ data: transformed, message: 'Devis créé avec succès' });
+    res.status(201).json({
+      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorDevis(transformed),
+      message: 'Devis créé avec succès',
+    });
   })
 );
 
@@ -794,7 +798,10 @@ devisRouter.patch(
     const transformed = transformDevis(refreshed);
     notify(() => socketEvents.devisUpdated(userId, companyId, transformed));
 
-    res.json({ data: transformed, message: 'Devis mis à jour' });
+    res.json({
+      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorDevis(transformed),
+      message: 'Devis mis à jour',
+    });
   })
 );
 

@@ -5,6 +5,8 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { loadAccess } from '../lib/loadAccess.js';
+import type { Access } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
@@ -65,12 +67,29 @@ function transform(d: any) {
   };
 }
 
+/** Demandes reçues : réservées à ceux qui trient la file d'entrée (direction, chiffrage, conducteur). */
+function requireTriage(acc: Access) {
+  if (!acc.canTriageDemandes) {
+    throw new AppError(403, "Les demandes reçues ne sont pas accessibles avec votre profil", 'FORBIDDEN');
+  }
+}
+
+/** Droit de créer la pièce vers laquelle la demande est orientée. */
+function canOrienter(acc: Access, decision: Decision): boolean {
+  if (acc.isAdmin) return true;
+  if (decision === 'DEVIS') return Boolean(acc.perms.canEditDevis);
+  if (decision === 'VISITE') return Boolean(acc.perms.canEditDevis) || Boolean(acc.perms.canEditPlanning);
+  return Boolean(acc.perms.canEditInterventions) || Boolean(acc.perms.canEditPlanning);
+}
+
 const auteurOf = (req: Request) => req.user?.email || 'Utilisateur';
 
 demandesRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    requireTriage(acc);
+    const companyId = acc.companyId;
     const search = (req.query.search as string) || '';
     const statut = (req.query.statut as string) || '';
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 200, 500);
@@ -100,7 +119,9 @@ demandesRouter.get(
 demandesRouter.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    requireTriage(acc);
+    const companyId = acc.companyId;
     const userId = req.user?.userId;
     if (!userId) throw new AppError(401, 'Authentification requise');
 
@@ -152,7 +173,9 @@ demandesRouter.post(
 demandesRouter.patch(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    requireTriage(acc);
+    const companyId = acc.companyId;
     const id = parseInt(req.params.id, 10);
     const existing = await prisma.demande.findFirst({ where: { id, companyId } });
     if (!existing) throw new AppError(404, 'Demande introuvable');
@@ -193,7 +216,9 @@ demandesRouter.patch(
 demandesRouter.post(
   '/:id/orienter',
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    requireTriage(acc);
+    const companyId = acc.companyId;
     const userId = req.user?.userId;
     if (!userId) throw new AppError(401, 'Authentification requise');
 
@@ -204,6 +229,10 @@ demandesRouter.post(
 
     const decision = String(req.body?.decision || '').toUpperCase() as Decision;
     if (!DECISIONS.includes(decision)) throw new AppError(400, 'Décision inconnue : VISITE, DEVIS ou INTERVENTION');
+    // Orienter crée une pièce : il faut aussi le droit de créer cette pièce
+    if (!canOrienter(acc, decision)) {
+      throw new AppError(403, "Permission insuffisante pour orienter cette demande vers « " + decision.toLowerCase() + " »", 'FORBIDDEN');
+    }
 
     const auteur = auteurOf(req);
     const annee = new Date(demande.dateReception).getFullYear();

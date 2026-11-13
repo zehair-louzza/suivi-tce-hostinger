@@ -119,3 +119,23 @@ test('un événement sans entreprise valide n\'est envoyé à personne (plus de 
 test('il n\'existe plus de diffusion à toutes les entreprises', () => {
   assert.equal((socketEvents as any).broadcast, undefined);
 });
+
+test('le temps réel ne transporte aucune donnée métier : seulement un signal avec l\'identifiant', async () => {
+  await withServer(async ({ open }) => {
+    const a1 = await open(token(1, COMPANY_A));
+    const tech = await open(token(2, COMPANY_A)); // même entreprise : reçoit le signal, mais aucune donnée
+    const received: unknown[] = [];
+    EVENTS.forEach((e) => tech.on(e, (d) => received.push(d)));
+    void a1;
+
+    socketEvents.devisCreated(1, COMPANY_A, { id: 7, client: 'Client secret', amount: 99999, montantHt: 80000 });
+    socketEvents.interventionUpdated(1, COMPANY_A, { id: 8, client: 'Autre', amount: 5 });
+    socketEvents.broadcastCompany(COMPANY_A, 'technicien:gps_updated', { technicien: 'Sofia', lat: 48.85, lng: 2.35 });
+    await settle();
+
+    assert.deepEqual(received, [{ id: 7 }, { id: 8 }, { id: null }]);
+    assert.equal(JSON.stringify(received).includes('secret'), false);
+    assert.equal(JSON.stringify(received).includes('99999'), false);
+    assert.equal(JSON.stringify(received).includes('48.85'), false);
+  });
+});
