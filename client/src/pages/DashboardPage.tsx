@@ -904,23 +904,44 @@ export function DashboardPage() {
     });
   };
 
+  // Pastilles du menu : chacune compte ce que CE profil doit traiter dans la section (mêmes files que « Mon travail »),
+  // jamais le total brut de la liste.
+  const sidebarBadges = (() => {
+    const espace = espaceRoleOf(user);
+    const aValiderInterne = devisList.filter((d) => d.statutCommercial === 'À valider en interne').length;
+    const rapportsAValider = queues.rapportsEnAttente.filter(
+      (i) => i.statutOperationnel === 'Terminée - à valider' || i.statutRapport === 'Déclaré par technicien'
+    ).length;
+    const aFacturer = queues.intvAFacturer.filter((i) => i.statutOperationnel === 'Clôturée').length;
+    const aPlanifier = queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length;
+    const devisATraiter = aValiderInterne + queues.devisARelancer.length + queues.devisAcceptesSansIntv.length;
+    const intvATraiter = queues.intvEnRetard.length + queues.intvAPlanifier.length + rapportsAValider;
+    const monTravail =
+      espace === 'chiffrage'
+        ? devisATraiter + queues.visitesDevisAPlanifier.length
+        : espace === 'travaux'
+        ? rapportsAValider + queues.devisAcceptesSansIntv.length + queues.intvAPlanifier.length + queues.intvEnRetard.length
+        : espace === 'rapports'
+        ? aFacturer + queues.rapportsEnAttente.length
+        : espace === 'terrain'
+        ? queues.rapportsEnAttente.length
+        : rapportsAValider + queues.intvAFacturer.length;
+    return {
+      aujourdhui: monTravail,
+      planning: aPlanifier,
+      demandes: demandesADecider,
+      devis: devisATraiter,
+      interventions: espace === 'rapports' ? rapportsAValider : intvATraiter,
+      facturation: aFacturer,
+      admin: 0,
+    };
+  })();
+
   return (
     <Layout
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
-      badges={{
-        aujourdhui:
-          queues.devisARelancer.length +
-          queues.devisAcceptesSansIntv.length +
-          queues.intvEnRetard.length +
-          queues.rapportsEnAttente.length,
-        planning: queues.visitesDevisAPlanifier.length + queues.intvAPlanifier.length,
-        demandes: demandesADecider,
-        devis: devisList.length,
-        interventions: interventionsList.length,
-        facturation: queues.intvAFacturer.length,
-        admin: queues.rapportsEnAttente.length,
-      }}
+      badges={sidebarBadges}
       onOpenCommandPalette={() => setCmdOpen(true)}
       onQuickNewDevis={openNewDevisDrawer}
       onQuickNewIntervention={openNewIntvDrawer}
