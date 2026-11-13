@@ -6,7 +6,7 @@
 //
 // Les règles « sur l'objet précis » (ex. : un technicien ne lit que SES missions) restent appliquées
 // dans les routes avec access.ts ; cette table décide si l'action est permise au rôle, tout court.
-import type { Access } from './access.js';
+import { accessFor, type Access } from './access.js';
 
 type Rule = (a: Access) => boolean;
 
@@ -76,4 +76,49 @@ export function can(access: Access, action: string): boolean {
   if (!Object.prototype.hasOwnProperty.call(POLICY, action)) return false;
   const rule = (POLICY as Record<string, Rule>)[action];
   return rule(access) === true;
+}
+
+/** Libellés métier des actions, pour des refus compréhensibles (« Votre profil ne permet pas de … »). */
+export const ACTION_LABELS: Record<Action, string> = {
+  'devis.list': 'consulter les devis',
+  'devis.read': 'consulter ce devis',
+  'devis.stats': 'consulter les statistiques des devis',
+  'devis.create': 'créer un devis',
+  'devis.update': 'modifier ce devis',
+  'devis.delete': 'supprimer un devis',
+  'devis.convert': 'transformer un devis en intervention',
+  'devis.sendEmail': 'envoyer un devis par email',
+  'interventions.list': 'consulter les interventions',
+  'interventions.read': 'consulter cette intervention',
+  'interventions.stats': 'consulter les statistiques des interventions',
+  'interventions.create': 'créer une intervention',
+  'interventions.update': 'modifier cette intervention',
+  'interventions.delete': 'supprimer une intervention',
+  'interventions.sendReport': 'envoyer un rapport par email',
+  'demandes.list': 'consulter les demandes reçues',
+  'demandes.create': 'enregistrer une demande',
+  'demandes.update': 'modifier une demande',
+  'demandes.orienter': 'orienter une demande',
+  'referentiels.read': 'consulter les paramètres métier',
+  'referentiels.write': 'modifier les paramètres métier',
+  'gps.post': 'envoyer une position',
+  'admin.users.list': 'consulter les utilisateurs',
+  'admin.users.create': 'créer un utilisateur',
+  'admin.users.update': 'modifier un utilisateur',
+  'admin.users.delete': 'supprimer un utilisateur',
+  'admin.invitations.manage': 'gérer les invitations',
+  'admin.company.destroy': 'supprimer la société',
+  'admin.smtp.manage': 'régler l\'envoi des emails',
+  'admin.appearance.read': 'consulter l\'apparence de la société',
+  'admin.appearance.update': 'modifier l\'apparence de la société',
+  'admin.siege.update': 'modifier le siège de la société',
+  'admin.pointages.read': 'consulter les pointages',
+  'admin.pointages.clock': 'pointer',
+};
+
+/** Profils (par défaut) autorisés pour une action — même table de règles que l'application réelle. */
+export function rolesAllowedFor(action: Action, labels: Record<string, string>): string[] {
+  return Object.keys(labels).filter((role) =>
+    can(accessFor({ id: 0, role, name: 'x', technicienNom: role === 'TECHNICIEN' ? 'x' : null } as any), action)
+  );
 }

@@ -1,8 +1,8 @@
 // Garde d'accès Express — sans base de données dans ce fichier, pour pouvoir être testé de bout en bout.
 import { Router, type Request, type RequestHandler } from 'express';
 import { AppError } from '../middleware/errorHandler.js';
-import { can, type Action } from './policy.js';
-import type { Access } from './access.js';
+import { ACTION_LABELS, can, rolesAllowedFor, type Action } from './policy.js';
+import { ROLE_LABELS, type Access } from './access.js';
 
 export type CallerAccess = Access & { companyId: number };
 export type AccessLoader = (req: Request) => Promise<CallerAccess>;
@@ -23,7 +23,12 @@ export function makePolicy(load: AccessLoader) {
       load(req)
         .then((access) => {
           if (!can(access, action)) {
-            throw new AppError(403, 'Permission insuffisante pour cette action', 'FORBIDDEN');
+            const roles = rolesAllowedFor(action, ROLE_LABELS).map((r) => ROLE_LABELS[r]);
+            throw new AppError(
+              403,
+              `Votre profil ne permet pas de ${ACTION_LABELS[action]}. Profils autorisés : ${roles.join(' ; ') || 'la direction'}.`,
+              'FORBIDDEN'
+            );
           }
           req.access = access;
           next();
