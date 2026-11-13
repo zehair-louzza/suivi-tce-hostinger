@@ -10,6 +10,7 @@ import {
   UserPermissions,
   ROLE_DEFINITIONS,
   getEffectivePermissions,
+  isPermissionAllowedForRole,
   Intervention,
   Devis,
   formatDateFR,
@@ -2416,6 +2417,11 @@ export function AdminWorkstation({
                   {PERMISSION_LABELS.map((p) => (
                     <label
                       key={p.key}
+                      title={
+                        isPermissionAllowedForRole(newRole, p.key)
+                          ? undefined
+                          : 'Ce droit ne peut pas être accordé à ce rôle'
+                      }
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
@@ -2424,12 +2430,14 @@ export function AdminWorkstation({
                         borderRadius: '6px',
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
+                        cursor: isPermissionAllowedForRole(newRole, p.key) ? 'pointer' : 'not-allowed',
+                        opacity: isPermissionAllowedForRole(newRole, p.key) ? 1 : 0.45,
                       }}
                     >
                       <input
                         type="checkbox"
-                        checked={Boolean(newPerms[p.key])}
+                        disabled={!isPermissionAllowedForRole(newRole, p.key)}
+                        checked={Boolean(newPerms[p.key]) && isPermissionAllowedForRole(newRole, p.key)}
                         onChange={(e) =>
                           setNewPerms((prev) => ({ ...prev, [p.key]: e.target.checked }))
                         }
@@ -2569,6 +2577,11 @@ export function AdminWorkstation({
                   {PERMISSION_LABELS.map((p) => (
                     <label
                       key={p.key}
+                      title={
+                        isPermissionAllowedForRole(editRole, p.key)
+                          ? undefined
+                          : 'Ce droit ne peut pas être accordé à ce rôle'
+                      }
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
@@ -2577,12 +2590,14 @@ export function AdminWorkstation({
                         borderRadius: '6px',
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
+                        cursor: isPermissionAllowedForRole(editRole, p.key) ? 'pointer' : 'not-allowed',
+                        opacity: isPermissionAllowedForRole(editRole, p.key) ? 1 : 0.45,
                       }}
                     >
                       <input
                         type="checkbox"
-                        checked={Boolean(editPerms[p.key])}
+                        disabled={!isPermissionAllowedForRole(editRole, p.key)}
+                        checked={Boolean(editPerms[p.key]) && isPermissionAllowedForRole(editRole, p.key)}
                         onChange={(e) =>
                           setEditPerms((prev) => ({ ...prev, [p.key]: e.target.checked }))
                         }

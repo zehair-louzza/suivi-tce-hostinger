@@ -10,7 +10,7 @@ import { formatPublicUser } from './auth.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
-import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
+import { ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
   APP_URL,
   sendWelcomeUserEmail,
@@ -125,6 +125,9 @@ adminRouter.post(
     if (!email || !password || !name) {
       throw new AppError(400, 'Nom, email et mot de passe sont obligatoires', 'VALIDATION_ERROR');
     }
+    if (role !== undefined && !isKnownRole(role)) {
+      throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
+    }
     const cleanEmail = String(email).trim().toLowerCase();
     const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
@@ -140,7 +143,9 @@ adminRouter.post(
         name: String(name).trim(),
         role: role || 'CONDUCTEUR_TRAVAUX',
         technicienNom: technicienNom ? String(technicienNom).trim() : null,
-        permissionsJson: permissions ? JSON.stringify(permissions) : null,
+        permissionsJson: permissions
+          ? JSON.stringify(sanitizePermissionsForRole(role || 'CONDUCTEUR_TRAVAUX', permissions))
+          : null,
         companyId: tenantOf(caller),
         active: true,
         emailConfirmed: true,
@@ -192,12 +197,26 @@ adminRouter.put(
     const updateData: any = {};
     if (name !== undefined) updateData.name = String(name).trim();
     if (email !== undefined) updateData.email = String(email).trim().toLowerCase();
-    if (role !== undefined) updateData.role = String(role);
+    if (role !== undefined) {
+      if (!isKnownRole(role)) throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
+      updateData.role = String(role);
+    }
     if (technicienNom !== undefined) {
       updateData.technicienNom = technicienNom ? String(technicienNom).trim() : null;
     }
-    if (permissions !== undefined) {
-      updateData.permissionsJson = permissions ? JSON.stringify(permissions) : null;
+    if (permissions !== undefined || role !== undefined) {
+      // Plafond du rôle appliqué à l'enregistrement, y compris quand seul le rôle change
+      let base: any = permissions;
+      if (permissions === undefined) {
+        try {
+          base = existing.permissionsJson ? JSON.parse(existing.permissionsJson) : null;
+        } catch {
+          base = null;
+        }
+      }
+      updateData.permissionsJson = base
+        ? JSON.stringify(sanitizePermissionsForRole(role !== undefined ? role : existing.role, base))
+        : null;
     }
     if (active !== undefined && id !== 1) {
       updateData.active = Boolean(active);

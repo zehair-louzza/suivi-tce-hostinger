@@ -46,6 +46,10 @@ export interface InterventionsStudioViewProps {
   onSendReport?: (intv: Intervention) => void;
   onExportExcel?: () => void;
   techniciens?: string[];
+  /** false : pas de bouton de création (profil sans droit de planification) */
+  canCreate?: boolean;
+  /** false : pas de validation de rapport (profil sans droit sur les rapports) */
+  canClose?: boolean;
 }
 
 const STATUSES = [
@@ -86,11 +90,14 @@ export function InterventionsStudioView({
   interventionsList,
   onOpenNewIntv,
   onSelectIntv,
-  onValidateIntv,
+  onValidateIntv: onValidateIntvProp,
   onSendReport,
   onExportExcel,
   techniciens = [],
+  canCreate,
+  canClose,
 }: InterventionsStudioViewProps) {
+  const onValidateIntv = canClose === false ? undefined : onValidateIntvProp;
   const isMobile = useIsMobile();
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,7 +125,7 @@ export function InterventionsStudioView({
 
   const actionFor = (i: Intervention) => {
     const norm = normalizeStatus(i.statutOperationnel);
-    if (norm === 'Terminée — à valider') {
+    if (norm === 'Terminée — à valider' && canClose !== false) {
       return {
         label: 'Valider',
         icon: CheckCircle2,
@@ -129,7 +136,7 @@ export function InterventionsStudioView({
         },
       };
     }
-    if (norm === 'À planifier') {
+    if (norm === 'À planifier' && canCreate !== false) {
       return {
         label: 'Planifier',
         icon: CalendarPlus,
@@ -140,7 +147,7 @@ export function InterventionsStudioView({
         },
       };
     }
-    if (norm === 'Non terminée') {
+    if (norm === 'Non terminée' && canCreate !== false) {
       return {
         label: 'Replanifier',
         icon: CalendarPlus,
@@ -295,9 +302,11 @@ export function InterventionsStudioView({
               Exporter
             </Btn>
           )}
-          <Btn variant="primary" icon={Plus} onClick={onOpenNewIntv}>
-            Nouvelle intervention
-          </Btn>
+          {canCreate !== false && (
+            <Btn variant="primary" icon={Plus} onClick={onOpenNewIntv}>
+              Nouvelle intervention
+            </Btn>
+          )}
         </>
       }
       subnav={
@@ -493,7 +502,7 @@ export function InterventionsStudioView({
               >
                 Envoyer le rapport
               </Btn>
-              {normalizeStatus(selectedItem.statutOperationnel) === 'Terminée — à valider' && (
+              {canClose !== false && normalizeStatus(selectedItem.statutOperationnel) === 'Terminée — à valider' && (
                 <Btn
                   variant="primary"
                   icon={CheckCircle2}

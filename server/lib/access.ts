@@ -305,3 +305,29 @@ export function shapeClientFiche(a: Access, f: Record<string, any>): Record<stri
   const { tauxHoraireNegocie: _t, ...rest } = f;
   return rest;
 }
+
+const isClosureValue = (v: unknown) => /cl[oô]tur/i.test(String(v ?? ''));
+
+/**
+ * Écriture d'une intervention : filtre par champ + une seule exception à la règle « le rapports ne touche pas au
+ * statut » — il peut CLÔTURER (valider son rapport). Le reste du statut reste réservé au bureau et au terrain.
+ */
+export function limitInterventionBody(
+  a: Access,
+  body: Record<string, any>,
+  existing?: { isVisiteDevis?: boolean | null }
+): { clean: Record<string, any>; dropped: string[] } {
+  const allowed = writableInterventionFields(a, existing);
+  const res = limitToWritable(body, allowed);
+  if (
+    allowed &&
+    !a.isFieldOnly &&
+    (a.perms.canWriteReports || a.perms.canEditInterventions) &&
+    res.dropped.includes('statutOperationnel') &&
+    isClosureValue(body.statutOperationnel)
+  ) {
+    res.clean.statutOperationnel = body.statutOperationnel;
+    res.dropped = res.dropped.filter((k) => k !== 'statutOperationnel');
+  }
+  return res;
+}

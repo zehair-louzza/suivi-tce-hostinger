@@ -173,3 +173,37 @@ test('fiches clients : taux négocié masqué sans droit Montants ; terrain = co
   assert.ok(!('tauxHoraireNegocie' in blind));
   assert.equal(shapeClientFiche(user('ADMIN'), fiche).tauxHoraireNegocie, 58);
 });
+
+import { limitInterventionBody } from '../server/lib/access.js';
+import { canUserCloseIntervention, canUserCreateIntervention, isKnownRole, sanitizePermissionsForRole } from '../shared/types.js';
+
+test('rapports : peut clôturer (valider son rapport) mais pas changer le statut autrement', () => {
+  const r = user('REDACTEUR_RAPPORTS');
+  const close = limitInterventionBody(r, { statutOperationnel: 'CLOTUREE', compteRendu: 'ok' });
+  assert.equal(close.clean.statutOperationnel, 'CLOTUREE');
+  assert.deepEqual(close.dropped, []);
+  const other = limitInterventionBody(r, { statutOperationnel: 'Planifiée', datePlanifiee: '2026-12-01' });
+  assert.deepEqual(other.clean, {});
+  assert.deepEqual(other.dropped.sort(), ['datePlanifiee', 'statutOperationnel']);
+  // Le terrain garde sa propre liste ; le chiffrage ne clôture pas
+  assert.ok(!('statutOperationnel' in limitInterventionBody(user('CHIFFRAGE_DEVIS'), { statutOperationnel: 'CLOTUREE' }, { isVisiteDevis: false }).clean));
+});
+
+test('enregistrement des droits : plafond appliqué, rôle inconnu refusé', () => {
+  const s = sanitizePermissionsForRole('TECHNICIEN', { canManageBilling: true, canAccessMobileTech: true });
+  assert.equal(s.canManageBilling, false);
+  assert.equal(s.canAccessMobileTech, true);
+  assert.equal(isKnownRole('PIRATE'), false);
+  assert.equal(isKnownRole('conducteur_travaux'), true);
+});
+
+test('écrans : création et clôture suivent les mêmes règles que le serveur', () => {
+  const u = (role: string) => ({ id: 50, role, permissions: getEffectivePermissions(role, null) } as any);
+  assert.equal(canUserCreateIntervention(u('CONDUCTEUR_TRAVAUX')), true);
+  assert.equal(canUserCreateIntervention(u('CHIFFRAGE_DEVIS')), true);
+  assert.equal(canUserCreateIntervention(u('REDACTEUR_RAPPORTS')), false);
+  assert.equal(canUserCreateIntervention(u('TECHNICIEN')), false);
+  assert.equal(canUserCloseIntervention(u('REDACTEUR_RAPPORTS')), true);
+  assert.equal(canUserCloseIntervention(u('CHIFFRAGE_DEVIS')), false);
+  assert.equal(canUserCloseIntervention(u('TECHNICIEN')), false);
+});

@@ -5,7 +5,7 @@ import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadIntervention, limitToWritable, shapeIntervention, writableInterventionFields } from '../lib/access.js';
+import { canReadIntervention, limitInterventionBody, shapeIntervention } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -535,7 +535,7 @@ interventionRouter.patch(
     if (!canReadIntervention(acc, existing)) {
       throw new AppError(403, 'Vous ne pouvez modifier que les interventions qui vous sont attribuées', 'FORBIDDEN');
     }
-    const limited = limitToWritable(req.body || {}, writableInterventionFields(acc, existing));
+    const limited = limitInterventionBody(acc, req.body || {}, existing);
     if (limited.dropped.length > 0 && Object.keys(limited.clean).length === 0) {
       throw new AppError(403, 'Votre profil ne permet pas de modifier ces informations', 'FORBIDDEN');
     }

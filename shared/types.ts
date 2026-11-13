@@ -1441,6 +1441,19 @@ export function isPermissionAllowedForRole(role: string | null | undefined, key:
   return !forbidden.includes(key);
 }
 
+/** Retire d'un jeu de droits ceux que le rôle n'a pas le droit de porter (à l'enregistrement). */
+export function sanitizePermissionsForRole<T extends Partial<UserPermissions>>(role: string | null | undefined, perms: T): T {
+  const forbidden = ROLE_FORBIDDEN_PERMISSIONS[(role || '').toUpperCase()] || [];
+  const out: any = { ...perms };
+  for (const k of forbidden) if (k in out) out[k] = false;
+  return out;
+}
+
+/** Rôles que l'application sait gérer. */
+export function isKnownRole(role: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(ROLE_FORBIDDEN_PERMISSIONS, (role || '').toUpperCase());
+}
+
 export function getEffectivePermissions(
   role?: string | null,
   customPermissionsJson?: string | null
@@ -1480,6 +1493,24 @@ function mergePermissions(
  * - OU la permission mobileOnly est activée
  * - OU un nom de technicien lui est associé et il n'a aucun droit de gestion de bureau (Devis, Planning, Facturation, Admin)
  */
+/** Droit de créer une intervention (écrans) : même règle que le serveur — direction, conducteur, chargé d'études. */
+export function canUserCreateIntervention(user?: User | null): boolean {
+  if (!user || isUserMobileOnly(user)) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  return isAdmin || Boolean(perms.canEditPlanning);
+}
+
+/** Droit de valider / clôturer un rapport (écrans) : direction, conducteur, rapports. */
+export function canUserCloseIntervention(user?: User | null): boolean {
+  if (!user || isUserMobileOnly(user)) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  return isAdmin || Boolean(perms.canEditInterventions) || Boolean(perms.canWriteReports);
+}
+
 export function isUserMobileOnly(user?: User | null): boolean {
   if (!user) return false;
   const role = (user.role || '').toUpperCase();

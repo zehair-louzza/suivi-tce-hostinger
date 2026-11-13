@@ -62,6 +62,8 @@ import toast from 'react-hot-toast';
 import {
   isUserMobileOnly,
   canUserAccessSection,
+  canUserCreateIntervention,
+  canUserCloseIntervention,
   getDefaultAuthorizedSection,
 } from '../../../shared/types';
 import { ProAlertIcon, ProLockIcon } from '../components/ProIcons';
@@ -1147,6 +1149,8 @@ export function DashboardPage() {
           onSendReport={(i) => setReportEmailIntv(i)}
           onExportExcel={() => exportSituationInterventionsExcel(interventionsList)}
           techniciens={techniciensList}
+          canCreate={canUserCreateIntervention(user)}
+          canClose={canUserCloseIntervention(user)}
         />
       )}
 
