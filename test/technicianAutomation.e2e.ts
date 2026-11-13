@@ -183,7 +183,7 @@ test('la nuit : la relance part aussi (seul le dimanche est exclu)', async () =>
   assert.ok(notifsDe(SOFIA).some((n: any) => n.type === 'RELANCE_TECHNICIEN'));
 });
 
-test('pause du dimanche : rien du dimanche 0 h au lundi 6 h, la relance part le lundi à 6 h ; réglage désactivable', async () => {
+test('pause de fin de semaine : rien du samedi 17 h au lundi 6 h, la relance part le lundi à 6 h ; réglage désactivable', async () => {
   const comp = (pause: boolean) => ({ active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: pause });
   db.intervention.rows.push(intv(23, {
     entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: dimanche(0, 30), company: comp(true),

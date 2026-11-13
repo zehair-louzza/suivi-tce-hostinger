@@ -27,7 +27,7 @@ model Company {
   autoTechnicienDelaiMinutes Int            @default(15)
   /// Délai entre la relance du technicien et l'alerte au planificateur / à la direction (minutes)
   autoTechnicienAlerteMinutes Int           @default(5)
-  /// Pause du dimanche : pas de relance ni d'alerte du dimanche 0 h au lundi 6 h (heure de Paris) ; jour et nuit les autres jours. Nom historique de colonne.
+  /// Pause de fin de semaine : pas de relance ni d'alerte du samedi 17 h au lundi 6 h (heure de Paris) ; jour et nuit les autres jours. Nom historique de colonne.
   autoTechnicienHeuresBureau Boolean        @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
