@@ -5,7 +5,7 @@
 //   affectation → EN_ATTENTE → (ACCEPTEE | REFUSEE)
 //   EN_ATTENTE sans réponse : relance après `delaiMinutes` (15 min par défaut), puis alerte au planificateur
 //   et à la direction `delaiAlerteMinutes` après la relance (5 min par défaut). Par défaut, les relances
-//   partent jour et nuit, sauf le dimanche (réglable par société).
+//   partent jour et nuit, sauf pendant la pause du dimanche (dimanche 0 h → lundi 6 h ; réglable par société).
 
 export type ReponseTechnicien = 'EN_ATTENTE' | 'ACCEPTEE' | 'REFUSEE';
 
@@ -54,9 +54,18 @@ function partiesParis(date: Date): { jour: number; heure: number } {
   return { jour: jours[wd] ?? 1, heure: h };
 }
 
-/** Relances et alertes : jour et nuit, du lundi au samedi (jamais le dimanche, heure de Paris). */
+/** Le lundi, les envois reprennent à 6 h (heure de Paris), après la pause du dimanche. */
+export const REPRISE_LUNDI_HEURE = 6;
+
+/**
+ * Relances et alertes : jour et nuit, du lundi au samedi. Pause le dimanche (heure de Paris) :
+ * rien ne part du dimanche 0 h au lundi 6 h ; ce qui était dû part le lundi à 6 h.
+ */
 export function envoiAutorise(date: Date): boolean {
-  return partiesParis(date).jour !== 0;
+  const { jour, heure } = partiesParis(date);
+  if (jour === 0) return false;
+  if (jour === 1 && heure < REPRISE_LUNDI_HEURE) return false;
+  return true;
 }
 
 export type EtatRelance = {
@@ -68,7 +77,7 @@ export type EtatRelance = {
   delaiMinutes: number;
   /** Délai entre la relance et l'alerte (défaut : 5 min). */
   delaiAlerteMinutes?: number;
-  /** Aucune relance ni alerte le dimanche (défaut : oui). */
+  /** Pause du dimanche : aucune relance ni alerte du dimanche 0 h au lundi 6 h (défaut : oui). */
   pasLeDimanche?: boolean;
 };
 
@@ -76,7 +85,7 @@ export type ActionRelance = 'aucune' | 'relancer_technicien' | 'alerter_planific
 
 /**
  * Décide la prochaine action automatique pour une affectation en attente.
- *  - rien si la réponse est donnée, ou si on est dimanche (sauf réglage contraire) ;
+ *  - rien si la réponse est donnée, ou pendant la pause du dimanche (jusqu'au lundi 6 h, sauf réglage contraire) ;
  *  - relance du technicien après `delaiMinutes` sans réponse ;
  *  - alerte au planificateur et à la direction `delaiAlerteMinutes` après la relance, si toujours sans réponse.
  * Chaque étape n'est déclenchée qu'une fois (relanceLe / alerteLe servent de verrou).

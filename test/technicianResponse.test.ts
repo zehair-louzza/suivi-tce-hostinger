@@ -13,11 +13,15 @@ import {
 
 // Novembre 2026 : heure d'hiver (Paris = UTC+1). Lundi 16 nov. 2026.
 const lundi = (h: number, m = 0) => new Date(Date.UTC(2026, 10, 16, h - 1, m));
+const samedi = (h: number, m = 0) => new Date(Date.UTC(2026, 10, 14, h - 1, m));
 const dimanche = (h: number) => new Date(Date.UTC(2026, 10, 15, h - 1, 0));
 
-test('envoi autorisé : tous les jours et toute la nuit, sauf le dimanche (heure de Paris)', () => {
+test('envoi autorisé : jour et nuit, sauf du dimanche 0 h au lundi 6 h (heure de Paris)', () => {
   assert.equal(envoiAutorise(lundi(9)), true);
-  assert.equal(envoiAutorise(lundi(3)), true);
+  assert.equal(envoiAutorise(lundi(3)), false, 'lundi avant 6 h : encore en pause');
+  assert.equal(envoiAutorise(lundi(5, 59)), false);
+  assert.equal(envoiAutorise(lundi(6)), true, 'reprise à 6 h');
+  assert.equal(envoiAutorise(samedi(23, 59)), true);
   assert.equal(envoiAutorise(lundi(23, 59)), true);
   assert.equal(envoiAutorise(dimanche(10)), false);
   assert.equal(envoiAutorise(dimanche(23)), false);
@@ -62,6 +66,16 @@ test('relance : aucune si le technicien a répondu, pas le dimanche (sauf si le 
   assert.equal(prochaineAction({ ...base, reponse: 'EN_ATTENTE', maintenant: dimanche(12) }), 'aucune');
   assert.equal(prochaineAction({ ...base, affecteLe: dimanche(9), reponse: 'EN_ATTENTE', maintenant: dimanche(12) }), 'aucune');
   assert.equal(prochaineAction({ ...base, affecteLe: dimanche(9), reponse: 'EN_ATTENTE', maintenant: dimanche(12), pasLeDimanche: false }), 'relancer_technicien');
+});
+
+test('affectation le samedi soir : rien le dimanche, relance le lundi à 6 h, alerte 5 min plus tard', () => {
+  const base = { reponse: 'EN_ATTENTE', affecteLe: samedi(22), alerteLe: null, delaiMinutes: 15, delaiAlerteMinutes: 5 };
+  assert.equal(prochaineAction({ ...base, relanceLe: null, maintenant: samedi(22, 20) }), 'relancer_technicien', 'le samedi soir, la relance part normalement');
+  const b2 = { ...base, affecteLe: samedi(23, 55) };
+  assert.equal(prochaineAction({ ...b2, relanceLe: null, maintenant: dimanche(12) }), 'aucune');
+  assert.equal(prochaineAction({ ...b2, relanceLe: null, maintenant: lundi(5, 59) }), 'aucune');
+  assert.equal(prochaineAction({ ...b2, relanceLe: null, maintenant: lundi(6, 0) }), 'relancer_technicien');
+  assert.equal(prochaineAction({ ...b2, relanceLe: lundi(6, 0), maintenant: lundi(6, 5) }), 'alerter_planificateur');
 });
 
 test('remplaçants : jamais le refusant, compétence d\'abord, puis charge du jour la plus faible', () => {

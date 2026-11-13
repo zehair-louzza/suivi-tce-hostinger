@@ -183,15 +183,22 @@ test('la nuit : la relance part aussi (seul le dimanche est exclu)', async () =>
   assert.ok(notifsDe(SOFIA).some((n: any) => n.type === 'RELANCE_TECHNICIEN'));
 });
 
-test('dimanche : rien ne part, sauf si la société a désactivé cette restriction', async () => {
-  const comp = (pasLeDimanche: boolean) => ({ active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: pasLeDimanche });
+test('pause du dimanche : rien du dimanche 0 h au lundi 6 h, la relance part le lundi à 6 h ; réglage désactivable', async () => {
+  const comp = (pause: boolean) => ({ active: true, autoTechnicienActif: true, autoTechnicienDelaiMinutes: 15, autoTechnicienAlerteMinutes: 5, autoTechnicienHeuresBureau: pause });
   db.intervention.rows.push(intv(23, {
-    entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: dimanche(9), company: comp(true),
+    entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: dimanche(0, 30), company: comp(true),
   }));
   assert.deepEqual(await executer(dimanche(10)), { relances: 0, alertes: 0 });
-  row('intervention', 23).company = comp(false);
-  assert.deepEqual(await executer(dimanche(10)), { relances: 1, alertes: 0 });
+  assert.deepEqual(await executer(lundi(5, 59)), { relances: 0, alertes: 0 });
+  assert.deepEqual(await executer(lundi(6, 0)), { relances: 1, alertes: 0 }, 'relance à 6 h');
+  assert.deepEqual(await executer(lundi(6, 6)), { relances: 0, alertes: 1 }, 'alerte 5 min après');
   row('intervention', 23).reponseTechnicien = 'ACCEPTEE'; // referme l'attente pour les tests suivants
+
+  db.intervention.rows.push(intv(24, {
+    entreprise: 'Sofia', statutOperationnel: 'Planifiée', reponseTechnicien: 'EN_ATTENTE', affecteLe: dimanche(9), company: comp(false),
+  }));
+  assert.deepEqual(await executer(dimanche(10)), { relances: 1, alertes: 0 }, 'sans pause, ça part aussi le dimanche');
+  row('intervention', 24).reponseTechnicien = 'ACCEPTEE';
 });
 
 test('réglage société : automatisation désactivée → aucune attente ouverte, aucune relance', async () => {
