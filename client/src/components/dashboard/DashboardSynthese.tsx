@@ -193,7 +193,7 @@ export function DashboardSynthese({
     );
     const caAFacturer = aFacturer.reduce((acc, i) => acc + amountOf(i, ledger), 0);
 
-    const devisAttente = devisPeriode.filter((d) => ['Envoyé', 'En négociation', 'Accepté'].includes(d.statutCommercial || ''));
+    const devisAttente = devisPeriode.filter((d) => ['Envoyé', 'Envoyé au client', 'En négociation', 'Accepté'].includes(d.statutCommercial || ''));
     const totalDevisPortefeuille = devisAttente.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
     const totalDevisNonBrouillon = devisPeriode.filter((d) => d.statutCommercial !== 'À préparer').length;

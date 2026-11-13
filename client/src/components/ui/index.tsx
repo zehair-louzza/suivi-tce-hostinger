@@ -7,6 +7,11 @@ import type { LucideIcon } from 'lucide-react';
 export const STATUS_TONE: Record<string, 'slate' | 'blue' | 'green' | 'amber' | 'red' | 'teal' | 'indigo' | 'purple'> = {
   'À préparer': 'slate',
   'Envoyé': 'blue',
+  'Envoyé au client': 'blue',
+  'À valider en interne': 'amber',
+  'En préparation': 'slate',
+  'Expiré': 'slate',
+  'Annulé': 'slate',
   'En négociation': 'amber',
   'Accepté': 'green',
   'Refusé': 'red',

@@ -29,6 +29,8 @@ model Company {
   autoTechnicienAlerteMinutes Int           @default(5)
   /// Pause de fin de semaine : pas de relance ni d'alerte du samedi 17 h au lundi 6 h (heure de Paris) ; jour et nuit les autres jours. Nom historique de colonne.
   autoTechnicienHeuresBureau Boolean        @default(true)
+  /// Automatisation « devis client » : relances J+3 / J+7 et expiration à 30 jours (l'envoi initial reste toujours manuel)
+  autoDevisActif       Boolean              @default(true)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   users                User[]
@@ -41,6 +43,8 @@ model Company {
   mailSettings         CompanyMailSettings?
   emailLogs            EmailLog[]
   notifications        Notification[]
+  devisDocuments       DevisDocument[]
+  devisLiensClient     DevisLienClient[]
 
   @@map("companies")
 }
@@ -127,6 +131,13 @@ model Devis {
   visiteStatut         String?
   visitePhotosJson     String?
   historiqueJson       String?
+
+  /// Envoi au client par lien sécurisé (automatisation B)
+  envoiClientLe        DateTime?
+  relanceClientJ3Le    DateTime?
+  relanceClientJ7Le    DateTime?
+  documents            DevisDocument[]
+  liensClient          DevisLienClient[]
 
   @@index([userId])
   @@index([companyId], map: "devis_companyid_idx")
@@ -392,10 +403,58 @@ model Notification {
   titre          String
   message        String?
   interventionId Int?
+  devisId        Int?
   lu             Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   @@index([userId, lu, createdAt], map: "notifications_user_lu_idx")
   @@index([companyId], map: "notifications_companyid_idx")
   @@map("notifications")
+}
+
+/// PDF du devis importé, déposé manuellement. Stocké en base (le disque de l'hébergement est remplacé à chaque déploiement).
+model DevisDocument {
+  id         Int      @id @default(autoincrement())
+  companyId  Int
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  devisId    Int
+  devis      Devis    @relation(fields: [devisId], references: [id], onDelete: Cascade)
+  nomFichier String
+  taille     Int
+  sha256     String
+  contenu    Bytes
+  deposePar  String?
+  createdAt  DateTime @default(now())
+
+  @@index([devisId], map: "devis_documents_devisid_idx")
+  @@index([companyId], map: "devis_documents_companyid_idx")
+  @@map("devis_documents")
+}
+
+/// Lien sécurisé envoyé au client pour un devis : limité dans le temps, à usage unique pour la réponse, lié à la société et au devis.
+model DevisLienClient {
+  id            Int       @id @default(autoincrement())
+  companyId     Int
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  devisId       Int
+  devis         Devis     @relation(fields: [devisId], references: [id], onDelete: Cascade)
+  documentId    Int?
+  /// Sel aléatoire : le jeton envoyé est dérivé (HMAC) de l'identifiant, de la société, du devis et de ce sel
+  sel           String
+  /// Adresses confirmées par l'utilisateur au moment de l'envoi (JSON) ; les relances partent aux mêmes
+  destinataires String
+  expireLe      DateTime
+  reponse       String?
+  motif         String?
+  repondantNom  String?
+  reponduLe     DateTime?
+  revoqueLe     DateTime?
+  revoqueRaison String?
+  creePar       String?
+  dernierAccesLe DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([devisId], map: "devis_liens_client_devisid_idx")
+  @@index([companyId], map: "devis_liens_client_companyid_idx")
+  @@map("devis_liens_client")
 }

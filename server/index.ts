@@ -22,6 +22,8 @@ import { referentielsRouter } from './routes/referentiels.js';
 import { adminRouter } from './routes/admin.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { demarrerPlanificateurTechnicien } from './services/technicianAutomation.js';
+import { demarrerPlanificateurDevis } from './services/devisClient.js';
+import { devisClientPublicRouter, limiteurDevisClient } from './routes/devisClientPublic.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -92,6 +94,8 @@ app.use('/api/interventions', authMiddleware, interventionRouter);
 app.use('/api/referentiels', authMiddleware, referentielsRouter);
 app.use('/api/admin', authMiddleware, adminRouter);
 app.use('/api/notifications', authMiddleware, notificationsRouter);
+// Page publique du devis client : sans compte, jeton signé, limitée par adresse IP
+app.use('/api/public/devis', limiteurDevisClient, devisClientPublicRouter);
 
 if (config.nodeEnv === 'production') {
   const clientDist = path.resolve(process.cwd(), 'dist/client');
@@ -171,6 +175,7 @@ function applyPendingMigrations() {
 
 applyPendingMigrations();
 demarrerPlanificateurTechnicien();
+demarrerPlanificateurDevis();
 
 httpServer.listen(config.port, () => {
   console.log(`→ Server running on port ${config.port} (${config.nodeEnv})`);

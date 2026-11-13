@@ -12,7 +12,13 @@ function ilYA(iso: string): string {
   return `il y a ${Math.round(h / 24)} j`;
 }
 
-export function NotificationBell({ onOpenIntervention }: { onOpenIntervention?: (interventionId: number) => void }) {
+export function NotificationBell({
+  onOpenIntervention,
+  onOpenDevis,
+}: {
+  onOpenIntervention?: (interventionId: number) => void;
+  onOpenDevis?: (devisId: number) => void;
+}) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -112,6 +118,9 @@ export function NotificationBell({ onOpenIntervention }: { onOpenIntervention?: 
                       if (n.interventionId && onOpenIntervention) {
                         setOpen(false);
                         onOpenIntervention(n.interventionId);
+                      } else if (n.devisId && onOpenDevis) {
+                        setOpen(false);
+                        onOpenDevis(n.devisId);
                       }
                     }}
                     style={{

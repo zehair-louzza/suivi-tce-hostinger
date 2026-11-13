@@ -5,6 +5,8 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /socket.io/
+Disallow: /devis-client/
+Disallow: /invitation
 
 # Moteurs de Recherche IA & Génératifs (GEO / AEO / SAIO)
 User-agent: GPTBot

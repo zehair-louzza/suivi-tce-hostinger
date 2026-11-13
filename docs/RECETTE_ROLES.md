@@ -26,3 +26,14 @@ Tests automatiques : `npm run test:roles` (vraies routes, base simulée, 2 soci�
 6. Direction → Utilisateurs et accès → **Automatisations** : activer/désactiver, délai de relance, délai d'alerte, option « pause de fin de semaine ». Désactivé : aucune nouvelle attente, aucune relance.
 7. Téléphone du technicien : sur la fiche d'une mission « À confirmer », le bouton **✓ Accepter la mission** est collé en bas de l'écran (avec « Refuser »), et reste visible même quand le motif de refus est ouvert.
 8. Isolation : un technicien d'une autre société ne reçoit rien et ne peut pas répondre.
+
+## Automatisation B — devis client par lien sécurisé
+
+1. Chargé d'études (ou Direction) → Devis → ouvrir un devis → onglet **3. Suivi & Relances** → bloc **Envoi au client** → **Déposer le PDF du devis** (PDF réel, 8 Mo maximum). Planificateur, Rapports et Technicien : pas de dépôt ni d'envoi.
+2. **Envoyer au client** : les adresses viennent de la **fiche client** (Profils & donneurs d'ordre). Une seule adresse → envoi direct à cette adresse. Plusieurs → il faut confirmer celle(s) à utiliser (les services « reçoit les devis » sont présélectionnés). Aucune adresse ou aucune fiche → l'envoi est refusé et on renvoie vers la fiche. Case de confirmation obligatoire : rien ne part tout seul.
+3. Le client reçoit un e-mail avec un lien personnel (30 jours) → page sans compte : consulter le PDF, **accepter**, **refuser** (motif) ou **demander une modification** (message). Son nom est obligatoire. Réponse à usage unique.
+4. Réponse : le devis passe à « Accepté » / « Refusé » / « En négociation » ; l'équipe est notifiée dans la cloche ; accepté → le Planificateur reçoit « à transformer en intervention » (aucune intervention créée automatiquement).
+5. Sans réponse : relance J+3 puis J+7 (mêmes adresses, même lien), du lundi au samedi de 8 h à 19 h ; à 30 jours le devis passe à « Expiré », le lien est fermé, rien n'est supprimé. Chaque action est écrite dans l'historique : « Automatique — … ».
+6. Devis modifié après envoi (montant, objet, client, site, corps d'état, TVA) ou nouveau PDF déposé → lien révoqué ; renvoyer le devis crée un nouveau lien et révoque l'ancien. Une note interne ne révoque rien.
+7. Direction → Automatisations → « Devis envoyés aux clients » : coche pour activer/désactiver les relances et l'expiration (l'envoi initial reste toujours manuel).
+8. Isolation : le lien est lié à une société et à un devis ; un jeton falsifié, ou d'une autre société, n'ouvre rien.

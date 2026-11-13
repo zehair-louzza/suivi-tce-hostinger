@@ -281,9 +281,42 @@ export const devisApi = {
       previewUrl?: string | null;
       message: string;
     }>(`/devis/${id}/send-devis-email`, payload),
+
+  // Devis client par lien sécurisé : PDF importé, envoi, suivi
+  uploadDocument: (id: number, nomFichier: string, contenuBase64: string) =>
+    api.post<{ data: { id: number; nomFichier: string; taille: number }; lienRevoque: boolean; message: string }>(
+      `/devis/${id}/document`,
+      { nomFichier, contenuBase64 },
+      { timeout: 60000 }
+    ),
+  downloadDocument: (id: number) => api.get<Blob>(`/devis/${id}/document`, { responseType: 'blob', timeout: 60000 }),
+  envoiClient: (id: number) => api.get<{ data: DevisEnvoiClient }>(`/devis/${id}/envoi-client`),
+  envoyerClient: (id: number, payload: { confirme: boolean; emails?: string[] }) =>
+    api.post<{ data: Devis; envoyes: string[]; echecs: string[]; message: string }>(`/devis/${id}/envoyer-client`, payload),
 };
 
+export interface DevisEnvoiClient {
+  reference: string;
+  document: { id: number; nomFichier: string; taille: number; deposeLe: string; deposePar: string | null } | null;
+  ficheTrouvee: boolean;
+  adresses: Array<{ email: string; libelle: string; suggeree: boolean }>;
+  lien: {
+    etat: 'actif' | 'repondu' | 'revoque' | 'expire';
+    creeLe: string;
+    expireLe: string;
+    destinataires: string[];
+    reponse: 'ACCEPTEE' | 'REFUSEE' | 'MODIFICATION' | null;
+    motif: string | null;
+    repondantNom: string | null;
+    reponduLe: string | null;
+    revoqueRaison: string | null;
+    relanceJ3Le: string | null;
+    relanceJ7Le: string | null;
+  } | null;
+}
+
 export interface AppNotification {
+  devisId?: number | null;
   id: number;
   type: string;
   titre: string;
@@ -470,6 +503,7 @@ export const authApi = {
 };
 
 export type AutomationSettings = {
+  autoDevisActif: boolean;
   autoTechnicienActif: boolean;
   autoTechnicienDelaiMinutes: number;
   autoTechnicienAlerteMinutes: number;

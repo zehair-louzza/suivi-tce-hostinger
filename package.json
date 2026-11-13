@@ -12,7 +12,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "db:init": "tsx server/db/init.ts",
-    "test:roles": "tsx --import ./test/support/registerStub.mjs --test test/roleRoutes.e2e.ts test/technicianAutomation.e2e.ts",
+    "test:roles": "tsx --import ./test/support/registerStub.mjs --test test/roleRoutes.e2e.ts test/technicianAutomation.e2e.ts test/devisClient.e2e.ts",
     "db:seed": "tsx server/db/seed.ts",
     "db:studio": "npx prisma studio",
     "lint": "eslint . --ext ts,tsx",

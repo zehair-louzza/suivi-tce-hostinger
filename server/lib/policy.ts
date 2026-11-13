@@ -23,6 +23,10 @@ export const POLICY = {
   'devis.delete': (a) => a.isAdmin || a.perms.canDeleteRecords,
   'devis.convert': (a) => a.isAdmin || a.perms.canConvertDevis || a.perms.canEditDevis,
   'devis.sendEmail': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
+  // Devis client par lien sécurisé : dépôt du PDF importé, envoi, suivi des réponses
+  'devis.document': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
+  'devis.sendClient': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
+  'devis.suiviClient': (a) => !a.isFieldOnly,
 
   // --- Interventions
   'interventions.list': anyMember,
@@ -95,6 +99,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   'devis.delete': 'supprimer un devis',
   'devis.convert': 'transformer un devis en intervention',
   'devis.sendEmail': 'envoyer un devis par email',
+  'devis.document': 'déposer le PDF d’un devis',
+  'devis.sendClient': 'envoyer un devis au client par lien sécurisé',
+  'devis.suiviClient': 'suivre les réponses du client à un devis',
   'interventions.list': 'consulter les interventions',
   'interventions.read': 'consulter cette intervention',
   'interventions.stats': 'consulter les statistiques des interventions',

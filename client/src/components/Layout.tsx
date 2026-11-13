@@ -43,6 +43,7 @@ interface LayoutProps {
   onOpenSituationReport?: () => void;
   /** Ouvre une intervention à partir d'une notification. */
   onOpenInterventionById?: (id: number) => void;
+  onOpenDevisById?: (id: number) => void;
 }
 
 export function Layout({
@@ -55,6 +56,7 @@ export function Layout({
   onQuickNewIntervention,
   onOpenSituationReport,
   onOpenInterventionById,
+  onOpenDevisById,
 }: LayoutProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -726,7 +728,7 @@ export function Layout({
               </button>
             )}
 
-            <NotificationBell onOpenIntervention={onOpenInterventionById} />
+            <NotificationBell onOpenIntervention={onOpenInterventionById} onOpenDevis={onOpenDevisById} />
 
             {!isMobileTechOnly && canUserAccessSection('mobile_tech', user) && (
               <button

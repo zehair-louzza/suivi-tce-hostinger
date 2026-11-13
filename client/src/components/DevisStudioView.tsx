@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   Sheet,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Devis } from '../lib/api';
+import { DevisClientPanel } from './DevisClientPanel';
 import {
   Page,
   SubNav,
@@ -45,9 +46,15 @@ export interface DevisStudioViewProps {
   onExportExcel?: () => void;
   techniciens?: string[];
   donneursOrdre?: string[];
+  /** Devis à ouvrir dans le tiroir (clic sur une notification) */
+  ouvrirDevisId?: number | null;
+  onDevisOuvert?: () => void;
 }
 
-const STATUSES = ['À préparer', 'Envoyé', 'En négociation', 'Accepté', 'Refusé'];
+const STATUSES = ['À préparer', 'À valider en interne', 'Envoyé au client', 'En négociation', 'Accepté', 'Expiré', 'Refusé'];
+
+/** Anciennes valeurs « Envoyé » / « Devis envoyé » : affichées comme « Envoyé au client ». */
+const statutNormalise = (s?: string | null) => (s === 'Envoyé' || s === 'Devis envoyé' ? 'Envoyé au client' : s || 'À préparer');
 
 function eur(val: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
@@ -61,7 +68,7 @@ function primaryAction(d: Devis) {
   if (status === 'Accepté' && d.refInterventionTexte) {
     return { label: d.refInterventionTexte, icon: Link2, variant: 'ghost' as const, kind: 'linked' };
   }
-  if (status === 'Envoyé' || status === 'En négociation') {
+  if (status === 'Envoyé' || status === 'Envoyé au client' || status === 'En négociation') {
     return { label: 'Relancer', icon: Send, variant: 'secondary' as const, kind: 'relance' };
   }
   if (status === 'À préparer') {
@@ -77,6 +84,8 @@ export function DevisStudioView({
   onSelectDevis,
   onConvertDevis,
   onExportExcel,
+  ouvrirDevisId,
+  onDevisOuvert,
 }: DevisStudioViewProps) {
   const isMobile = useIsMobile();
   const [status, setStatus] = useState<string>('all');
@@ -84,10 +93,20 @@ export function DevisStudioView({
   const [respFilter, setRespFilter] = useState('all');
   const [view, setView] = useState<'table' | 'kanban'>('table');
   const [selectedItem, setSelectedItem] = useState<Devis | null>(null);
+  const [envoiOuvert, setEnvoiOuvert] = useState(false);
+
+  useEffect(() => {
+    if (!ouvrirDevisId) return;
+    const d = devisList.find((x) => x.id === ouvrirDevisId);
+    if (d) {
+      setSelectedItem(d);
+      onDevisOuvert?.();
+    }
+  }, [ouvrirDevisId, devisList]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     return devisList.filter((d) => {
-      const matchStatus = status === 'all' || d.statutCommercial === status;
+      const matchStatus = status === 'all' || statutNormalise(d.statutCommercial) === status;
       const matchResp = respFilter === 'all' || d.responsable === respFilter;
       const text = `${d.reference || ''} ${d.numeroDI || ''} ${d.client || ''} ${d.objet || ''} ${d.site || ''} ${d.corpsEtat || ''}`.toLowerCase();
       const matchSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
@@ -95,7 +114,7 @@ export function DevisStudioView({
     });
   }, [devisList, status, respFilter, searchQuery]);
 
-  const countByStatus = (s: string) => devisList.filter((d) => d.statutCommercial === s).length;
+  const countByStatus = (s: string) => devisList.filter((d) => statutNormalise(d.statutCommercial) === s).length;
   const totalPortefeuille = devisList.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
   const signedDevis = devisList.filter((d) => d.statutCommercial === 'Accepté');
   const signedVolume = signedDevis.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
@@ -345,7 +364,7 @@ export function DevisStudioView({
       ) : (
         <div className="m-kanban">
           {STATUSES.map((s) => {
-            const list = filtered.filter((d) => d.statutCommercial === s);
+            const list = filtered.filter((d) => statutNormalise(d.statutCommercial) === s);
             const sumCol = list.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
             return (
               <div key={s} className="m-kcol">
@@ -387,7 +406,10 @@ export function DevisStudioView({
       {selectedItem && (
         <Drawer
           open={!!selectedItem}
-          onClose={() => setSelectedItem(null)}
+          onClose={() => {
+            setSelectedItem(null);
+            setEnvoiOuvert(false);
+          }}
           head={
             <div className="m-drawer-tags">
               <span className="m-mono m-strong">{selectedItem.reference || `DEV-${selectedItem.id}`}</span>
@@ -398,15 +420,11 @@ export function DevisStudioView({
           subtitle={`${selectedItem.corpsEtat || 'TCE'} · ${selectedItem.objet}`}
           footer={
             <>
-              <Btn
-                icon={Send}
-                onClick={() => {
-                  toast.success(`Devis ${selectedItem.reference} envoyé au client`);
-                  setSelectedItem(null);
-                }}
-              >
-                Envoyer au client
-              </Btn>
+              {canCreate !== false && selectedItem.id && (
+                <Btn icon={Send} onClick={() => setEnvoiOuvert(true)} data-testid="devis-footer-envoyer">
+                  Envoyer au client
+                </Btn>
+              )}
               {selectedItem.statutCommercial === 'Accepté' && !selectedItem.refInterventionTexte && (
                 <Btn
                   variant="primary"
@@ -471,6 +489,16 @@ export function DevisStudioView({
               </div>
             )}
           </dl>
+
+          {selectedItem.id && (
+            <DevisClientPanel
+              devisId={selectedItem.id}
+              statutCommercial={selectedItem.statutCommercial}
+              canManage={canCreate !== false}
+              envoiOuvert={envoiOuvert}
+              onEnvoiOuvert={setEnvoiOuvert}
+            />
+          )}
 
           <h4 className="m-h4">
             <History size={15} /> Historique du dossier

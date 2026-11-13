@@ -1122,7 +1122,7 @@ adminRouter.get(
     if (!caller.isAdmin) throw new AppError(403, "Accès réservé à l'administrateur", 'FORBIDDEN');
     const c = await (prisma as any).company.findUnique({
       where: { id: tenantOf(caller) },
-      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true },
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true, autoDevisActif: true },
     });
     res.json({
       data: {
@@ -1130,6 +1130,7 @@ adminRouter.get(
         autoTechnicienDelaiMinutes: normaliserDelai(c?.autoTechnicienDelaiMinutes),
         autoTechnicienAlerteMinutes: normaliserDelaiAlerte(c?.autoTechnicienAlerteMinutes),
         autoTechnicienHeuresBureau: c ? c.autoTechnicienHeuresBureau !== false : true,
+        autoDevisActif: c ? c.autoDevisActif !== false : true,
       },
     });
   })
@@ -1147,6 +1148,7 @@ adminRouter.patch(
         autoTechnicienDelaiMinutes: z.number().int().optional(),
         autoTechnicienAlerteMinutes: z.number().int().optional(),
         autoTechnicienHeuresBureau: z.boolean().optional(),
+        autoDevisActif: z.boolean().optional(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success || Object.values(parsed.data).every((v) => v === undefined)) {
@@ -1161,10 +1163,11 @@ adminRouter.patch(
       data.autoTechnicienAlerteMinutes = normaliserDelaiAlerte(parsed.data.autoTechnicienAlerteMinutes);
     }
     if (parsed.data.autoTechnicienHeuresBureau !== undefined) data.autoTechnicienHeuresBureau = parsed.data.autoTechnicienHeuresBureau;
+    if (parsed.data.autoDevisActif !== undefined) data.autoDevisActif = parsed.data.autoDevisActif;
     const updated = await (prisma as any).company.update({
       where: { id: tenantOf(caller) },
       data,
-      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true },
+      select: { autoTechnicienActif: true, autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true, autoDevisActif: true },
     });
     res.json({ data: updated, message: 'Automatisations mises à jour' });
   })

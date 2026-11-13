@@ -19,7 +19,7 @@ const INVALIDATIONS: Record<string, string[]> = {
   'intervention:updated': ['interventions', 'devis', 'demandes'],
   'intervention:deleted': ['interventions', 'devis', 'demandes'],
   // Notification personnelle : la cloche se recharge, et les missions (l'affectation vient peut-être d'arriver)
-  'notification:new': ['notifications', 'interventions'],
+  'notification:new': ['notifications', 'interventions', 'devis'],
 };
 
 export function demarrerTempsReel(queryClient: QueryClient): void {

@@ -21,7 +21,7 @@ notificationsRouter.get(
         where: { userId, companyId },
         orderBy: { createdAt: 'desc' },
         take: 50,
-        select: { id: true, type: true, titre: true, message: true, interventionId: true, lu: true, createdAt: true },
+        select: { id: true, type: true, titre: true, message: true, interventionId: true, devisId: true, lu: true, createdAt: true },
       }),
       db.notification.count({ where: { userId, companyId, lu: false } }),
     ]);

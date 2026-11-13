@@ -3,7 +3,8 @@
 type Row = Record<string, any>;
 
 function matchValue(actual: any, cond: any): boolean {
-  if (cond === null || typeof cond !== 'object' || cond instanceof Date) return actual === cond;
+  if (cond === null) return actual == null; // SQL NULL : colonne absente ou nulle
+  if (typeof cond !== 'object' || cond instanceof Date) return actual === cond;
   const ci = cond.mode === 'insensitive';
   const norm = (v: any) => (ci && typeof v === 'string' ? v.toLowerCase() : v);
   for (const [op, v] of Object.entries(cond)) {
@@ -92,6 +93,8 @@ export function createFakeDb() {
     referentiel: new Table('referentiel'),
     company: new Table('company'),
     notification: new Table('notification'),
+    devisDocument: new Table('devisDocument'),
+    devisLienClient: new Table('devisLienClient'),
     $transaction: async (x: any) => (typeof x === 'function' ? x(db) : Promise.all(x)),
   };
   return db;

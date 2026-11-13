@@ -1351,3 +1351,55 @@ export async function sendAutomationEmail(params: {
     text,
   });
 }
+
+/**
+ * E-mail au CLIENT : lien sécurisé vers le devis (envoi initial ou relance J+3 / J+7).
+ * Part de la boîte mail de la société si elle est configurée ; jamais vers un service de prévisualisation tiers.
+ */
+export async function sendDevisClientLinkEmail(params: {
+  companyId: number;
+  companyName: string;
+  toEmail: string;
+  replyTo?: string;
+  devis: { reference: string; client: string; objet?: string | null; siteAdresse?: string | null };
+  lien: string;
+  expireLe: Date;
+  relance?: 'J3' | 'J7' | null;
+}): Promise<EmailDeliveryResult> {
+  const ref = params.devis.reference;
+  const expire = params.expireLe.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: 'long', year: 'numeric' });
+  const rappel = params.relance
+    ? `Nous revenons vers vous au sujet de notre devis ${ref}, qui attend toujours votre réponse.`
+    : `Nous avons le plaisir de vous transmettre notre devis ${ref}.`;
+  const subject = params.relance
+    ? `Rappel — devis ${ref} en attente de votre réponse (${params.companyName})`
+    : `Devis ${ref} — ${params.companyName}`;
+  const lignes = [
+    params.devis.objet ? `Objet : ${params.devis.objet}` : '',
+    params.devis.siteAdresse ? `Site : ${params.devis.siteAdresse}` : '',
+    `Ce lien est personnel et valable jusqu'au ${expire}.`,
+  ].filter(Boolean);
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#0f172a;padding:20px;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;">
+    <h2 style="margin-top:0;">${esc(params.relance ? 'Rappel : devis en attente' : 'Votre devis')} ${esc(ref)}</h2>
+    <p>Bonjour,</p>
+    <p>${esc(rappel)}</p>
+    ${lignes.map((l) => `<p style="margin:6px 0;color:#334155;">${esc(l)}</p>`).join('')}
+    <p style="margin:22px 0;"><a href="${esc(params.lien)}" style="display:inline-block;background:#00bf63;color:#fff;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:10px;">Consulter et répondre au devis</a></p>
+    <p style="font-size:13px;color:#475569;">Vous pourrez accepter le devis, le refuser en indiquant un motif, ou demander une modification.</p>
+    <p style="font-size:12px;color:#64748b;">Envoyé par ${esc(params.companyName)}. Si vous n'êtes pas concerné par ce message, vous pouvez l'ignorer.</p>
+  </div></body></html>`;
+  const text = `Bonjour,\n\n${rappel}\n${lignes.join('\n')}\n\nConsulter et répondre : ${params.lien}\n\n${params.companyName}`;
+  return dispatchEmailWithFallback({
+    type: 'PROPOSITION_DEVIS',
+    companyId: params.companyId,
+    companyName: params.companyName,
+    toEmail: params.toEmail,
+    replyTo: params.replyTo,
+    subject,
+    html,
+    text,
+    recipientName: params.devis.client,
+  });
+}

@@ -41,6 +41,7 @@ import { DashboardSynthese } from '../components/dashboard/DashboardSynthese';
 import { DashboardOperations } from '../components/dashboard/DashboardOperations';
 import { DashboardAnalyse } from '../components/dashboard/DashboardAnalyse';
 import { DevisStudioView } from '../components/DevisStudioView';
+import { DevisClientPanel } from '../components/DevisClientPanel';
 import { InterventionsStudioView } from '../components/InterventionsStudioView';
 import { PlanningStudioView } from '../components/PlanningStudioView';
 import { CarteStudioView } from '../components/CarteStudioView';
@@ -221,6 +222,10 @@ export function DashboardPage() {
   const [selectedDevis, setSelectedDevis] = useState<Partial<Devis> | null>(null);
   const [isCreatingDevis, setIsCreatingDevis] = useState(false);
   const [devisTab, setDevisTab] = useState<'qualif' | 'chiffrage' | 'relances' | 'historique'>('qualif');
+  const [envoiDevisOuvert, setEnvoiDevisOuvert] = useState(false);
+  useEffect(() => {
+    if (!selectedDevis) setEnvoiDevisOuvert(false);
+  }, [selectedDevis]);
 
   const [selectedIntv, setSelectedIntv] = useState<Partial<Intervention> | null>(null);
   const [isCreatingIntv, setIsCreatingIntv] = useState(false);
@@ -906,6 +911,12 @@ export function DashboardPage() {
 
   // Pastilles du menu : chacune compte ce que CE profil doit traiter dans la section (mêmes files que « Mon travail »),
   // jamais le total brut de la liste.
+  const [devisAOuvrir, setDevisAOuvrir] = useState<number | null>(null);
+  const openDevisById = (id: number) => {
+    handleSectionChange('devis');
+    setDevisAOuvrir(id);
+  };
+
   const openInterventionById = async (id: number) => {
     const i =
       interventionsList.find((x) => x.id === id) ||
@@ -963,6 +974,7 @@ export function DashboardPage() {
       onQuickNewIntervention={openNewIntvDrawer}
       onOpenSituationReport={() => setIsSituationModalOpen(true)}
       onOpenInterventionById={openInterventionById}
+      onOpenDevisById={openDevisById}
     >
       {/* =====================================================================
           SECTION 1 : CENTRE DE PILOTAGE ("AUJOURD'HUI" / TABLEAU DE BORD)
@@ -1169,6 +1181,8 @@ export function DashboardPage() {
           }}
           onExportExcel={() => exportSituationDevisExcel(devisList)}
           techniciens={techniciensList}
+          ouvrirDevisId={devisAOuvrir}
+          onDevisOuvert={() => setDevisAOuvrir(null)}
         />
       )}
 
@@ -1773,6 +1787,18 @@ export function DashboardPage() {
                       onChange={(e) => setSelectedDevis({ ...selectedDevis, notes: e.target.value })}
                     />
                   </div>
+
+                  {!isCreatingDevis && selectedDevis.id ? (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <DevisClientPanel
+                        devisId={selectedDevis.id}
+                        statutCommercial={selectedDevis.statutCommercial}
+                        canManage={canUserCreateDevis(user)}
+                        envoiOuvert={envoiDevisOuvert}
+                        onEnvoiOuvert={setEnvoiDevisOuvert}
+                      />
+                    </div>
+                  ) : null}
 
                   {Boolean(selectedDevis.id && (selectedDevis.interventionsCount || 0) > 0) && (
                     <div

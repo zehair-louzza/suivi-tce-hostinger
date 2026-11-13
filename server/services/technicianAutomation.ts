@@ -64,7 +64,7 @@ export async function comptesPlanification(companyId: number): Promise<Destinata
 export async function notifier(
   companyId: number,
   destinataires: Destinataire[],
-  n: { type: string; titre: string; message?: string; interventionId?: number }
+  n: { type: string; titre: string; message?: string; interventionId?: number; devisId?: number }
 ): Promise<void> {
   if (destinataires.length === 0) return;
   const created = await Promise.all(
@@ -77,6 +77,7 @@ export async function notifier(
           titre: n.titre,
           message: n.message || null,
           interventionId: n.interventionId ?? null,
+          devisId: n.devisId ?? null,
           lu: false,
         },
         select: { id: true, userId: true },

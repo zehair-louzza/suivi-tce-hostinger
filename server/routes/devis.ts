@@ -14,6 +14,16 @@ import { saveTechnicienGpsPosition } from './referentiels.js';
 import { parsePhotosJson, sanitizePhotosJson } from '../lib/terrainPhotos.js';
 import { sendDevisProposalEmail } from '../services/emailService.js';
 import {
+  adressesPourDevis,
+  dernierDocument,
+  envoyerAuClient,
+  etatLien,
+  liensDuDevis,
+  referenceDevis,
+  revoquerLiensActifs,
+} from '../services/devisClient.js';
+import { contenuDevisModifie, validerPdf } from '../domain/devisClient.js';
+import {
   computeDevisCalculations,
   traitementToStatusCode,
   statusCodeToTraitement,
@@ -773,6 +783,21 @@ devisRouter.patch(
     await syncVisiteDevisIntervention(updated, userId, auteur);
     await syncDevisDossier(updated, companyId);
 
+    // Devis modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué
+    if (contenuDevisModifie(existing as any, updated as any) && (await revoquerLiensActifs(companyId, id, 'Devis modifié après envoi')) > 0) {
+      await prisma.devis.update({
+        where: { id },
+        data: {
+          historiqueJson: addHistoriqueEvent(
+            updated.historiqueJson,
+            'Automatique',
+            'Automatique — lien client révoqué',
+            'Le devis a été modifié après son envoi : renvoyez-le au client pour qu\'il réponde sur la bonne version'
+          ),
+        },
+      });
+    }
+
     const refreshed = await prisma.devis.findUnique({
       where: { id },
       include: { interventions: true },
@@ -1045,6 +1070,143 @@ devisRouter.post(
       deliveryChannel: delivery.channel,
       previewUrl: delivery.previewUrl || null,
       message: `Proposition de devis envoyée avec succès par e-mail à ${validEmails.join(', ')}`,
+    });
+  })
+);
+
+
+// ============================================================================
+// DEVIS CLIENT — PDF importé, envoi par lien sécurisé, suivi des réponses
+// ============================================================================
+
+async function devisPourDocument(req: Request, exigerEcriture: boolean) {
+  const companyId = requireCompanyId(req.user?.companyId);
+  const id = parseInt(req.params.id, 10);
+  const acc = await loadAccess(req);
+  const devis = await prisma.devis.findFirst({ where: { id, companyId } });
+  if (!devis || !canReadDevis(acc, devis)) throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
+  return { companyId, acc, devis, id, exigerEcriture };
+}
+
+// Dépôt manuel du PDF du devis importé (JSON base64 : pas de dépendance d'envoi de fichiers)
+devisRouter.post(
+  '/:id/document',
+  policy('devis.document'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, true);
+    const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64);
+    if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
+    const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const doc = await (prisma as any).devisDocument.create({
+      data: { companyId, devisId: devis.id, nomFichier: v.nom, taille: v.octets.length, sha256: v.sha256, contenu: v.octets, deposePar: auteur },
+      select: { id: true, nomFichier: true, taille: true, createdAt: true, deposePar: true },
+    });
+    // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
+    const revoques = await revoquerLiensActifs(companyId, devis.id, 'Nouveau PDF déposé après envoi');
+    await prisma.devis.update({
+      where: { id: devis.id },
+      data: {
+        historiqueJson: addHistoriqueEvent(
+          devis.historiqueJson,
+          auteur,
+          'PDF du devis déposé',
+          `${v.nom} (${Math.round(v.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le devis' : '')
+        ),
+      },
+    });
+    res.status(201).json({
+      data: { id: doc.id, nomFichier: doc.nomFichier, taille: doc.taille, createdAt: doc.createdAt, deposePar: doc.deposePar },
+      lienRevoque: revoques > 0,
+      message: 'PDF du devis enregistré',
+    });
+  })
+);
+
+devisRouter.get(
+  '/:id/document',
+  policy('devis.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, false);
+    const meta = await dernierDocument(companyId, devis.id);
+    if (!meta) throw new AppError(404, 'Aucun PDF déposé pour ce devis', 'NOT_FOUND');
+    const doc = await (prisma as any).devisDocument.findFirst({ where: { id: meta.id, companyId, devisId: devis.id } });
+    if (!doc) throw new AppError(404, 'Aucun PDF déposé pour ce devis', 'NOT_FOUND');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.nomFichier)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(Buffer.from(doc.contenu));
+  })
+);
+
+// Suivi : PDF déposé, adresses de la fiche client, état du lien, relances faites, réponse du client
+devisRouter.get(
+  '/:id/envoi-client',
+  policy('devis.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, false);
+    const [document, adr, liens] = await Promise.all([
+      dernierDocument(companyId, devis.id),
+      adressesPourDevis(companyId, devis.client),
+      liensDuDevis(companyId, devis.id),
+    ]);
+    const dernier = liens[0] || null;
+    res.json({
+      data: {
+        reference: referenceDevis(devis),
+        document: document
+          ? { id: document.id, nomFichier: document.nomFichier, taille: document.taille, deposeLe: document.createdAt, deposePar: document.deposePar }
+          : null,
+        ficheTrouvee: adr.ficheTrouvee,
+        adresses: adr.adresses,
+        lien: dernier
+          ? {
+              etat: etatLien(dernier),
+              creeLe: dernier.createdAt,
+              expireLe: dernier.expireLe,
+              destinataires: (() => { try { return JSON.parse(dernier.destinataires || '[]'); } catch { return []; } })(),
+              reponse: dernier.reponse,
+              motif: dernier.motif,
+              repondantNom: dernier.repondantNom,
+              reponduLe: dernier.reponduLe,
+              revoqueRaison: dernier.revoqueRaison,
+              relanceJ3Le: devis.relanceClientJ3Le,
+              relanceJ7Le: devis.relanceClientJ7Le,
+            }
+          : null,
+      },
+    });
+  })
+);
+
+// Envoi au client : toujours un geste humain, avec confirmation de l'utilisateur
+devisRouter.post(
+  '/:id/envoyer-client',
+  policy('devis.sendClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, true);
+    if (req.body?.confirme !== true) {
+      throw new AppError(400, 'Confirmez avoir vérifié le devis avant de l\'envoyer au client.', 'CONFIRMATION_REQUISE');
+    }
+    if (['Accepté', 'Annulé'].includes(String(devis.statutCommercial || ''))) {
+      throw new AppError(409, `Un devis « ${devis.statutCommercial} » ne peut plus être envoyé.`, 'STATUT_INVALIDE');
+    }
+    const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const r = await envoyerAuClient({
+      companyId,
+      devis,
+      adresseChoisies: req.body?.emails,
+      auteur,
+      replyTo: req.user?.email,
+    });
+    const refreshed = await prisma.devis.findUnique({ where: { id: devis.id }, include: { interventions: true } });
+    const transformed = transformDevis(refreshed);
+    notify(() => socketEvents.devisUpdated(req.user!.userId, companyId, transformed));
+    res.json({
+      data: transformed,
+      envoyes: r.envoyes,
+      echecs: r.echecs,
+      message: `Devis envoyé à ${r.envoyes.join(', ')}` + (r.echecs.length ? ` (échec pour ${r.echecs.join(', ')})` : ''),
     });
   })
 );

@@ -122,6 +122,7 @@ function AutomationsPanel() {
   const delai = query.data?.autoTechnicienDelaiMinutes ?? 15;
   const delaiAlerte = query.data?.autoTechnicienAlerteMinutes ?? 5;
   const heuresBureau = query.data?.autoTechnicienHeuresBureau !== false;
+  const devisActif = query.data?.autoDevisActif !== false;
   const dureeLabel = (m: number) => (m < 60 ? `${m} minutes` : `${m / 60} heure${m >= 120 ? 's' : ''}`);
   const optionsDelai = Array.from(new Set([5, 10, 15, 30, 60, 120, 240, 480, delai])).sort((a, b) => a - b);
   const optionsAlerte = Array.from(new Set([5, 10, 15, 30, 60, delaiAlerte])).sort((a, b) => a - b);
@@ -184,6 +185,26 @@ function AutomationsPanel() {
       <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
         Le technicien est prévenu et relancé uniquement dans l'application (cloche), sans e-mail. Le planificateur et la direction reçoivent l'alerte dans l'application et par e-mail.
       </p>
+
+      <hr style={{ border: 0, borderTop: '1px solid var(--border-subtle, #e2e8f0)', margin: '6px 0' }} />
+      <div>
+        <h3 style={{ margin: 0, fontSize: '16px' }}>Devis envoyés aux clients</h3>
+        <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          L'envoi d'un devis au client reste toujours manuel (adresse confirmée, devis vérifié). Une fois envoyé, le client répond par un lien personnel
+          valable 30 jours. Sans réponse, il est relancé à J+3 et J+7 (du lundi au samedi, de 8 h à 19 h, heure de Paris), puis le devis passe à
+          « Expiré ». Un silence n'est jamais une acceptation, et rien n'est supprimé.
+        </p>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
+        <input
+          type="checkbox"
+          checked={devisActif}
+          disabled={query.isLoading || mut.isPending}
+          onChange={(e) => mut.mutate({ autoDevisActif: e.target.checked })}
+          data-testid="auto-devis-toggle"
+        />
+        Relancer automatiquement les clients (J+3 / J+7) et marquer les devis « Expiré » au bout de 30 jours
+      </label>
     </div>
   );
 }
