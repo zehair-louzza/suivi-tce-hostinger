@@ -1,5 +1,6 @@
 // API client with axios + Full ANELEC types & endpoints
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores/authStore';
 import {
   Devis,
@@ -129,10 +130,33 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+/**
+ * Message « droit insuffisant sur cette partie » : affiché clairement (avec les rôles autorisés), après les
+ * notifications ordinaires de l'écran pour ne pas être recouvert par elles.
+ */
+function showFieldRightsToast(message: string) {
+  setTimeout(() => {
+    toast(message, {
+      id: 'field-rights',
+      icon: '🔒',
+      duration: 9000,
+      style: { whiteSpace: 'pre-line', border: '1.5px solid #f59e0b', borderLeft: '5px solid #d97706' },
+    });
+  }, 350);
+}
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const notice = (response.data as any)?.notice;
+    if (typeof notice === 'string' && notice) showFieldRightsToast(notice);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+
+    if (error.response?.status === 403 && error.response?.data?.code === 'FIELD_FORBIDDEN') {
+      showFieldRightsToast(String(error.response.data.error || ''));
+    }
 
     // Ne jamais intercepter les endpoints d'authentification pour éviter les blocages / boucles infinies
     const url = originalRequest?.url || '';

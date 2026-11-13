@@ -331,3 +331,74 @@ export function limitInterventionBody(
   }
   return res;
 }
+
+// --- Messages clairs quand une partie n'est pas modifiable par le rôle -------------------------------------
+
+export const ROLE_LABELS: Record<string, string> = {
+  ADMIN: 'Direction',
+  CONDUCTEUR_TRAVAUX: 'Conducteur de travaux',
+  CHIFFRAGE_DEVIS: "Chargé d'études (chiffrage)",
+  REDACTEUR_RAPPORTS: 'Rapports et facturation',
+  TECHNICIEN: 'Technicien (sur ses propres missions)',
+};
+
+type Part = { label: string; keys: string[] };
+
+const INTERVENTION_PARTS: Part[] = [
+  { label: 'le planning (date, heures, technicien)', keys: PLANNING_KEYS.filter((k) => k !== 'statutOperationnel') },
+  { label: "le statut de l'intervention", keys: ['statutOperationnel', 'traitement', 'status'] },
+  { label: 'le rapport et le compte rendu', keys: [...REPORT_KEYS, 'heureDebutReelle', 'heureFinReelle', 'gpsCloture'] },
+  { label: 'la facturation', keys: BILLING_KEYS },
+  { label: 'les montants', keys: [...AMOUNT_KEYS, 'montantHt'] },
+];
+const DEVIS_PARTS: Part[] = [
+  { label: 'les montants du devis', keys: DEVIS_AMOUNT_KEYS },
+  { label: 'le relevé de visite (statut, photos, compte rendu)', keys: DEVIS_TERRAIN_KEYS },
+];
+
+function partFor(parts: Part[], key: string, fallback: string): Part {
+  return parts.find((p) => p.keys.includes(key)) || { label: fallback, keys: [key] };
+}
+
+function defaultAccess(role: string): Access {
+  return accessFor({ id: 0, role, name: 'x', technicienNom: role === 'TECHNICIEN' ? 'x' : null } as any);
+}
+
+/** Rôles (par défaut) qui ont le droit de modifier ce champ — calculé avec les mêmes règles que l'enregistrement. */
+export function rolesAllowedToWrite(kind: 'intervention' | 'devis', key: string): string[] {
+  const out: string[] = [];
+  for (const role of Object.keys(ROLE_LABELS)) {
+    const a = defaultAccess(role);
+    const test = (existing?: { isVisiteDevis?: boolean }) =>
+      (kind === 'intervention' ? limitInterventionBody(a, { [key]: 'x' }, existing) : limitDevisBody(a, { [key]: 'x' }))
+        .dropped.length === 0;
+    if (kind === 'intervention' && role === 'CHIFFRAGE_DEVIS') {
+      if (test({ isVisiteDevis: true })) out.push(`${ROLE_LABELS[role]}, pour les visites de chiffrage uniquement`);
+      continue;
+    }
+    if (test({ isVisiteDevis: false })) out.push(ROLE_LABELS[role]);
+  }
+  return out;
+}
+
+/** « Vous n'avez pas le droit de modifier … Peuvent la modifier : … » — une phrase par partie concernée. */
+export function describeRefusal(
+  kind: 'intervention' | 'devis',
+  dropped: string[]
+): { message: string; parts: { part: string; roles: string[] }[] } {
+  const parts = kind === 'intervention' ? INTERVENTION_PARTS : DEVIS_PARTS;
+  const fallback = kind === 'intervention' ? 'la fiche (client, chantier, références)' : 'la fiche du devis';
+  const byLabel = new Map<string, { part: string; roles: string[] }>();
+  for (const key of dropped) {
+    const p = partFor(parts, key, fallback);
+    if (!byLabel.has(p.label)) byLabel.set(p.label, { part: p.label, roles: rolesAllowedToWrite(kind, key) });
+  }
+  const list = [...byLabel.values()];
+  const message = list
+    .map(
+      (x) =>
+        `Vous n'avez pas le droit de modifier ${x.part}. Peuvent la modifier : ${x.roles.join(' ; ') || 'la direction'}.`
+    )
+    .join('\n');
+  return { message, parts: list };
+}

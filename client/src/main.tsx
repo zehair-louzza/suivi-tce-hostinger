@@ -67,6 +67,7 @@ function EphemeralToaster() {
           fontSize: '13px',
           lineHeight: 1.4,
           maxWidth: '400px',
+          whiteSpace: 'pre-line',
           opacity: 1,
         },
         success: {

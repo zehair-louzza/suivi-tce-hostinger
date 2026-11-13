@@ -207,3 +207,29 @@ test('écrans : création et clôture suivent les mêmes règles que le serveur'
   assert.equal(canUserCloseIntervention(u('CHIFFRAGE_DEVIS')), false);
   assert.equal(canUserCloseIntervention(u('TECHNICIEN')), false);
 });
+
+import { describeRefusal, rolesAllowedToWrite } from '../server/lib/access.js';
+
+test('message de refus : dit quelle partie et quels rôles peuvent la modifier', () => {
+  const r = describeRefusal('intervention', ['datePlanifiee', 'numeroFacture']);
+  assert.match(r.message, /Vous n'avez pas le droit de modifier le planning/);
+  assert.match(r.message, /Peuvent la modifier : Direction ; Conducteur de travaux/);
+  assert.match(r.message, /la facturation/);
+  assert.match(r.message, /Rapports et facturation/);
+  assert.equal(r.parts.length, 2);
+  assert.ok(!r.message.includes('Technicien'), 'le terrain ne modifie ni planning ni facturation');
+});
+
+test('rôles autorisés : calculés avec les vraies règles (chiffrage = visites seulement, terrain = ses missions)', () => {
+  const planning = rolesAllowedToWrite('intervention', 'datePlanifiee');
+  assert.deepEqual(planning, [
+    'Direction',
+    'Conducteur de travaux',
+    "Chargé d'études (chiffrage), pour les visites de chiffrage uniquement",
+  ]);
+  const report = rolesAllowedToWrite('intervention', 'compteRendu');
+  assert.ok(report.includes('Technicien (sur ses propres missions)'));
+  assert.ok(report.includes('Rapports et facturation'));
+  assert.ok(!report.some((x) => x.startsWith("Chargé d'études")));
+  assert.deepEqual(rolesAllowedToWrite('devis', 'montantHt'), ['Direction', "Chargé d'études (chiffrage)"]);
+});

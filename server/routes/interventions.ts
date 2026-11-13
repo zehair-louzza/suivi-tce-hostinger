@@ -5,7 +5,7 @@ import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadIntervention, limitInterventionBody, shapeIntervention } from '../lib/access.js';
+import { canReadIntervention, describeRefusal, limitInterventionBody, shapeIntervention } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -537,9 +537,11 @@ interventionRouter.patch(
     }
     const limited = limitInterventionBody(acc, req.body || {}, existing);
     if (limited.dropped.length > 0 && Object.keys(limited.clean).length === 0) {
-      throw new AppError(403, 'Votre profil ne permet pas de modifier ces informations', 'FORBIDDEN');
+      const refusal = describeRefusal('intervention', limited.dropped);
+      throw new AppError(403, refusal.message, 'FIELD_FORBIDDEN', refusal.parts);
     }
     const b = limited.clean;
+    const refusalNotice = limited.dropped.length > 0 ? describeRefusal('intervention', limited.dropped).message : undefined;
 
     const changes: string[] = [];
     if (b.entreprise !== undefined && b.entreprise !== existing.entreprise) {
@@ -815,6 +817,7 @@ interventionRouter.patch(
 
     res.json({
       data: shapeIntervention(acc, transformed),
+      notice: refusalNotice,
       message: 'Intervention mise à jour',
     });
   })

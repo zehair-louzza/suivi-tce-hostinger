@@ -5,7 +5,7 @@ import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadDevis, limitDevisBody, shapeDevis } from '../lib/access.js';
+import { canReadDevis, describeRefusal, limitDevisBody, shapeDevis } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -624,9 +624,11 @@ devisRouter.patch(
     }
     const limited = limitDevisBody(acc, req.body || {});
     if (limited.dropped.length > 0 && Object.keys(limited.clean).length === 0) {
-      throw new AppError(403, 'Votre profil ne permet pas de modifier ces informations', 'FORBIDDEN');
+      const refusal = describeRefusal('devis', limited.dropped);
+      throw new AppError(403, refusal.message, 'FIELD_FORBIDDEN', refusal.parts);
     }
     const b = limited.clean;
+    const refusalNotice = limited.dropped.length > 0 ? describeRefusal('devis', limited.dropped).message : undefined;
 
     const changes: string[] = [];
     if (b.statutCommercial && b.statutCommercial !== existing.statutCommercial) {
@@ -781,6 +783,7 @@ devisRouter.patch(
 
     res.json({
       data: shapeDevis(acc, transformed),
+      notice: refusalNotice,
       message: 'Devis mis à jour',
     });
   })
