@@ -229,9 +229,11 @@ export function CarteStudioView({
     // 1. Add HQ Marker
     const hqIcon = L.divIcon({
       className: 'm-map-hq',
-      html: `<div style="background:#0F172A;color:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;box-shadow:0 2px 8px rgba(0,0,0,.2);white-space:nowrap;">🏢 ${HQ.name}</div>`,
-      iconSize: [140, 26],
-      iconAnchor: [70, 13],
+      // Pastille ronde avec pictogramme seul (sans texte) ; le nom et l'adresse restent dans la bulle au clic.
+      html: `<div style="width:44px;height:44px;background:#0F172A;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;box-shadow:0 3px 10px rgba(0,0,0,.35);">🏢</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22],
     });
     L.marker(HQ.pos, { icon: hqIcon })
       .bindPopup(`<strong>${HQ.name}</strong><br/>${HQ.addr}`)
