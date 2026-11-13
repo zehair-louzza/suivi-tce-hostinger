@@ -233,3 +233,34 @@ test('rôles autorisés : calculés avec les vraies règles (chiffrage = visites
   assert.ok(!report.some((x) => x.startsWith("Chargé d'études")));
   assert.deepEqual(rolesAllowedToWrite('devis', 'montantHt'), ['Direction', "Chargé d'études (chiffrage)"]);
 });
+
+import { ROLE_PERIMETRE, canUserCreateDevis, espaceRoleOf } from '../shared/types.js';
+
+test('chaque profil a son espace : menus, accueil et espace terrain sans fuite entre profils', () => {
+  const u = (role: string) => ({ id: 50, role, permissions: getEffectivePermissions(role, null) } as any);
+  const sections = ['aujourdhui', 'planning', 'devis', 'interventions', 'carte', 'facturation', 'rentabilite', 'clients', 'referentiels', 'admin', 'mobile_tech'];
+  const menu = (role: string) => sections.filter((s) => canUserAccessSection(s, u(role)));
+  assert.deepEqual(menu('REDACTEUR_RAPPORTS'), ['aujourdhui', 'interventions', 'facturation', 'clients']);
+  assert.ok(!menu('REDACTEUR_RAPPORTS').includes('carte'));
+  assert.ok(!menu('CHIFFRAGE_DEVIS').includes('mobile_tech'), "le chiffrage n'a pas l'espace technicien");
+  assert.ok(!menu('REDACTEUR_RAPPORTS').includes('mobile_tech'));
+  assert.ok(menu('CHIFFRAGE_DEVIS').includes('devis') && !menu('CHIFFRAGE_DEVIS').includes('facturation'));
+  assert.ok(menu('CONDUCTEUR_TRAVAUX').includes('planning') && !menu('CONDUCTEUR_TRAVAUX').includes('facturation'));
+  assert.deepEqual(menu('TECHNICIEN'), ['mobile_tech']);
+  assert.ok(menu('CONDUCTEUR_TRAVAUX').includes('devis'), 'le conducteur ouvre les devis acceptés à transformer');
+  assert.equal(canUserCreateDevis(u('CONDUCTEUR_TRAVAUX')), false);
+  assert.equal(canUserCreateDevis(u('CHIFFRAGE_DEVIS')), true);
+});
+
+test('Mon travail : un profil par rôle, avec ce qu\'il valide et ce qui est hors de son périmètre', () => {
+  const u = (role: string) => ({ id: 50, role, permissions: getEffectivePermissions(role, null) } as any);
+  assert.equal(espaceRoleOf(u('ADMIN')), 'direction');
+  assert.equal(espaceRoleOf(u('CHIFFRAGE_DEVIS')), 'chiffrage');
+  assert.equal(espaceRoleOf(u('CONDUCTEUR_TRAVAUX')), 'travaux');
+  assert.equal(espaceRoleOf(u('REDACTEUR_RAPPORTS')), 'rapports');
+  assert.equal(espaceRoleOf(u('TECHNICIEN')), 'terrain');
+  assert.equal(espaceRoleOf(null), 'terrain');
+  for (const r of Object.values(ROLE_PERIMETRE)) {
+    assert.ok(r.vousValidez.length > 0 && r.horsPerimetre.length > 0);
+  }
+});

@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
 import { InstallAppButton } from './InstallAppButton';
 import { ProfileMenu } from './ProfileMenu';
-import { isUserMobileOnly, canUserAccessSection, canUserCreateIntervention } from '../../../shared/types';
+import { isUserMobileOnly, canUserAccessSection, canUserCreateIntervention, canUserCreateDevis } from '../../../shared/types';
 import { ProGlyph } from './ProIcons';
 
 export type AppSection =
@@ -747,7 +747,7 @@ export function Layout({
               </button>
             )}
 
-            {!isMobileTechOnly && onQuickNewDevis && activeSection !== 'devis' && canUserAccessSection('devis', user) && (
+            {!isMobileTechOnly && onQuickNewDevis && activeSection !== 'devis' && canUserAccessSection('devis', user) && canUserCreateDevis(user) && (
               <button
                 type="button"
                 className="btn btn--secondary desktop-only-el"

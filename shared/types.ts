@@ -1493,6 +1493,108 @@ function mergePermissions(
  * - OU la permission mobileOnly est activée
  * - OU un nom de technicien lui est associé et il n'a aucun droit de gestion de bureau (Devis, Planning, Facturation, Admin)
  */
+/** Droit de créer un devis (écrans) : même règle que le serveur — direction et chiffrage. */
+export function canUserCreateDevis(user?: User | null): boolean {
+  if (!user || isUserMobileOnly(user)) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  return isAdmin || Boolean(perms.canEditDevis);
+}
+
+/**
+ * Périmètre de chaque profil, en langage métier : ce qu'il valide, ce qu'il ne valide pas (et qui s'en charge).
+ * Affiché dans « Mon travail » pour que chacun sache où s'arrête sa responsabilité.
+ */
+export type EspaceRole = 'direction' | 'chiffrage' | 'travaux' | 'rapports' | 'terrain';
+
+export const ROLE_PERIMETRE: Record<
+  EspaceRole,
+  { titre: string; vousValidez: string[]; horsPerimetre: string[] }
+> = {
+  direction: {
+    titre: 'Direction',
+    vousValidez: [
+      'Les demandes entrantes (accepter, refuser, orienter)',
+      'Les rapports terminés avant facturation',
+      'La facturation et la rentabilité',
+      'Les comptes, les droits et les paramètres de la société',
+    ],
+    horsPerimetre: ['Le détail du terrain : les techniciens renseignent eux-mêmes leurs missions'],
+  },
+  chiffrage: {
+    titre: 'Chargé d’études — chiffrage',
+    vousValidez: [
+      'Le chiffrage des devis (montants, validité) et leur envoi au client',
+      'Les visites de chiffrage et leurs relevés',
+      'La transformation d’un devis accepté en intervention',
+    ],
+    horsPerimetre: [
+      'L’exécution des travaux et le planning des équipes → conducteur de travaux',
+      'Les rapports de fin d’intervention → rapports',
+      'La facturation → rapports et facturation / direction',
+      'Les comptes et les droits → direction',
+    ],
+  },
+  travaux: {
+    titre: 'Conducteur de travaux',
+    vousValidez: [
+      'La planification et l’affectation des techniciens',
+      'Le déblocage des interventions en retard ou suspendues',
+      'La clôture d’une intervention terminée',
+    ],
+    horsPerimetre: [
+      'Le chiffrage et les montants des devis → chargé d’études',
+      'La facturation → rapports et facturation / direction',
+      'Les comptes et les droits → direction',
+    ],
+  },
+  rapports: {
+    titre: 'Rapports et facturation',
+    vousValidez: [
+      'Les rapports terminés (relecture puis clôture)',
+      'Le numéro et le statut de facture des interventions clôturées',
+    ],
+    horsPerimetre: [
+      'Le planning, les dates et les techniciens → conducteur de travaux',
+      'Les devis et le chiffrage → chargé d’études',
+      'Les comptes et les droits → direction',
+    ],
+  },
+  terrain: {
+    titre: 'Technicien',
+    vousValidez: [
+      'L’avancement de vos missions : arrivée, fin, compte rendu et photos',
+      'Vos relevés de visite de chiffrage',
+    ],
+    horsPerimetre: [
+      'Les montants, la facturation et les devis',
+      'Le planning des autres équipes',
+      'La clôture des interventions → conducteur / rapports',
+    ],
+  },
+};
+
+/** Profil d'espace de travail d'un utilisateur (déduit de son rôle, puis de ses droits). */
+export function espaceRoleOf(user?: User | null): EspaceRole {
+  if (!user) return 'terrain';
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  if (isAdmin) return 'direction';
+  if (isUserMobileOnly(user) || role === 'TECHNICIEN') return 'terrain';
+  switch (role) {
+    case 'CHIFFRAGE_DEVIS':
+      return 'chiffrage';
+    case 'CONDUCTEUR_TRAVAUX':
+      return 'travaux';
+    case 'REDACTEUR_RAPPORTS':
+      return 'rapports';
+    default:
+      return 'terrain';
+  }
+}
+
 /** Droit de créer une intervention (écrans) : même règle que le serveur — direction, conducteur, chargé d'études. */
 export function canUserCreateIntervention(user?: User | null): boolean {
   if (!user || isUserMobileOnly(user)) return false;
@@ -1556,7 +1658,8 @@ export function canUserAccessSection(
 
   switch (section) {
     case 'mobile_tech':
-      return true; // Accès universel pour tout profil utilisateur
+      // Espace terrain : réservé aux profils qui ont le droit « Accès mobile terrain » (plus d'accès universel)
+      return Boolean(perms.canAccessMobileTech);
 
     case 'admin':
       return Boolean(perms.canManageUsers);
@@ -1569,7 +1672,8 @@ export function canUserAccessSection(
       return Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning);
 
     case 'devis':
-      return Boolean(perms.canEditDevis);
+      // Chiffrage : tout le pipeline ; conducteur : les devis acceptés à transformer en intervention (lecture)
+      return Boolean(perms.canEditDevis) || Boolean(perms.canConvertDevis);
 
     case 'planning':
       return Boolean(perms.canEditPlanning);
@@ -1583,7 +1687,8 @@ export function canUserAccessSection(
       );
 
     case 'carte':
-      return Boolean(perms.canEditPlanning) || Boolean(perms.canEditInterventions);
+      // La carte sert à planifier : chiffrage (visites) et conducteur, pas aux rapports ni à la facturation
+      return Boolean(perms.canEditPlanning);
 
     case 'facturation':
       return Boolean(perms.canManageBilling);
@@ -1596,11 +1701,14 @@ export function canUserAccessSection(
       return Boolean(perms.canEditDevis) || Boolean(perms.canManageBilling) || Boolean(perms.canEditInterventions);
 
     case 'aujourdhui':
+      // Chaque profil de bureau a son espace « Mon travail » (file, validations, périmètre)
       return (
-        Boolean(perms.canViewFinancials) ||
         Boolean(perms.canEditPlanning) ||
         Boolean(perms.canEditDevis) ||
-        Boolean(perms.canEditInterventions)
+        Boolean(perms.canConvertDevis) ||
+        Boolean(perms.canEditInterventions) ||
+        Boolean(perms.canWriteReports) ||
+        Boolean(perms.canManageBilling)
       );
 
     default:

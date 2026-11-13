@@ -38,6 +38,8 @@ import {
 export interface DevisStudioViewProps {
   devisList: Devis[];
   onOpenNewDevis?: () => void;
+  /** false : pas de création de devis (profil sans droit de chiffrage) */
+  canCreate?: boolean;
   onSelectDevis?: (devis: Devis) => void;
   onConvertDevis?: (devis: Devis) => void;
   onExportExcel?: () => void;
@@ -71,6 +73,7 @@ function primaryAction(d: Devis) {
 export function DevisStudioView({
   devisList,
   onOpenNewDevis,
+  canCreate,
   onSelectDevis,
   onConvertDevis,
   onExportExcel,
@@ -225,9 +228,11 @@ export function DevisStudioView({
               Exporter
             </Btn>
           )}
-          <Btn variant="primary" icon={Plus} onClick={onOpenNewDevis}>
-            Nouveau devis
-          </Btn>
+          {canCreate !== false && (
+            <Btn variant="primary" icon={Plus} onClick={onOpenNewDevis}>
+              Nouveau devis
+            </Btn>
+          )}
         </>
       }
       subnav={

@@ -63,6 +63,8 @@ import {
   isUserMobileOnly,
   canUserAccessSection,
   canUserCreateIntervention,
+  canUserCreateDevis,
+  espaceRoleOf,
   canUserCloseIntervention,
   getDefaultAuthorizedSection,
 } from '../../../shared/types';
@@ -105,6 +107,8 @@ function HistoriqueTimeline({ events }: { events?: Array<{ id?: string; date?: s
 
 export function DashboardPage() {
   const { user } = useAuth();
+  // Seule la direction garde les tableaux de bord transverses ; chaque autre profil a son « Mon travail »
+  const isAdminUser = espaceRoleOf(user) === 'direction';
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
@@ -928,7 +932,7 @@ export function DashboardPage() {
       {activeSection === 'aujourdhui' && canUserAccessSection('aujourdhui', user) && (
         <>
           {/* « Ma file » en tête du tableau de bord, quand la société a activé la bascule */}
-          {user?.company?.accueilMaFile === true && (
+          {(!isAdminUser || user?.company?.accueilMaFile === true) && (
             <div style={{ padding: '18px 20px 0' }}>
               <MaFileView
                 user={user}
@@ -953,7 +957,7 @@ export function DashboardPage() {
             </div>
           )}
 
-          {dashboardTab === 'synthese' && (
+          {isAdminUser && dashboardTab === 'synthese' && (
             <DashboardSynthese
               period={dashboardPeriod}
               onPeriodChange={setDashboardPeriod}
@@ -986,7 +990,7 @@ export function DashboardPage() {
             />
           )}
 
-          {dashboardTab === 'operations' && (
+          {isAdminUser && dashboardTab === 'operations' && (
             <DashboardOperations
               period={dashboardPeriod}
               onPeriodChange={setDashboardPeriod}
@@ -1029,7 +1033,7 @@ export function DashboardPage() {
             />
           )}
 
-          {dashboardTab === 'analyse' && (
+          {isAdminUser && dashboardTab === 'analyse' && (
             <DashboardAnalyse
               period={dashboardPeriod}
               onPeriodChange={setDashboardPeriod}
@@ -1118,6 +1122,7 @@ export function DashboardPage() {
         <DevisStudioView
           devisList={devisList}
           onOpenNewDevis={openNewDevisDrawer}
+          canCreate={canUserCreateDevis(user)}
           onSelectDevis={(d) => setSelectedDevis(d)}
           onConvertDevis={(d) => {
             if (d.id) {
