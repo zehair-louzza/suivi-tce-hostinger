@@ -5,7 +5,7 @@ import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadIntervention, censorIntervention } from '../lib/access.js';
+import { canReadIntervention, limitToWritable, shapeIntervention, writableInterventionFields } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -225,18 +225,7 @@ interventionRouter.get(
     const limit = parseInt(req.query.limit as string, 10) || 300;
     const companyId = requireCompanyId(req.user?.companyId);
 
-    // Récupération du profil et des droits de l'appelant pour cloisonnement étanche
-    const callerId = req.user?.userId;
-    const callerUser = callerId
-      ? await prisma.user.findUnique({
-          where: { id: callerId },
-          select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, companyId: true },
-        })
-      : null;
-    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
-    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
-    const isMobileOnly = !isAdmin && (callerRole === 'TECHNICIEN' || Boolean(callerPerms.mobileOnly) || (Boolean(callerUser?.technicienNom) && !callerPerms.canEditDevis && !callerPerms.canManageBilling && !callerPerms.canEditPlanning));
+    const acc = await loadAccess(req);
 
     const where: any = {
       companyId,
@@ -257,30 +246,38 @@ interventionRouter.get(
         : {}),
     };
 
-    // Cloisonnement strict des techniciens : ils ne peuvent voir QUE leurs propres interventions
-    if (isMobileOnly || callerRole === 'TECHNICIEN') {
-      const boundTech = (callerUser?.technicienNom || callerUser?.name || '').trim();
-      if (boundTech) {
+    // Cloisonnement par rôle (décisions validées) : le terrain ne voit QUE ses missions, le chargé d'études
+    // ne voit que les interventions rattachées à un devis ; sans nom de technicien, un profil terrain ne voit rien.
+    if (acc.isFieldOnly) {
+      where.AND = [
+        ...(where.AND || []),
+        acc.boundTech
+          ? {
+              OR: [
+                { entreprise: { contains: acc.boundTech, mode: 'insensitive' } },
+                { technicien: { contains: acc.boundTech, mode: 'insensitive' } },
+              ],
+            }
+          : { id: -1 },
+      ];
+    } else {
+      if (acc.linkedOnly) {
+        where.AND = [
+          ...(where.AND || []),
+          { OR: [{ devisId: { not: null } }, { origineDevisId: { not: null } }, { isVisiteDevis: true }] },
+        ];
+      }
+      if (technicienParam) {
         where.AND = [
           ...(where.AND || []),
           {
             OR: [
-              { entreprise: { contains: boundTech, mode: 'insensitive' } },
-              { technicien: { contains: boundTech, mode: 'insensitive' } },
+              { entreprise: { contains: technicienParam, mode: 'insensitive' } },
+              { technicien: { contains: technicienParam, mode: 'insensitive' } },
             ],
           },
         ];
       }
-    } else if (technicienParam) {
-      where.AND = [
-        ...(where.AND || []),
-        {
-          OR: [
-            { entreprise: { contains: technicienParam, mode: 'insensitive' } },
-            { technicien: { contains: technicienParam, mode: 'insensitive' } },
-          ],
-        },
-      ];
     }
 
     const [items, total] = await Promise.all([
@@ -293,16 +290,12 @@ interventionRouter.get(
       prisma.intervention.count({ where }),
     ]);
 
-    let transformed = items.map(transformIntervention);
-
-    // Si l'utilisateur n'a pas le droit d'accès aux données financières, masquer les montants HT
-    if (!isAdmin && !callerPerms.canViewFinancials) {
-      transformed = transformed.map((i) => censorIntervention(i));
-    }
+    // Chaque rôle ne reçoit que ses champs (montants, facturation, historique interne retirés selon le rôle)
+    let transformed = items.map((row: any) => shapeIntervention(acc, transformIntervention(row)) as any);
 
     if (status) {
       transformed = transformed.filter(
-        (i) => i.status === status || i.traitement === status || i.statutOperationnel === status
+        (i: any) => i.status === status || i.traitement === status || i.statutOperationnel === status
       );
     }
 
@@ -386,8 +379,7 @@ interventionRouter.get(
       throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
     }
 
-    const dto = transformIntervention(intervention);
-    res.json({ data: acc.canSeeAmounts ? dto : censorIntervention(dto) });
+    res.json({ data: shapeIntervention(acc, transformIntervention(intervention)) });
   })
 );
 
@@ -400,16 +392,13 @@ interventionRouter.post(
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
-    // Contrôle d'accès : création réservée aux conducteurs de travaux, admin ou chiffrage
-    const callerUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
-    });
-    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
-    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
-    if (!isAdmin && !callerPerms.canEditInterventions && !callerPerms.canEditPlanning) {
-      throw new AppError(403, 'Permission insuffisante pour créer une intervention', 'FORBIDDEN');
+    // Contrôle d'accès : direction, conducteur, chargé d'études (visites de chiffrage uniquement)
+    const acc = await loadAccess(req);
+    const wantsVisite = Boolean(
+      b.isVisiteDevis === true || b.isVisiteDevis === 'true' || b.typeIntervention === 'Visite technique devis'
+    );
+    if (acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin && !wantsVisite) {
+      throw new AppError(403, 'Votre profil ne crée que des visites de chiffrage', 'FORBIDDEN');
     }
 
     const chantier = String(b.chantier || b.siteAdresse || b.site || b.client || 'Site à préciser').trim();
@@ -521,7 +510,7 @@ interventionRouter.post(
     }
 
     res.status(201).json({
-      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorIntervention(transformed),
+      data: shapeIntervention(acc, transformed),
       message: 'Intervention créée avec succès',
     });
   })
@@ -535,32 +524,22 @@ interventionRouter.patch(
     const userId = req.user!.userId;
     const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
-    const b = req.body || {};
 
     const existing = await prisma.intervention.findFirst({ where: { id, companyId } });
     if (!existing) {
       throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
     }
 
-    // Contrôle d'accès : modification réservée aux rôles bureau ou au technicien affecté
-    const callerUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
-    });
-    const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
-    const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
-    const isMobileOnly = !isAdmin && (callerRole === 'TECHNICIEN' || Boolean(callerPerms.mobileOnly) || (Boolean(callerUser?.technicienNom) && !callerPerms.canEditDevis && !callerPerms.canManageBilling && !callerPerms.canEditPlanning));
-
-    if (isMobileOnly) {
-      const boundTech = (callerUser?.technicienNom || callerUser?.name || '').trim().toLowerCase();
-      const existingTech = (existing.entreprise || existing.technicien || '').trim().toLowerCase();
-      if (!existingTech.includes(boundTech) && !boundTech.includes(existingTech)) {
-        throw new AppError(403, 'Vous ne pouvez modifier que les interventions qui vous sont attribuées', 'FORBIDDEN');
-      }
-    } else if (!isAdmin && !callerPerms.canEditInterventions && !callerPerms.canWriteReports && !callerPerms.canEditPlanning && !callerPerms.canManageBilling) {
-      throw new AppError(403, 'Permission insuffisante pour modifier cette intervention', 'FORBIDDEN');
+    // Contrôle d'accès par objet ET par champ : chaque rôle ne modifie que ses propres champs.
+    const acc = await loadAccess(req);
+    if (!canReadIntervention(acc, existing)) {
+      throw new AppError(403, 'Vous ne pouvez modifier que les interventions qui vous sont attribuées', 'FORBIDDEN');
     }
+    const limited = limitToWritable(req.body || {}, writableInterventionFields(acc, existing));
+    if (limited.dropped.length > 0 && Object.keys(limited.clean).length === 0) {
+      throw new AppError(403, 'Votre profil ne permet pas de modifier ces informations', 'FORBIDDEN');
+    }
+    const b = limited.clean;
 
     const changes: string[] = [];
     if (b.entreprise !== undefined && b.entreprise !== existing.entreprise) {
@@ -835,7 +814,7 @@ interventionRouter.patch(
     }
 
     res.json({
-      data: callerPerms.canViewFinancials || isAdmin ? transformed : censorIntervention(transformed),
+      data: shapeIntervention(acc, transformed),
       message: 'Intervention mise à jour',
     });
   })

@@ -28,6 +28,10 @@ export interface Access {
   canTriageDemandes: boolean;
   /** Pointages et positions GPS de toute l'équipe : direction et conducteur uniquement */
   canSeeTeam: boolean;
+  /** Facturation (n° et statut de facture) : direction et droit Facturation uniquement */
+  canSeeBilling: boolean;
+  /** Chargé d'études : ne lit que les interventions rattachées à un devis (lecture seule) */
+  linkedOnly: boolean;
 }
 
 const NO_PERMISSIONS: UserPermissions = {
@@ -71,6 +75,8 @@ export function accessFor(user: AccessUser | null | undefined, tokenRole?: strin
     canSeeAmounts: isAdmin || Boolean(perms.canViewFinancials),
     canTriageDemandes: isAdmin || (!isFieldOnly && (Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning))),
     canSeeTeam: isAdmin || role === 'CONDUCTEUR_TRAVAUX',
+    canSeeBilling: isAdmin || Boolean(perms.canManageBilling),
+    linkedOnly: !isAdmin && !isFieldOnly && role === 'CHIFFRAGE_DEVIS',
   };
 }
 
@@ -98,13 +104,21 @@ export function canReadDevis(
   return Boolean(a.perms.canConvertDevis) && ACCEPTED_DEVIS.includes((d.statutCommercial || '').trim());
 }
 
-/** Lecture d'UNE intervention : un profil terrain ne lit que les siennes (même règle que la liste). */
+/** Lecture d'UNE intervention : terrain = les siennes ; chargé d'études = celles rattachées à un devis. */
 export function canReadIntervention(
   a: Access,
-  i: { entreprise?: string | null; technicien?: string | null }
+  i: {
+    entreprise?: string | null;
+    technicien?: string | null;
+    devisId?: number | null;
+    origineDevisId?: number | null;
+    isVisiteDevis?: boolean | null;
+  }
 ): boolean {
-  if (!a.isFieldOnly) return true;
-  return techMatches(a.boundTech, i.entreprise) || techMatches(a.boundTech, i.technicien);
+  if (a.isAdmin) return true;
+  if (a.isFieldOnly) return techMatches(a.boundTech, i.entreprise) || techMatches(a.boundTech, i.technicien);
+  if (a.linkedOnly) return Boolean(i.devisId || i.origineDevisId || i.isVisiteDevis);
+  return true;
 }
 
 /** Retire les montants d'un devis (identique au masquage historique de la liste). */
@@ -115,4 +129,179 @@ export function censorDevis<T extends { computed?: any }>(d: T): T {
 /** Retire les montants d'une intervention (identique au masquage historique de la liste). */
 export function censorIntervention<T extends object>(i: T): T {
   return { ...i, amount: 0, montantHt: null };
+}
+
+/** Retire la facturation (n° et statut de facture) pour qui n'a pas le droit Facturation. */
+export function censorBilling<T extends object>(i: T): T {
+  return { ...i, numeroFacture: null, statutFacture: null };
+}
+
+/**
+ * Vue « terrain » d'une intervention : client, adresse du chantier, contact sur place (dans les notes),
+ * créneau, avancement, compte rendu et photos. Aucun montant, aucune facturation, aucun historique interne.
+ */
+const FIELD_VIEW_KEYS = [
+  'id', 'reference', 'referenceMetier', 'refDevisTexte', 'client', 'chantier', 'siteAdresse', 'objet',
+  'typeIntervention', 'corpsEtat', 'priorite', 'modePlanification', 'datePlanifiee', 'statutOperationnel',
+  'traitement', 'status', 'entreprise', 'technicien', 'dateDebut', 'dateReelle', 'dateFin',
+  'resultatTechnique', 'motifBlocage', 'compteRendu', 'notes', 'heureDebut', 'heureFin',
+  'heureDebutReelle', 'heureFinReelle', 'actionsRealisees', 'photos', 'elementsChiffrage', 'statutRapport',
+  'isVisiteDevis', 'origineDevisId', 'devisId', 'gpsCloture', 'version', 'createdAt', 'updatedAt',
+] as const;
+
+export function fieldViewIntervention<T extends Record<string, any>>(i: T): Partial<T> {
+  const out: Record<string, any> = {};
+  for (const k of FIELD_VIEW_KEYS) if (k in i) out[k] = i[k];
+  return out as Partial<T>;
+}
+
+/** Applique à une intervention tout ce que le rôle n'a pas le droit de voir. */
+export function shapeIntervention<T extends Record<string, any>>(a: Access, i: T): T | Partial<T> {
+  if (a.isAdmin) return i;
+  if (a.isFieldOnly) return fieldViewIntervention(i);
+  let out: any = i;
+  if (!a.canSeeAmounts) out = censorIntervention(out);
+  if (!a.canSeeBilling) out = censorBilling(out);
+  return out;
+}
+
+// --- Écriture d'une intervention : chaque rôle ne peut modifier QUE ses propres champs ---------------------
+
+const REPORT_KEYS = [
+  'compteRendu', 'actionsRealisees', 'photos', 'elementsChiffrage', 'resultatTechnique', 'motifBlocage',
+  'statutRapport', 'rapportFinal',
+];
+const TERRAIN_KEYS = [
+  'statutOperationnel', 'traitement', 'status', 'heureDebutReelle', 'heureFinReelle', 'dateReelle', 'dateFin',
+  'dateDebut', 'gpsCloture', 'compteRendu', 'actionsRealisees', 'photos', 'elementsChiffrage',
+  'resultatTechnique', 'motifBlocage', 'statutRapport',
+];
+const PLANNING_KEYS = [
+  'datePlanifiee', 'heureDebut', 'heureFin', 'entreprise', 'technicien', 'statutOperationnel',
+  'modePlanification', 'priorite', 'dateEcheance', 'echeance', 'dateDemande',
+];
+const OFFICE_KEYS = [
+  ...PLANNING_KEYS, ...REPORT_KEYS, 'reference', 'referenceMetier', 'refDevisTexte', 'client', 'chantier',
+  'siteAdresse', 'objet', 'origine', 'typeIntervention', 'corpsEtat', 'isVisiteDevis', 'devisId', 'numeroDI',
+  'traitement', 'status', 'notes', 'dateDebut', 'dateReelle', 'dateFin', 'heureDebutReelle', 'heureFinReelle',
+  'gpsCloture',
+];
+const BILLING_KEYS = ['numeroFacture', 'statutFacture'];
+const AMOUNT_KEYS = ['amount', 'tauxTVA'];
+
+/**
+ * Champs qu'un rôle a le droit d'écrire sur une intervention. `null` = tous (direction).
+ *  - Terrain : l'avancement de SES missions, le compte rendu, les photos — rien d'autre.
+ *  - Rapports : le rapport seulement (ni date, ni technicien, ni statut).
+ *  - Facturation : la facturation seulement.
+ *  - Conducteur : tout sauf la facturation.
+ *  - Chargé d'études : le créneau des visites de chiffrage seulement.
+ */
+export function writableInterventionFields(
+  a: Access,
+  existing?: { isVisiteDevis?: boolean | null }
+): Set<string> | null {
+  if (a.isAdmin) return null;
+  if (a.isFieldOnly) return new Set(TERRAIN_KEYS);
+  const keys = new Set<string>();
+  const planning =
+    Boolean(a.perms.canEditPlanning) && (a.role !== 'CHIFFRAGE_DEVIS' || Boolean(existing?.isVisiteDevis));
+  if (a.perms.canEditInterventions && a.perms.canEditPlanning && a.role !== 'CHIFFRAGE_DEVIS') {
+    // Conducteur : la fiche complète, sauf la facturation
+    OFFICE_KEYS.forEach((k) => keys.add(k));
+    if (a.canSeeAmounts) AMOUNT_KEYS.forEach((k) => keys.add(k));
+  } else {
+    if (a.perms.canEditInterventions || a.perms.canWriteReports) REPORT_KEYS.forEach((k) => keys.add(k));
+    if (planning) PLANNING_KEYS.forEach((k) => keys.add(k));
+  }
+  if (a.perms.canManageBilling) {
+    BILLING_KEYS.forEach((k) => keys.add(k));
+    AMOUNT_KEYS.forEach((k) => keys.add(k));
+  }
+  return keys;
+}
+
+/** Garde uniquement les champs autorisés ; renvoie aussi la liste des champs refusés. */
+export function limitToWritable(
+  body: Record<string, any>,
+  allowed: Set<string> | null
+): { clean: Record<string, any>; dropped: string[] } {
+  if (allowed === null) return { clean: body, dropped: [] };
+  const clean: Record<string, any> = {};
+  const dropped: string[] = [];
+  for (const k of Object.keys(body)) {
+    if (allowed.has(k)) clean[k] = body[k];
+    else dropped.push(k);
+  }
+  return { clean, dropped };
+}
+
+// --- Devis : même principe que pour les interventions ----------------------------------------------------
+
+const DEVIS_FIELD_VIEW_KEYS = [
+  'id', 'reference', 'referenceMetier', 'client', 'site', 'siteAdresse', 'objet', 'corpsEtat', 'numeroDI',
+  'dateCreated', 'dateDemande', 'statutCommercial', 'traitement', 'status', 'responsable', 'notes',
+  'commentaires', 'visiteNecessaire', 'visiteTechnicien', 'visiteDate', 'visiteHeureDebut', 'visiteHeureFin',
+  'visiteStatut', 'gpsCloture', 'photos', 'version', 'createdAt', 'updatedAt',
+] as const;
+
+/** Vue « terrain » d'un devis (visite assignée) : lieu, client, créneau, relevés — ni montants, ni historique. */
+export function fieldViewDevis<T extends Record<string, any>>(d: T): Partial<T> {
+  const out: Record<string, any> = {};
+  for (const k of DEVIS_FIELD_VIEW_KEYS) if (k in d) out[k] = d[k];
+  return out as Partial<T>;
+}
+
+/** Applique à un devis tout ce que le rôle n'a pas le droit de voir. */
+export function shapeDevis<T extends Record<string, any>>(a: Access, d: T): T | Partial<T> {
+  if (a.isAdmin) return d;
+  if (a.isFieldOnly) return fieldViewDevis(d);
+  return a.canSeeAmounts ? d : censorDevis(d as any);
+}
+
+const DEVIS_TERRAIN_KEYS = ['visiteStatut', 'gpsCloture', 'compteRendu', 'photos'];
+const DEVIS_CONVERT_KEYS = ['traitement', 'status', 'prochaineAction', 'refInterventionTexte', 'numeroDI'];
+const DEVIS_AMOUNT_KEYS = ['amount', 'montantHt', 'tauxTVA'];
+
+/**
+ * Filtre le corps d'une modification de devis :
+ *  - terrain : relevé de visite seulement ;
+ *  - chiffrage : tout, mais les montants seulement avec le droit « Montants » ;
+ *  - conversion seule : suivi du dossier seulement.
+ */
+export function limitDevisBody(
+  a: Access,
+  body: Record<string, any>
+): { clean: Record<string, any>; dropped: string[] } {
+  if (a.isAdmin) return { clean: body, dropped: [] };
+  if (a.isFieldOnly) return limitToWritable(body, new Set(DEVIS_TERRAIN_KEYS));
+  if (a.perms.canEditDevis) {
+    const clean: Record<string, any> = {};
+    const dropped: string[] = [];
+    for (const k of Object.keys(body)) {
+      if (!a.canSeeAmounts && DEVIS_AMOUNT_KEYS.includes(k)) dropped.push(k);
+      else clean[k] = body[k];
+    }
+    return { clean, dropped };
+  }
+  return limitToWritable(body, new Set(a.perms.canConvertDevis ? DEVIS_CONVERT_KEYS : []));
+}
+
+// --- Fiches clients et équipe (paramètres) ------------------------------------------------------------------
+
+/** Fiche client vue par le terrain : nom, adresse et contact sur place — ni tarifs, ni facturation, ni SIRET. */
+export function fieldClientFiche(f: Record<string, any>): Record<string, any> {
+  const keys = ['id', 'nom', 'type', 'adresse', 'codePostal', 'ville', 'contactNom', 'contactRole', 'telephone', 'active'];
+  const out: Record<string, any> = {};
+  for (const k of keys) if (k in f) out[k] = f[k];
+  return out;
+}
+
+/** Fiche client vue par les autres rôles : le taux horaire négocié n'est visible qu'avec les montants. */
+export function shapeClientFiche(a: Access, f: Record<string, any>): Record<string, any> {
+  if (a.isAdmin) return f;
+  if (a.isFieldOnly) return fieldClientFiche(f);
+  if (a.canSeeAmounts) return f;
+  const { tauxHoraireNegocie: _t, ...rest } = f;
+  return rest;
 }

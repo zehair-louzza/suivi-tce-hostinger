@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { policy, secureRouter } from '../lib/guard.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { techMatches } from '../lib/access.js';
+import { shapeClientFiche, techMatches } from '../lib/access.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -138,6 +138,44 @@ referentielsRouter.get(
     // Positions GPS de l'équipe : direction et conducteur seulement ; les autres ne voient que la leur
     if (!acc.canSeeTeam) {
       result.positions_gps_techniciens = ownGpsOnly(result.positions_gps_techniciens, acc.boundTech);
+    }
+
+    // Fiches clients : tarifs négociés réservés à ceux qui voient les montants ; le terrain ne reçoit que
+    // les clients de SES missions (nom, adresse, contact) et ni la liste de l'équipe ni celle des responsables.
+    if (acc.isFieldOnly) {
+      const bound = acc.boundTech;
+      const mineWhere = bound
+        ? {
+            OR: [
+              { entreprise: { contains: bound, mode: 'insensitive' as const } },
+              { technicien: { contains: bound, mode: 'insensitive' as const } },
+            ],
+          }
+        : { id: -1 };
+      const [myInterventions, myVisits] = await Promise.all([
+        prisma.intervention.findMany({ where: { companyId, ...mineWhere }, select: { client: true } }),
+        bound
+          ? prisma.devis.findMany({
+              where: { companyId, visiteTechnicien: { contains: bound, mode: 'insensitive' } },
+              select: { client: true },
+            })
+          : Promise.resolve([] as { client: string | null }[]),
+      ]);
+      const myClients = new Set(
+        [...myInterventions, ...myVisits].map((m: any) => String(m.client || '').trim().toLowerCase()).filter(Boolean)
+      );
+      result.clients = [];
+      result.responsables = [];
+      result.techniciens = bound ? [bound] : [];
+      result.technicien_competences = bound && result.technicien_competences?.[bound]
+        ? { [bound]: result.technicien_competences[bound] }
+        : {};
+      result.equipes_journalieres = [];
+      result.clients_fiches = (result.clients_fiches || [])
+        .filter((f) => myClients.has(String(f.nom || '').trim().toLowerCase()))
+        .map((f) => shapeClientFiche(acc, f as any) as any);
+    } else {
+      result.clients_fiches = (result.clients_fiches || []).map((f) => shapeClientFiche(acc, f as any) as any);
     }
 
     res.json({ data: result });

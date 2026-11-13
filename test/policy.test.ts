@@ -29,7 +29,7 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'interventions.list': [true, true, true, true, true],
   'interventions.read': [true, true, true, true, true],
   'interventions.stats': [true, true, true, true, false],
-  'interventions.create': [true, true, true, true, true],
+  'interventions.create': [true, true, true, false, false],
   'interventions.update': [true, true, true, true, true],
   'interventions.delete': [true, false, false, false, false],
   'interventions.sendReport': [true, false, true, true, false],
@@ -53,8 +53,8 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'admin.pointages.read': [true, true, true, true, true],
   'admin.pointages.clock': [true, true, true, true, true],
 };
-// interventions.create : le technicien a canEditInterventions par défaut (rôle terrain) — la création reste
-// bornée à ce qui lui est affecté par la route ; elle est listée ici telle qu'elle est aujourd'hui.
+// interventions.create : direction, conducteur et chargé d'études (visites de chiffrage, vérifié dans la route).
+// Jamais le terrain ni les rapports.
 
 test('la table de règles correspond exactement à la matrice attendue, pour les 5 rôles', () => {
   assert.deepEqual(Object.keys(POLICY).sort(), Object.keys(ATTENDU).sort(), 'aucune action oubliée ni en trop');

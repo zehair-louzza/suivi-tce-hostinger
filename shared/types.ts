@@ -1397,7 +1397,61 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
 };
 
+/**
+ * PLAFOND PAR RÔLE : droits qu'un badge individuel ne pourra JAMAIS accorder à ce rôle.
+ * Les badges par utilisateur restent des réglages fins, mais bornés par ce plafond (appliqué serveur ET écran).
+ */
+const NEVER_FOR_NON_ADMIN: (keyof UserPermissions)[] = ['canManageUsers', 'canDeleteRecords'];
+
+export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[]> = {
+  ADMIN: [],
+  CHIFFRAGE_DEVIS: [
+    ...NEVER_FOR_NON_ADMIN,
+    'canManageBilling',
+    'canWriteReports',
+    'canEditInterventions',
+    'canManageReferentiels',
+  ],
+  CONDUCTEUR_TRAVAUX: [...NEVER_FOR_NON_ADMIN, 'canManageBilling', 'canEditDevis'],
+  REDACTEUR_RAPPORTS: [
+    ...NEVER_FOR_NON_ADMIN,
+    'canEditDevis',
+    'canConvertDevis',
+    'canEditPlanning',
+    'canManageReferentiels',
+  ],
+  // Technicien : uniquement l'espace mobile et la mise à jour de SES missions
+  TECHNICIEN: [
+    ...NEVER_FOR_NON_ADMIN,
+    'canManageReferentiels',
+    'canEditDevis',
+    'canViewFinancials',
+    'canConvertDevis',
+    'canEditPlanning',
+    'canWriteReports',
+    'canManageBilling',
+  ],
+};
+
+/** Ce droit peut-il être accordé à ce rôle ? (utilisé par l'écran d'administration pour griser les cases) */
+export function isPermissionAllowedForRole(role: string | null | undefined, key: keyof UserPermissions): boolean {
+  const forbidden = ROLE_FORBIDDEN_PERMISSIONS[(role || '').toUpperCase()];
+  // Rôle inconnu : rien n'est accordable
+  if (!forbidden) return false;
+  return !forbidden.includes(key);
+}
+
 export function getEffectivePermissions(
+  role?: string | null,
+  customPermissionsJson?: string | null
+): UserPermissions {
+  const merged = mergePermissions(role, customPermissionsJson);
+  const forbidden = ROLE_FORBIDDEN_PERMISSIONS[(role || '').toUpperCase()] || [];
+  for (const k of forbidden) (merged as any)[k] = false;
+  return merged;
+}
+
+function mergePermissions(
   role?: string | null,
   customPermissionsJson?: string | null
 ): UserPermissions {
@@ -1490,7 +1544,12 @@ export function canUserAccessSection(
       return Boolean(perms.canEditPlanning);
 
     case 'interventions':
-      return Boolean(perms.canEditInterventions) || Boolean(perms.canWriteReports);
+      // Le chiffrage lit (sans modifier) les interventions rattachées à ses devis
+      return (
+        Boolean(perms.canEditInterventions) ||
+        Boolean(perms.canWriteReports) ||
+        (role === 'CHIFFRAGE_DEVIS' && Boolean(perms.canEditDevis))
+      );
 
     case 'carte':
       return Boolean(perms.canEditPlanning) || Boolean(perms.canEditInterventions);
@@ -1499,7 +1558,8 @@ export function canUserAccessSection(
       return Boolean(perms.canManageBilling);
 
     case 'rentabilite':
-      return Boolean(perms.canViewFinancials) && (Boolean(perms.canManageBilling) || Boolean(perms.canManageUsers));
+      // Rentabilité et coûts d'équipe : direction uniquement (décision validée)
+      return false;
 
     case 'clients':
       return Boolean(perms.canEditDevis) || Boolean(perms.canManageBilling) || Boolean(perms.canEditInterventions);

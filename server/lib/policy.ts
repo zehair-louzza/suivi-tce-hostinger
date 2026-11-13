@@ -28,7 +28,8 @@ export const POLICY = {
   'interventions.list': anyMember,
   'interventions.read': anyMember,
   'interventions.stats': (a) => !a.isFieldOnly,
-  'interventions.create': (a) => a.isAdmin || a.perms.canEditInterventions || a.perms.canEditPlanning,
+  // Création : direction, conducteur, chargé d'études (visites de chiffrage). Jamais le terrain ni les rapports.
+  'interventions.create': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditPlanning),
   'interventions.update': (a) =>
     a.isAdmin ||
     a.isFieldOnly ||
