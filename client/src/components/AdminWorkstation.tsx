@@ -1,4 +1,6 @@
 import { getCompanyName } from '../lib/companyHQ';
+import { PasswordRules } from './PasswordRules';
+import { validatePassword, passwordErrorMessage } from '../../../shared/passwordPolicy';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -2309,6 +2311,11 @@ export function AdminWorkstation({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                const pwProblems = validatePassword(newPassword, { email: newEmail, name: newName });
+                if (pwProblems.length > 0) {
+                  toast.error(passwordErrorMessage(pwProblems));
+                  return;
+                }
                 createUserMut.mutate({
                   name: newName,
                   email: newEmail,
@@ -2352,11 +2359,14 @@ export function AdminWorkstation({
                     type="password"
                     className="input"
                     required
-                    minLength={6}
-                    placeholder="Min. 6 caractères"
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    placeholder="Min. 12 caractères"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />
+                  <PasswordRules password={newPassword} context={{ email: newEmail, name: newName }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Rôle Métier ANELEC *</label>
@@ -2472,6 +2482,13 @@ export function AdminWorkstation({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                if (editPassword.trim()) {
+                  const editProblems = validatePassword(editPassword.trim(), { email: editingUser.email, name: editingUser.name });
+                  if (editProblems.length > 0) {
+                    toast.error(passwordErrorMessage(editProblems));
+                    return;
+                  }
+                }
                 updateUserMut.mutate({
                   id: editingUser.id,
                   payload: {
@@ -2527,8 +2544,13 @@ export function AdminWorkstation({
                     className="input"
                     placeholder="Laisser vide pour conserver"
                     value={editPassword}
+                    autoComplete="new-password"
+                    maxLength={128}
                     onChange={(e) => setEditPassword(e.target.value)}
                   />
+                  {editPassword && (
+                    <PasswordRules password={editPassword} context={{ email: editingUser.email, name: editingUser.name }} />
+                  )}
                 </div>
               </div>
 

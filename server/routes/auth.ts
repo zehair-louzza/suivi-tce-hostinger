@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertStrongPassword } from '../lib/password.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getEffectivePermissions, ROLE_DEFINITIONS } from '../../shared/types.js';
 import { z } from 'zod';
@@ -101,7 +102,7 @@ const LoginSchema = z.object({
 const RegisterSchema = z.object({
   name: z.string().min(1, 'Nom du responsable requis').max(100),
   email: z.string().email('Email professionnel invalide'),
-  password: z.string().min(8, 'Mot de passe trop court (min 8 caractères)'),
+  password: z.string().min(1, 'Mot de passe requis').max(128, 'Mot de passe trop long'),
   companyName: z.string().min(2, "Nom de l'entreprise requis").max(120),
   siretOrSiren: z.string().optional(),
 });
@@ -302,6 +303,7 @@ authRouter.post(
       throw new AppError(400, "Le nom de l'entreprise est obligatoire", 'INVALID_COMPANY');
     }
 
+    assertStrongPassword(data.password, { email: data.email, name: data.name, companyName: data.companyName });
     const password = await bcrypt.hash(data.password, 12);
     // Tout créateur d'espace entreprise est ADMINISTRATEUR de son espace
     const role = 'ADMIN';
@@ -540,8 +542,8 @@ authRouter.post(
     const token = String(req.body?.token || '').trim();
     const newPassword = String(req.body?.password || '');
 
-    if (!token || newPassword.length < 8) {
-      throw new AppError(400, 'Jeton valide et nouveau mot de passe (min 8 caractères) requis', 'INVALID_RESET');
+    if (!token || !newPassword) {
+      throw new AppError(400, 'Jeton valide et nouveau mot de passe requis', 'INVALID_RESET');
     }
 
     const user = await findPublicUserFirst({ confirmationToken: token });
@@ -555,6 +557,7 @@ authRouter.post(
       throw new AppError(410, 'Ce lien de réinitialisation a expiré. Refaites une demande.', 'TOKEN_EXPIRED');
     }
 
+    assertStrongPassword(newPassword, { email: user.email, name: user.name });
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -840,7 +843,7 @@ authRouter.get(
 const AcceptInvitationSchema = z.object({
   token: z.string().min(20).max(200),
   name: z.string().trim().min(1, 'Votre nom est requis').max(100),
-  password: z.string().min(8, 'Mot de passe trop court (min 8 caractères)').max(200),
+  password: z.string().min(1, 'Mot de passe requis').max(128, 'Mot de passe trop long'),
   acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Vous devez accepter les conditions d’utilisation' }) }),
 });
 
@@ -863,6 +866,7 @@ authRouter.post(
     }
 
     const role = (ROLE_DEFINITIONS as any)[inv.role] ? inv.role : 'CONDUCTEUR_TRAVAUX';
+    assertStrongPassword(password, { email, name });
     const hashed = await bcrypt.hash(password, 12);
 
     let created;

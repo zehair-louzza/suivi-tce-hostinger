@@ -1,4 +1,5 @@
 import net from 'net';
+import { buildInvitationEmail } from './invitationEmail.js';
 import { promises as dns } from 'dns';
 import nodemailer, { Transporter } from 'nodemailer';
 import { prisma } from '../lib/prisma.js';
@@ -1255,43 +1256,16 @@ export async function sendInvitationEmail(params: {
   inviteLink: string;
   expiresAt: Date;
 }): Promise<EmailDeliveryResult> {
-  const expires = params.expiresAt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-  const company = esc(params.companyName);
-  const html = `
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #0f172a; padding: 20px; }
-    .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 32px; }
-    .btn { display: inline-block; background: #00bf63; color: #ffffff !important; font-weight: 700; font-size: 14px; text-decoration: none; padding: 13px 26px; border-radius: 10px; margin: 18px 0; }
-    p { font-size: 14px; line-height: 1.6; color: #475569; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2 style="margin-top:0;color:#0f172a;">Vous êtes invité(e) à rejoindre ${company}</h2>
-    <p><strong>${esc(params.inviterName)}</strong> vous invite à rejoindre l'espace <strong>${company}</strong> sur la plateforme ANELEC TCE avec le profil <strong>${esc(params.roleLabel)}</strong>.</p>
-    <div style="text-align:center;">
-      <a href="${esc(params.inviteLink)}" class="btn" target="_blank">Accepter l'invitation et créer mon accès</a>
-    </div>
-    <p style="font-size:12px;color:#64748b;">Ce lien est personnel, à usage unique, et valable jusqu'au ${esc(expires)}.<br />
-    Si le bouton ne fonctionne pas : <a href="${esc(params.inviteLink)}" style="color:#00bf63;word-break:break-all;">${esc(params.inviteLink)}</a></p>
-    <p style="font-size:11px;color:#94a3b8;">Vous n'attendiez pas cette invitation ? Ignorez simplement ce message, aucun compte ne sera créé.</p>
-  </div>
-</body>
-</html>`;
-
+  const content = buildInvitationEmail(params);
   return dispatchEmailWithFallback({
     type: 'INVITATION_COLLABORATEUR',
     companyId: params.companyId,
     companyName: params.companyName,
     replyTo: params.inviterEmail,
     toEmail: params.toEmail,
-    subject: `Invitation à rejoindre ${params.companyName} sur ANELEC TCE`,
-    html,
-    text: `${params.inviterName} vous invite à rejoindre l'espace ${params.companyName} (profil : ${params.roleLabel}).\nAccepter l'invitation : ${params.inviteLink}\nLien personnel valable jusqu'au ${expires}.`,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
   });
 }
 

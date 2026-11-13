@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { formatPublicUser } from './auth.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { assertStrongPassword } from '../lib/password.js';
 import { basePublicUserSelect, isMissingSchemaError } from '../lib/userSelect.js';
 import { ROLE_DEFINITIONS, getEffectivePermissions } from '../../shared/types.js';
 import {
@@ -127,6 +128,7 @@ adminRouter.post(
       throw new AppError(409, 'Cet email est déjà attribué à un utilisateur', 'EMAIL_EXISTS');
     }
 
+    assertStrongPassword(String(password), { email: cleanEmail, name: String(name) });
     const hashedPassword = await bcrypt.hash(String(password), 12);
     const created = await prisma.user.create({
       data: {
@@ -196,7 +198,8 @@ adminRouter.put(
     if (active !== undefined && id !== 1) {
       updateData.active = Boolean(active);
     }
-    if (password && String(password).trim().length >= 6) {
+    if (password) {
+      assertStrongPassword(String(password), { email: updateData.email ?? existing.email, name: updateData.name ?? existing.name });
       updateData.password = await bcrypt.hash(String(password).trim(), 12);
     }
 

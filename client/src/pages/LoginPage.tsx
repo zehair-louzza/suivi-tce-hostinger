@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { PasswordRules } from '../components/PasswordRules';
+import { validatePassword, passwordErrorMessage, generateStrongPassword } from '../../../shared/passwordPolicy';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -151,10 +153,8 @@ type LoginForm = z.infer<typeof loginSchema>;
  * se connecte avec Google ; pour un mot de passe à elle, elle passe par « mot de passe oublié ».
  */
 function motDePasseAleatoire(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+';
-  const octets = new Uint32Array(32);
-  crypto.getRandomValues(octets);
-  return Array.from(octets, (v) => alphabet[v % alphabet.length]).join('');
+  // Conforme à la politique de mots de passe (régénéré tant qu'une règle n'est pas respectée)
+  return generateStrongPassword((n) => Array.from(crypto.getRandomValues(new Uint32Array(n))), 32);
 }
 
 const registerCompanySchema = z
@@ -182,9 +182,7 @@ const registerCompanySchema = z
       .min(2, "Nom et prénom de l'administrateur requis")
       .max(100),
     email: z.string().email('Email professionnel invalide'),
-    password: z
-      .string()
-      .min(8, 'Le mot de passe doit comporter au moins 8 caractères'),
+    password: z.string(),
     confirmPassword: z.string(),
     acceptTerms: z.literal(true, {
       errorMap: () => ({
@@ -192,9 +190,18 @@ const registerCompanySchema = z
       }),
     }),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Les mots de passe ne correspondent pas',
-    path: ['confirmPassword'],
+  .superRefine((data, ctx) => {
+    const problems = validatePassword(data.password, {
+      email: data.email,
+      name: data.name,
+      companyName: data.companyName,
+    });
+    if (problems.length > 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: `Mot de passe trop faible : ${problems.join(' ; ')}` });
+    }
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['confirmPassword'], message: 'Les mots de passe ne correspondent pas' });
+    }
   });
 
 type RegisterCompanyForm = z.infer<typeof registerCompanySchema>;
@@ -629,8 +636,9 @@ export function LoginPage() {
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTokenFromUrl) return;
-    if (newResetPassword.length < 8) {
-      toast.error('Le nouveau mot de passe doit contenir au moins 8 caractères');
+    const resetProblems = validatePassword(newResetPassword, { email: resetEmailFromUrl });
+    if (resetProblems.length > 0) {
+      toast.error(passwordErrorMessage(resetProblems));
       return;
     }
     if (newResetPassword !== confirmResetPassword) {
@@ -748,11 +756,14 @@ export function LoginPage() {
             <input
               type="password"
               className="input"
-              placeholder="Nouveau mot de passe (min. 8 caractères)"
+              placeholder="Nouveau mot de passe (min. 12 caractères)"
               value={newResetPassword}
               onChange={(e) => setNewResetPassword(e.target.value)}
+              maxLength={128}
+              autoComplete="new-password"
               required
             />
+            <PasswordRules password={newResetPassword} context={{ email: resetEmailFromUrl }} />
             <input
               type="password"
               className="input"
@@ -1455,9 +1466,21 @@ export function LoginPage() {
                   <input
                     type="password"
                     className="input"
-                    placeholder="Min. 8 car."
+                    placeholder="Min. 12 car."
+                    maxLength={128}
+                    autoComplete="new-password"
                     {...registerForm.register('password')}
                   />
+                  {!pendingGoogleProfile && (
+                    <PasswordRules
+                      password={registerForm.watch('password') || ''}
+                      context={{
+                        email: registerForm.watch('email'),
+                        name: registerForm.watch('name'),
+                        companyName: registerForm.watch('companyName'),
+                      }}
+                    />
+                  )}
                   {registerForm.formState.errors.password && (
                     <p style={{ color: '#dc2626', fontSize: '11px', marginTop: '3px' }}>
                       {registerForm.formState.errors.password.message}
