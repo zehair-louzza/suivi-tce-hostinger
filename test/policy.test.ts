@@ -53,7 +53,7 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'admin.pointages.read': [true, true, true, true, true],
   'admin.pointages.clock': [true, true, true, true, true],
 };
-// interventions.create : direction, conducteur et chargé d'études (visites de chiffrage, vérifié dans la route).
+// interventions.create : direction, planificateur et chargé d'études (visites de chiffrage, vérifié dans la route).
 // Jamais le terrain ni les rapports.
 
 test('la table de règles correspond exactement à la matrice attendue, pour les 5 rôles', () => {

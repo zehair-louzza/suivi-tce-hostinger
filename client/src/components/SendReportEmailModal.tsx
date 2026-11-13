@@ -381,7 +381,7 @@ export function SendReportEmailModal({
               <input
                 type="text"
                 className="input"
-                placeholder="ex: direction@... ou conducteur@..."
+                placeholder="ex: direction@... ou planificateur@..."
                 value={ccEmail}
                 onChange={(e) => setCcEmail(e.target.value)}
               />

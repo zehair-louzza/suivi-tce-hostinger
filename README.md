@@ -151,7 +151,7 @@ Le module **Interventions** assure le suivi opérationnel complet des travaux et
 
 ## 7. Planning Gantt Multi-Ressources (60 fps) & Bourse de Dispatch
 
-Le **Planning Gantt** permet aux conducteurs de travaux et dispatchers d'organiser les journées des techniciens par simple glisser-déposer :
+Le **Planning Gantt** permet aux planificateurs et dispatchers d'organiser les journées des techniciens par simple glisser-déposer :
 
 <p align="center">
   <img src="docs/images/04-dispatch-planning-gantt-pc.png" alt="Planning Gantt Multi-Ressources" width="95%" />
@@ -227,7 +227,7 @@ L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne
 
 ### 8.1.1 Accès Universel à l'App Mobile sur N'importe Quel Profil Utilisateur
 
-Que l'utilisateur soit connecté en tant qu'**Administrateur**, **Conducteur de travaux**, **Chiffrage & Devis**, **Rédacteur de rapports** ou **Consultation seule (Viewer)** :
+Que l'utilisateur soit connecté en tant qu'**Administrateur**, **Planificateur**, **Chiffrage & Devis**, **Rédacteur de rapports** ou **Consultation seule (Viewer)** :
 * **Bouton « Version Mobile » dans la Topbar :** Un bouton direct permet de basculer instantanément de l'interface bureau vers l'application mobile technicien sans quitter sa session.
 * **Option « Basculer vers l'App Mobile » dans le Menu « Mon profil » :** Accessible via la pastille utilisateur en bas de la barre latérale.
 * **Lien permanent « App Mobile Technicien » :** Présent dans le menu de gauche sous la rubrique *Espace Terrain* (accessible avec raccourci clavier `0`).

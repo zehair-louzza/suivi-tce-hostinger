@@ -1046,7 +1046,7 @@ const htmlContent = `<!DOCTYPE html>
     <div class="step-content">
       <div class="step-title">Accès Universel Multi-Profils &amp; Sélecteur des 7 Directions Artistiques (Onglet Profil)</div>
       <div class="step-desc">
-        N'importe quel profil connecté (Administrateur, Chargé d'affaires, Conducteur ou Technicien) peut afficher l'application mobile en 1 clic grâce au bouton <strong>« 📱 Version Mobile »</strong> situé dans la barre supérieure et dans le menu utilisateur. Dans l'onglet Profil, le technicien dispose en outre de ses 4 KPI terrain et du sélecteur interactif des <strong>7 directions artistiques</strong> (<em>Atlas Clarity, Craft Warmth, Signal Command, Editorial Swiss, Bento Modular, Original Clair, Original Sombre</em>).
+        N'importe quel profil connecté (Administrateur, Chargé d'affaires, Planificateur ou Technicien) peut afficher l'application mobile en 1 clic grâce au bouton <strong>« 📱 Version Mobile »</strong> situé dans la barre supérieure et dans le menu utilisateur. Dans l'onglet Profil, le technicien dispose en outre de ses 4 KPI terrain et du sélecteur interactif des <strong>7 directions artistiques</strong> (<em>Atlas Clarity, Craft Warmth, Signal Command, Editorial Swiss, Bento Modular, Original Clair, Original Sombre</em>).
       </div>
     </div>
   </div>

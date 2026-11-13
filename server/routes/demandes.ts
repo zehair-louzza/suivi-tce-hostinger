@@ -68,7 +68,7 @@ function transform(d: any) {
   };
 }
 
-/** Demandes reçues : réservées à ceux qui trient la file d'entrée (direction, chiffrage, conducteur). */
+/** Demandes reçues : réservées à ceux qui trient la file d'entrée (direction, chiffrage, planificateur). */
 function requireTriage(acc: Access) {
   if (!acc.canTriageDemandes) {
     throw new AppError(403, "Les demandes reçues ne sont pas accessibles avec votre profil", 'FORBIDDEN');

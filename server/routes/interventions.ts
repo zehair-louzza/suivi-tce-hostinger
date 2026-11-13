@@ -392,7 +392,7 @@ interventionRouter.post(
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const b = req.body || {};
 
-    // Contrôle d'accès : direction, conducteur, chargé d'études (visites de chiffrage uniquement)
+    // Contrôle d'accès : direction, planificateur, chargé d'études (visites de chiffrage uniquement)
     const acc = await loadAccess(req);
     const wantsVisite = Boolean(
       b.isVisiteDevis === true || b.isVisiteDevis === 'true' || b.typeIntervention === 'Visite technique devis'

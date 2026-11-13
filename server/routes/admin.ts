@@ -276,7 +276,7 @@ adminRouter.get(
     const dateJour = (req.query.dateJour as string) || '';
     let technicien = (req.query.technicien as string) || '';
 
-    // Pointages de toute l'équipe : direction et conducteur uniquement. Tous les autres, y compris le
+    // Pointages de toute l'équipe : direction et planificateur uniquement. Tous les autres, y compris le
     // chargé d'études, ne voient que le leur.
     if (!caller.isAdmin && caller.effectiveRole !== 'CONDUCTEUR_TRAVAUX') {
       technicien = (caller.technicienNom || caller.name || '').trim();

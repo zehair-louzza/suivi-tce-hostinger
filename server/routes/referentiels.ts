@@ -135,7 +135,7 @@ referentielsRouter.get(
     }
     result.technicien_competences = compMap;
 
-    // Positions GPS de l'équipe : direction et conducteur seulement ; les autres ne voient que la leur
+    // Positions GPS de l'équipe : direction et planificateur seulement ; les autres ne voient que la leur
     if (!acc.canSeeTeam) {
       result.positions_gps_techniciens = ownGpsOnly(result.positions_gps_techniciens, acc.boundTech);
     }

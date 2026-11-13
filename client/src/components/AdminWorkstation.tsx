@@ -2272,7 +2272,7 @@ export function AdminWorkstation({
                 <li><strong>Toutes vos Interventions :</strong> fiches chantiers, plannings techniciens, déclarations, heures, rapports PDF signés et photos.</li>
                 <li><strong>Tous vos Référentiels :</strong> grille de compétences, corps d'état, techniciens et véhicules.</li>
                 <li><strong>Tous les Pointages :</strong> historique complet des pointages matin/soir et feuilles de présence.</li>
-                <li><strong>Tous les Comptes Collaborateurs :</strong> accès administrateurs, conducteurs de travaux, chiffreurs et techniciens.</li>
+                <li><strong>Tous les Comptes Collaborateurs :</strong> accès administrateurs, planificateurs, chiffreurs et techniciens.</li>
                 <li><strong>Votre Entité Entreprise :</strong> raison sociale, SIRET/SIREN, clés et configurations.</li>
               </ul>
             </div>

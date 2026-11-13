@@ -79,7 +79,7 @@ test('écriture intervention : rapports = rapport seulement ; facturation = fact
   assert.deepEqual([...billing].sort(), ['amount', 'numeroFacture', 'statutFacture', 'tauxTVA']);
 });
 
-test('écriture intervention : le conducteur modifie la fiche mais jamais la facturation', () => {
+test('écriture intervention : le planificateur modifie la fiche mais jamais la facturation', () => {
   const allowed = writableInterventionFields(user('CONDUCTEUR_TRAVAUX'))!;
   for (const k of ['datePlanifiee', 'entreprise', 'chantier', 'compteRendu']) assert.ok(allowed.has(k), k);
   assert.ok(!allowed.has('numeroFacture'));
@@ -134,7 +134,7 @@ test('vue terrain : client, adresse, contact sur place — aucun montant, aucune
   }
 });
 
-test('forme par rôle : conducteur sans montants et sans facturation ; facturation voit la facture', () => {
+test('forme par rôle : planificateur sans montants et sans facturation ; facturation voit la facture', () => {
   const noAmounts = accessFor({ id: 13, role: 'CONDUCTEUR_TRAVAUX', permissionsJson: JSON.stringify({ canViewFinancials: false }) });
   const s = shapeIntervention(noAmounts, FULL) as any;
   assert.equal(s.amount, 0);
@@ -213,7 +213,7 @@ import { describeRefusal, rolesAllowedToWrite } from '../server/lib/access.js';
 test('message de refus : dit quelle partie et quels rôles peuvent la modifier', () => {
   const r = describeRefusal('intervention', ['datePlanifiee', 'numeroFacture']);
   assert.match(r.message, /Vous n'avez pas le droit de modifier le planning/);
-  assert.match(r.message, /Peuvent la modifier : Direction ; Conducteur de travaux/);
+  assert.match(r.message, /Peuvent la modifier : Direction ; Planificateur/);
   assert.match(r.message, /la facturation/);
   assert.match(r.message, /Rapports et facturation/);
   assert.equal(r.parts.length, 2);
@@ -224,7 +224,7 @@ test('rôles autorisés : calculés avec les vraies règles (chiffrage = visites
   const planning = rolesAllowedToWrite('intervention', 'datePlanifiee');
   assert.deepEqual(planning, [
     'Direction',
-    'Conducteur de travaux',
+    'Planificateur',
     "Chargé d'études (chiffrage), pour les visites de chiffrage uniquement",
   ]);
   const report = rolesAllowedToWrite('intervention', 'compteRendu');
@@ -247,7 +247,7 @@ test('chaque profil a son espace : menus, accueil et espace terrain sans fuite e
   assert.ok(menu('CHIFFRAGE_DEVIS').includes('devis') && !menu('CHIFFRAGE_DEVIS').includes('facturation'));
   assert.ok(menu('CONDUCTEUR_TRAVAUX').includes('planning') && !menu('CONDUCTEUR_TRAVAUX').includes('facturation'));
   assert.deepEqual(menu('TECHNICIEN'), ['mobile_tech']);
-  assert.ok(menu('CONDUCTEUR_TRAVAUX').includes('devis'), 'le conducteur ouvre les devis acceptés à transformer');
+  assert.ok(menu('CONDUCTEUR_TRAVAUX').includes('devis'), 'le planificateur ouvre les devis acceptés à transformer');
   assert.equal(canUserCreateDevis(u('CONDUCTEUR_TRAVAUX')), false);
   assert.equal(canUserCreateDevis(u('CHIFFRAGE_DEVIS')), true);
 });

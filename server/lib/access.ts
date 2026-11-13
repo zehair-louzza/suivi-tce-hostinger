@@ -24,9 +24,9 @@ export interface Access {
   /** Nom sous lequel les missions lui sont affectées */
   boundTech: string;
   canSeeAmounts: boolean;
-  /** Demandes reçues : direction, chiffrage, conducteur (ceux qui trient la file d'entrée) */
+  /** Demandes reçues : direction, chiffrage, planificateur (ceux qui trient la file d'entrée) */
   canTriageDemandes: boolean;
-  /** Pointages et positions GPS de toute l'équipe : direction et conducteur uniquement */
+  /** Pointages et positions GPS de toute l'équipe : direction et planificateur uniquement */
   canSeeTeam: boolean;
   /** Facturation (n° et statut de facture) : direction et droit Facturation uniquement */
   canSeeBilling: boolean;
@@ -56,7 +56,7 @@ export function accessFor(user: AccessUser | null | undefined, tokenRole?: strin
   // Même règle que le reste de l'application : le compte fondateur est administrateur de SA seule entreprise
   const isOwner = user?.id === 1 || (user?.email || '').toLowerCase() === OWNER_EMAIL;
   const role = isOwner ? 'ADMIN' : baseRole;
-  // Rôle inconnu = aucun droit (refus par défaut). Avant, un rôle inconnu héritait des droits du conducteur.
+  // Rôle inconnu = aucun droit (refus par défaut). Avant, un rôle inconnu héritait des droits du planificateur.
   const perms = ROLE_DEFINITIONS[role] ? getEffectivePermissions(role, user?.permissionsJson) : { ...NO_PERMISSIONS };
   const isAdmin = isOwner || role === 'ADMIN' || Boolean(perms.canManageUsers);
   const isMobileOnly =
@@ -91,7 +91,7 @@ export function techMatches(bound: string, value?: string | null): boolean {
 const ACCEPTED_DEVIS = ['Accepté', 'Signé', 'Facturé', 'Gagné'];
 
 /**
- * Lecture d'UN devis. Même règle que la liste, plus : le conducteur lit les devis acceptés pour les convertir.
+ * Lecture d'UN devis. Même règle que la liste, plus : le planificateur lit les devis acceptés pour les convertir.
  */
 export function canReadDevis(
   a: Access,
@@ -194,7 +194,7 @@ const AMOUNT_KEYS = ['amount', 'tauxTVA'];
  *  - Terrain : l'avancement de SES missions, le compte rendu, les photos — rien d'autre.
  *  - Rapports : le rapport seulement (ni date, ni technicien, ni statut).
  *  - Facturation : la facturation seulement.
- *  - Conducteur : tout sauf la facturation.
+ *  - Planificateur : tout sauf la facturation.
  *  - Chargé d'études : le créneau des visites de chiffrage seulement.
  */
 export function writableInterventionFields(
@@ -207,7 +207,7 @@ export function writableInterventionFields(
   const planning =
     Boolean(a.perms.canEditPlanning) && (a.role !== 'CHIFFRAGE_DEVIS' || Boolean(existing?.isVisiteDevis));
   if (a.perms.canEditInterventions && a.perms.canEditPlanning && a.role !== 'CHIFFRAGE_DEVIS') {
-    // Conducteur : la fiche complète, sauf la facturation
+    // Planificateur : la fiche complète, sauf la facturation
     OFFICE_KEYS.forEach((k) => keys.add(k));
     if (a.canSeeAmounts) AMOUNT_KEYS.forEach((k) => keys.add(k));
   } else {
@@ -336,7 +336,7 @@ export function limitInterventionBody(
 
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Direction',
-  CONDUCTEUR_TRAVAUX: 'Conducteur de travaux',
+  CONDUCTEUR_TRAVAUX: 'Planificateur',
   CHIFFRAGE_DEVIS: "Chargé d'études (chiffrage)",
   REDACTEUR_RAPPORTS: 'Rapports et facturation',
   TECHNICIEN: 'Technicien (sur ses propres missions)',

@@ -37,7 +37,7 @@ export function ProfileMenu({ open, onClose, onLogout }: ProfileMenuProps) {
   if (!open || !user) return null;
 
   const initials = user.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() : 'U';
-  const roleLabel = user.role === 'ADMIN' ? 'Administrateur' : user.role === 'CHIFFRAGE_DEVIS' ? 'Chiffrage & Devis' : user.role === 'CONDUCTEUR_TRAVAUX' ? 'Conducteur de travaux' : user.role === 'REDACTEUR_RAPPORTS' ? 'Rédacteur de rapports' : user.role === 'TECHNICIEN' ? 'Technicien terrain' : user.role === 'VIEWER' ? 'Consultation seule' : user.role || 'Collaborateur';
+  const roleLabel = user.role === 'ADMIN' ? 'Administrateur' : user.role === 'CHIFFRAGE_DEVIS' ? 'Chiffrage & Devis' : user.role === 'CONDUCTEUR_TRAVAUX' ? 'Planificateur' : user.role === 'REDACTEUR_RAPPORTS' ? 'Rédacteur de rapports' : user.role === 'TECHNICIEN' ? 'Technicien terrain' : user.role === 'VIEWER' ? 'Consultation seule' : user.role || 'Collaborateur';
 
   return (
     <div

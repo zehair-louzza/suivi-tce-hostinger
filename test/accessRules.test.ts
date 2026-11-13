@@ -14,14 +14,14 @@ const CONDUCTEUR = user('CONDUCTEUR_TRAVAUX');
 const RAPPORTS = user('REDACTEUR_RAPPORTS');
 const TECH = user('TECHNICIEN');
 
-test('demandes : seuls direction, chiffrage et conducteur les trient', () => {
+test('demandes : seuls direction, chiffrage et planificateur les trient', () => {
   assert.deepEqual(
     [ADMIN, CHIFFRAGE, CONDUCTEUR, RAPPORTS, TECH].map((a) => a.canTriageDemandes),
     [true, true, true, false, false]
   );
 });
 
-test('pointages et GPS de toute l\'équipe : direction et conducteur uniquement', () => {
+test('pointages et GPS de toute l\'équipe : direction et planificateur uniquement', () => {
   assert.deepEqual(
     [ADMIN, CHIFFRAGE, CONDUCTEUR, RAPPORTS, TECH].map((a) => a.canSeeTeam),
     [true, false, true, false, false]
@@ -64,7 +64,7 @@ test('un profil mobile par droit individuel est traité comme un technicien', ()
   assert.equal(canReadIntervention(mobile, { entreprise: 'Autre' }), false);
 });
 
-test('devis : direction et chiffrage lisent tout ; conducteur seulement les devis acceptés ou ses visites', () => {
+test('devis : direction et chiffrage lisent tout ; planificateur seulement les devis acceptés ou ses visites', () => {
   const envoye = { visiteTechnicien: null, statutCommercial: 'Envoyé' };
   const accepte = { visiteTechnicien: null, statutCommercial: 'Accepté' };
   assert.equal(canReadDevis(ADMIN, envoye), true);

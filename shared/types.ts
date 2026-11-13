@@ -1316,7 +1316,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
   },
   CONDUCTEUR_TRAVAUX: {
     code: 'CONDUCTEUR_TRAVAUX',
-    label: 'Conducteur de travaux',
+    label: 'Planificateur',
     badgeColor: '#7c3aed',
     summary:
       'Pilote l’exécution : planifie et affecte les techniciens, suit le terrain, débloque les retards et clôture les interventions terminées. Voit les montants en lecture, sans chiffrer ni facturer.',
@@ -1540,14 +1540,14 @@ export const ROLE_PERIMETRE: Record<
       'La transformation d’un devis accepté en intervention',
     ],
     horsPerimetre: [
-      'L’exécution des travaux et le planning des équipes → conducteur de travaux',
+      'L’exécution des travaux et le planning des équipes → planificateur',
       'Les rapports de fin d’intervention → rapports',
       'La facturation → rapports et facturation / direction',
       'Les comptes et les droits → direction',
     ],
   },
   travaux: {
-    titre: 'Conducteur de travaux',
+    titre: 'Planificateur',
     vousValidez: [
       'La planification et l’affectation des techniciens',
       'Le déblocage des interventions en retard ou suspendues',
@@ -1566,7 +1566,7 @@ export const ROLE_PERIMETRE: Record<
       'Le numéro et le statut de facture des interventions clôturées',
     ],
     horsPerimetre: [
-      'Le planning, les dates et les techniciens → conducteur de travaux',
+      'Le planning, les dates et les techniciens → planificateur',
       'Les devis et le chiffrage → chargé d’études',
       'Les comptes et les droits → direction',
     ],
@@ -1580,7 +1580,7 @@ export const ROLE_PERIMETRE: Record<
     horsPerimetre: [
       'Les montants, la facturation et les devis',
       'Le planning des autres équipes',
-      'La clôture des interventions → conducteur / rapports',
+      'La clôture des interventions → planificateur / rapports',
     ],
   },
 };
@@ -1605,7 +1605,7 @@ export function espaceRoleOf(user?: User | null): EspaceRole {
   }
 }
 
-/** Droit de créer une intervention (écrans) : même règle que le serveur — direction, conducteur, chargé d'études. */
+/** Droit de créer une intervention (écrans) : même règle que le serveur — direction, planificateur, chargé d'études. */
 export function canUserCreateIntervention(user?: User | null): boolean {
   if (!user || isUserMobileOnly(user)) return false;
   const role = (user.role || '').toUpperCase();
@@ -1614,7 +1614,7 @@ export function canUserCreateIntervention(user?: User | null): boolean {
   return isAdmin || Boolean(perms.canEditPlanning);
 }
 
-/** Droit de valider / clôturer un rapport (écrans) : direction, conducteur, rapports. */
+/** Droit de valider / clôturer un rapport (écrans) : direction, planificateur, rapports. */
 export function canUserCloseIntervention(user?: User | null): boolean {
   if (!user || isUserMobileOnly(user)) return false;
   const role = (user.role || '').toUpperCase();
@@ -1678,11 +1678,11 @@ export function canUserAccessSection(
       return Boolean(perms.canManageReferentiels);
 
     case 'demandes':
-      // La file d'entrée est triée par la direction, le chiffrage et le conducteur (même règle que le serveur)
+      // La file d'entrée est triée par la direction, le chiffrage et le planificateur (même règle que le serveur)
       return Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning);
 
     case 'devis':
-      // Chiffrage : tout le pipeline ; conducteur : les devis acceptés à transformer en intervention (lecture)
+      // Chiffrage : tout le pipeline ; planificateur : les devis acceptés à transformer en intervention (lecture)
       return Boolean(perms.canEditDevis) || Boolean(perms.canConvertDevis);
 
     case 'planning':
@@ -1697,7 +1697,7 @@ export function canUserAccessSection(
       );
 
     case 'carte':
-      // La carte sert à planifier : chiffrage (visites) et conducteur, pas aux rapports ni à la facturation
+      // La carte sert à planifier : chiffrage (visites) et planificateur, pas aux rapports ni à la facturation
       return Boolean(perms.canEditPlanning);
 
     case 'facturation':

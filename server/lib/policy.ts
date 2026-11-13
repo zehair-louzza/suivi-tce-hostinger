@@ -28,7 +28,7 @@ export const POLICY = {
   'interventions.list': anyMember,
   'interventions.read': anyMember,
   'interventions.stats': (a) => !a.isFieldOnly,
-  // Création : direction, conducteur, chargé d'études (visites de chiffrage). Jamais le terrain ni les rapports.
+  // Création : direction, planificateur, chargé d'études (visites de chiffrage). Jamais le terrain ni les rapports.
   'interventions.create': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditPlanning),
   'interventions.update': (a) =>
     a.isAdmin ||
@@ -64,7 +64,7 @@ export const POLICY = {
   'admin.appearance.read': admin,
   'admin.appearance.update': admin,
   'admin.siege.update': admin,
-  'admin.pointages.read': anyMember, // direction et conducteur : l'équipe ; les autres : le leur (filtré dans la route)
+  'admin.pointages.read': anyMember, // direction et planificateur : l'équipe ; les autres : le leur (filtré dans la route)
   'admin.pointages.clock': anyMember, // chacun pointe pour lui-même (forcé côté serveur)
 } satisfies Record<string, Rule>;
 
