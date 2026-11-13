@@ -469,12 +469,43 @@ export function CarteStudioView({
             borderRadius: '12px',
             overflow: 'hidden',
             boxShadow: 'var(--shadow-sm)',
+            position: 'relative',
           }}
         >
           <div
             ref={mapContainerRef}
             style={{ width: '100%', height: isMobile ? '420px' : '580px' }}
           />
+          {/* Bouton plein écran directement sur la carte : reste visible même quand l'en-tête de page défile */}
+          {!full && (
+            <button
+              type="button"
+              onClick={() => setFull(true)}
+              title="Afficher la carte en plein écran"
+              aria-label="Plein écran"
+              data-testid="map-fullscreen-btn"
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                zIndex: 1000,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <Maximize2 size={14} /> Plein écran
+            </button>
+          )}
         </div>
 
         {/* Progress Panel */}
