@@ -58,6 +58,7 @@ model User {
   /// Un même e-mail peut exister dans plusieurs entreprises : unicité (e-mail, entreprise) assurée par
   /// l'index SQL users_email_companyid_key (voir migration 20261114090000), pas par Prisma.
   email              String
+  phone              String?
   password           String
   name               String
   role               String              @default("USER")
@@ -87,6 +88,20 @@ model User {
 
   @@index([companyId], map: "users_companyid_idx")
   @@map("users")
+}
+
+model PlatformCreator {
+  id          Int      @id @default(1)
+  email       String   @unique
+  phone       String
+  name        String
+  companyName String   @default("ANELEC GROUPE") @map("company_name")
+  role        String   @default("ADMIN")
+  locked      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_creator")
 }
 
 model Devis {

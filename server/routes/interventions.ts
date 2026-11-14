@@ -30,6 +30,7 @@ import {
   GpsPositionPayload,
   getEffectivePermissions,
   applyInterventionAutomations,
+  isPlatformCreatorIdentity,
 } from '../../shared/types.js';
 
 import { sanitizeAndOptimizePhotosJson } from '../lib/terrainPhotos.js';
@@ -1103,11 +1104,11 @@ interventionRouter.delete(
     // Contrôle d'accès : suppression réservée aux utilisateurs autorisés
     const callerUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
+      select: { id: true, email: true, phone: true, name: true, role: true, technicienNom: true, permissionsJson: true },
     });
     const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
     const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    const isAdmin = (isPlatformCreatorIdentity(callerUser) && (!callerRole || callerRole === 'ADMIN')) || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
 
     if (!isAdmin && !callerPerms.canDeleteRecords) {
       throw new AppError(403, 'Suppression d’interventions non autorisée sur ce profil', 'FORBIDDEN');

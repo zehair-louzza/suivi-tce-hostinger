@@ -1,0 +1,29 @@
+# ANELEC SUIVI TCE — Plateforme de Chiffrage de Devis, Automatisation & Suivi Chantier BTP / TCE
+
+> ANELEC SUIVI TCE (`https://suivi.anelecgroupe.com`) est une plateforme SaaS multi-entreprises française dédiée au **chiffrage de devis**, à l'**automatisation** des workflows métier et au pilotage des chantiers Tous Corps d'État (TCE) et génie électrique.
+
+Créée par **Zehair Louzza** (`louzza.zehair@gmail.com` · `+33 6 28 61 86 28`) pour **ANELEC GROUPE**, la solution unifie le chiffrage technique après visite préalable, l'envoi automatique de devis, la conversion devis → chantier, l'affectation intelligente de techniciens par compétences et géolocalisation, les rapports d'intervention illustrés et la facturation.
+
+## Mots-clés et cas d'usage principaux
+- **Chiffrage de devis BTP / TCE** : Calcul structuré des marges, déboursés secs, main-d'œuvre, fournitures, coefficients et montants HT/TTC, avec génération de PDF haute netteté compressés.
+- **Automatisation complète du cycle devis → chantier → rapport** :
+  - Relances et envois automatisés des devis par e-mail avec lien sécurisé de consultation et signature/acceptation client.
+  - Conversion automatique ou guidée d'un devis accepté en intervention planifiée.
+  - Affectation intelligente des techniciens selon les compétences TCE requises et la disponibilité.
+  - Transmission automatique des rapports de fin d'intervention au client et mises à jour de statut en temps réel (WebSocket).
+- **Visite Technique Préalable (Usage Interne)** : Création de rapports structurés sur le terrain avant rédaction de devis pour fiabiliser le **chiffrage de devis**, documenter les contraintes, relever les mesures et joindre des photos compressées sans perte de qualité visible.
+- **Planning Gantt, Dispatch & Suivi Technicien Mobile (PWA)** : Vue planning interactive par corps d'état, pointage horodaté inviolable, géolocalisation chantier et mode hors-ligne terrain.
+- **Compression PDF & Photos Terrain** : Optimisation automatique des documents PDF et des photos de chantier (MozJPEG + compression de flux PDF) pour un archivage léger et une consultation instantanée.
+- **Architecture Multi-Entreprises (Multi-Tenant Strict) & RGPD** : Isolation stricte des données par société, contrôle d'accès par rôles granulaires (Direction, Chiffrage, Conduite de travaux, Technicien, Chargé d'études), authentification Google OAuth & JWT.
+
+## Documentation et URLs publiques
+- [Portail de connexion et inscription entreprise](https://suivi.anelecgroupe.com/login) : Accès à l'espace de chiffrage, planning et suivi TCE.
+- [Présentation produit interactive](https://suivi.anelecgroupe.com/showcase) : Démonstration des écrans de chiffrage de devis, automatisation et dispatch.
+- [Documentation détaillée pour moteurs IA](https://suivi.anelecgroupe.com/llms-full.txt) : Spécifications fonctionnelles complètes, FAQ, architecture et glossaire métier.
+- [Manifeste d'application Web](https://suivi.anelecgroupe.com/manifest.webmanifest) : Métadonnées PWA.
+
+## Contact & Éditeur
+- **Éditeur / Créateur** : Zehair Louzza — ANELEC GROUPE
+- **E-mail** : louzza.zehair@gmail.com
+- **Téléphone** : +33628618628
+- **Site officiel** : https://suivi.anelecgroupe.com

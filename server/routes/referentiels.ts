@@ -16,6 +16,7 @@ import {
   GpsPositionPayload,
   ReferentielsMap,
   getEffectivePermissions,
+  isPlatformCreatorIdentity,
 } from '../../shared/types.js';
 
 export const referentielsRouter = secureRouter('referentiels');
@@ -222,14 +223,15 @@ referentielsRouter.put(
     }
     const caller = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      select: { id: true, role: true, permissionsJson: true, companyId: true, active: true },
+      select: { id: true, email: true, phone: true, role: true, permissionsJson: true, companyId: true, active: true },
     });
     if (!caller || caller.active === false) {
       throw new AppError(403, 'Compte inactif ou introuvable', 'FORBIDDEN');
     }
-    const effectiveRole = caller.id === 1 || caller.role === 'ADMIN' ? 'ADMIN' : caller.role;
+    const isCreator = isPlatformCreatorIdentity(caller);
+    const effectiveRole = (isCreator && (!caller.role || caller.role === 'ADMIN')) || caller.role === 'ADMIN' ? 'ADMIN' : caller.role;
     const perms = getEffectivePermissions(effectiveRole as any, caller.permissionsJson);
-    const isAdmin = caller.id === 1 || effectiveRole === 'ADMIN' || perms.canManageUsers;
+    const isAdmin = effectiveRole === 'ADMIN' || perms.canManageUsers;
 
     // Seuls les administrateurs ou les utilisateurs avec droit canManageReferentiels peuvent altérer les référentiels métiers
     if (!isAdmin && !perms.canManageReferentiels) {

@@ -1,0 +1,12 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "ANELEC SUIVI TCE",
+  "name_for_model": "anelec_suivi_tce",
+  "description_for_human": "Plateforme BTP & TCE pour le chiffrage de devis, l'automatisation des workflows chantier, la visite technique préalable et le planning techniciens.",
+  "description_for_model": "ANELEC SUIVI TCE (https://suivi.anelecgroupe.com) is a French multi-tenant B2B construction & electrical engineering (TCE) SaaS platform specializing in quote costing (chiffrage de devis), workflow automation (automatisation), pre-quote technical site visits (visite technique préalable), Gantt technician dispatch, GPS check-in, and compressed PDF/photo reporting.",
+  "auth": {
+    "type": "none"
+  },
+  "contact_email": "louzza.zehair@gmail.com",
+  "legal_info_url": "https://suivi.anelecgroupe.com/login"
+}

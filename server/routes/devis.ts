@@ -42,6 +42,7 @@ import {
   getEffectivePermissions,
   applyDevisAutomations,
   applyInterventionAutomations,
+  isPlatformCreatorIdentity,
 } from '../../shared/types.js';
 
 export const devisRouter = secureRouter('devis');
@@ -929,11 +930,11 @@ devisRouter.delete(
     // Contrôle d'accès : suppression de devis réservée aux profils autorisés
     const callerUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true },
+      select: { id: true, email: true, phone: true, name: true, role: true, technicienNom: true, permissionsJson: true },
     });
     const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
     const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    const isAdmin = (isPlatformCreatorIdentity(callerUser) && (!callerRole || callerRole === 'ADMIN')) || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
 
     if (!isAdmin && !callerPerms.canDeleteRecords) {
       throw new AppError(403, 'Suppression de devis non autorisée sur ce profil', 'FORBIDDEN');
@@ -959,11 +960,11 @@ devisRouter.post(
     // Contrôle d'accès : conversion de devis réservée aux profils habilités
     const callerUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, permissionsJson: true },
+      select: { id: true, email: true, phone: true, name: true, role: true, permissionsJson: true },
     });
     const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
     const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
-    const isAdmin = callerUser?.id === 1 || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
+    const isAdmin = (isPlatformCreatorIdentity(callerUser) && (!callerRole || callerRole === 'ADMIN')) || callerRole === 'ADMIN' || Boolean(callerPerms.canManageUsers);
     if (!isAdmin && !callerPerms.canConvertDevis && !callerPerms.canEditDevis) {
       throw new AppError(403, 'Permission insuffisante pour convertir un devis', 'FORBIDDEN');
     }

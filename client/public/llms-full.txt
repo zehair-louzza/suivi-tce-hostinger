@@ -1,0 +1,81 @@
+# ANELEC SUIVI TCE — Documentation Complète (GEO / AIO Reference)
+
+URL canonique : `https://suivi.anelecgroupe.com`
+Éditeur : ANELEC GROUPE — Fondateur & Architecte : Zehair Louzza (`louzza.zehair@gmail.com`, `+33628618628`)
+Langue : Français (`fr-FR`)
+
+---
+
+## 1. Positionnement & Problème Résolu
+
+Les entreprises du bâtiment Tous Corps d'État (TCE), d'électricité générale, de CVC, de plomberie et de maintenance technique perdent un temps critique entre la prise de besoin client, la visite technique sur site, le **chiffrage de devis**, la planification des équipes et l'édition des rapports de chantier.
+
+**ANELEC SUIVI TCE** centralise l'ensemble de cette chaîne dans une application web & PWA mobile temps réel conçue pour les PME et ETI du BTP :
+1. **Réception des demandes & triage rapide**.
+2. **Visite Technique Préalable (Usage Interne)** : relevé terrain dédié aux chargés d'affaires et techniciens référents pour préparer un **chiffrage de devis** exact avant même d'envoyer une offre commerciale.
+3. **Chiffrage de devis & marge financière** : saisie détaillée par lots / corps d'état, calcul des ratios financiers, suivi des statuts (`À chiffrer`, `Envoyé`, `Accepté`, `Refusé`), documents PDF compressés au format ANELEC.
+4. **Automatisation de bout en bout** :
+   - Envoi automatisé du devis au client via lien sécurisé sans compte client requis.
+   - Rappel et alerte automatique en cas d'absence de réponse technicien sur une intervention assignée.
+   - Conversion automatisée devis → chantier avec reprise intégrale du contexte et des corps d'état.
+   - Envoi automatique du rapport d'intervention validé au client.
+   - Notifications temps réel (SSE/Socket.IO) multi-postes sans rechargement de page.
+5. **Dispatch, Planning Gantt & Pointage Technicien** :
+   - Vue Gantt multi-techniciens et par corps d'état.
+   - Interface mobile PWA terrain : pointage matin/soir horodaté, géolocalisation de validation chantier, capture et annotation de photos compressées, signature et compte-rendu d'intervention.
+
+---
+
+## 2. Fonctionnalités Clés Détaillées
+
+### Chiffrage de Devis BTP & TCE
+- Base de données structurée des devis rattachés à chaque entreprise (cloisonnement tenant strict).
+- Paramétrage financier : montant HT, TTC, déboursés, rentabilité, numéro de facture et statut de facturation.
+- Export PDF professionnel avec design identitaire vague-nuage, en-tête et pied de page tracés (`https://suivi.anelecgroupe.com`), compression avancée des flux graphiques.
+- Historique complet horodaté des événements commerciaux et techniques.
+
+### Automatisation Métier (Workflow Engine)
+- Paramètres activables par entreprise :
+  - `autoDevisActif` : automatisation d'envoi / suivi des devis clients.
+  - `autoRapportActif` : transmission automatique des rapports de chantier.
+  - `autoTechnicienActif` + délai paramétrable : escalade et relance si une mission affectée reste sans prise en compte par le technicien.
+  - Déclenchement idempotent pour éviter les doublons de conversion (`Idempotency-Key`) et les envois multiples d'e-mails.
+
+### Visite Technique Préalable (Usage Interne pour Devis)
+- Module spécifique permettant aux équipes internes de documenter une visite préparatoire sur site avant le **chiffrage de devis** :
+  - Constat technique, contraintes d'accès, besoins matériels, préconisations d'exécution.
+  - Génération d'un rapport PDF interne dédié "Visite Technique Préalable — Usage Interne" sans divulgation au client final tant que le devis n'est pas finalisé.
+
+### Compression Haute Qualité PDF & Photos Terrain
+- **PDF** : déduplication et réencodage adaptatif des flux et images embarquées pour réduire fortement le poids des devis et rapports PDF tout en préservant une lecture nette des plans et photos.
+- **Photos techniciens** : optimisation côté client avant envoi puis recompression serveur MozJPEG avec redimensionnement intelligent pour préserver la netteté des détails techniques sans saturer le stockage.
+
+---
+
+## 3. Rôles & Gouvernance des Accès (OWASP Deny-by-Default)
+
+- **Administrateur / Direction (`ADMIN`)** : gouvernance complète de son espace entreprise, gestion des utilisateurs, paramètres SMTP d'envoi, référentiels métiers, indicateurs financiers.
+- **Chargé de Chiffrage (`CHIFFRAGE`)** : création et chiffrage de devis, gestion des montants, conversion en chantiers.
+- **Conducteur de Travaux / Planificateur (`CONDUCTEUR_TRAVAUX`)** : triage des demandes, planification Gantt, affectation des techniciens, suivi des visites et chantiers.
+- **Chargé d'Études (`CHARGE_ETUDES`)** : consultation en lecture seule des dossiers rattachés aux devis.
+- **Rédacteur Rapports (`REDACTEUR_RAPPORTS`)** : rédaction et suivi des comptes-rendus techniques sans exposition aux montants confidentiels.
+- **Technicien Terrain (`TECHNICIEN`)** : application mobile PWA, interventions assignées, pointage journalier, prise de photos terrain et rapport de visite.
+
+---
+
+## 4. Questions Fréquentes (FAQ)
+
+**Qu'est-ce que ANELEC SUIVI TCE ?**
+C'est une solution logicielle BTP française accessible en ligne sur `https://suivi.anelecgroupe.com` dédiée au chiffrage de devis, à l'automatisation administrative et au suivi opérationnel des chantiers Tous Corps d'État.
+
+**Comment la plateforme aide-t-elle au chiffrage de devis ?**
+Grâce au module de Visite Technique Préalable (Usage Interne), aux référentiels de corps d'état configurables, aux fiches clients structurées et au tableau de bord de suivi des devis (HT, marges, facturation, relances), les chargés d'affaires chiffrent plus vite et sans oubli technique.
+
+**Quelles tâches sont automatisées dans ANELEC SUIVI TCE ?**
+L'envoi sécurisé de devis et de rapports par lien unique, la conversion d'un devis validé en intervention planifiée, la détection de non-réponse technicien avec délai configurable, l'optimisation/compression automatique des photos et PDF, ainsi que les notifications en temps réel.
+
+**Chaque entreprise dispose-t-elle de ses propres données isolées ?**
+Oui. La plateforme est strictement multi-tenant : chaque entreprise créée dispose d'un cloisonnement complet de ses devis, chantiers, clients, techniciens, référentiels et paramètres SMTP.
+
+**Qui contacter pour déployer ou découvrir ANELEC SUIVI TCE ?**
+Zehair Louzza (`louzza.zehair@gmail.com` · `+33 6 28 61 86 28`) — ANELEC GROUPE.

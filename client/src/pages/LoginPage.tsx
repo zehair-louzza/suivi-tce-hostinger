@@ -758,7 +758,7 @@ export function LoginPage() {
               lineHeight: 1.5,
             }}
           >
-            Gestion des Devis, Interventions TCE, Dispatch & Planning Techniciens
+            Chiffrage de devis, Visite technique, Automatisation & Planning TCE
           </p>
         </div>
 

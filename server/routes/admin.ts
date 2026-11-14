@@ -11,7 +11,7 @@ import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { normaliserDelai, normaliserDelaiAlerte } from '../domain/technicianResponse.js';
 import { basePublicUserSelect, findUserInCompany, isMissingSchemaError } from '../lib/userSelect.js';
-import { ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, sanitizePermissionsForRole } from '../../shared/types.js';
+import { PLATFORM_CREATOR, ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, isPlatformCreatorIdentity, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
   APP_URL,
   sendWelcomeUserEmail,
@@ -63,7 +63,7 @@ async function getCallerUser(req: Request) {
   }
   const u = await prisma.user.findUnique({
     where: { id: req.user.userId },
-    select: { id: true, email: true, name: true, role: true, technicienNom: true, permissionsJson: true, active: true, companyId: true },
+    select: { id: true, email: true, phone: true, name: true, role: true, technicienNom: true, permissionsJson: true, active: true, companyId: true },
   });
   if (!u || u.active === false) {
     throw new AppError(403, 'Compte désactivé ou inexistant', 'FORBIDDEN');
@@ -73,9 +73,10 @@ async function getCallerUser(req: Request) {
     const p = u.permissionsJson ? JSON.parse(u.permissionsJson) : null;
     if (p?.canManageUsers) hasAdminPerm = true;
   } catch {}
-  const effectiveRole = u.id === 1 || u.role === 'ADMIN' ? 'ADMIN' : u.role;
+  const isCreator = isPlatformCreatorIdentity(u);
+  const effectiveRole = (isCreator && (!u.role || u.role === 'ADMIN')) || u.role === 'ADMIN' ? 'ADMIN' : u.role;
   const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
-  const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
+  const isAdmin = effectiveRole === 'ADMIN' || hasAdminPerm;
   return { ...u, effectiveRole, isAdmin, perms };
 }
 
@@ -220,7 +221,7 @@ adminRouter.put(
         ? JSON.stringify(sanitizePermissionsForRole(role !== undefined ? role : existing.role, base))
         : null;
     }
-    if (active !== undefined && id !== 1) {
+    if (active !== undefined && !isPlatformCreatorIdentity(existing)) {
       updateData.active = Boolean(active);
     }
     if (password) {
@@ -251,10 +252,13 @@ adminRouter.delete(
     }
 
     const id = parseInt(req.params.id, 10);
-    if (id === 1 || id === req.user?.userId) {
-      throw new AppError(400, 'Impossible de supprimer le compte fondateur de la société', 'FORBIDDEN');
+    if (id === req.user?.userId) {
+      throw new AppError(400, 'Impossible de supprimer votre propre compte connecté', 'FORBIDDEN');
     }
     const existing = await prisma.user.findUnique({ where: { id } });
+    if (existing && isPlatformCreatorIdentity(existing)) {
+      throw new AppError(400, 'Impossible de supprimer le compte créateur de la plateforme', 'FORBIDDEN');
+    }
     if (!existing) {
       throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
     }
@@ -575,8 +579,9 @@ adminRouter.delete(
       throw new AppError(400, "Aucun espace entreprise associé à ce compte", 'INVALID_COMPANY');
     }
 
-    // Protection stricte de l'espace racine ANELEC GROUPE (ID 1)
-    if (companyId === 1 && caller.id === 1) {
+    const targetCompanyForCheck = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
+    // Protection stricte de l'espace racine du créateur ANELEC GROUPE
+    if (isPlatformCreatorIdentity(caller) && (companyId === 1 || targetCompanyForCheck?.name?.trim().toUpperCase() === PLATFORM_CREATOR.companyName)) {
       const confirmPhrase = String(req.body?.confirmPhrase || '').trim();
       if (confirmPhrase !== 'SUPPRIMER ANELEC GROUPE DEFINITIVEMENT') {
         throw new AppError(400, "Sécurité racine ANELEC : veuillez saisir la phrase de confirmation exacte pour détruire l'espace principal", 'ROOT_PROTECTED');

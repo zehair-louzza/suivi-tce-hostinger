@@ -1,6 +1,37 @@
 // Shared types, ANELEC business lists, formulas, and validation schemas
 import { z } from 'zod';
 
+// Identité canonique du créateur/fondateur de la plateforme (persistée en base dans platform_creator)
+export const PLATFORM_CREATOR = {
+  email: 'louzza.zehair@gmail.com',
+  phone: '+33628618628',
+  name: 'Zehair Louzza',
+  companyName: 'ANELEC GROUPE',
+  role: 'ADMIN',
+} as const;
+
+export function normaliserTelephoneFr(phone?: string | null): string {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s.\-()]/g, '');
+  if (cleaned.startsWith('0033') && cleaned.length === 13) {
+    return `+33${cleaned.slice(4)}`;
+  }
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    return `+33${cleaned.slice(1)}`;
+  }
+  if (cleaned.startsWith('33') && cleaned.length === 11) {
+    return `+${cleaned}`;
+  }
+  return cleaned;
+}
+
+export function isPlatformCreatorIdentity(user?: { email?: string | null; phone?: string | null } | null): boolean {
+  if (!user) return false;
+  const emailMatch = (user.email || '').trim().toLowerCase() === PLATFORM_CREATOR.email;
+  const phoneMatch = normaliserTelephoneFr(user.phone) === PLATFORM_CREATOR.phone;
+  return emailMatch || phoneMatch;
+}
+
 // ============================================================================
 // 1. RÉFÉRENTIELS MÉTIER ANELEC (issus de analyse-45-colonnes-ANELEC.csv)
 // ============================================================================

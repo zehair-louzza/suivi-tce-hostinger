@@ -6,7 +6,8 @@ import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { getEffectivePermissions, ROLE_DEFINITIONS } from '../../shared/types.js';
+import { PLATFORM_CREATOR, getEffectivePermissions, isPlatformCreatorIdentity, ROLE_DEFINITIONS } from '../../shared/types.js';
+import { resolveCreatorAwarePhone, syncPlatformCreatorInDb } from '../lib/platformCreator.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
@@ -124,6 +125,7 @@ const RegisterSchema = z.object({
   name: z.string().min(1, 'Nom du responsable requis').max(100),
   email: z.string().email('Email professionnel invalide'),
   password: z.string().min(1, 'Mot de passe requis').max(128, 'Mot de passe trop long'),
+  phone: z.string().max(30).optional(),
   companyName: z.string().min(2, "Nom de l'entreprise requis").max(120),
   siretOrSiren: z.string().optional(),
 });
@@ -163,6 +165,7 @@ function clearAuthCookies(res: Response) {
 export function formatPublicUser(u: {
   id: number;
   email: string;
+  phone?: string | null;
   name: string;
   role: string;
   technicienNom?: string | null;
@@ -184,7 +187,8 @@ export function formatPublicUser(u: {
   } | null;
   createdAt?: Date | string;
 }) {
-  const effectiveRole = u.id === 1 ? 'ADMIN' : u.role;
+  const isCreator = isPlatformCreatorIdentity(u);
+  const effectiveRole = isCreator && (!u.role || u.role === 'ADMIN') ? 'ADMIN' : u.role;
   const companyId = u.companyId ?? u.company?.id ?? null;
   const companyName = u.company?.name || (companyId === null ? null : `Entreprise #${companyId}`);
   const companyDefaultTheme = u.company?.defaultTheme || 'light';
@@ -194,6 +198,8 @@ export function formatPublicUser(u: {
   return {
     id: u.id,
     email: u.email,
+    phone: u.phone ?? (isCreator ? PLATFORM_CREATOR.phone : null),
+    isCreator,
     name: u.name,
     role: effectiveRole,
     technicienNom: u.technicienNom || null,
@@ -301,11 +307,15 @@ authRouter.post(
     const confirmationToken = crypto.randomBytes(32).toString('hex');
     const confirmationSentAt = new Date();
 
-    const user = await prisma.user.create({
-      data: {
+    const resolvedPhone = resolveCreatorAwarePhone(data.email, data.phone);
+    const isCreator = isPlatformCreatorIdentity({ email: data.email, phone: resolvedPhone });
+    if (isCreator) {
+      await syncPlatformCreatorInDb();
+    }
+    const userData: Record<string, unknown> = {
         email: data.email,
         password,
-        name: data.name,
+        name: isCreator && !data.name.trim() ? PLATFORM_CREATOR.name : data.name,
         role,
         companyId,
         active: false,
@@ -314,7 +324,10 @@ authRouter.post(
         confirmationCode,
         confirmationCodeExpires,
         confirmationSentAt,
-      },
+        ...(resolvedPhone ? { phone: resolvedPhone } : {}),
+    };
+    const user = await prisma.user.create({
+      data: userData as any,
       select: publicUserSelect,
     });
 
@@ -670,14 +683,14 @@ authRouter.post(
     }
     if (valides.length > 1) throw choixEntrepriseRequis(valides);
     const user = valides[0];
-    if ((user as any).emailConfirmed === false && user.id !== 1) {
+    if ((user as any).emailConfirmed === false) {
       throw new AppError(
         403,
         "Votre espace entreprise" + (user.company?.name ? ` « ${user.company.name} »` : '') + " est en attente d'activation. Veuillez consulter votre boîte mail (" + user.email + ") et cliquer sur le lien de confirmation envoyé par zehair@anelecgroupe.com pour accepter les conditions et activer votre compte.",
         'EMAIL_NOT_CONFIRMED'
       );
     }
-    if (user.active === false && user.id !== 1) {
+    if (user.active === false && !isPlatformCreatorIdentity(user)) {
       throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
     }
 
@@ -1039,7 +1052,7 @@ authRouter.post(
         throw choixEntrepriseRequis(comptes);
       }
 
-      if (user.active === false && user.id !== 1) {
+      if (user.active === false && !isPlatformCreatorIdentity(user)) {
         throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
       }
 
@@ -1135,18 +1148,24 @@ authRouter.post(
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
+    const resolvedGooglePhone = resolveCreatorAwarePhone(email, null);
+    const isGoogleCreator = isPlatformCreatorIdentity({ email, phone: resolvedGooglePhone });
+    if (isGoogleCreator) {
+      await syncPlatformCreatorInDb();
+    }
     const newUser = await prisma.user.create({
       data: {
         email,
         password: passwordHash,
-        name,
+        name: isGoogleCreator && !name.trim() ? PLATFORM_CREATOR.name : name,
         role: 'ADMIN',
         companyId: company.id,
         active: true,
         emailConfirmed: true,
         termsAcceptedAt: new Date(),
         termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
-      },
+        ...(resolvedGooglePhone ? { phone: resolvedGooglePhone } : {}),
+      } as any,
       select: publicUserSelect,
     });
 

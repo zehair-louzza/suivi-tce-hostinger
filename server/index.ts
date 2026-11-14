@@ -111,7 +111,42 @@ if (config.nodeEnv === 'production') {
       res.setHeader('Service-Worker-Allowed', '/');
       res.sendFile(path.join(clientDist, 'sw.js'));
     });
-    app.get('/manifest.webmanifest', (_req, res) => {
+    // Politique X-Robots-Tag pour moteurs web & IA : API / liens privés exclus de l'indexation, pages publiques autorisées
+  app.use((req, res, next) => {
+    const p = req.path;
+    if (
+      p.startsWith('/api/') ||
+      p.startsWith('/devis-client/') ||
+      p.startsWith('/rapport-client/') ||
+      p.startsWith('/invitation')
+    ) {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    } else if (!p.includes('.') || p.endsWith('.html')) {
+      res.setHeader('X-Robots-Tag', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+      res.setHeader('Link', '<https://suivi.anelecgroupe.com/llms.txt>; rel="alternate"; type="text/markdown"');
+    }
+    next();
+  });
+
+  app.get('/llms.txt', (_req, res) => {
+    res.type('text/markdown; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'all');
+    res.sendFile(path.join(clientDist, 'llms.txt'));
+  });
+
+  app.get('/llms-full.txt', (_req, res) => {
+    res.type('text/markdown; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'all');
+    res.sendFile(path.join(clientDist, 'llms-full.txt'));
+  });
+
+  app.get('/.well-known/ai-plugin.json', (_req, res) => {
+    res.type('application/json; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'all');
+    res.sendFile(path.join(clientDist, '.well-known', 'ai-plugin.json'));
+  });
+
+  app.get('/manifest.webmanifest', (_req, res) => {
       res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDist, 'manifest.webmanifest'));

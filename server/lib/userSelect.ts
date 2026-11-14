@@ -23,6 +23,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
 
 let themeColumnsAvailable = true;
+let phoneColumnAvailable = true;
 
 export function areThemeColumnsAvailable(): boolean {
   return themeColumnsAvailable;
@@ -39,6 +40,7 @@ export function isMissingSchemaError(e: unknown): boolean {
 export interface AuthUserRow {
   id: number;
   email: string;
+  phone?: string | null;
   name: string;
   role: string;
   technicienNom: string | null;
@@ -117,6 +119,7 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
     company: { select: companySelect },
     createdAt: true,
   };
+  if (phoneColumnAvailable) select.phone = true;
   if (themeColumnsAvailable) select.themePref = true;
   if (opts.withPassword) select.password = true;
   return select as Prisma.UserSelect;
@@ -126,11 +129,12 @@ async function withThemeFallback<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (themeColumnsAvailable && isMissingSchemaError(e)) {
+    if ((themeColumnsAvailable || phoneColumnAvailable) && isMissingSchemaError(e)) {
       themeColumnsAvailable = false;
+      phoneColumnAvailable = false;
       console.warn(
-        "[auth] Colonnes d'apparence absentes de la base — repli sans thème. " +
-          'Exécutez `prisma migrate deploy` pour activer la persistance du thème.'
+        "[auth] Colonnes optionnelles (thème/téléphone) absentes de la base — repli activé. " +
+          'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
       );
       return await run();
     }

@@ -1,39 +1,156 @@
-# Robots.txt — ANELEC TCE Platform (https://suivi.anelecgroupe.com)
-# Optimisation SEO, GEO, AEO, SAIO & SEA
+# robots.txt — ANELEC SUIVI TCE (https://suivi.anelecgroupe.com)
+# Politique d'indexation ouverte : moteurs de recherche web & moteurs de recherche IA (SEO + GEO / AIO / LLM)
+# Mots-clés cœur : chiffrage de devis, automatisation, visite technique préalable, suivi TCE, planning technicien
 
-User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /socket.io/
-Disallow: /devis-client/
-Disallow: /rapport-client/
-Disallow: /invitation
-
-# Moteurs de Recherche IA & Génératifs (GEO / AEO / SAIO)
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: Applebot-Extended
-Allow: /
-
-# Moteurs de Recherche Traditionnels (SEO & SEA)
+# ============================================================================
+# MOTEURS DE RECHERCHE TRADITIONNELS (MONDE ENTIER)
+# ============================================================================
 User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot-Mobile
 Allow: /
 
 User-agent: Bingbot
 Allow: /
 
-# Déclaration officielle du Sitemap
+User-agent: msnbot
+Allow: /
+
+User-agent: BingPreview
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Qwantbot
+Allow: /
+
+User-agent: Yandex
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: NaverBot
+Allow: /
+
+User-agent: Yeti
+Allow: /
+
+User-agent: Seznambot
+Allow: /
+
+# ============================================================================
+# MOTEURS DE RECHERCHE IA, ASSISTANTS & RAG (GEO / AIO)
+# ============================================================================
+# OpenAI / ChatGPT Search
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+# Perplexity AI
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+# Anthropic / Claude
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Google Gemini / AI Overviews
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GoogleOther
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot-Extended
+Allow: /
+
+# Meta AI
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: meta-externalfetcher
+Allow: /
+
+# Microsoft Copilot / DuckAssist / You.com / Mistral / xAI Grok / Cohere / Amazon / Common Crawl
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: MistralAI-User
+Allow: /
+
+User-agent: xAI-Bot
+Allow: /
+
+User-agent: GrokBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Diffbot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+# ============================================================================
+# RÈGLE GÉNÉRALE & EXCLUSIONS PRIVÉES (SÉCURITÉ & DONNÉES CLIENTS)
+# ============================================================================
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /showcase
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /.well-known/ai-plugin.json
+Disallow: /api/
+Disallow: /devis-client/
+Disallow: /rapport-client/
+Disallow: /invitation
+
+# Plan de site XML & Index IA (llms.txt standard)
 Sitemap: https://suivi.anelecgroupe.com/sitemap.xml
+# LLMs: https://suivi.anelecgroupe.com/llms.txt
+# LLMs-Full: https://suivi.anelecgroupe.com/llms-full.txt
