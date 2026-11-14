@@ -189,16 +189,24 @@ export async function envoyerAuClient(p: {
   }
 
   const dateRelanceAuto = new Date(maintenant.getTime() + 3 * JOUR_MS);
-  const echeanceAuto = new Date(maintenant.getTime() + (devis.validiteJours || 30) * JOUR_MS);
+  const validiteMs = (devis.validiteJours || 30) * JOUR_MS;
+  const echeanceAuto = new Date(maintenant.getTime() + validiteMs);
+  const echeanceCreationDefaut = devis.dateCreated ? new Date(new Date(devis.dateCreated).getTime() + 7 * JOUR_MS) : null;
+  const etaitEcheanceDefaut =
+    !!devis.echeance &&
+    !!echeanceCreationDefaut &&
+    Math.abs(new Date(devis.echeance).getTime() - echeanceCreationDefaut.getTime()) < 3 * 3600_000;
+  const prochaineEcheance = !devis.echeance || etaitEcheanceDefaut ? echeanceAuto : devis.echeance;
   await db.devis.update({
     where: { id: devis.id },
     data: {
       statutCommercial: 'Envoyé au client',
+      traitement: 'En attente client',
       dateEnvoi: maintenant,
       envoiClientLe: maintenant,
       dateRelance: dateRelanceAuto,
-      echeance: devis.echeance || echeanceAuto,
-      dateLimite: devis.dateLimite || devis.echeance || echeanceAuto,
+      echeance: prochaineEcheance,
+      dateLimite: devis.dateLimite && !etaitEcheanceDefaut ? devis.dateLimite : prochaineEcheance,
       relanceClientJ3Le: null,
       relanceClientJ7Le: null,
       prochaineAction: 'Attendre la réponse du client',

@@ -152,6 +152,12 @@ test('ENVOI : PDF requis, confirmation requise, adresses issues de la fiche clie
   assert.equal(mails[1].to, 'travaux@atlas.fr');
   assert.equal(row('devis', 1).statutCommercial, 'Envoyé au client');
   assert.ok(row('devis', 1).envoiClientLe);
+  assert.ok(row('devis', 1).dateEnvoi);
+  assert.ok(row('devis', 1).dateRelance);
+  assert.equal(row('devis', 1).traitement, 'En attente client');
+  assert.equal(ok.json.data.statutCommercial, 'Envoyé au client');
+  assert.ok(ok.json.data.dateEnvoi);
+  assert.ok(ok.json.data.dateRelance);
   assert.match(row('devis', 1).historiqueJson, /envoyé au client par lien sécurisé/);
   // Le jeton n'est jamais stocké en clair
   assert.ok(!JSON.stringify(db.devisLienClient.rows).includes(jetonDe(mails[1].lien)));

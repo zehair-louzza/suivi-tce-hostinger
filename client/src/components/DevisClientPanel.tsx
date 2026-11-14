@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Send, Upload, Eye, Mail, Clock, CheckCircle2, XCircle, MessageSquareWarning, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { devisApi } from '../lib/api';
+import { devisApi, Devis } from '../lib/api';
 import { Btn, Pill } from './ui';
 
 function lireFichier(f: File): Promise<string> {
@@ -30,9 +30,10 @@ type Props = {
   /** Ouvre la fenêtre d'envoi (le bouton du pied de tiroir la déclenche) */
   envoiOuvert: boolean;
   onEnvoiOuvert: (ouvert: boolean) => void;
+  onDevisUpdated?: (devis: Partial<Devis>) => void;
 };
 
-export function DevisClientPanel({ devisId, statutCommercial, canManage, envoiOuvert, onEnvoiOuvert }: Props) {
+export function DevisClientPanel({ devisId, statutCommercial, canManage, envoiOuvert, onEnvoiOuvert, onDevisUpdated }: Props) {
   const queryClient = useQueryClient();
   const fichierRef = useRef<HTMLInputElement>(null);
   const [choix, setChoix] = useState<string[]>([]);
@@ -68,8 +69,15 @@ export function DevisClientPanel({ devisId, statutCommercial, canManage, envoiOu
       return devisApi.uploadDocument(devisId, f.name, await lireFichier(f));
     },
     onSuccess: (res) => {
-      toast.success(res.data.lienRevoque ? 'PDF remplacé : le lien déjà envoyé est révoqué, renvoyez le devis.' : 'PDF du devis enregistré');
       rafraichir();
+      if (res.data.lienRevoque) {
+        toast.success('PDF remplacé : le lien précédent est révoqué, renvoyez le devis au client.');
+      } else if (!lien && !['Accepté', 'Annulé'].includes(String(statutCommercial || '')) && adresses.length > 0) {
+        toast.success('PDF enregistré — confirmez l’envoi au client');
+        onEnvoiOuvert(true);
+      } else {
+        toast.success('PDF enregistré — cliquez sur « Envoyer au client » pour passer automatiquement le statut à Envoyé et calculer la relance.');
+      }
     },
     onError: (err: any) => toast.error(err?.response?.data?.error || err?.message || 'Dépôt impossible'),
   });
@@ -77,7 +85,10 @@ export function DevisClientPanel({ devisId, statutCommercial, canManage, envoiOu
   const envoyer = useMutation({
     mutationFn: () => devisApi.envoyerClient(devisId, { confirme: true, emails: choix }),
     onSuccess: (res) => {
-      toast.success(res.data.message || 'Devis envoyé au client');
+      if (res.data?.data) {
+        onDevisUpdated?.(res.data.data);
+      }
+      toast.success(res.data.message || 'Devis envoyé au client — date d’envoi et relance J+3 renseignées');
       onEnvoiOuvert(false);
       rafraichir();
     },

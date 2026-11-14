@@ -1768,6 +1768,11 @@ export function DashboardPage() {
                       value={selectedDevis.dateEnvoi ? selectedDevis.dateEnvoi.slice(0, 10) : ''}
                       onChange={(e) => updateDevisDraft({ dateEnvoi: e.target.value || null })}
                     />
+                    {!selectedDevis.dateEnvoi && (
+                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: 3 }}>
+                        Remplie automatiquement lors de l’envoi du PDF au client
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Validité (jours)</label>
@@ -1816,9 +1821,25 @@ export function DashboardPage() {
                         canManage={canUserCreateDevis(user)}
                         envoiOuvert={envoiDevisOuvert}
                         onEnvoiOuvert={setEnvoiDevisOuvert}
+                        onDevisUpdated={(updated) =>
+                          setSelectedDevis((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur))
+                        }
                       />
                     </div>
-                  ) : null}
+                  ) : (
+                    <div
+                      style={{
+                        gridColumn: '1 / -1',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px dashed var(--border-subtle)',
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      📄 Enregistrez d’abord le devis (« Créer le Devis ») pour déposer le PDF et l’envoyer au client : la date d’envoi, le statut « Envoyé au client » et la relance J+3 seront renseignés automatiquement.
+                    </div>
+                  )}
 
                   {Boolean(selectedDevis.id && (selectedDevis.interventionsCount || 0) > 0) && (
                     <div
