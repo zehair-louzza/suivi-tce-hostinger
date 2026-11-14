@@ -169,3 +169,19 @@ test('Intervention : motif de blocage => « Suspendue » / « Bloqué » ; numé
   assert.equal(closed.statutRapport, 'Validé');
   assert.equal(closed.statutFacture, 'Facturée');
 });
+
+test('Devis : échéance brouillon J+7 est remplacée par validité (J+30) lors du passage à Envoyé au client', () => {
+  const today = getTodayParisISO();
+  const draft = applyDevisAutomations({
+    client: 'Syndic Beta',
+    statutCommercial: 'À préparer',
+    validiteJours: 30,
+    dateCreated: today,
+  });
+  assert.equal(draft.echeance, addDaysISO(today, 7));
+
+  const sent = applyDevisAutomations({ ...draft, statutCommercial: 'Envoyé au client' }, draft);
+  assert.equal(sent.dateEnvoi, today);
+  assert.equal(sent.dateRelance, addDaysISO(today, 3));
+  assert.equal(sent.echeance, addDaysISO(today, 30));
+});

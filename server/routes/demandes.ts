@@ -13,6 +13,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
 import { nextCompanyRef } from '../lib/companySeq.js';
 import { socketEvents } from '../socket/index.js';
+import { applyDevisAutomations, applyInterventionAutomations } from '../../shared/types.js';
 
 export const demandesRouter = secureRouter('demandes');
 
@@ -249,6 +250,16 @@ demandesRouter.post(
     let libelle = '';
 
     if (decision === 'DEVIS') {
+      const autoDevis = applyDevisAutomations<Record<string, any>>({
+        statutCommercial: 'À préparer',
+        traitement: 'À traiter',
+        prochaineAction: 'Chiffrer',
+        amount: 0,
+        validiteJours: 30,
+        dateCreated: new Date(),
+        dateDemande: demande.dateReception,
+        echeance: demande.echeanceSouhaitee || undefined,
+      });
       const devis = await prisma.devis.create({
         data: {
           client: demande.client,
@@ -259,13 +270,14 @@ demandesRouter.post(
           numeroDI: demande.numeroDI || demande.referenceInterne,
           origine: demande.canalReception || 'Client',
           priorite: demande.priorite,
-          statutCommercial: 'À préparer',
-          traitement: 'À traiter',
-          prochaineAction: 'Chiffrer',
+          statutCommercial: autoDevis.statutCommercial,
+          traitement: autoDevis.traitement,
+          prochaineAction: autoDevis.prochaineAction,
           amount: 0,
-          validiteJours: 30,
+          validiteJours: autoDevis.validiteJours,
           dateCreated: new Date(),
           dateDemande: demande.dateReception,
+          echeance: parseDateOrNull(autoDevis.echeance),
           notes: demande.notes,
           historiqueJson: addEvent(null, auteur, 'Devis créé depuis la demande', demande.numeroDI || demande.referenceInterne || ''),
           userId,
@@ -279,6 +291,13 @@ demandesRouter.post(
       libelle = `Devis ${ref}`;
     } else {
       const isVisite = decision === 'VISITE';
+      const autoIntv = applyInterventionAutomations<Record<string, any>>({
+        dateDemande: demande.dateReception,
+        echeance: demande.echeanceSouhaitee || undefined,
+        priorite: demande.priorite,
+        statutOperationnel: 'À planifier',
+        statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
+      });
       const intervention = await prisma.intervention.create({
         data: {
           client: demande.client,
@@ -291,13 +310,15 @@ demandesRouter.post(
           priorite: demande.priorite,
           typeIntervention: isVisite ? 'Visite technique devis' : 'Corrective',
           isVisiteDevis: isVisite,
-          modePlanification: 'Planifiée',
-          statutOperationnel: 'À planifier',
+          modePlanification: autoIntv.modePlanification,
+          statutOperationnel: autoIntv.statutOperationnel,
           traitement: 'À traiter',
-          statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
+          statutFacture: isVisite ? 'Non facturable' : (autoIntv.statutFacture || 'Non facturée'),
+          statutRapport: 'En attente',
           amount: 0,
           datePlanifiee: new Date(),
           dateDemande: demande.dateReception,
+          dateEcheance: parseDateOrNull(autoIntv.echeance),
           notes: demande.notes,
           historiqueJson: addEvent(
             null,

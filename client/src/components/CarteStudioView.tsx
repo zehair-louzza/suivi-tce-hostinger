@@ -539,7 +539,7 @@ export function CarteStudioView({
               const ownPending = pendingInterventions.filter((i) => i.entreprise === tName);
               const ownCompleted = completedInterventions.filter((i) => i.entreprise === tName);
               const total = ownPending.length + ownCompleted.length;
-              const pct = total > 0 ? Math.round((ownCompleted.length / total) * 100) : 100;
+              const pct = total > 0 ? Math.round((ownCompleted.length / total) * 100) : 0;
               const next = ownPending[0];
               const isSelected = tech === tName;
 
@@ -576,7 +576,7 @@ export function CarteStudioView({
                         {tName}
                       </strong>
                       <span className="m-mono m-small" style={{ color: 'var(--muted)' }}>
-                        {ownCompleted.length}/{total || 1} · {pct} %
+                        {total > 0 ? `${ownCompleted.length}/${total} · ${pct} %` : '0/0 · Aucune'}
                       </span>
                     </div>
                     <Progress value={pct} />
@@ -593,10 +593,12 @@ export function CarteStudioView({
                         <>
                           <Navigation size={12} /> {next.client || 'Client'} · {next.heureDebut || '10:00'}
                         </>
-                      ) : (
+                      ) : total > 0 ? (
                         <>
                           <CheckCircle2 size={12} style={{ color: 'var(--ok)' }} /> Tournée terminée
                         </>
+                      ) : (
+                        <>Aucune intervention assignée</>
                       )}
                     </span>
                   </div>

@@ -33,6 +33,7 @@ import {
   GpsPositionPayload,
   getEffectivePermissions,
   applyDevisAutomations,
+  applyInterventionAutomations,
 } from '../../shared/types.js';
 
 export const devisRouter = secureRouter('devis');
@@ -941,6 +942,17 @@ devisRouter.post(
     const heureDebut = b.heureDebut || devis.visiteHeureDebut || '08:30';
     const heureFin = b.heureFin || devis.visiteHeureFin || '11:30';
 
+    const autoConv = applyInterventionAutomations<Record<string, any>>({
+      dateDemande: new Date(),
+      datePlanifiee: b.datePlanifiee ? datePlan : null,
+      priorite: b.priorite || devis.priorite || 'Normale',
+      statutOperationnel: b.datePlanifiee ? (technicien ? 'Planifiée' : 'À planifier') : 'À planifier',
+      entreprise: technicien || '',
+      technicien: technicien || '',
+      heureDebut,
+      heureFin,
+      statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
+    });
     const ouvreAttente = technicien && (await reglagesSociete(companyId)).actif && (await comptesTechnicien(companyId, String(technicien))).length > 0;
     const intervention = await prisma.intervention.create({
       data: {
@@ -956,20 +968,24 @@ devisRouter.post(
           : devis.objet || `Travaux suite au devis ${refDevis}`,
         origine: devis.origine || 'Devis client',
         typeIntervention: isVisite ? 'Visite technique devis' : b.typeIntervention || 'Travaux complémentaires',
-        modePlanification: b.datePlanifiee ? 'Planifiée' : 'Non planifiée',
+        modePlanification: autoConv.modePlanification,
         corpsEtat: devis.corpsEtat || 'Tous corps d’état',
         priorite: b.priorite || devis.priorite || 'Normale',
-        dateDemande: new Date(),
+        dateDemande: parseDateOrNull(autoConv.dateDemande) || new Date(),
         datePlanifiee: datePlan,
-        statutOperationnel: b.datePlanifiee ? (technicien ? 'Planifiée' : 'À planifier') : 'À planifier',
+        dateEcheance: parseDateOrNull(autoConv.echeance),
+        statutOperationnel: autoConv.statutOperationnel,
         traitement: 'À traiter',
         status: 'A_TRAITER',
+        statutFacture: isVisite ? 'Non facturable' : (autoConv.statutFacture || 'Non facturée'),
+        statutRapport: 'En attente',
         entreprise: technicien,
         technicien,
-        heureDebut,
-        heureFin,
+        heureDebut: autoConv.heureDebut || heureDebut,
+        heureFin: autoConv.heureFin || heureFin,
         isVisiteDevis: isVisite,
         amount: isVisite ? 0 : devis.amount || 0,
+        tauxTVA: isVisite ? null : (devis.tauxTVA ?? null),
         notes: b.notes || devis.notes || null,
         origineDevisId: devis.id,
         origineDevisClient: devis.client,

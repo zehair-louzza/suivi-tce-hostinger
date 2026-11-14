@@ -235,8 +235,13 @@ export const CASE_LABEL: Record<DossierCase, string> = {
   'devis-seul': 'Devis en préparation',
 };
 
-export function isDevisSuiteIntervention(d?: Devis | null): boolean {
-  return Boolean(d) && (low(d!.origine) === 'intervention' || Boolean((d!.refInterventionTexte || '').trim()));
+export function isDevisSuiteIntervention(d?: Devis | null, dossier?: Dossier): boolean {
+  if (!d) return false;
+  if (low(d.origine) === 'intervention') return true;
+  if (!dossier) return false;
+  const allIntvs = [...dossier.travaux, ...dossier.visites];
+  const cameFromDevis = allIntvs.some((i) => i.origineDevisId === d.id || i.devisId === d.id);
+  return !cameFromDevis && Boolean((d.refInterventionTexte || '').trim());
 }
 
 /** Retrouve le dossier (devis + interventions) auquel appartient une fiche. */
@@ -264,11 +269,11 @@ export function findDossier(
 
 export function dossierCase(kind: 'devis' | 'intervention', dossier?: Dossier): DossierCase {
   if (kind === 'devis') {
-    if (isDevisSuiteIntervention(dossier?.devis)) return 'devis-suite-intervention';
+    if (isDevisSuiteIntervention(dossier?.devis, dossier)) return 'devis-suite-intervention';
     return dossier && dossier.travaux.length + dossier.visites.length > 0 ? 'sur-devis' : 'devis-seul';
   }
   if (!dossier?.devis) return 'directe';
-  return isDevisSuiteIntervention(dossier.devis) ? 'devis-suite-intervention' : 'sur-devis';
+  return isDevisSuiteIntervention(dossier.devis, dossier) ? 'devis-suite-intervention' : 'sur-devis';
 }
 
 /**

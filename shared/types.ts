@@ -802,6 +802,8 @@ export function applyDevisAutomations<T extends Record<string, any>>(next: T, pr
     statut = 'À valider en interne';
   }
 
+  const defaultPrepDeadline = addDaysISO(dateCreated, 7);
+
   // 2. Date d'envoi saisie ou modifiée => passe en "Envoyé au client" + calcule J+3 relance & échéance
   if (dateEnvoi && dateEnvoi !== prevEnvoi) {
     if (['À préparer', 'À valider en interne'].includes(statut)) {
@@ -810,7 +812,7 @@ export function applyDevisAutomations<T extends Record<string, any>>(next: T, pr
     if (!dateRelance || dateRelance === prevRelance) {
       dateRelance = addDaysISO(dateEnvoi, 3);
     }
-    if (!echeance || echeance === prevEcheance) {
+    if (!echeance || echeance === prevEcheance || echeance === defaultPrepDeadline) {
       echeance = addDaysISO(dateEnvoi, validite);
     }
   }
@@ -819,7 +821,7 @@ export function applyDevisAutomations<T extends Record<string, any>>(next: T, pr
   if (statut === 'Envoyé au client' && prevStatut !== 'Envoyé au client') {
     if (!dateEnvoi) dateEnvoi = today;
     if (!dateRelance) dateRelance = addDaysISO(dateEnvoi, 3);
-    if (!echeance) echeance = addDaysISO(dateEnvoi, validite);
+    if (!echeance || echeance === defaultPrepDeadline) echeance = addDaysISO(dateEnvoi, validite);
   }
 
   // 4. Recalcul échéance si validité modifiée alors que dateEnvoi est présente
