@@ -295,14 +295,33 @@ export const devisApi = {
       { nomFichier, contenuBase64 },
       { timeout: 60000 }
     ),
-  downloadDocument: (id: number) => api.get<Blob>(`/devis/${id}/document`, { responseType: 'blob', timeout: 60000 }),
+  downloadDocument: (id: number, origine?: 'GENERE' | 'DEPOSE') =>
+    api.get<Blob>(`/devis/${id}/document`, { params: origine ? { origine } : undefined, responseType: 'blob', timeout: 60000 }),
+  apercu: (id: number, payload?: { inclureVisite?: boolean; toutesPhotos?: boolean; photoIds?: string[] }) =>
+    api.post<Blob>(`/devis/${id}/apercu`, payload || {}, { responseType: 'blob', timeout: 60000 }),
+  miniatureVisite: (id: number, photoId: string) =>
+    api.get<Blob>(`/devis/${id}/visite-photos/${encodeURIComponent(photoId)}`, { responseType: 'blob', timeout: 60000 }),
   envoiClient: (id: number) => api.get<{ data: DevisEnvoiClient }>(`/devis/${id}/envoi-client`),
-  envoyerClient: (id: number, payload: { confirme: boolean; emails?: string[] }) =>
-    api.post<{ data: Devis; envoyes: string[]; echecs: string[]; message: string }>(`/devis/${id}/envoyer-client`, payload),
+  envoyerClient: (
+    id: number,
+    payload: {
+      confirme: boolean;
+      source?: 'GENERE' | 'DEPOSE';
+      inclureVisite?: boolean;
+      toutesPhotos?: boolean;
+      photoIds?: string[];
+      emails?: string[];
+    }
+  ) => api.post<{ data: Devis; envoyes: string[]; echecs: string[]; message: string }>(`/devis/${id}/envoyer-client`, payload, { timeout: 60000 }),
 };
 
 export interface DevisEnvoiClient {
   reference: string;
+  autoPdfDisponible?: boolean;
+  hasVisiteRapport?: boolean;
+  visiteCompteRendu?: string | null;
+  photos?: Array<{ id: string; caption?: string | null; category?: string | null }>;
+  nbPhotosTotal?: number;
   document: { id: number; nomFichier: string; taille: number; deposeLe: string; deposePar: string | null } | null;
   ficheTrouvee: boolean;
   adresses: Array<{ email: string; libelle: string; suggeree: boolean }>;

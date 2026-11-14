@@ -16,6 +16,7 @@ import {
   validerReponseClient,
   verifierJeton,
 } from '../server/domain/devisClient.js';
+import { genererPdfDevis } from '../server/services/devisPdf.js';
 
 // Novembre 2026 : heure d'hiver (Paris = UTC+1). Lundi 16 nov. 2026.
 const paris = (jour: number, h: number, m = 0) => new Date(Date.UTC(2026, 10, jour, h - 1, m));
@@ -143,4 +144,36 @@ test('contenu du devis : seul ce que le client voit révoque le lien (pas les no
   assert.equal(contenuDevisModifie(avant, { ...avant, montantHt: 6100 }), true);
   assert.equal(contenuDevisModifie(avant, { ...avant, objet: ' Rénovation  lourde ' }), true);
   assert.equal(contenuDevisModifie(avant, { ...avant, objet: ' Rénovation ' }), false, 'espaces ignorés');
+});
+
+test('PDF du devis : génération automatique avec chiffrage, rapport de visite technique et photo', async () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const pdf = await genererPdfDevis({
+    societe: 'ANELEC GROUPE',
+    contenu: {
+      reference: 'DEV-2026-009',
+      numeroDI: 'DI-900',
+      client: 'Groupe Atlas',
+      site: '3 rue de la Paix',
+      objet: 'Remplacement tableau général basse tension.',
+      corpsEtat: 'Électricité',
+      responsable: 'Admin',
+      dateEmission: '2026-11-14',
+      validiteJours: 30,
+      echeance: '2026-12-14',
+      montantHt: 2500,
+      tauxTVA: 20,
+      montantTtc: 3000,
+      notes: 'Délai 5 jours ouvrés.',
+      visite: {
+        technicien: 'Karim',
+        dateVisite: '2026-11-12',
+        statut: 'Terminée',
+        comptesRendus: ['Relève des cotes et repérage des départs validé.'],
+      },
+    },
+    photos: [{ id: 'v1', caption: 'Tableau existant', category: 'AVANT', octets: Buffer.from(PNG, 'base64'), type: 'png' }],
+  });
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
+  assert.equal(validerPdf('devis-DEV-2026-009.pdf', pdf.toString('base64')).ok, true);
 });

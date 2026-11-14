@@ -119,9 +119,9 @@ test('DÉPÔT PDF : réservé au chiffrage et à la direction ; seul un vrai PDF
 test('ENVOI : PDF requis, confirmation requise, adresses issues de la fiche client, choix demandé s\'il y en a plusieurs', async () => {
   assert.equal((await call(PLANIF, 'POST', '/api/devis/1/envoyer-client', { confirme: true })).status, 403);
   assert.equal((await call(ADMIN2, 'POST', '/api/devis/1/envoyer-client', { confirme: true })).status, 404);
-  const sansPdf = await call(CHIFFRAGE, 'POST', '/api/devis/4/envoyer-client', { confirme: true, emails: ['travaux@atlas.fr'] });
-  assert.equal(sansPdf.status, 422);
-  assert.equal(sansPdf.json.code, 'DOCUMENT_REQUIS');
+  const sansPdfDepose = await call(CHIFFRAGE, 'POST', '/api/devis/4/envoyer-client', { confirme: true, source: 'DEPOSE', emails: ['travaux@atlas.fr'] });
+  assert.equal(sansPdfDepose.status, 422);
+  assert.equal(sansPdfDepose.json.code, 'DOCUMENT_REQUIS');
   assert.equal((await call(CHIFFRAGE, 'POST', '/api/devis/1/envoyer-client', { emails: ['travaux@atlas.fr'] })).status, 400, 'confirmation requise');
 
   const suivi = await call(CHIFFRAGE, 'GET', '/api/devis/1/envoi-client');
@@ -212,8 +212,20 @@ test('RÉPONSE : acceptation à usage unique, statut du devis, planificateur pr�
 });
 
 test('REFUS et MODIFICATION : motif obligatoire, statuts « Refusé » et « En négociation »', async () => {
-  await deposer(CHIFFRAGE, 4);
-  await call(CHIFFRAGE, 'POST', '/api/devis/4/envoyer-client', { confirme: true, emails: ['compta@atlas.fr'] });
+  // Envoi direct sans aucun PDF externe déposé : l'application génère automatiquement le PDF du devis (source=GENERE par défaut)
+  const apercu = await fetch(`${base}/api/devis/4/apercu`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens[CHIFFRAGE]}` },
+    body: JSON.stringify({ inclureVisite: true }),
+  });
+  assert.equal(apercu.status, 200);
+  assert.equal(Buffer.from(await apercu.arrayBuffer()).subarray(0, 5).toString('latin1'), '%PDF-');
+
+  const autoEnvoye = await call(CHIFFRAGE, 'POST', '/api/devis/4/envoyer-client', { confirme: true, emails: ['compta@atlas.fr'] });
+  assert.equal(autoEnvoye.status, 200);
+  const dlAuto = await fetch(`${base}/api/devis/4/document?origine=GENERE`, { headers: { authorization: `Bearer ${tokens[CHIFFRAGE]}` } });
+  assert.equal(dlAuto.status, 200);
+  assert.equal(Buffer.from(await dlAuto.arrayBuffer()).subarray(0, 5).toString('latin1'), '%PDF-');
   const j4 = jetonDe(mails[mails.length - 1].lien);
   assert.equal((await call(null, 'POST', `/api/public/devis/${j4}/reponse`, { reponse: 'REFUSEE', nom: 'Durand' })).status, 400, 'motif requis');
   assert.equal((await call(null, 'POST', `/api/public/devis/${j4}/reponse`, { reponse: 'REFUSEE', nom: 'Durand', motif: 'Budget gelé' })).status, 200);

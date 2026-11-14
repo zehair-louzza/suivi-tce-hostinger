@@ -12,6 +12,10 @@ import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { APP_URL, sendDevisClientLinkEmail } from './emailService.js';
 import { notifier, ajouterHistorique } from './technicianAutomation.js';
+import { parsePhotosJson } from '../lib/terrainPhotos.js';
+import { genererPdfDevis, type ContenuDevisPdf } from './devisPdf.js';
+import type { PhotoPdf } from './pdfLayout.js';
+import { choisirPhotos, photosTransmissibles, type PhotoTransmissible } from '../domain/rapportClient.js';
 import {
   DUREE_LIEN_JOURS,
   adressesDepuisFiche,
@@ -82,13 +86,118 @@ export async function liensDuDevis(companyId: number, devisId: number): Promise<
   return liens.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function dernierDocument(companyId: number, devisId: number): Promise<{ id: number; nomFichier: string; taille: number; createdAt: Date; deposePar: string | null } | null> {
+const estAutoGenere = (deposePar: unknown): boolean => String(deposePar || '').startsWith('AUTO:');
+
+export async function dernierDocument(
+  companyId: number,
+  devisId: number,
+  origine?: 'GENERE' | 'DEPOSE'
+): Promise<{ id: number; nomFichier: string; taille: number; createdAt: Date; deposePar: string | null } | null> {
   const docs: any[] = await db.devisDocument.findMany({
     where: { companyId, devisId },
     select: { id: true, nomFichier: true, taille: true, createdAt: true, deposePar: true },
   });
-  docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id - a.id);
-  return docs[0] || null;
+  const filtres =
+    origine === 'GENERE'
+      ? docs.filter((d) => estAutoGenere(d.deposePar))
+      : origine === 'DEPOSE'
+      ? docs.filter((d) => !estAutoGenere(d.deposePar))
+      : docs;
+  filtres.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || b.id - a.id);
+  const doc = filtres[0] || null;
+  if (!doc) return null;
+  return {
+    ...doc,
+    deposePar: estAutoGenere(doc.deposePar) ? String(doc.deposePar).slice(5) || null : doc.deposePar,
+  };
+}
+
+export function visitePhotosDisponibles(devis: any): PhotoTransmissible[] {
+  return photosTransmissibles(parsePhotosJson(devis.visitePhotosJson));
+}
+
+export function octetsPhotoDevis(devis: any, photoId: string): { octets: Buffer; type: string } | null {
+  const p = parsePhotosJson(devis.visitePhotosJson).find((x: any) => x?.id === photoId);
+  const m = /^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i.exec(String(p?.url || ''));
+  if (!m) return null;
+  const t = m[1].toLowerCase();
+  return { octets: Buffer.from(m[2].replace(/\s/g, ''), 'base64'), type: t === 'jpg' ? 'jpeg' : t };
+}
+
+export function comptesRendusVisiteDevis(devis: any): string[] {
+  try {
+    const events = JSON.parse(devis.historiqueJson || '[]');
+    if (!Array.isArray(events)) return [];
+    return events
+      .filter((e: any) => e?.action === 'COMPTE_RENDU_VISITE' && typeof e?.detail === 'string' && e.detail.trim())
+      .map((e: any) => String(e.detail).trim());
+  } catch {
+    return [];
+  }
+}
+
+function jourDevisIso(v: unknown): string | null {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  return Number.isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10);
+}
+
+export async function fabriquerPdfDevisDoc(
+  companyId: number,
+  devis: any,
+  opts?: { inclureVisite?: boolean; photos?: { toutes?: unknown; ids?: unknown } }
+): Promise<Buffer> {
+  const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
+  const inclureVisite = opts?.inclureVisite !== false;
+  const dispo = visitePhotosDisponibles(devis);
+  let photosChoisies: PhotoTransmissible[] = [];
+  if (inclureVisite && dispo.length > 0) {
+    const demande =
+      opts?.photos && (opts.photos.toutes !== undefined || opts.photos.ids !== undefined)
+        ? opts.photos
+        : { toutes: true };
+    const choix = choisirPhotos(dispo, demande);
+    if (!choix.ok) throw new AppError(422, choix.message, 'PHOTO_INCONNUE');
+    photosChoisies = dispo.filter((x) => choix.ids.includes(x.id));
+  }
+  const photosPdf: PhotoPdf[] = [];
+  for (const ph of photosChoisies) {
+    const o = octetsPhotoDevis(devis, ph.id);
+    if (o) photosPdf.push({ id: ph.id, caption: ph.caption, category: ph.category, octets: o.octets, type: o.type });
+  }
+  const montantHt = devis.montantHt != null ? Number(devis.montantHt) : devis.amount != null ? Number(devis.amount) : null;
+  const taux = devis.tauxTVA != null ? Number(devis.tauxTVA) : null;
+  const comptesRendus = comptesRendusVisiteDevis(devis);
+  const contenu: ContenuDevisPdf = {
+    reference: referenceDevis(devis),
+    numeroDI: devis.numeroDI || null,
+    client: devis.client || null,
+    site: devis.siteAdresse || null,
+    objet: devis.objet || null,
+    corpsEtat: devis.corpsEtat || null,
+    responsable: devis.responsable || null,
+    statutCommercial: devis.statutCommercial || null,
+    dateEmission: jourDevisIso(devis.dateEnvoi || devis.dateCreated),
+    echeance: jourDevisIso(devis.echeance || devis.dateLimite),
+    validiteJours: devis.validiteJours ?? 30,
+    montantHt,
+    tauxTVA: taux,
+    montantTtc: montantHt != null && taux != null ? Math.round(montantHt * (1 + taux / 100) * 100) / 100 : null,
+    notes: devis.notes || devis.commentaires || null,
+    visite: inclureVisite
+      ? {
+          technicien: devis.visiteTechnicien || null,
+          dateVisite: jourDevisIso(devis.visiteDate),
+          statut: devis.visiteStatut || null,
+          comptesRendus,
+        }
+      : null,
+  };
+  return genererPdfDevis({
+    societe: company?.name || 'Votre prestataire',
+    contenu,
+    photos: photosPdf,
+  });
 }
 
 export async function revoquerLiensActifs(companyId: number, devisId: number, raison: string): Promise<number> {
@@ -137,17 +246,45 @@ export async function comptesParRoles(companyId: number, roles: string[], inclur
 export async function envoyerAuClient(p: {
   companyId: number;
   devis: any;
+  source?: 'GENERE' | 'DEPOSE';
+  inclureVisite?: boolean;
+  photos?: { toutes?: unknown; ids?: unknown };
   adresseChoisies: unknown;
   auteur: string;
   replyTo?: string;
 }): Promise<{ lien: any; envoyes: string[]; echecs: string[] }> {
   const { companyId, devis } = p;
-  const doc = await dernierDocument(companyId, devis.id);
-  if (!doc) throw new AppError(422, "Déposez d'abord le devis (PDF) avant de l'envoyer au client.", 'DOCUMENT_REQUIS');
-
+  const source: 'GENERE' | 'DEPOSE' = p.source === 'DEPOSE' ? 'DEPOSE' : 'GENERE';
   const { adresses } = await adressesPourDevis(companyId, devis.client);
   const choix = choisirDestinataires(adresses, p.adresseChoisies);
   if (!choix.ok) throw new AppError(422, choix.message, choix.code);
+
+  const ref = referenceDevis(devis);
+  let doc: { id: number } | null;
+  if (source === 'DEPOSE') {
+    doc = await dernierDocument(companyId, devis.id, 'DEPOSE');
+    if (!doc) {
+      throw new AppError(422, "Déposez d'abord le devis (PDF), ou laissez l'application générer le PDF automatiquement.", 'DOCUMENT_REQUIS');
+    }
+  } else {
+    const pdf = await fabriquerPdfDevisDoc(companyId, devis, {
+      inclureVisite: p.inclureVisite,
+      photos: p.photos,
+    });
+    const crypto = await import('node:crypto');
+    doc = await db.devisDocument.create({
+      data: {
+        companyId,
+        devisId: devis.id,
+        nomFichier: `devis-${ref}.pdf`,
+        taille: pdf.length,
+        sha256: crypto.createHash('sha256').update(pdf).digest('hex'),
+        contenu: pdf,
+        deposePar: `AUTO:${p.auteur}`,
+      },
+      select: { id: true },
+    });
+  }
 
   const maintenant = new Date();
   await revoquerLiensActifs(companyId, devis.id, 'Nouvel envoi');
@@ -155,7 +292,7 @@ export async function envoyerAuClient(p: {
     data: {
       companyId,
       devisId: devis.id,
-      documentId: doc.id,
+      documentId: doc!.id,
       sel: genererSel(),
       destinataires: JSON.stringify(choix.emails),
       expireLe: new Date(maintenant.getTime() + DUREE_LIEN_JOURS * JOUR_MS),

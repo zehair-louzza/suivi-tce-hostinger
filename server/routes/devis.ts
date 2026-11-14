@@ -17,8 +17,12 @@ import { parsePhotosJson, sanitizePhotosJson } from '../lib/terrainPhotos.js';
 import { sendDevisProposalEmail } from '../services/emailService.js';
 import {
   adressesPourDevis,
+  comptesRendusVisiteDevis,
   dernierDocument,
   envoyerAuClient,
+  fabriquerPdfDevisDoc,
+  octetsPhotoDevis,
+  visitePhotosDisponibles,
   etatLien,
   liensDuDevis,
   referenceDevis,
@@ -1191,7 +1195,8 @@ devisRouter.get(
   policy('devis.suiviClient'),
   asyncHandler(async (req: Request, res: Response) => {
     const { companyId, devis } = await devisPourDocument(req, false);
-    const meta = await dernierDocument(companyId, devis.id);
+    const origine = req.query.origine === 'GENERE' || req.query.origine === 'DEPOSE' ? (req.query.origine as 'GENERE' | 'DEPOSE') : undefined;
+    const meta = await dernierDocument(companyId, devis.id, origine);
     if (!meta) throw new AppError(404, 'Aucun PDF déposé pour ce devis', 'NOT_FOUND');
     const doc = await (prisma as any).devisDocument.findFirst({ where: { id: meta.id, companyId, devisId: devis.id } });
     if (!doc) throw new AppError(404, 'Aucun PDF déposé pour ce devis', 'NOT_FOUND');
@@ -1204,20 +1209,60 @@ devisRouter.get(
 );
 
 // Suivi : PDF déposé, adresses de la fiche client, état du lien, relances faites, réponse du client
+// Aperçu du PDF généré automatiquement pour le devis (+ visite technique si cochée)
+devisRouter.post(
+  '/:id/apercu',
+  policy('devis.document'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, false);
+    const pdf = await fabriquerPdfDevisDoc(companyId, devis, {
+      inclureVisite: req.body?.inclureVisite !== false,
+      photos: { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds },
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="apercu-devis.pdf"');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
+  })
+);
+
+// Miniature d'une photo de visite technique du devis
+devisRouter.get(
+  '/:id/visite-photos/:photoId',
+  policy('devis.suiviClient'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { devis } = await devisPourDocument(req, false);
+    const photo = octetsPhotoDevis(devis, String(req.params.photoId || ''));
+    if (!photo) throw new AppError(404, 'Photo introuvable', 'NOT_FOUND');
+    res.setHeader('Content-Type', `image/${photo.type}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(photo.octets);
+  })
+);
+
 devisRouter.get(
   '/:id/envoi-client',
   policy('devis.suiviClient'),
   asyncHandler(async (req: Request, res: Response) => {
     const { companyId, devis } = await devisPourDocument(req, false);
     const [document, adr, liens] = await Promise.all([
-      dernierDocument(companyId, devis.id),
+      dernierDocument(companyId, devis.id, 'DEPOSE'),
       adressesPourDevis(companyId, devis.client),
       liensDuDevis(companyId, devis.id),
     ]);
     const dernier = liens[0] || null;
+    const photosVisite = visitePhotosDisponibles(devis);
+    const comptesRendus = comptesRendusVisiteDevis(devis);
     res.json({
       data: {
         reference: referenceDevis(devis),
+        autoPdfDisponible: true,
+        hasVisiteRapport: Boolean(devis.visiteNecessaire || comptesRendus.length > 0 || photosVisite.length > 0),
+        visiteCompteRendu: comptesRendus[comptesRendus.length - 1] || null,
+        photos: photosVisite.map((p) => ({ id: p.id, caption: p.caption, category: p.category })),
+        nbPhotosTotal: (() => { try { const a = JSON.parse(devis.visitePhotosJson || '[]'); return Array.isArray(a) ? a.length : 0; } catch { return 0; } })(),
         document: document
           ? { id: document.id, nomFichier: document.nomFichier, taille: document.taille, deposeLe: document.createdAt, deposePar: document.deposePar }
           : null,
@@ -1256,9 +1301,13 @@ devisRouter.post(
       throw new AppError(409, `Un devis « ${devis.statutCommercial} » ne peut plus être envoyé.`, 'STATUT_INVALIDE');
     }
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const source = req.body?.source === 'DEPOSE' ? 'DEPOSE' : 'GENERE';
     const r = await envoyerAuClient({
       companyId,
       devis,
+      source,
+      inclureVisite: req.body?.inclureVisite !== false,
+      photos: { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds },
       adresseChoisies: req.body?.emails,
       auteur,
       replyTo: req.user?.email,

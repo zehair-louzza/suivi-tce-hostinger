@@ -1824,6 +1824,15 @@ export function DashboardPage() {
                         onDevisUpdated={(updated) =>
                           setSelectedDevis((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur))
                         }
+                        onBeforeAction={async () => {
+                          if (!selectedDevis?.id) return;
+                          const auto = applyDevisAutomations(selectedDevis);
+                          const payload = {
+                            ...auto,
+                            tauxTVA: auto.tauxTVA ?? tvaParDefaut(auto.client, clientProfiles),
+                          };
+                          await updateDevisMut.mutateAsync({ id: selectedDevis.id, data: payload });
+                        }}
                       />
                     </div>
                   ) : (
@@ -1837,7 +1846,7 @@ export function DashboardPage() {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      📄 Enregistrez d’abord le devis (« Créer le Devis ») pour déposer le PDF et l’envoyer au client : la date d’envoi, le statut « Envoyé au client » et la relance J+3 seront renseignés automatiquement.
+                      📄 Enregistrez d’abord le devis (« Créer le Devis ») pour générer automatiquement son PDF (ou insérer un PDF externe) et l’envoyer au client : la date d’envoi, le statut « Envoyé au client » et la relance J+3 seront renseignés automatiquement.
                     </div>
                   )}
 
@@ -2580,7 +2589,21 @@ export function DashboardPage() {
                             padding: '6px 14px',
                             border: 'none',
                           }}
-                          onClick={() => {
+                          onClick={async () => {
+                            if (selectedIntv?.id) {
+                              try {
+                                const auto = applyInterventionAutomations(selectedIntv);
+                                const payload = {
+                                  ...auto,
+                                  modePlanification: auto.datePlanifiee ? 'Planifiée' : 'Non planifiée',
+                                  tauxTVA: auto.tauxTVA ?? tvaParDefaut(auto.client, clientProfiles),
+                                };
+                                await updateIntvMut.mutateAsync({ id: selectedIntv.id, data: payload });
+                                queryClient.invalidateQueries({ queryKey: ['rapport-envoi-client', selectedIntv.id] });
+                              } catch {
+                                /* en cas d'échec réseau, on ouvre tout de même la modale */
+                              }
+                            }
                             setReportEmailIntv(selectedIntv as Intervention);
                           }}
                         >
@@ -2911,6 +2934,10 @@ export function DashboardPage() {
               interventionId={reportEmailIntv.id}
               referenceMetier={reportEmailIntv.reference}
               canManage={canUserSendRapportClient(user)}
+              onInterventionUpdated={(updated) => {
+                setSelectedIntv((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur));
+                setReportEmailIntv((cur) => (cur && cur.id === updated.id ? { ...cur, ...updated } : cur));
+              }}
             />
           </div>
         </div>
