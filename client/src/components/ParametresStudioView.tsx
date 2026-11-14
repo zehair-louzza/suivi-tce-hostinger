@@ -28,6 +28,10 @@ interface ParametresStudioViewProps {
   technicienCompetences: Record<string, string[]>;
   onUpdateCompetences?: (nextMap: Record<string, string[]>) => Promise<any>;
   onAddCorpsEtat?: (val: string) => Promise<any>;
+  onUpdateCorpsEtat?: (nextList: string[]) => Promise<any>;
+  baremes?: { corps: string; ht: number; min: number; deplacement: number }[];
+  onUpdateBaremes?: (nextList: { corps: string; ht: number; min: number; deplacement: number }[]) => Promise<any>;
+  onGoAdminUsers?: () => void;
 }
 
 const DEFAULT_BAREMES = [
@@ -73,8 +77,16 @@ export function ParametresStudioView({
   corpsEtatList,
   technicienCompetences,
   onUpdateCompetences,
+  onUpdateCorpsEtat,
+  baremes,
+  onUpdateBaremes,
+  onGoAdminUsers,
 }: ParametresStudioViewProps) {
   const [activeTab, setActiveTab] = useState('competences');
+  const [newCorps, setNewCorps] = useState('');
+  const [editingBaremeCorps, setEditingBaremeCorps] = useState<string | null>(null);
+  const [baremeDraft, setBaremeDraft] = useState<{ ht: number; min: number; deplacement: number }>({ ht: 55, min: 1, deplacement: 35 });
+  const baremesList = baremes && baremes.length > 0 ? baremes : DEFAULT_BAREMES;
 
   const numbersRows = useMemo(() => {
     const toutes = [...referencesDevis, ...referencesInterventions].filter(Boolean);
@@ -92,7 +104,7 @@ export function ParametresStudioView({
   }, [techniciens, searchTech]);
 
   const handleToggleSkill = async (tech: string, trade: string) => {
-    const currentSkills = technicienCompetences[tech] || ['Électricité'];
+    const currentSkills = technicienCompetences[tech] || [];
     const exists = currentSkills.includes(trade);
     const nextSkills = exists
       ? currentSkills.filter((s) => s !== trade)
@@ -139,7 +151,10 @@ export function ParametresStudioView({
             <Btn
               size="sm"
               icon={Plus}
-              onClick={() => toast('Les collaborateurs se créent dans Administration · Utilisateurs')}
+              onClick={() => {
+                if (onGoAdminUsers) onGoAdminUsers();
+                else toast('Les collaborateurs se créent dans Administration · Utilisateurs');
+              }}
             >
               Ajouter un technicien
             </Btn>
@@ -167,7 +182,7 @@ export function ParametresStudioView({
               </thead>
               <tbody>
                 {filteredTechs.map((techName) => {
-                  const skills = technicienCompetences[techName] || ['Électricité'];
+                  const skills = technicienCompetences[techName] || [];
                   return (
                     <tr key={techName}>
                       <td>
@@ -236,42 +251,70 @@ export function ParametresStudioView({
                 key: 'ht',
                 label: 'Taux horaire HT',
                 align: 'right' as const,
-                render: (b: any) => <span className="m-mono">{eur(b.ht)} / h</span>,
+                render: (b: any) =>
+                  editingBaremeCorps === b.corps ? (
+                    <input
+                      type="number"
+                      className="input"
+                      style={{ width: 80, textAlign: 'right' }}
+                      value={baremeDraft.ht}
+                      onChange={(e) => setBaremeDraft((d) => ({ ...d, ht: Number(e.target.value) || 0 }))}
+                    />
+                  ) : (
+                    <span className="m-mono">{eur(b.ht)} / h</span>
+                  ),
               },
               {
                 key: 'min',
                 label: 'Durée minimum',
                 align: 'right' as const,
-                render: (b: any) => <span className="m-mono">{b.min} h</span>,
+                render: (b: any) =>
+                  editingBaremeCorps === b.corps ? (
+                    <input
+                      type="number"
+                      step="0.5"
+                      className="input"
+                      style={{ width: 70, textAlign: 'right' }}
+                      value={baremeDraft.min}
+                      onChange={(e) => setBaremeDraft((d) => ({ ...d, min: Number(e.target.value) || 0 }))}
+                    />
+                  ) : (
+                    <span className="m-mono">{b.min} h</span>
+                  ),
               },
               {
                 key: 'deplacement',
                 label: 'Forfait déplacement',
                 align: 'right' as const,
-                render: (b: any) => <span className="m-mono">{eur(b.deplacement)}</span>,
+                render: (b: any) =>
+                  editingBaremeCorps === b.corps ? (
+                    <input
+                      type="number"
+                      className="input"
+                      style={{ width: 80, textAlign: 'right' }}
+                      value={baremeDraft.deplacement}
+                      onChange={(e) => setBaremeDraft((d) => ({ ...d, deplacement: Number(e.target.value) || 0 }))}
+                    />
+                  ) : (
+                    <span className="m-mono">{eur(b.deplacement)}</span>
+                  ),
               },
               {
                 key: 'actions',
                 label: '',
                 width: 120,
                 align: 'right' as const,
-                render: (b: any) => (
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    icon={Edit3}
-                    onClick={() =>
-                      toast(
-                        `Barème indicatif. Le taux qui s’applique est celui de la fiche client (${b.corps}).`
-                      )
-                    }
-                  >
-                    Modifier
-                  </Btn>
+                render: (b: any) => editingBaremeCorps === b.corps ? (
+                  <div style={{ display: "inline-flex", gap: 6 }}>
+                    <Btn size="sm" variant="primary" icon={Check} onClick={async () => { const next = baremesList.map((item) => item.corps === b.corps ? { ...item, ...baremeDraft } : item); if (onUpdateBaremes) await onUpdateBaremes(next); setEditingBaremeCorps(null); toast.success("Barème enregistré"); }}>OK</Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => setEditingBaremeCorps(null)}>Annuler</Btn>
+                  </div>
+                ) : (
+                  <Btn size="sm" variant="ghost" icon={Edit3} onClick={() => { setEditingBaremeCorps(b.corps); setBaremeDraft({ ht: b.ht, min: b.min, deplacement: b.deplacement }); }}>Modifier</Btn>
                 ),
               },
             ]}
-            rows={DEFAULT_BAREMES}
+            rows={baremesList}
             rowKey={(b) => b.corps}
           />
         </Card>
@@ -280,13 +323,13 @@ export function ParametresStudioView({
       {/* ONGLET 3 : CORPS D’ÉTAT */}
       {activeTab === 'corps' && (
         <Card
-          title="Corps d’état ANELEC TCE"
+          title="Corps d’état"
           subtitle="Référentiel des spécialités mobilisées dans les devis, plannings et calculs de rentabilité."
           icon={Wrench}
           actions={
-            <Btn size="sm" icon={Plus} onClick={() => toast('Les corps d’état se gèrent dans Référentiels')}>
-              Ajouter
-            </Btn>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input className="input" placeholder="Nouveau corps d’état…" value={newCorps} onChange={(e) => setNewCorps(e.target.value)} style={{ width: 190 }} /><Btn size="sm" icon={Plus} onClick={async () => { const val = newCorps.trim(); if (!val) return; if (corpsEtatList.includes(val)) { toast('Ce corps d’état existe déjà'); return; } if (onUpdateCorpsEtat) await onUpdateCorpsEtat([...corpsEtatList, val]); setNewCorps(''); toast.success(`Corps d’état « ${val} » ajouté`); }}>Ajouter</Btn></div>
+
+
           }
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '6px 0' }}>
@@ -307,6 +350,25 @@ export function ParametresStudioView({
                 }}
               >
                 {c}
+                {onUpdateCorpsEtat && (
+                  <button
+                    type="button"
+                    aria-label={`Supprimer ${c}`}
+                    onClick={async () => {
+                      await onUpdateCorpsEtat(corpsEtatList.filter((x) => x !== c));
+                      toast.success(`Corps d’état « ${c} » retiré`);
+                    }}
+                    style={{
+                      all: 'unset',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      marginLeft: 2,
+                      opacity: 0.7,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ))}
           </div>

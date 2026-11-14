@@ -73,7 +73,7 @@ async function getCallerUser(req: Request) {
     const p = u.permissionsJson ? JSON.parse(u.permissionsJson) : null;
     if (p?.canManageUsers) hasAdminPerm = true;
   } catch {}
-  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' || u.role === 'ADMIN' ? 'ADMIN' : u.role;
+  const effectiveRole = u.id === 1 || u.role === 'ADMIN' ? 'ADMIN' : u.role;
   const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
   const isAdmin = u.id === 1 || effectiveRole === 'ADMIN' || hasAdminPerm;
   return { ...u, effectiveRole, isAdmin, perms };

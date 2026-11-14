@@ -328,7 +328,7 @@ export function FacturationStudioView({
             disabled={readyList.length === 0}
             onClick={handleBillAllReady}
           >
-            Émettre les factures ({readyList.length})
+            Marquer comme facturées ({readyList.length})
           </Btn>
         </>
       }

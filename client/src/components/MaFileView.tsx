@@ -243,8 +243,18 @@ export function MaFileView({
         id: 'dv',
         titre: 'À valider',
         genre: 'valider',
-        aide: 'Rapports terminés avant facturation.',
-        items: rapportsAValider.map((i) => intvItem(i, 'rapport à valider')),
+        aide: 'Devis à valider en interne, rapports terminés et réserves à lever.',
+        items: [
+          ...aValiderEnInterne.map((d) => devisItem(d, 'devis à valider en interne')),
+          ...rapportsAValider.map((i) => intvItem(i, 'rapport à valider')),
+          ...interventionsList
+            .filter(
+              (i) =>
+                i.statutRapport === 'Réserve / Finition à prévoir' &&
+                !['Clôturée', 'Annulée'].includes(String(i.statutOperationnel))
+            )
+            .map((i) => intvItem(i, 'réserve à lever')),
+        ],
       },
       {
         id: 'df',

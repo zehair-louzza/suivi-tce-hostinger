@@ -51,7 +51,7 @@ export interface DevisStudioViewProps {
   onDevisOuvert?: () => void;
 }
 
-const STATUSES = ['À préparer', 'À valider en interne', 'Envoyé au client', 'En négociation', 'Accepté', 'Expiré', 'Refusé'];
+const STATUSES = ['À préparer', 'À valider en interne', 'Envoyé au client', 'Accepté', 'Expiré', 'Refusé', 'Annulé'];
 
 /** Anciennes valeurs « Envoyé » / « Devis envoyé » : affichées comme « Envoyé au client ». */
 const statutNormalise = (s?: string | null) => (s === 'Envoyé' || s === 'Devis envoyé' ? 'Envoyé au client' : s || 'À préparer');
@@ -179,8 +179,8 @@ export function DevisStudioView({
       width: 140,
       render: (d: Devis) => (
         <span className="m-cell-user">
-          <Avatar name={d.responsable || 'Bureau'} size={22} />
-          <span>{d.responsable || 'Bureau'}</span>
+          <Avatar name={d.responsable || '—'} size={22} />
+          <span>{d.responsable || '—'}</span>
         </span>
       ),
     },
@@ -391,7 +391,7 @@ export function DevisStudioView({
                     <span className="m-small m-muted m-ellipsis">{d.objet}</span>
                     <div className="m-kcard-foot">
                       <span className="m-mono m-strong">{eur(Number(d.amount) || 0)}</span>
-                      <Avatar name={d.responsable || 'Bureau'} size={20} />
+                      <Avatar name={d.responsable || '—'} size={20} />
                     </div>
                   </button>
                 ))}
@@ -405,6 +405,7 @@ export function DevisStudioView({
       {/* Tiroir d'inspection latérale Atlas Clarity */}
       {selectedItem && (
         <Drawer
+          key={selectedItem.id}
           open={!!selectedItem}
           onClose={() => {
             setSelectedItem(null);
@@ -463,7 +464,7 @@ export function DevisStudioView({
             <div>
               <dt>Responsable</dt>
               <dd>
-                <User size={14} /> {selectedItem.responsable || 'Bureau'}
+                <User size={14} /> {selectedItem.responsable || '—'}
               </dd>
             </div>
             <div>
@@ -506,7 +507,7 @@ export function DevisStudioView({
           <ol className="m-timeline">
             <li>
               <time>{selectedItem.dateCreated || 'Récemment'}</time>
-              <span>Devis initié par {selectedItem.responsable || 'Bureau'}</span>
+              <span>Devis initié par {selectedItem.responsable || '—'}</span>
             </li>
             {selectedItem.visiteDate && (
               <li>

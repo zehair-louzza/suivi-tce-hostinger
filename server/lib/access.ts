@@ -54,7 +54,7 @@ const OWNER_EMAIL = 'louzza.zehair@gmail.com';
 export function accessFor(user: AccessUser | null | undefined, tokenRole?: string | null): Access {
   const baseRole = ((user?.role || tokenRole || '') as string).toUpperCase();
   // Même règle que le reste de l'application : le compte fondateur est administrateur de SA seule entreprise
-  const isOwner = user?.id === 1 || (user?.email || '').toLowerCase() === OWNER_EMAIL;
+  const isOwner = user?.id === 1;
   const role = isOwner ? 'ADMIN' : baseRole;
   // Rôle inconnu = aucun droit (refus par défaut). Avant, un rôle inconnu héritait des droits du planificateur.
   const perms = ROLE_DEFINITIONS[role] ? getEffectivePermissions(role, user?.permissionsJson) : { ...NO_PERMISSIONS };

@@ -4,6 +4,7 @@ import { normalizeDI, resolveInterventionDossier, pushDIToDevis, findDevisByDI }
 import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
+import { nextCompanyRef } from '../lib/companySeq.js';
 import { loadAccess } from '../lib/loadAccess.js';
 import { canReadIntervention, describeRefusal, limitInterventionBody, shapeIntervention } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -563,9 +564,9 @@ interventionRouter.post(
     await pushDIToDevis(dossier.devis, dossier.numeroDI);
 
     if (!created.referenceMetier) {
-      const autoRef = isVisiteDevis
-        ? `VIS-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}`
-        : `INT-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}`;
+      const autoRef = await nextCompanyRef(companyId, isVisiteDevis ? 'VIS' : 'INT');
+
+
       await prisma.intervention.update({
         where: { id: created.id },
         data: { referenceMetier: autoRef },

@@ -4,7 +4,7 @@ import {
   Intervention,
   EquipeJournaliere,
   DEFAULT_REFERENTIELS,
-  DEFAULT_TECHNICIEN_COMPETENCES,
+
   rankTechniciansForTrade,
   parseTimeIntervalInput,
   computeDurationHours,
@@ -728,7 +728,7 @@ export function PlanningBoard({
   const toggleTechSkill = async (tech: string, skill: string) => {
     const current = Array.isArray(technicienCompetences[tech])
       ? technicienCompetences[tech]
-      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+      : [];
     const exists = current.includes(skill);
     const nextSkills = exists ? current.filter((s) => s !== skill) : [...current, skill];
     const nextMap = { ...technicienCompetences, [tech]: nextSkills };
@@ -742,7 +742,7 @@ export function PlanningBoard({
     if (!val) return;
     const current = Array.isArray(technicienCompetences[tech])
       ? technicienCompetences[tech]
-      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+      : [];
     if (!current.includes(val)) {
       const nextMap = { ...technicienCompetences, [tech]: [...current, val] };
       if (onUpdateCompetences) {
@@ -1993,7 +1993,7 @@ export function PlanningBoard({
                   const teamSkills = Array.from(
                     new Set(
                       eq.membres.flatMap(
-                        (m) => technicienCompetences[m] || DEFAULT_TECHNICIEN_COMPETENCES[m] || []
+                        (m) => technicienCompetences[m] || []
                       )
                     )
                   );
@@ -2486,7 +2486,7 @@ export function PlanningBoard({
                                     }}
                                     title="Cliquez pour modifier les compétences de ce technicien"
                                   >
-                                    {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || []).length} comp.
+                                    {(technicienCompetences[tech] || []).length} comp.
                                   </span>
                                 </div>
 
@@ -2519,7 +2519,7 @@ export function PlanningBoard({
                                   }}
                                   title="Cliquez pour ajouter ou retirer des compétences métier"
                                 >
-                                  {(technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [meta.role]).map(
+                                  {(technicienCompetences[tech] || [meta.role]).map(
                                     (sk) => (
                                       <span
                                         key={sk}
@@ -3852,7 +3852,7 @@ export function PlanningBoard({
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
               {techniciens.map((tech) => {
                 const techSkills =
-                  technicienCompetences[tech] || DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+                  technicienCompetences[tech] || [];
                 const isSpecialist = techSkills.length === 1;
 
                 return (

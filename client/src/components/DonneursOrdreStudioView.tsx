@@ -72,6 +72,8 @@ export function DonneursOrdreStudioView({
   const [selectedClient, setSelectedClient] = useState<EnrichedClientProfile | null>(null);
   const [drawerTab, setDrawerTab] = useState('infos');
   const [isCreatingModal, setIsCreatingModal] = useState(false);
+  const [addingEmail, setAddingEmail] = useState(false);
+  const [extraEmail, setExtraEmail] = useState('');
 
   // New Client Form
   const [newName, setNewName] = useState('');
@@ -624,13 +626,49 @@ export function DonneursOrdreStudioView({
             <Btn
               icon={Plus}
               variant="ghost"
-              onClick={() => toast('Les destinataires se modifient sur la fiche du client')}
+              onClick={() => setAddingEmail((v) => !v)}
             >
               Ajouter un service / e-mail
             </Btn>
             <p className="m-small m-muted" style={{ margin: 0 }}>
-              Les rapports d’intervention validés sont envoyés automatiquement au bon service selon le type de document.
+              Ces adresses sont proposées lors de l’envoi d’un rapport d’intervention depuis la fiche intervention.
             </p>
+            {addingEmail && selectedClient && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="nouveau.service@client.fr"
+                  value={extraEmail}
+                  onChange={(e) => setExtraEmail(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    const mail = extraEmail.trim();
+                    if (!mail || !mail.includes('@')) {
+                      toast.error('Adresse e-mail invalide');
+                      return;
+                    }
+                    const prevServices = Array.isArray((selectedClient as any).servicesContacts) ? (selectedClient as any).servicesContacts : (selectedClient.emailsList || []).map((e) => ({ service: 'Principal', email: e, recoitDevis: true, recoitRapports: true }));
+                    const nextServices = [...prevServices, { service: 'Service client', email: mail, recoitDevis: true, recoitRapports: true }];
+                    const nextEmails = Array.from(new Set([...(selectedClient.emailsList || []), mail]));
+                    const nextProfiles = clientProfiles.map((cp) =>
+                      cp.nom === selectedClient.nom ? { ...cp, servicesContacts: nextServices } : cp
+                    );
+                    if (onUpdateProfiles) await onUpdateProfiles(nextProfiles);
+                    setSelectedClient({ ...selectedClient, servicesContacts: nextServices, emailsList: nextEmails } as any);
+                    setExtraEmail('');
+                    setAddingEmail(false);
+                    toast.success('Destinataire ajouté');
+                  }}
+                >
+                  Enregistrer
+                </Btn>
+              </div>
+            )}
           </div>
         )}
 

@@ -114,8 +114,8 @@ export function DemandesStudioView({
   }, [demandes, filtre, search]);
 
   const aDecider = demandes.filter((d) => d.statut === 'A_DECIDER');
-  const nbB2B = aDecider.filter((d) => !d.isB2C).length;
-  const nbB2C = aDecider.filter((d) => d.isB2C).length;
+  const nbB2B = visibles.filter((d) => !d.isB2C).length;
+  const nbB2C = visibles.filter((d) => d.isB2C).length;
   const enRetard = aDecider.filter((d) => (joursDepuis(d.dateReception) ?? 0) >= 2).length;
 
   return (

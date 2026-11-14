@@ -11,6 +11,8 @@ import type { Access } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
+import { nextCompanyRef } from '../lib/companySeq.js';
+import { socketEvents } from '../socket/index.js';
 
 export const demandesRouter = secureRouter('demandes');
 
@@ -270,7 +272,7 @@ demandesRouter.post(
           companyId,
         },
       });
-      const ref = `DEV-${annee}-${String(devis.id).padStart(3, '0')}`;
+      const ref = await nextCompanyRef(companyId, 'DEV', annee);
       await prisma.devis.update({ where: { id: devis.id }, data: { referenceMetier: ref } });
       await syncDevisDossier({ ...devis, referenceMetier: ref }, companyId);
       devisId = devis.id;
@@ -308,7 +310,7 @@ demandesRouter.post(
         },
       });
       const prefix = isVisite ? 'VIS' : 'INT';
-      const ref = `${prefix}-${annee}-${String(intervention.id).padStart(3, '0')}`;
+      const ref = await nextCompanyRef(companyId, isVisite ? 'VIS' : 'INT', annee);
       await prisma.intervention.update({ where: { id: intervention.id }, data: { referenceMetier: ref } });
       interventionId = intervention.id;
       libelle = `${isVisite ? 'Visite' : 'Intervention'} ${ref}`;
@@ -326,6 +328,7 @@ demandesRouter.post(
       },
     });
 
+    try { if (devisId) socketEvents.devisCreated(userId, companyId, { id: devisId }); else if (interventionId) socketEvents.interventionCreated(userId, companyId, { id: interventionId }); } catch {}
     res.status(201).json({ data: transform(updated), created: { decision, devisId, interventionId, libelle } });
   })
 );

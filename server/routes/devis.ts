@@ -1,6 +1,8 @@
 // Devis routes - Full 22 ANELEC columns + Auto-planning Visite Devis + Non-destructive linked interventions + History + PostgreSQL compatibility
 import { Request, Response } from 'express';
 import { normalizeDI, syncDevisDossier } from '../lib/dossierDI.js';
+import { nextCompanyRef } from '../lib/companySeq.js';
+import { comptesTechnicien, notifierAffectation, reglagesSociete } from '../services/technicianAutomation.js';
 import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
@@ -591,7 +593,7 @@ devisRouter.post(
     if (!created.referenceMetier) {
       await prisma.devis.update({
         where: { id: created.id },
-        data: { referenceMetier: `DEV-${new Date().getFullYear()}-${String(created.id).padStart(3, '0')}` },
+        data: { referenceMetier: await nextCompanyRef(companyId, 'DEV') },
       });
     }
 
@@ -899,9 +901,11 @@ devisRouter.post(
     const heureDebut = b.heureDebut || devis.visiteHeureDebut || '08:30';
     const heureFin = b.heureFin || devis.visiteHeureFin || '11:30';
 
+    const ouvreAttente = technicien && (await reglagesSociete(companyId)).actif && (await comptesTechnicien(companyId, String(technicien))).length > 0;
     const intervention = await prisma.intervention.create({
       data: {
-        referenceMetier: isVisite ? `VIS-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}` : null,
+        ...(ouvreAttente ? { reponseTechnicien: 'EN_ATTENTE', affecteLe: new Date() } : {}),
+        referenceMetier: isVisite ? await nextCompanyRef(companyId, 'VIS') : null,
         refDevisTexte: refDevis,
         numeroDI: devis.numeroDI || null,
         client: devis.client,
@@ -945,7 +949,7 @@ devisRouter.post(
     if (!intervention.referenceMetier) {
       await prisma.intervention.update({
         where: { id: intervention.id },
-        data: { referenceMetier: `INT-${new Date().getFullYear()}-${String(intervention.id).padStart(3, '0')}` },
+        data: { referenceMetier: await nextCompanyRef(companyId, 'INT') },
       });
     }
 
@@ -977,6 +981,10 @@ devisRouter.post(
       include: { interventions: true },
     });
 
+    await prisma.demande.updateMany({ where: { devisId, companyId, interventionId: null }, data: { interventionId: intervention.id } });
+    if (ouvreAttente) {
+      await notifierAffectation(companyId, intervention).catch((e) => console.error('Notification affectation :', e?.message));
+    }
     notify(() => socketEvents.devisUpdated(userId, companyId, transformDevis(updatedDevis)));
     notify(() => socketEvents.interventionCreated(userId, companyId, intervention));
 

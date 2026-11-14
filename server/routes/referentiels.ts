@@ -34,20 +34,17 @@ referentielsRouter.get(
       orderBy: { id: 'asc' },
     });
 
-    // Les listes « maison » ANELEC (clients, fiches donneurs d'ordre, équipe, compétences) ne servent
-    // de point de départ qu'à l'entreprise plateforme (id 1). Toute autre entreprise démarre vide :
-    // elle ne doit jamais voir les noms, contacts ou SIRET d'une autre société.
-    const isPlatform = companyId === 1;
+    // Chaque entreprise est traitée à égalité : aucune liste ANELEC codée en dur par companyId.
     const result: ReferentielsMap = {
-      clients: isPlatform ? [...DEFAULT_REFERENTIELS.clients] : [],
-      clients_fiches: isPlatform ? [...(DEFAULT_REFERENTIELS.clients_fiches || [])] : [],
+      clients: [],
+      clients_fiches: [],
       corps_etat: [...DEFAULT_REFERENTIELS.corps_etat],
       origines: [...DEFAULT_REFERENTIELS.origines],
-      responsables: isPlatform ? [...DEFAULT_REFERENTIELS.responsables] : [],
-      techniciens: isPlatform ? [...DEFAULT_REFERENTIELS.techniciens] : [],
+      responsables: [],
+      techniciens: [],
       motifs_blocage: [...DEFAULT_REFERENTIELS.motifs_blocage],
       resultats_techniques: [...DEFAULT_REFERENTIELS.resultats_techniques],
-      technicien_competences: isPlatform ? { ...DEFAULT_TECHNICIEN_COMPETENCES } : {},
+      technicien_competences: {},
       equipes_journalieres: [],
       positions_gps_techniciens: {},
     };
@@ -59,10 +56,7 @@ referentielsRouter.get(
         try {
           const parsed = JSON.parse(r.valeurs);
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            result.technicien_competences = {
-              ...(isPlatform ? DEFAULT_TECHNICIEN_COMPETENCES : {}),
-              ...parsed,
-            };
+            result.technicien_competences = { ...parsed };
           }
         } catch {
           // ignore invalid json
@@ -137,11 +131,36 @@ referentielsRouter.get(
       }
     }
 
+    // Synchroniser les comptes actifs de l'entreprise dans les listes techniciens et responsables
+    const companyUsers = await prisma.user.findMany({
+      where: { companyId, active: true },
+      select: { name: true, role: true, technicienNom: true },
+      orderBy: { id: 'asc' },
+    });
+    const knownTechs = new Set(result.techniciens.map((t) => t.trim().toLowerCase()));
+    const knownResps = new Set(result.responsables.map((r) => r.trim().toLowerCase()));
+    for (const u of companyUsers) {
+      const role = String(u.role || '').toUpperCase();
+      if (role === 'TECHNICIEN') {
+        const nom = (u.technicienNom || u.name || '').trim();
+        if (nom && !knownTechs.has(nom.toLowerCase())) {
+          result.techniciens.push(nom);
+          knownTechs.add(nom.toLowerCase());
+        }
+      } else if (role === 'ADMIN' || role === 'CONDUCTEUR_TRAVAUX') {
+        const nom = (u.name || '').trim();
+        if (nom && !knownResps.has(nom.toLowerCase())) {
+          result.responsables.push(nom);
+          knownResps.add(nom.toLowerCase());
+        }
+      }
+    }
+
     // S'assurer que tout technicien de la liste possède une entrée dans technicien_competences
     const compMap: Record<string, string[]> = { ...(result.technicien_competences || {}) };
     for (const tech of result.techniciens) {
       if (!Array.isArray(compMap[tech])) {
-        compMap[tech] = (isPlatform && DEFAULT_TECHNICIEN_COMPETENCES[tech]) || ['Électricité'];
+        compMap[tech] = ['Électricité'];
       }
     }
     result.technicien_competences = compMap;
@@ -416,6 +435,33 @@ referentielsRouter.put(
         data: { categorie: 'clients_fiches', valeurs: cleanedFiches },
         message: "Fiches techniques des Donneurs d'ordre & Clients enregistrées avec succès",
       });
+      return;
+    }
+
+    if (categorie === ('baremes' as any)) {
+      const rawList = Array.isArray(req.body?.valeurs) ? req.body.valeurs : [];
+      const cleanedBaremes = rawList
+        .map((b: any) => ({
+          corps: String(b?.corps || '').trim(),
+          ht: Number(b?.ht) || 0,
+          min: Number(b?.min) || 0,
+          deplacement: Number(b?.deplacement) || 0,
+        }))
+        .filter((b: any) => b.corps.length > 0);
+      const existingBaremes = await prisma.referentiel.findFirst({
+        where: { categorie: 'baremes', companyId },
+      });
+      if (existingBaremes) {
+        await prisma.referentiel.update({
+          where: { id: existingBaremes.id },
+          data: { valeurs: JSON.stringify(cleanedBaremes) },
+        });
+      } else {
+        await prisma.referentiel.create({
+          data: { categorie: 'baremes', valeurs: JSON.stringify(cleanedBaremes), companyId },
+        });
+      }
+      res.json({ data: { categorie: 'baremes', valeurs: cleanedBaremes }, message: 'Barèmes mis à jour' });
       return;
     }
 

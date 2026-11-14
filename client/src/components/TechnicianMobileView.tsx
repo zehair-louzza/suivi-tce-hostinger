@@ -558,7 +558,7 @@ export function TechnicianMobileView({
   devisList,
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { current: currentTheme, themes, userPref, allowUserOverride, setUserPref, isPending: themePending } = useTheme();
   const skin = skinFor(currentTheme);
   const isTablet = useMediaQuery('(min-width: 768px)');
@@ -1125,11 +1125,11 @@ export function TechnicianMobileView({
           <button
             type="button"
             className="t-btn t-btn--primary t-btn--xl t-btn--block"
-            disabled={clockInMut.isPending}
+            disabled={clockInMut.isPending || user?.role === 'ADMIN'}
             onClick={handleStartDay}
           >
             <Ic n="play" size={22} />
-            <span>{clockInMut.isPending ? 'Enregistrement…' : 'Commencer la journée'}</span>
+            <span>{user?.role === 'ADMIN' ? 'Aperçu Direction (pointage désactivé)' : clockInMut.isPending ? 'Enregistrement…' : 'Commencer la journée'}</span>
           </button>
         </>
       ) : (

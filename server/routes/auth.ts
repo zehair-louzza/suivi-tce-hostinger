@@ -10,6 +10,7 @@ import { getEffectivePermissions, ROLE_DEFINITIONS } from '../../shared/types.js
 import { z } from 'zod';
 import crypto from 'crypto';
 import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
+import { initCompanyReferentiels } from '../lib/companyInit.js';
 import {
   basePublicUserSelect,
   findPublicUserUnique,
@@ -183,7 +184,7 @@ export function formatPublicUser(u: {
   } | null;
   createdAt?: Date | string;
 }) {
-  const effectiveRole = u.id === 1 || u.email.toLowerCase() === 'louzza.zehair@gmail.com' ? 'ADMIN' : u.role;
+  const effectiveRole = u.id === 1 ? 'ADMIN' : u.role;
   const companyId = u.companyId ?? u.company?.id ?? null;
   const companyName = u.company?.name || (companyId === null ? null : `Entreprise #${companyId}`);
   const companyDefaultTheme = u.company?.defaultTheme || 'light';
@@ -281,42 +282,7 @@ authRouter.post(
         });
 
         // Initialisation des référentiels de base pour le nouveau tenant
-        await prisma.referentiel.createMany({
-          data: [
-            {
-              categorie: 'corpsEtat',
-              valeurs: JSON.stringify([
-                'Tous corps d’état',
-                'Plomberie',
-                'Électricité',
-                'CVC / Climatisation',
-                'Chauffage',
-                'Serrurerie',
-                'Menuiserie',
-                'Peinture',
-              ]),
-              companyId: company.id,
-            },
-            {
-              categorie: 'origines',
-              valeurs: JSON.stringify([
-                "Donneur d'ordre",
-                'Client',
-                'Contrat de maintenance',
-                'Technicien',
-                'Syndic / gestionnaire',
-                'Interne',
-              ]),
-              companyId: company.id,
-            },
-            {
-              categorie: 'responsables',
-              valeurs: JSON.stringify([data.name]),
-              companyId: company.id,
-            },
-          ],
-          skipDuplicates: true,
-        });
+        await initCompanyReferentiels(company.id, data.name);
       }
 
       companyId = company.id;
@@ -1163,42 +1129,7 @@ authRouter.post(
       });
 
       // Référentiels par défaut pour ce nouveau tenant
-      await prisma.referentiel.createMany({
-        data: [
-          {
-            categorie: 'corpsEtat',
-            valeurs: JSON.stringify([
-              'Tous corps d’état',
-              'Plomberie',
-              'Électricité',
-              'CVC / Climatisation',
-              'Chauffage',
-              'Serrurerie',
-              'Menuiserie',
-              'Peinture',
-            ]),
-            companyId: company.id,
-          },
-          {
-            categorie: 'origines',
-            valeurs: JSON.stringify([
-              "Donneur d'ordre",
-              'Client',
-              'Contrat de maintenance',
-              'Technicien',
-              'Syndic / gestionnaire',
-              'Interne',
-            ]),
-            companyId: company.id,
-          },
-          {
-            categorie: 'responsables',
-            valeurs: JSON.stringify([name]),
-            companyId: company.id,
-          },
-        ],
-        skipDuplicates: true,
-      });
+      await initCompanyReferentiels(company.id, name);
     }
 
     const randomPassword = crypto.randomBytes(32).toString('hex');

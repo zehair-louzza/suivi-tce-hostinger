@@ -2023,6 +2023,7 @@ export function AdminWorkstation({
                   <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Adresse Expéditeur (SMTP User)</label>
                   <input
                     type="email"
+                  autoComplete="off"
                     className="input"
                     value={smtpUser}
                     onChange={(e) => setSmtpUser(e.target.value)}
@@ -2045,6 +2046,7 @@ export function AdminWorkstation({
                 <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Répondre à (facultatif)</label>
                 <input
                   type="email"
+                  autoComplete="off"
                   className="input"
                   value={smtpReplyTo}
                   onChange={(e) => setSmtpReplyTo(e.target.value)}
@@ -2181,6 +2183,7 @@ export function AdminWorkstation({
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="email"
+                  autoComplete="off"
                   className="input"
                   style={{ flex: 1 }}
                   value={testRecipientEmail}
@@ -2489,6 +2492,7 @@ export function AdminWorkstation({
                 <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Adresse e-mail du collaborateur</label>
                 <input
                   type="email"
+                  autoComplete="off"
                   className="input"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
@@ -2588,6 +2592,7 @@ export function AdminWorkstation({
                   <label style={{ fontSize: '11.5px', fontWeight: 700 }}>Email de connexion *</label>
                   <input
                     type="email"
+                  autoComplete="off"
                     className="input"
                     required
                     placeholder="prenom.nom@votre-entreprise.fr"

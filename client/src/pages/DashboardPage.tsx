@@ -10,7 +10,7 @@ import {
   Intervention,
   ReferentielsMap,
   DEFAULT_REFERENTIELS,
-  DEFAULT_TECHNICIEN_COMPETENCES,
+
   ClientProfile,
   STATUTS_COMMERCIAUX_DEVIS,
   TRAITEMENTS_ADMIN,
@@ -369,7 +369,7 @@ export function DashboardPage() {
 
   const activeCompMap: Record<string, string[]> = useMemo(() => {
     return {
-      ...(refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES),
+      ...(refs.technicien_competences || {}),
       ...(competencesOverrides || {}),
     };
   }, [refs.technicien_competences, competencesOverrides]);
@@ -1290,11 +1290,12 @@ export function DashboardPage() {
           referencesInterventions={interventionsList.map((i) => i.reference || '').filter(Boolean)}
           techniciens={techniciensList}
           corpsEtatList={corpsEtatList}
-          technicienCompetences={refs.technicien_competences || DEFAULT_TECHNICIEN_COMPETENCES}
-          onUpdateCompetences={async (nextMap) => {
-            await referentielsApi.updateCompetences(nextMap);
-            queryClient.invalidateQueries({ queryKey: ['referentiels'] });
-          }}
+          technicienCompetences={refs.technicien_competences || {}}
+          onUpdateCompetences={async (nextMap) => { await referentielsApi.updateCompetences(nextMap); queryClient.invalidateQueries({ queryKey: ['referentiels'] }); }}
+          onUpdateCorpsEtat={async (nextList) => { await referentielsApi.updateCategory('corps_etat', nextList); queryClient.invalidateQueries({ queryKey: ['referentiels'] }); }}
+          baremes={Array.isArray((refs as any).baremes) && (refs as any).baremes.length ? (refs as any).baremes : undefined}
+          onUpdateBaremes={async (nextBaremes) => { await referentielsApi.updateCategory('baremes' as any, nextBaremes as any); queryClient.invalidateQueries({ queryKey: ['referentiels'] }); }}
+          onGoAdminUsers={() => { setAdminSubTab('users'); setActiveSection('admin'); }}
         />
       )}
 

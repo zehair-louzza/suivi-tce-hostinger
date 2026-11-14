@@ -373,7 +373,7 @@ export const DEFAULT_TECHNICIENS = [
 
 export const STATUTS_COMMERCIAUX_DEVIS = [
   'À préparer',
-  'En préparation',
+
   'À valider en interne',
   'Envoyé au client',
   'En négociation',
@@ -420,10 +420,7 @@ export const TYPES_INTERVENTION = [
   'SAV',
   'Contrôle / diagnostic',
   'Travaux complémentaires',
-  'Mise en conformité',
-  'Planifiée',
-  'Non planifiée',
-  'Urgente',
+  
 ] as const;
 
 export const MODES_PLANIFICATION = [
@@ -432,12 +429,12 @@ export const MODES_PLANIFICATION = [
 ] as const;
 
 export const STATUTS_OPERATIONNELS_INTERVENTION = [
-  'Nouvelle demande',
+
   'À planifier',
   'Planifiée',
   'Affectée',
-  'En route',
-  'Sur site',
+
+
   'En cours',
   'Suspendue',
   'Terminée - à valider',
@@ -1174,7 +1171,7 @@ export function rankTechniciansForTrade(
   qualified: { technicien: string; skillCount: number; skills: string[]; isWildcard: boolean }[];
   allRanked: { technicien: string; skillCount: number; skills: string[]; isQualified: boolean }[];
 } {
-  const map = competencesMap || DEFAULT_TECHNICIEN_COMPETENCES;
+  const map = competencesMap || {};
   const reqNorm = normalizeSkillToken(requiredTrade);
   const isGeneric =
     !reqNorm ||
@@ -1185,7 +1182,7 @@ export function rankTechniciansForTrade(
   const evaluated = techniciens.map((tech) => {
     const rawSkills = Array.isArray(map[tech])
       ? map[tech].filter(Boolean)
-      : DEFAULT_TECHNICIEN_COMPETENCES[tech] || [];
+      : [];
     const normSkills = rawSkills.map(normalizeSkillToken);
     const hasWildcard = normSkills.some((k) => k.includes('tous corps'));
     const hasDirectSkill =

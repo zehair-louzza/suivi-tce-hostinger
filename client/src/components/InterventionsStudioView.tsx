@@ -55,14 +55,17 @@ export interface InterventionsStudioViewProps {
 const STATUSES = [
   'À planifier',
   'Planifiée',
+  'Affectée',
   'En cours',
-  'Non terminée',
-  'Terminée — à valider',
+  'Suspendue',
+
+  'Terminée - à valider',
   'Clôturée',
+  'Annulée',
 ];
 
 const SHORT_STATUS: Record<string, string> = {
-  'Terminée — à valider': 'À valider',
+  'Terminée - à valider': 'À valider',
   'A_PLANIFIER': 'À planifier',
   'PLANIFIEE': 'Planifiée',
   'EN_COURS': 'En cours',
@@ -76,9 +79,11 @@ function normalizeStatus(s?: string): string {
   if (s === 'A_PLANIFIER') return 'À planifier';
   if (s === 'PLANIFIEE') return 'Planifiée';
   if (s === 'EN_COURS') return 'En cours';
-  if (s === 'TERMINEE_A_VALIDER' || s === 'Terminée — à valider') return 'Terminée — à valider';
+  if (s === 'TERMINEE_A_VALIDER' || s === 'Terminée — à valider') return 'Terminée - à valider';
   if (s === 'CLOTUREE') return 'Clôturée';
-  if (s === 'NON_TERMINEE') return 'Non terminée';
+  if (s === 'NON_TERMINEE' || s === 'Non terminée') return 'Suspendue';
+  if (s === 'Nouvelle demande') return 'À planifier';
+  if (s === 'En route' || s === 'Sur site') return 'En cours';
   return s;
 }
 
@@ -120,12 +125,12 @@ export function InterventionsStudioView({
   const countByStatus = (s: string) => interventionsList.filter((i) => normalizeStatus(i.statutOperationnel) === s).length;
   const onSiteCount = countByStatus('En cours');
   const planifiedCount = countByStatus('Planifiée');
-  const toValidateCount = countByStatus('Terminée — à valider');
-  const toPlanCount = countByStatus('À planifier') + countByStatus('Non terminée');
+  const toValidateCount = countByStatus('Terminée - à valider');
+  const toPlanCount = countByStatus('À planifier') + countByStatus('Suspendue');
 
   const actionFor = (i: Intervention) => {
     const norm = normalizeStatus(i.statutOperationnel);
-    if (norm === 'Terminée — à valider' && canClose !== false) {
+    if (norm === 'Terminée - à valider' && canClose !== false) {
       return {
         label: 'Valider',
         icon: CheckCircle2,
@@ -147,7 +152,7 @@ export function InterventionsStudioView({
         },
       };
     }
-    if (norm === 'Non terminée' && canCreate !== false) {
+    if (norm === 'Suspendue' && canCreate !== false) {
       return {
         label: 'Replanifier',
         icon: CalendarPlus,
@@ -319,7 +324,7 @@ export function InterventionsStudioView({
               id: s,
               label: SHORT_STATUS[s] || s,
               count: countByStatus(s),
-              alert: s === 'Terminée — à valider',
+              alert: s === 'Terminée - à valider',
             })),
           ]}
         />
@@ -502,7 +507,7 @@ export function InterventionsStudioView({
               >
                 Envoyer le rapport au client
               </Btn>
-              {canClose !== false && normalizeStatus(selectedItem.statutOperationnel) === 'Terminée — à valider' && (
+              {canClose !== false && normalizeStatus(selectedItem.statutOperationnel) === 'Terminée - à valider' && (
                 <Btn
                   variant="primary"
                   icon={CheckCircle2}

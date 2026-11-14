@@ -107,11 +107,18 @@ export function PlanningStudioView({
   const [selectedTech, setSelectedTech] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mTech, setMTech] = useState<string>(techniciens[0] || '');
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+
+  const shiftDate = (days: number) => {
+    const d = new Date(`${selectedDate}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
 
   const nowHour = useMemo(() => {
     const d = new Date();
     return Math.min(Math.max(d.getHours() + d.getMinutes() / 60, START), END);
-  }, []);
+  }, [selectedDate]);
 
   const todayLabel = useMemo(() => {
     return new Intl.DateTimeFormat('fr-FR', {
@@ -119,8 +126,8 @@ export function PlanningStudioView({
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    }).format(new Date());
-  }, []);
+    }).format(new Date(`${selectedDate}T12:00:00`));
+  }, [selectedDate]);
 
   // Map real interventions & devis into planning blocks
   const { blocks, bourse } = useMemo(() => {
@@ -136,6 +143,9 @@ export function PlanningStudioView({
       const hasPlan = Boolean(intv.datePlanifiee || intv.heureDebut);
 
       if (techAssigned && hasPlan && intv.statutOperationnel !== 'À planifier') {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const intvDate = intv.datePlanifiee ? String(intv.datePlanifiee).slice(0, 10) : todayIso;
+        if (intvDate !== selectedDate) return;
         const startH = intv.heureDebut
           ? parseFloat(intv.heureDebut.split(':')[0]) +
             parseFloat(intv.heureDebut.split(':')[1] || '0') / 60
@@ -176,6 +186,7 @@ export function PlanningStudioView({
       if (dev.visiteNecessaire) {
         const techAssigned = (dev.visiteTechnicien || '').trim();
         if (techAssigned && dev.visiteDate) {
+          if (String(dev.visiteDate).slice(0, 10) !== selectedDate) return;
           const startH = dev.visiteHeureDebut
             ? parseFloat(dev.visiteHeureDebut.split(':')[0]) +
               parseFloat(dev.visiteHeureDebut.split(':')[1] || '0') / 60
@@ -212,7 +223,7 @@ export function PlanningStudioView({
     });
 
     return { blocks: bList, bourse: qList };
-  }, [devisList, interventionsList, techniciens]);
+  }, [devisList, interventionsList, techniciens, selectedDate]);
 
   const shownBlocks = useMemo(() => {
     return blocks.filter((b) => kind === 'all' || b.kind === kind);
@@ -244,7 +255,7 @@ export function PlanningStudioView({
       if (q.sourceType === 'INTERVENTION' && onUpdateIntvPlanning) {
         await onUpdateIntvPlanning(q.sourceId, {
           entreprise: q.suggest,
-          datePlanifiee: new Date().toISOString().slice(0, 10),
+          datePlanifiee: selectedDate,
           heureDebut: '10:00',
           heureFin: '12:00',
           statutOperationnel: 'Planifiée',
@@ -253,7 +264,7 @@ export function PlanningStudioView({
       } else if (q.sourceType === 'DEVIS' && onUpdateDevisPlanning) {
         await onUpdateDevisPlanning(q.sourceId, {
           visiteTechnicien: q.suggest,
-          visiteDate: new Date().toISOString().slice(0, 10),
+          visiteDate: selectedDate,
           visiteHeureDebut: '14:00',
           visiteHeureFin: '15:30',
           visiteStatut: 'Planifiée',
@@ -285,9 +296,9 @@ export function PlanningStudioView({
       actions={
         <>
           <div className="m-daynav" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <IconBtn icon={ChevronLeft} label="Jour précédent" />
-            <Btn size="sm">Aujourd’hui</Btn>
-            <IconBtn icon={ChevronRight} label="Jour suivant" />
+            <IconBtn icon={ChevronLeft} label="Jour précédent" onClick={() => shiftDate(-1)} />
+            <Btn size="sm" onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}>Aujourd’hui</Btn>
+            <IconBtn icon={ChevronRight} label="Jour suivant" onClick={() => shiftDate(1)} />
           </div>
           <Btn
             variant="primary"

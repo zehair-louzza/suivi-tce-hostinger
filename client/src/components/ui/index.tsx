@@ -21,7 +21,7 @@ export const STATUS_TONE: Record<string, 'slate' | 'blue' | 'green' | 'amber' | 
   'Planifiée': 'blue',
   'En cours': 'indigo',
   'Non terminée': 'red',
-  'Terminée — à valider': 'teal',
+  'Terminée - à valider': 'teal',
   'À valider': 'teal',
   'Clôturée': 'green',
   'Brouillon': 'slate',
