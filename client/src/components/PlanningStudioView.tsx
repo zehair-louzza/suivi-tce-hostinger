@@ -26,7 +26,8 @@ import {
   Progress,
   useIsMobile,
 } from './ui';
-import type { Devis, Intervention } from '../lib/api';
+import type { Devis, GpsPositionPayload, Intervention } from '../lib/api';
+import { evaluateTechniciansAvailability } from '../lib/techAvailability';
 import toast from 'react-hot-toast';
 
 const START = 7;
@@ -86,6 +87,8 @@ interface PlanningStudioViewProps {
   devisList: Devis[];
   interventionsList: Intervention[];
   techniciens: string[];
+  technicienCompetences?: Record<string, string[]>;
+  positionsGps?: Record<string, GpsPositionPayload>;
   onOpenDevis?: (devis: Partial<Devis>) => void;
   onOpenIntv?: (intv: Partial<Intervention>) => void;
   onUpdateDevisPlanning?: (id: number, data: any) => Promise<any>;
@@ -96,6 +99,8 @@ export function PlanningStudioView({
   devisList,
   interventionsList,
   techniciens,
+  technicienCompetences,
+  positionsGps,
   onOpenDevis,
   onOpenIntv,
   onUpdateDevisPlanning,
@@ -175,7 +180,19 @@ export function PlanningStudioView({
           city: intv.chantier ? intv.chantier.slice(0, 20) : 'Paris',
           kind: kindVal,
           duration: ((intv as any).dureePrevueMinutes ? (intv as any).dureePrevueMinutes / 60 : 2),
-          suggest: techniciens[(intv.id + 1) % techniciens.length] || techniciens[0] || '',
+          suggest:
+            evaluateTechniciansAvailability({
+              techniciens,
+              corpsEtat: intv.corpsEtat,
+              dateISO: selectedDate,
+              heureDebut: intv.heureDebut || '10:00',
+              heureFin: intv.heureFin || '12:00',
+              excludeIntvId: intv.id,
+              interventionsList,
+              devisList,
+              competencesMap: technicienCompetences,
+              positionsGps,
+            })[0]?.technicien || techniciens[0] || '',
           corps: intv.corpsEtat || 'Électricité',
         });
       }
@@ -215,7 +232,19 @@ export function PlanningStudioView({
             city: dev.site ? dev.site.slice(0, 20) : 'IDF',
             kind: 'visite',
             duration: 1.5,
-            suggest: techniciens[dev.id % techniciens.length] || techniciens[0] || '',
+            suggest:
+              evaluateTechniciansAvailability({
+                techniciens,
+                corpsEtat: dev.corpsEtat,
+                dateISO: selectedDate,
+                heureDebut: dev.visiteHeureDebut || '14:00',
+                heureFin: dev.visiteHeureFin || '15:30',
+                excludeDevisId: dev.id,
+                interventionsList,
+                devisList,
+                competencesMap: technicienCompetences,
+                positionsGps,
+              })[0]?.technicien || techniciens[0] || '',
             corps: dev.corpsEtat || 'Tous corps d’état',
           });
         }
@@ -223,7 +252,7 @@ export function PlanningStudioView({
     });
 
     return { blocks: bList, bourse: qList };
-  }, [devisList, interventionsList, techniciens, selectedDate]);
+  }, [devisList, interventionsList, techniciens, technicienCompetences, positionsGps, selectedDate]);
 
   const shownBlocks = useMemo(() => {
     return blocks.filter((b) => kind === 'all' || b.kind === kind);

@@ -13,17 +13,17 @@ import {
 
   ClientProfile,
   STATUTS_COMMERCIAUX_DEVIS,
-  TRAITEMENTS_ADMIN,
-  PROCHAINES_ACTIONS_DEVIS,
+
   PRIORITES,
   CANAUX_RECEPTION,
   TYPES_INTERVENTION,
-  MODES_PLANIFICATION,
+
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
   formatDateFR,
   demandeApi
 } from '../lib/api';
+import { evaluateTechniciansAvailability } from '../lib/techAvailability';
 import { Layout, AppSection } from '../components/Layout';
 
 
@@ -373,6 +373,38 @@ export function DashboardPage() {
       ...(competencesOverrides || {}),
     };
   }, [refs.technicien_competences, competencesOverrides]);
+
+  const intvTechAvail = useMemo(() => {
+    if (!selectedIntv) return [];
+    return evaluateTechniciansAvailability({
+      techniciens: techniciensList,
+      corpsEtat: selectedIntv.corpsEtat,
+      dateISO: selectedIntv.datePlanifiee,
+      heureDebut: selectedIntv.heureDebut,
+      heureFin: selectedIntv.heureFin,
+      excludeIntvId: selectedIntv.id,
+      interventionsList,
+      devisList,
+      competencesMap: activeCompMap,
+      positionsGps: refs.positions_gps_techniciens || {},
+    });
+  }, [selectedIntv, techniciensList, interventionsList, devisList, activeCompMap, refs.positions_gps_techniciens]);
+
+  const devisVisiteTechAvail = useMemo(() => {
+    if (!selectedDevis) return [];
+    return evaluateTechniciansAvailability({
+      techniciens: techniciensList,
+      corpsEtat: selectedDevis.corpsEtat,
+      dateISO: selectedDevis.visiteDate,
+      heureDebut: selectedDevis.visiteHeureDebut,
+      heureFin: selectedDevis.visiteHeureFin,
+      excludeDevisId: selectedDevis.id,
+      interventionsList,
+      devisList,
+      competencesMap: activeCompMap,
+      positionsGps: refs.positions_gps_techniciens || {},
+    });
+  }, [selectedDevis, techniciensList, interventionsList, devisList, activeCompMap, refs.positions_gps_techniciens]);
 
   const handleToggleTechSkill = async (tech: string, skill: string) => {
     const currentSkills = activeCompMap[tech] || [];
@@ -1136,6 +1168,8 @@ export function DashboardPage() {
           devisList={devisList}
           interventionsList={interventionsList}
           techniciens={techniciensList}
+          technicienCompetences={refs.technicien_competences || {}}
+          positionsGps={refs.positions_gps_techniciens || {}}
           onOpenDevis={(d) => {
             setIsCreatingDevis(false);
             setSelectedDevis(d);
@@ -1407,10 +1441,9 @@ export function DashboardPage() {
               }}
             >
               {[
-                { id: 'qualif', label: '1. Qualification & Visite' },
-                { id: 'chiffrage', label: '2. Chiffrage & Échéances' },
-                { id: 'relances', label: '3. Suivi & Relances' },
-                { id: 'historique', label: '4. Calculs & Historique' },
+                { id: 'qualif', label: '1. Devis & Chiffrage' },
+                { id: 'relances', label: '2. Suivi & Échéances' },
+                ...(!isCreatingDevis && selectedDevis.id ? [{ id: 'historique', label: '3. Calculs & Historique' }] : []),
               ].map((t) => (
                 <button
                   key={t.id}
@@ -1458,7 +1491,8 @@ export function DashboardPage() {
                           setIsCustomDevisClient(true);
                         } else {
                           setIsCustomDevisClient(false);
-                          setSelectedDevis({ ...selectedDevis, client: val });
+                          const prof = clientProfiles.find((cp) => cp.nom === val);
+                          setSelectedDevis({ ...selectedDevis, client: val, site: selectedDevis.site || prof?.adresse || '' });
                         }
                       }}
                     >
@@ -1542,17 +1576,20 @@ export function DashboardPage() {
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Traitement Administratif</label>
-                    <select
-                      className="select"
-                      value={selectedDevis.traitement || 'À traiter'}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, traitement: e.target.value })}
-                    >
-                      {TRAITEMENTS_ADMIN.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Montant HT (€)</label>
+                    <input
+                      type="number"
+                      className="input font-mono"
+                      value={selectedDevis.amount ?? ''}
+                      onChange={(e) => setSelectedDevis({ ...selectedDevis, amount: parseFloat(e.target.value) || 0 })}
+                    />
                   </div>
+                  <TvaField
+                    value={selectedDevis.tauxTVA}
+                    clientName={selectedDevis.client}
+                    clientProfiles={clientProfiles}
+                    onChange={(taux) => setSelectedDevis({ ...selectedDevis, tauxTVA: taux })}
+                  />
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Objet / Description des travaux</label>
                     <textarea
@@ -1596,7 +1633,23 @@ export function DashboardPage() {
                       </label>
                     </div>
                     <div>
-                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Technicien Visite</label>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Technicien Visite</label>
+                        {devisVisiteTechAvail[0] && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '1px 6px', fontSize: '10.5px', color: '#6d28d9' }}
+                            onClick={() => {
+                              const best = devisVisiteTechAvail[0];
+                              setSelectedDevis({ ...selectedDevis, visiteNecessaire: true, visiteTechnicien: best.technicien });
+                              toast.success(`Technicien suggéré : ${best.optionLabel}`);
+                            }}
+                          >
+                            ✨ Suggérer
+                          </button>
+                        )}
+                      </div>
                       <select
                         className="select"
                         value={selectedDevis.visiteTechnicien || ''}
@@ -1609,8 +1662,8 @@ export function DashboardPage() {
                         }
                       >
                         <option value="">À affecter</option>
-                        {techniciensList.map((t) => (
-                          <option key={t} value={t}>{t}</option>
+                        {(devisVisiteTechAvail.length > 0 ? devisVisiteTechAvail : techniciensList.map((t) => ({ technicien: t, optionLabel: t }))).map((item) => (
+                          <option key={item.technicien} value={item.technicien}>{item.optionLabel}</option>
                         ))}
                       </select>
                     </div>
@@ -1651,23 +1704,8 @@ export function DashboardPage() {
                 </div>
               )}
 
-              {devisTab === 'chiffrage' && (
+              {devisTab === 'relances' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Montant HT (€)</label>
-                    <input
-                      type="number"
-                      className="input font-mono"
-                      value={selectedDevis.amount ?? ''}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, amount: parseFloat(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <TvaField
-                    value={selectedDevis.tauxTVA}
-                    clientName={selectedDevis.client}
-                    clientProfiles={clientProfiles}
-                    onChange={(taux) => setSelectedDevis({ ...selectedDevis, tauxTVA: taux })}
-                  />
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Origine / Provenance</label>
                     <select
@@ -1736,23 +1774,7 @@ export function DashboardPage() {
                       }
                     />
                   </div>
-                </div>
-              )}
 
-              {devisTab === 'relances' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Prochaine Action</label>
-                    <select
-                      className="select"
-                      value={selectedDevis.prochaineAction || 'Chiffrer'}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, prochaineAction: e.target.value })}
-                    >
-                      {PROCHAINES_ACTIONS_DEVIS.map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Date de relance prévue</label>
                     <input
@@ -1896,8 +1918,27 @@ export function DashboardPage() {
                       return;
                     }
                     // Le taux affiché en présélection est enregistré tel quel sur la pièce
+                    const sc = selectedDevis.statutCommercial || 'À préparer';
+                    const autoTraitement = selectedDevis.visiteNecessaire && !selectedDevis.visiteDate
+                      ? 'En attente technicien'
+                      : ['Accepté', 'Refusé', 'Annulé'].includes(sc)
+                      ? 'Traité'
+                      : sc === 'Envoyé au client'
+                      ? 'En attente client'
+                      : 'En cours de traitement';
+                    const autoAction = sc === 'À préparer'
+                      ? 'Chiffrer'
+                      : sc === 'À valider en interne'
+                      ? 'Faire valider'
+                      : sc === 'Envoyé au client'
+                      ? 'Relancer le client'
+                      : sc === 'Accepté'
+                      ? 'Planifier après accord'
+                      : 'Aucune';
                     const payload = {
                       ...selectedDevis,
+                      traitement: autoTraitement,
+                      prochaineAction: autoAction,
                       tauxTVA: selectedDevis.tauxTVA ?? tvaParDefaut(selectedDevis.client, clientProfiles),
                     };
                     if (isCreatingDevis || !selectedDevis.id) {
@@ -1956,12 +1997,14 @@ export function DashboardPage() {
             >
               {[
                 { id: 'planif', label: '1. Affectation & Créneau' },
-                {
-                  id: 'terrain',
-                  label: `2. Dossier Terrain & Photos ${(selectedIntv?.photos || []).length > 0 ? `(${selectedIntv!.photos!.length}) ⊞` : ''}`,
-                },
-                { id: 'facturation', label: '3. Facturation' },
-                { id: 'historique', label: '4. Alertes & Devis lié' },
+                ...(!isCreatingIntv && selectedIntv.id ? [
+                  {
+                    id: 'terrain',
+                    label: `2. Dossier Terrain & Photos ${(selectedIntv?.photos || []).length > 0 ? `(${selectedIntv!.photos!.length}) ⊞` : ''}`,
+                  },
+                  { id: 'facturation', label: '3. Facturation' },
+                ] : []),
+                { id: 'historique', label: isCreatingIntv ? '2. Devis lié' : '4. Alertes & Devis lié' },
               ].map((t) => (
                 <button
                   key={t.id}
@@ -2023,7 +2066,8 @@ export function DashboardPage() {
                           setIsCustomIntvClient(true);
                         } else {
                           setIsCustomIntvClient(false);
-                          setSelectedIntv({ ...selectedIntv, client: val });
+                          const prof = clientProfiles.find((cp) => cp.nom === val);
+                          setSelectedIntv({ ...selectedIntv, client: val, chantier: selectedIntv.chantier || prof?.adresse || '' });
                         }
                       }}
                     >
@@ -2085,15 +2129,36 @@ export function DashboardPage() {
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Technicien Terrain (Intervenant)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Technicien Terrain (Intervenant)</label>
+                      {intvTechAvail[0] && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '1px 6px', fontSize: '10.5px', color: '#2563eb' }}
+                          onClick={() => {
+                            const best = intvTechAvail[0];
+                            const autoStatut = selectedIntv.datePlanifiee && (!selectedIntv.statutOperationnel || selectedIntv.statutOperationnel === 'À planifier') ? 'Planifiée' : selectedIntv.statutOperationnel;
+                            setSelectedIntv({ ...selectedIntv, entreprise: best.technicien, statutOperationnel: autoStatut });
+                            toast.success(`Affecté à ${best.optionLabel}`);
+                          }}
+                        >
+                          ✨ Auto-affecter
+                        </button>
+                      )}
+                    </div>
                     <select
                       className="select"
                       value={selectedIntv.entreprise || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, entreprise: e.target.value })}
+                      onChange={(e) => {
+                        const tech = e.target.value;
+                        const autoStatut = tech && selectedIntv.datePlanifiee && (!selectedIntv.statutOperationnel || selectedIntv.statutOperationnel === 'À planifier') ? 'Planifiée' : selectedIntv.statutOperationnel;
+                        setSelectedIntv({ ...selectedIntv, entreprise: tech, statutOperationnel: autoStatut });
+                      }}
                     >
                       <option value="">À affecter</option>
-                      {techniciensList.map((t) => (
-                        <option key={t} value={t}>{t}</option>
+                      {(intvTechAvail.length > 0 ? intvTechAvail : techniciensList.map((t) => ({ technicien: t, optionLabel: t }))).map((item) => (
+                        <option key={item.technicien} value={item.technicien}>{item.optionLabel}</option>
                       ))}
                     </select>
                   </div>
@@ -2165,18 +2230,7 @@ export function DashboardPage() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Mode de planification</label>
-                    <select
-                      className="select"
-                      value={selectedIntv.modePlanification || 'Planifiée'}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, modePlanification: e.target.value })}
-                    >
-                      {MODES_PLANIFICATION.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
+
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Objet / Description des travaux</label>
                     <textarea
@@ -2670,6 +2724,7 @@ export function DashboardPage() {
                   }
                   const payload = {
                     ...selectedIntv,
+                    modePlanification: selectedIntv.datePlanifiee ? 'Planifiée' : 'Non planifiée',
                     tauxTVA: selectedIntv.tauxTVA ?? tvaParDefaut(selectedIntv.client, clientProfiles),
                   };
                   if (isCreatingIntv || !selectedIntv.id) {
