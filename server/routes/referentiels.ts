@@ -126,6 +126,17 @@ referentielsRouter.get(
     }
     result.clients_fiches = updatedFiches;
 
+    // Sens inverse : tout donneur d'ordre ACTIF de « Profils & donneurs d'ordre » doit apparaître dans les
+    // sélecteurs (devis, interventions…), même si la liste simple des clients n'a jamais été synchronisée.
+    const clientsConnus = new Set((result.clients || []).map((c: string) => c.toLowerCase()));
+    for (const f of updatedFiches) {
+      const nom = String(f.nom || '').trim();
+      if (nom && f.active !== false && !clientsConnus.has(nom.toLowerCase())) {
+        result.clients.push(nom);
+        clientsConnus.add(nom.toLowerCase());
+      }
+    }
+
     // S'assurer que tout technicien de la liste possède une entrée dans technicien_competences
     const compMap: Record<string, string[]> = { ...(result.technicien_competences || {}) };
     for (const tech of result.techniciens) {
@@ -393,6 +404,10 @@ referentielsRouter.put(
           await prisma.referentiel.update({
             where: { id: existingClientsRow.id },
             data: { valeurs: JSON.stringify(mergedList) },
+          });
+        } else {
+          await prisma.referentiel.create({
+            data: { categorie: 'clients', valeurs: JSON.stringify(mergedList), companyId },
           });
         }
       }
