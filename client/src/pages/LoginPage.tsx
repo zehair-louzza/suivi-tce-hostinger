@@ -1799,9 +1799,25 @@ export function LoginPage() {
               <ProLockIcon size={17} color="#0284c7" />
               <span>Réinitialiser votre mot de passe</span>
             </h3>
-            <p style={{ margin: '0 0 14px 0', fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               Saisissez l'adresse e-mail de votre compte pour recevoir un lien sécurisé de réinitialisation.
             </p>
+            <div
+              style={{
+                margin: '0 0 12px 0',
+                padding: '9px 11px',
+                borderRadius: '8px',
+                background: 'rgba(2, 132, 199, 0.06)',
+                border: '1px solid rgba(2, 132, 199, 0.2)',
+                fontSize: '11.5px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.45,
+              }}
+            >
+              Compte créé via <strong>Google</strong> ? Utilisez directement le bouton{' '}
+              <strong>« Continuer avec Google »</strong> sur l'écran de connexion (aucun mot de passe requis).
+              Pensez aussi à vérifier votre dossier Spam.
+            </div>
             <form onSubmit={handleForgotPasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <input
                 type="email"

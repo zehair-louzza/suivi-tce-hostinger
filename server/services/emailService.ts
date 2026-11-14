@@ -449,15 +449,8 @@ async function triggerSupabaseAuthEmailRelay(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     if (mode === 'recovery') {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(activationLink)}`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: toEmail }),
-      });
-      if (res.ok) return { ok: true };
+      // Les comptes étant stockés dans public.users avec jeton resetToken, Supabase /recover ne peut pas délivrer le lien de réinitialisation.
+      return { ok: false, error: 'Relais Supabase Auth non applicable à reset-password' };
     }
 
     // Signup ou OTP magic link sur Supabase Auth avec redirect_to pointant directement vers l'activation du compte
@@ -560,8 +553,23 @@ export async function dispatchEmailWithFallback(options: {
 
   const cacheKey = `${companyId}|${cfg.host}|${cfg.user}`;
   const built = buildSmtpCandidates(cfg, isPlatformSender);
+  // Si la boîte DB de la société 1 échoue et que des variables SMTP serveur (.env) distinctes existent, les tenter en repli.
+  const envFallback =
+    isPlatformSender && DEFAULT_SMTP_PASS && (cfg.user !== DEFAULT_SMTP_USER || cfg.pass !== DEFAULT_SMTP_PASS)
+      ? buildSmtpCandidates(
+          {
+            host: DEFAULT_SMTP_HOST,
+            port: DEFAULT_SMTP_PORT,
+            secure: DEFAULT_SMTP_PORT === 465,
+            user: DEFAULT_SMTP_USER,
+            pass: DEFAULT_SMTP_PASS,
+            fromName: 'ANELEC GROUPE',
+          },
+          true
+        )
+      : [];
   const cached = workingCandidates.get(cacheKey);
-  const candidates = cached ? [cached, ...built] : built;
+  const candidates = cached ? [cached, ...built, ...envFallback] : [...built, ...envFallback];
   let lastSmtpError = '';
 
   const logCompanyId = options.companyId ?? null;
@@ -657,8 +665,8 @@ export async function dispatchEmailWithFallback(options: {
     }
   }
 
-  // 3. Prévisualisation Ethereal : uniquement pour les e-mails d'authentification / de test plateforme
-  if (options.allowPreviewFallback) {
+  // 3. Prévisualisation Ethereal : uniquement hors production (dev/tests). En production, ne jamais simuler un envoi réussi vers une fausse boîte.
+  if (options.allowPreviewFallback && process.env.NODE_ENV !== 'production') {
     try {
       if (!etherealAccountCache) {
         const testAccount = await nodemailer.createTestAccount();
@@ -901,7 +909,7 @@ export async function sendPasswordResetEmail(params: {
     text: `Bonjour ${params.recipientName},\n\n${params.companyName ? `Compte de l'entreprise ${params.companyName}.\n` : ''}Cliquez sur ce lien pour réinitialiser votre mot de passe :\n${resetLink}`,
     activationLink: resetLink,
     recipientName: params.recipientName,
-    allowSupabaseRelay: true,
+    allowSupabaseRelay: false,
   });
 }
 
