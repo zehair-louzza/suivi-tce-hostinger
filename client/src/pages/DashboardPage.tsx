@@ -1492,7 +1492,7 @@ export function DashboardPage() {
                         } else {
                           setIsCustomDevisClient(false);
                           const prof = clientProfiles.find((cp) => cp.nom === val);
-                          setSelectedDevis({ ...selectedDevis, client: val, site: selectedDevis.site || prof?.adresse || '' });
+                          setSelectedDevis({ ...selectedDevis, client: val, site: prof?.type === 'PARTICULIER' ? (selectedDevis.site || prof.adresse || '') : selectedDevis.site });
                         }
                       }}
                     >
@@ -2067,7 +2067,7 @@ export function DashboardPage() {
                         } else {
                           setIsCustomIntvClient(false);
                           const prof = clientProfiles.find((cp) => cp.nom === val);
-                          setSelectedIntv({ ...selectedIntv, client: val, chantier: selectedIntv.chantier || prof?.adresse || '' });
+                          setSelectedIntv({ ...selectedIntv, client: val, chantier: prof?.type === 'PARTICULIER' ? (selectedIntv.chantier || prof.adresse || '') : selectedIntv.chantier });
                         }
                       }}
                     >
