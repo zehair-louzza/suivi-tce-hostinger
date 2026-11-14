@@ -15,6 +15,7 @@ import { APP_URL, sendRapportClientLinkEmail } from './emailService.js';
 import { notifier, ajouterHistorique } from './technicianAutomation.js';
 import { comptesParRoles, etatLien } from './devisClient.js';
 import { parsePhotosJson } from '../lib/terrainPhotos.js';
+import { chargerIdentiteDocument } from './pdfContext.js';
 import { genererPdfRapport, type PhotoPdf } from './rapportPdf.js';
 import { adressesDepuisFiche, choisirDestinataires, trouverFiche, type AdresseClient } from '../domain/devisClient.js';
 import {
@@ -151,14 +152,16 @@ export async function photoPourClient(lien: any, photoId: string): Promise<{ oct
 // ---------------------------------------------------------------------------
 
 export async function fabriquerPdf(companyId: number, intervention: any, photosChoisies: PhotoTransmissible[]): Promise<Buffer> {
-  const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
+  const identiteDoc = await chargerIdentiteDocument(companyId, intervention?.client);
   const photos: PhotoPdf[] = [];
   for (const p of photosChoisies) {
     const o = octetsPhoto(intervention, p.id);
     if (o) photos.push({ id: p.id, caption: p.caption, category: p.category, octets: o.octets, type: o.type });
   }
   return genererPdfRapport({
-    societe: company?.name || 'Votre prestataire',
+    societe: identiteDoc.societe.nom,
+    societeInfo: identiteDoc.societe,
+    clientInfo: identiteDoc.client,
     contenu: contenuPourClient(intervention, photosChoisies),
     photos,
   });

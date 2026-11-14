@@ -243,7 +243,7 @@ const DEVIS_FIELD_VIEW_KEYS = [
   'id', 'reference', 'referenceMetier', 'client', 'site', 'siteAdresse', 'objet', 'corpsEtat', 'numeroDI',
   'dateCreated', 'dateDemande', 'statutCommercial', 'traitement', 'status', 'responsable', 'notes',
   'commentaires', 'visiteNecessaire', 'visiteTechnicien', 'visiteDate', 'visiteHeureDebut', 'visiteHeureFin',
-  'visiteStatut', 'gpsCloture', 'photos', 'version', 'createdAt', 'updatedAt',
+  'visiteStatut', 'visiteRapport', 'gpsCloture', 'photos', 'version', 'createdAt', 'updatedAt',
 ] as const;
 
 /** Vue « terrain » d'un devis (visite assignée) : lieu, client, créneau, relevés — ni montants, ni historique. */
@@ -260,7 +260,7 @@ export function shapeDevis<T extends Record<string, any>>(a: Access, d: T): T | 
   return a.canSeeAmounts ? d : censorDevis(d as any);
 }
 
-const DEVIS_TERRAIN_KEYS = ['visiteStatut', 'gpsCloture', 'compteRendu', 'photos'];
+const DEVIS_TERRAIN_KEYS = ['visiteStatut', 'visiteRapport', 'gpsCloture', 'compteRendu', 'photos'];
 const DEVIS_CONVERT_KEYS = ['traitement', 'status', 'prochaineAction', 'refInterventionTexte', 'numeroDI'];
 const DEVIS_AMOUNT_KEYS = ['amount', 'montantHt', 'tauxTVA'];
 

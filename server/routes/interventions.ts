@@ -32,8 +32,9 @@ import {
   applyInterventionAutomations,
 } from '../../shared/types.js';
 
-import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
+import { sanitizeAndOptimizePhotosJson } from '../lib/terrainPhotos.js';
 import { validerPdf } from '../domain/devisClient.js';
+import { preparerPdfDeposeCompresse } from '../services/pdfCompression.js';
 import {
   STATUT_RESERVES,
   STATUT_VALIDE_CLIENT,
@@ -561,7 +562,7 @@ interventionRouter.post(
         heureDebutReelle: b.heureDebutReelle || null,
         heureFinReelle: b.heureFinReelle || null,
         actionsRealiseesJson: Array.isArray(b.actionsRealisees) ? JSON.stringify(b.actionsRealisees) : null,
-        photosJson: sanitizePhotosJson(b.photos),
+        photosJson: await sanitizeAndOptimizePhotosJson(b.photos),
         elementsChiffrage: b.elementsChiffrage || null,
         rapportFinal: b.rapportFinal || null,
         statutRapport: (refuserStatutClient(b.statutRapport, null), b.statutRapport || null),
@@ -874,7 +875,7 @@ interventionRouter.patch(
         : null;
     }
     if (b.photos !== undefined) {
-      updateData.photosJson = sanitizePhotosJson(b.photos);
+      updateData.photosJson = await sanitizeAndOptimizePhotosJson(b.photos);
     }
     if (b.elementsChiffrage !== undefined) updateData.elementsChiffrage = b.elementsChiffrage || null;
     if (b.rapportFinal !== undefined) updateData.rapportFinal = b.rapportFinal || null;
@@ -1165,10 +1166,11 @@ interventionRouter.post(
     const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64, 'rapport');
     if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
     const auteur = auteurDe(req);
+    const pret = await preparerPdfDeposeCompresse(v.octets);
     const doc = await (prisma as any).rapportDocument.create({
       data: {
-        companyId, interventionId: intervention.id, nomFichier: v.nom, taille: v.octets.length, sha256: v.sha256,
-        contenu: v.octets, origine: 'DEPOSE', deposePar: auteur,
+        companyId, interventionId: intervention.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256,
+        contenu: pret.octets, origine: 'DEPOSE', deposePar: auteur,
       },
       select: { id: true, nomFichier: true, taille: true, origine: true, createdAt: true, deposePar: true },
     });
@@ -1181,7 +1183,7 @@ interventionRouter.post(
           intervention.historiqueJson,
           auteur,
           'PDF du rapport déposé',
-          `${v.nom} (${Math.round(v.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le rapport' : '')
+          `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le rapport' : '')
         ),
       },
     });

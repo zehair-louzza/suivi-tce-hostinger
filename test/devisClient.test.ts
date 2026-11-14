@@ -15,8 +15,16 @@ import {
   validerPdf,
   validerReponseClient,
   verifierJeton,
+  comptesRendusVisiteDevis,
+  normaliserVisiteRapport,
+  parseVisiteRapportInterne,
 } from '../server/domain/devisClient.js';
 import { genererPdfDevis } from '../server/services/devisPdf.js';
+import { genererPdfVisiteTechnique } from '../server/services/visiteTechniquePdf.js';
+import { optimiserPhotoPourPdf, preparerPdfDeposeCompresse } from '../server/services/pdfCompression.js';
+import { sanitizeAndOptimizePhotosJson } from '../server/lib/terrainPhotos.js';
+import sharp from 'sharp';
+import { PDFDocument } from 'pdf-lib';
 
 // Novembre 2026 : heure d'hiver (Paris = UTC+1). Lundi 16 nov. 2026.
 const paris = (jour: number, h: number, m = 0) => new Date(Date.UTC(2026, 10, jour, h - 1, m));
@@ -176,4 +184,129 @@ test('PDF du devis : génération automatique avec chiffrage, rapport de visite 
   });
   assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
   assert.equal(validerPdf('devis-DEV-2026-009.pdf', pdf.toString('base64')).ok, true);
+});
+
+test('Visite technique préalable interne : parsing historique (details/detail) et génération PDF', async () => {
+  assert.equal(normaliserVisiteRapport({ constatTechnique: '   ', travauxAPrevoir: '' }), null);
+
+  const devisAvecRapport = {
+    visiteTechnicien: 'Karim Benali',
+    visiteDate: '2026-11-12',
+    historiqueJson: JSON.stringify([
+      {
+        action: 'VISITE_RAPPORT_INTERNE',
+        details: JSON.stringify({
+          constatTechnique: 'TGBT vétuste, disjoncteur principal 250A à remplacer.',
+          travauxAPrevoir: 'Dépose ancien coffret et pose TGBT neuf 4 rangées.',
+          materielNecessaire: 'Coffret Prisma, disjoncteur 250A, repérage filerie',
+          contraintesAcces: 'Coupure générale samedi matin 08h-12h avec gardien.',
+          estimationDuree: '1,5 jour à 2 techniciens',
+          redigePar: 'Karim Benali',
+          redigeLe: '2026-11-12',
+        }),
+      },
+      { action: 'COMPTE_RENDU_VISITE', details: 'Accès local technique vérifié.' },
+      { action: 'COMPTE_RENDU_VISITE', detail: 'Ancien format detail pris en compte.' },
+    ]),
+  };
+
+  assert.deepEqual(comptesRendusVisiteDevis(devisAvecRapport), [
+    'Accès local technique vérifié.',
+    'Ancien format detail pris en compte.',
+  ]);
+
+  const parsed = parseVisiteRapportInterne(devisAvecRapport);
+  assert.ok(parsed);
+  assert.equal(parsed.estimationDuree, '1,5 jour à 2 techniciens');
+  assert.equal(parsed.redigePar, 'Karim Benali');
+
+  // Fallback sur COMPTE_RENDU_VISITE si pas encore de VISITE_RAPPORT_INTERNE structuré
+  const fallback = parseVisiteRapportInterne({
+    visiteTechnicien: 'Nadia',
+    visiteDate: '2026-11-13',
+    historiqueJson: JSON.stringify([{ action: 'COMPTE_RENDU_VISITE', details: 'Relevé cotes OK' }]),
+  });
+  assert.equal(fallback?.constatTechnique, 'Relevé cotes OK');
+  assert.equal(fallback?.redigePar, 'Nadia');
+
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const pdf = await genererPdfVisiteTechnique({
+    societe: 'ANELEC GROUPE',
+    contenu: {
+      reference: 'DEV-2026-009',
+      numeroDI: 'DI-900',
+      client: 'Groupe Atlas',
+      site: '3 rue de la Paix',
+      objet: 'Remplacement tableau général basse tension.',
+      corpsEtat: 'Électricité',
+      responsable: 'Admin',
+      technicien: 'Karim Benali',
+      dateVisite: '2026-11-12',
+      heureDebut: '09:00',
+      heureFin: '10:30',
+      statutVisite: 'REALISEE',
+      rapport: parsed,
+      comptesRendusTerrain: ['Accès local technique vérifié.'],
+    },
+    photos: [{ id: 'v1', caption: 'Tableau existant', category: 'AVANT', octets: Buffer.from(PNG, 'base64'), type: 'png' }],
+  });
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
+  assert.equal(validerPdf('visite-technique-DEV-2026-009.pdf', pdf.toString('base64')).ok, true);
+});
+
+test('Compression PDF & photos : réduction MozJPEG haute qualité (PNG/WebP/JPG) et allégement des PDF déposés', async () => {
+  const w = 1400;
+  const h = 1050;
+  const rgb = Buffer.alloc(w * h * 3);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 3;
+      const noise = ((x * 29 + y * 13) ^ (x * y)) & 0x1f;
+      rgb[idx] = Math.min(255, ((x * 255) / w) | 0 + noise);
+      rgb[idx + 1] = Math.min(255, ((y * 255) / h) | 0 + noise);
+      rgb[idx + 2] = 110 + (noise >> 1);
+    }
+  }
+
+  const bigPng = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  const bigWebp = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).webp({ quality: 90 }).toBuffer();
+  const bigJpg = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 95 }).toBuffer();
+
+  const resPng = await optimiserPhotoPourPdf(bigPng, 'png');
+  const resWebp = await optimiserPhotoPourPdf(bigWebp, 'webp');
+  assert.equal(resPng.type, 'jpeg');
+  assert.equal(resWebp.type, 'jpeg');
+  assert.ok(resPng.octets.length < bigPng.length * 0.25);
+  assert.ok(resWebp.octets.length < bigWebp.length * 0.3);
+
+  // Ne jamais grossir une image minuscule déjà optimale
+  const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const resTiny = await optimiserPhotoPourPdf(tinyPng, 'png');
+  assert.equal(resTiny.octets.length, tinyPng.length);
+  assert.equal(resTiny.type, 'png');
+
+  // PDF externe déposé contenant une image JPEG haute résolution et sans object streams
+  const extPdfDoc = await PDFDocument.create();
+  const pg = extPdfDoc.addPage([595, 842]);
+  const jpgImg = await extPdfDoc.embedJpg(bigJpg);
+  pg.drawImage(jpgImg, { x: 40, y: 200, width: 480, height: 360 });
+  const unoptimized = Buffer.from(await extPdfDoc.save({ useObjectStreams: false }));
+
+  const compacted = await preparerPdfDeposeCompresse(unoptimized);
+  assert.equal(compacted.compressed, true);
+  assert.ok(compacted.octets.length < unoptimized.length * 0.5);
+  assert.equal(compacted.octets.subarray(0, 5).toString('latin1'), '%PDF-');
+  assert.equal(validerPdf('devis-externe.pdf', compacted.octets.toString('base64')).ok, true);
+
+  // Stockage base : photos technicien PNG/WebP/gros JPEG compressées en MozJPEG <= ~50 Ko, petits JPEG conservés intacts
+  const storedJson = await sanitizeAndOptimizePhotosJson([
+    { id: 't1', url: `data:image/png;base64,${bigPng.toString('base64')}`, category: 'Terrain', caption: 'Photo 1 technicien' },
+    { id: 't2', url: `data:image/jpeg;base64,${resPng.octets.toString('base64')}`, category: 'Terrain', caption: 'Déjà optimisée' },
+  ]);
+  assert.ok(storedJson);
+  const storedArr = JSON.parse(storedJson);
+  assert.equal(storedArr.length, 2);
+  assert.ok(storedArr[0].url.startsWith('data:image/jpeg;base64,'));
+  assert.ok(storedArr[0].url.length < bigPng.toString('base64').length * 0.3);
+  assert.equal(storedArr[1].url, `data:image/jpeg;base64,${resPng.octets.toString('base64')}`);
 });

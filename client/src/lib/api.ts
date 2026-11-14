@@ -299,6 +299,8 @@ export const devisApi = {
     api.get<Blob>(`/devis/${id}/document`, { params: origine ? { origine } : undefined, responseType: 'blob', timeout: 60000 }),
   apercu: (id: number, payload?: { inclureVisite?: boolean; toutesPhotos?: boolean; photoIds?: string[] }) =>
     api.post<Blob>(`/devis/${id}/apercu`, payload || {}, { responseType: 'blob', timeout: 60000 }),
+  apercuVisiteRapport: (id: number, payload?: { toutesPhotos?: boolean; photoIds?: string[] }) =>
+    api.post<Blob>(`/devis/${id}/visite-rapport/apercu`, payload || {}, { responseType: 'blob', timeout: 60000 }),
   miniatureVisite: (id: number, photoId: string) =>
     api.get<Blob>(`/devis/${id}/visite-photos/${encodeURIComponent(photoId)}`, { responseType: 'blob', timeout: 60000 }),
   envoiClient: (id: number) => api.get<{ data: DevisEnvoiClient }>(`/devis/${id}/envoi-client`),

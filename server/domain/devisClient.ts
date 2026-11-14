@@ -4,6 +4,7 @@
 // Cycle : devis déposé (PDF) → validé en interne puis ENVOYÉ À LA MAIN → client : accepte / refuse / demande une modification
 //   sans réponse : relance J+3, relance J+7, expiration à 30 jours (statut « Expiré », rien n'est supprimé).
 import crypto from 'node:crypto';
+import type { VisiteRapportInterne } from '../../shared/types.js';
 
 export const DUREE_LIEN_JOURS = 30;
 export const RELANCE_J3_JOURS = 3;
@@ -263,4 +264,65 @@ export function contenuDevisModifie(avant: Record<string, any>, apres: Record<st
     const z = valeurComparable(apres[k]);
     return a !== z;
   });
+}
+
+export function jourDevisIso(v: unknown): string | null {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  return Number.isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10);
+}
+
+export function comptesRendusVisiteDevis(devis: any): string[] {
+  try {
+    const events = JSON.parse(devis.historiqueJson || '[]');
+    if (!Array.isArray(events)) return [];
+    return events
+      .filter((e: any) => e?.action === 'COMPTE_RENDU_VISITE')
+      .map((e: any) => String(e?.details || e?.detail || '').trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export function normaliserVisiteRapport(raw: any): VisiteRapportInterne | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const cleanStr = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const out: VisiteRapportInterne = {
+    constatTechnique: cleanStr(raw.constatTechnique),
+    travauxAPrevoir: cleanStr(raw.travauxAPrevoir),
+    materielNecessaire: cleanStr(raw.materielNecessaire),
+    contraintesAcces: cleanStr(raw.contraintesAcces),
+    estimationDuree: cleanStr(raw.estimationDuree),
+    redigePar: cleanStr(raw.redigePar),
+    redigeLe: cleanStr(raw.redigeLe),
+  };
+  const hasContent = Boolean(
+    out.constatTechnique || out.travauxAPrevoir || out.materielNecessaire || out.contraintesAcces || out.estimationDuree
+  );
+  return hasContent ? out : null;
+}
+
+export function parseVisiteRapportInterne(devis: any): VisiteRapportInterne | null {
+  try {
+    const events = JSON.parse(devis.historiqueJson || '[]');
+    if (!Array.isArray(events)) return null;
+    const evt = events.find((e: any) => e?.action === 'VISITE_RAPPORT_INTERNE' && (e?.details || e?.detail));
+    if (evt) {
+      const parsed = JSON.parse(String(evt.details || evt.detail));
+      const norm = normaliserVisiteRapport(parsed);
+      if (norm) return norm;
+    }
+    const crs = comptesRendusVisiteDevis(devis);
+    if (crs.length > 0) {
+      return {
+        constatTechnique: crs.join('\n\n'),
+        redigePar: devis.visiteTechnicien || null,
+        redigeLe: jourDevisIso(devis.visiteDate),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

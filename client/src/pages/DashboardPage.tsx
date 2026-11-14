@@ -35,6 +35,8 @@ import { TechnicianMobileView } from '../components/TechnicianMobileView';
 
 import { PhotoLightbox, PhotoItem } from '../components/PhotoLightbox';
 import { RapportClientPanel } from '../components/RapportClientPanel';
+import { PhotoDossierEditor } from '../components/PhotoDossierEditor';
+import { ouvrirPdfBlob } from '../lib/pdfClientHelpers';
 
 import { SituationReportModal } from '../components/SituationReportModal';
 import { exportSituationInterventionsExcel, exportSituationDevisExcel } from '../lib/exportSituationExcel';
@@ -94,11 +96,45 @@ function HistoriqueTimeline({ events }: { events?: Array<{ id?: string; date?: s
             return (
               <li key={ev.id || i} style={{ display: 'grid', gridTemplateColumns: '10px 1fr', gap: '10px' }}>
                 <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--color-primary, #047857)', marginTop: 5 }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>{ev.action || 'Événement'}</div>
-                  {ev.details && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{ev.details}</div>}
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{[when, ev.auteur].filter(Boolean).join(' · ')}</div>
-                </div>
+                {(() => {
+                  let actionLabel = ev.action || 'Événement';
+                  let detailsLabel = ev.details;
+                  if (ev.action === 'VISITE_RAPPORT_INTERNE' && ev.details) {
+                    actionLabel = 'Rapport de visite technique préalable (usage interne)';
+                    try {
+                      const parsed = JSON.parse(ev.details);
+                      const parts = [
+                        parsed?.constatTechnique ? `Constat : ${parsed.constatTechnique}` : '',
+                        parsed?.travauxAPrevoir ? `À chiffrer : ${parsed.travauxAPrevoir}` : '',
+                        parsed?.estimationDuree ? `Durée : ${parsed.estimationDuree}` : '',
+                      ].filter(Boolean);
+                      if (parts.length > 0) detailsLabel = parts.join(' · ');
+                    } catch {
+                      // Conserver la chaîne brute si non JSON
+                    }
+                  } else if (ev.action === 'CLOTURE_GPS_TERRAIN' && ev.details) {
+                    actionLabel = 'Clôture terrain GPS';
+                    try {
+                      const parsed = JSON.parse(ev.details);
+                      if (parsed && typeof parsed === 'object') {
+                        const parts = [
+                          parsed.statut ? `Statut : ${parsed.statut}` : '',
+                          parsed.commentaire || parsed.note || '',
+                        ].filter(Boolean);
+                        if (parts.length > 0) detailsLabel = parts.join(' · ');
+                      }
+                    } catch {
+                      // Conserver la chaîne brute
+                    }
+                  }
+                  return (
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>{actionLabel}</div>
+                      {detailsLabel && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{detailsLabel}</div>}
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{[when, ev.auteur].filter(Boolean).join(' · ')}</div>
+                    </div>
+                  );
+                })()}
               </li>
             );
           })}
@@ -225,6 +261,62 @@ export function DashboardPage() {
   const [isCreatingDevis, setIsCreatingDevis] = useState(false);
   const [devisTab, setDevisTab] = useState<'qualif' | 'chiffrage' | 'relances' | 'historique'>('qualif');
   const [envoiDevisOuvert, setEnvoiDevisOuvert] = useState(false);
+  const [visiteRapportPdfLoading, setVisiteRapportPdfLoading] = useState(false);
+
+  const updateVisiteRapportDraft = (patch: Record<string, any>) => {
+    if (!selectedDevis) return;
+    setSelectedDevis({
+      ...selectedDevis,
+      visiteNecessaire: true,
+      visiteRapport: {
+        ...(selectedDevis.visiteRapport || {}),
+        ...patch,
+      },
+    });
+  };
+
+  const handleOpenVisiteRapportPdf = async () => {
+    if (!selectedDevis) return;
+    if (!String(selectedDevis.client || '').trim()) {
+      setDevisTab('qualif');
+      toast.error('Renseignez d’abord le client avant de générer le rapport de visite technique.');
+      return;
+    }
+    if (!String(selectedDevis.numeroDI || '').trim()) {
+      setDevisTab('qualif');
+      toast.error('Le numéro de DI du donneur d’ordre est requis pour enregistrer et générer le rapport.');
+      return;
+    }
+    setVisiteRapportPdfLoading(true);
+    try {
+      const auto = applyDevisAutomations(selectedDevis);
+      const payload = {
+        ...auto,
+        tauxTVA: auto.tauxTVA ?? tvaParDefaut(auto.client, clientProfiles),
+      };
+      let targetId = selectedDevis.id;
+      if (isCreatingDevis || !targetId) {
+        const res = await devisApi.create(payload);
+        const created = res.data.data;
+        targetId = created.id;
+        setIsCreatingDevis(false);
+        setSelectedDevis(created);
+        queryClient.invalidateQueries({ queryKey: ['devis'] });
+      } else {
+        const res = await updateDevisMut.mutateAsync({ id: targetId, data: payload });
+        if (res?.data?.data) {
+          setSelectedDevis((cur) => (cur && cur.id === targetId ? { ...cur, ...res.data.data } : cur));
+        }
+      }
+      const pdfRes = await devisApi.apercuVisiteRapport(targetId, { toutesPhotos: true });
+      ouvrirPdfBlob(pdfRes.data);
+      toast.success('Rapport de visite technique préalable généré (usage interne)');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Impossible de générer le rapport de visite technique');
+    } finally {
+      setVisiteRapportPdfLoading(false);
+    }
+  };
   useEffect(() => {
     if (!selectedDevis) setEnvoiDevisOuvert(false);
   }, [selectedDevis]);
@@ -1724,6 +1816,144 @@ export function DashboardPage() {
                         onChange={(e) => setSelectedDevis({ ...selectedDevis, visiteHeureFin: e.target.value })}
                       />
                     </div>
+                    <div>
+                      <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Statut visite</label>
+                      <select
+                        className="input"
+                        value={selectedDevis.visiteStatut || 'PLANIFIEE'}
+                        onChange={(e) => setSelectedDevis({ ...selectedDevis, visiteStatut: e.target.value })}
+                      >
+                        <option value="A_PLANIFIER">À planifier</option>
+                        <option value="PLANIFIEE">Planifiée</option>
+                        <option value="REALISEE">Réalisée</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          Rapport de Visite Technique Préalable (Usage Interne)
+                        </div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                          Document interne pour définir les besoins et rédiger le devis (non visible par le client).
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            const vr = selectedDevis.visiteRapport || {};
+                            const lines = [
+                              vr.travauxAPrevoir ? `Travaux à réaliser :\n${vr.travauxAPrevoir}` : '',
+                              vr.materielNecessaire ? `Matériel / fournitures :\n${vr.materielNecessaire}` : '',
+                              vr.contraintesAcces ? `Contraintes d\'accès :\n${vr.contraintesAcces}` : '',
+                              vr.estimationDuree ? `Durée estimée : ${vr.estimationDuree}` : '',
+                            ].filter(Boolean);
+                            if (lines.length === 0) {
+                              toast.error('Renseignez d\'abord le rapport de visite technique.');
+                              return;
+                            }
+                            const nextNotes = [selectedDevis.notes, ...lines].filter(Boolean).join('\n\n');
+                            const nextObjet = !selectedDevis.objet && vr.travauxAPrevoir ? String(vr.travauxAPrevoir).split('\n')[0].slice(0, 280) : selectedDevis.objet;
+                            updateDevisDraft({ notes: nextNotes, objet: nextObjet });
+                            toast.success('Notes & objet du devis pré-remplis depuis la visite technique.');
+                          }}
+                        >
+                          ↳ Pré-remplir le devis
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={visiteRapportPdfLoading}
+                          onClick={handleOpenVisiteRapportPdf}
+                        >
+                          {visiteRapportPdfLoading ? 'Génération...' : '📄 Générer PDF Visite Interne'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="form-grid" style={{ gap: '10px' }}>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Constat technique sur site (existant, anomalies, relevés)</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="État des lieux, tableau existant, métrés, diagnostic terrain..."
+                          value={selectedDevis.visiteRapport?.constatTechnique || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ constatTechnique: e.target.value })}
+                        />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Travaux à prévoir / périmètre à chiffrer</label>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          placeholder="Prestations détaillées, lots concernés, options recommandées..."
+                          value={selectedDevis.visiteRapport?.travauxAPrevoir || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ travauxAPrevoir: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Matériel, fournitures & moyens nécessaires</label>
+                        <textarea
+                          className="input"
+                          rows={2}
+                          placeholder="Équipements, références, nacelle, échafaudage..."
+                          value={selectedDevis.visiteRapport?.materielNecessaire || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ materielNecessaire: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Contraintes d'accès, sécurité & consignation</label>
+                        <textarea
+                          className="input"
+                          rows={2}
+                          placeholder="Horaires site, badges, EPI, coupure réseau..."
+                          value={selectedDevis.visiteRapport?.contraintesAcces || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ contraintesAcces: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Estimation durée / main-d'œuvre</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Ex: 2 jours à 2 techniciens"
+                          value={selectedDevis.visiteRapport?.estimationDuree || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ estimationDuree: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Rédigé par (référent technique)</label>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Nom du technicien / chargé d'affaires"
+                          value={selectedDevis.visiteRapport?.redigePar || selectedDevis.visiteTechnicien || ''}
+                          onChange={(e) => updateVisiteRapportDraft({ redigePar: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <PhotoDossierEditor
+                      titre="Photos de visite technique / constat"
+                      sousTitre="Optimisées (~50 Ko / photo) • Jointes automatiquement au PDF du devis si l'option visite est cochée"
+                      photos={(selectedDevis.photos || []) as any}
+                      auteur={user?.name || user?.email || ''}
+                      categorieDefaut="RELEVE_CHIFFRAGE"
+                      onChange={(photos) => setSelectedDevis({ ...selectedDevis, photos })}
+                      onCommit={async (photos) => {
+                        if (!selectedDevis?.id) return;
+                        await updateDevisMut.mutateAsync({ id: selectedDevis.id, data: { photos } });
+                        queryClient.invalidateQueries({ queryKey: ['devis-envoi-client', selectedDevis.id] });
+                      }}
+                      onOpenLightbox={(photos, idx) => {
+                        setLightboxPhotos(photos as any);
+                        setLightboxIndex(idx);
+                      }}
+                    />
                   </div>
                 </div>
               )}
@@ -2353,88 +2583,23 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Dossier photographique du technicien */}
-                  <div
-                    style={{
-                      padding: '12px',
-                      borderRadius: '10px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-default)',
+                  {/* Dossier photographique terrain (ajout & édition depuis le bureau ou le terrain) */}
+                  <PhotoDossierEditor
+                    titre="Dossier Photos Terrain"
+                    photos={(selectedIntv.photos || []) as any}
+                    auteur={user?.name || user?.email || ''}
+                    categorieDefaut="CONSTAT"
+                    onChange={(photos) => setSelectedIntv({ ...selectedIntv, photos })}
+                    onCommit={async (photos) => {
+                      if (!selectedIntv?.id) return;
+                      await updateIntvMut.mutateAsync({ id: selectedIntv.id, data: { photos } });
+                      queryClient.invalidateQueries({ queryKey: ['rapport-envoi-client', selectedIntv.id] });
                     }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700 }}>
-                        ⊞ Dossier Photos Terrain ({selectedIntv.photos?.length || 0})
-                      </div>
-                      <span style={{ fontSize: '10.5px', color: '#0284c7', fontWeight: 600 }}>
-                        Stockage optimisé (~50 Ko / photo) • Cliquez pour agrandir
-                      </span>
-                    </div>
-
-                    {selectedIntv.photos && selectedIntv.photos.length > 0 ? (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                          gap: '10px',
-                        }}
-                      >
-                        {selectedIntv.photos.map((ph, idx) => (
-                          <div
-                            key={ph.id || idx}
-                            onClick={() => {
-                              setLightboxPhotos(selectedIntv.photos as any);
-                              setLightboxIndex(idx);
-                            }}
-                            style={{
-                              borderRadius: '8px',
-                              overflow: 'hidden',
-                              border: '1px solid var(--border-default)',
-                              background: 'var(--bg-surface)',
-                              cursor: 'pointer',
-                              position: 'relative',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                              transition: 'transform 0.15s ease',
-                            }}
-                            title="Agrandir en haute résolution"
-                          >
-                            <img
-                              src={ph.url}
-                              alt={ph.caption || 'Photo'}
-                              style={{ width: '100%', height: '90px', objectFit: 'cover' }}
-                            />
-                            <div style={{ padding: '4px 6px' }}>
-                              <div
-                                style={{
-                                  fontSize: '9.5px',
-                                  fontWeight: 800,
-                                  color: '#0284c7',
-                                  textTransform: 'uppercase',
-                                }}
-                              >
-                                {ph.category || 'TERRAIN'}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: '10.5px',
-                                  color: 'var(--text-secondary)',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                {ph.caption || 'Sans légende'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '10px 0' }}>
-                        Aucune photo transmise pour le moment.
-                      </div>
-                    )}
-                  </div>
+                    onOpenLightbox={(photos, idx) => {
+                      setLightboxPhotos(photos as any);
+                      setLightboxIndex(idx);
+                    }}
+                  />
 
                   {/* Relevé Chiffrage / Devis supplémentaire */}
                   {selectedIntv.elementsChiffrage && (

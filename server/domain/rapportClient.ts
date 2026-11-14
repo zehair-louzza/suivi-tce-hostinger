@@ -147,6 +147,8 @@ export function choisirPhotos(dispo: PhotoTransmissible[], demande: { toutes?: u
 
 export type ContenuRapport = {
   reference: string;
+  numeroDI?: string | null;
+  technicien?: string | null;
   client: string | null;
   chantier: string | null;
   site: string | null;
@@ -155,6 +157,10 @@ export type ContenuRapport = {
   typeIntervention: string | null;
   datePlanifiee: string | null;
   dateReelle: string | null;
+  heureDebutReelle?: string | null;
+  heureFinReelle?: string | null;
+  resultatTechnique?: string | null;
+  statutRapport?: string | null;
   actionsRealisees: string[];
   rapport: string;
   photos: Array<{ id: string; caption: string; category: string }>;
@@ -179,6 +185,8 @@ export function fabriquerContenu(
 ): ContenuRapport {
   return {
     reference,
+    numeroDI: texte(i.numeroDI),
+
     client: texte(i.client),
     chantier: texte(i.chantier),
     site: texte(i.siteAdresse),
@@ -187,6 +195,10 @@ export function fabriquerContenu(
     typeIntervention: texte(i.typeIntervention),
     datePlanifiee: jour(i.datePlanifiee),
     dateReelle: jour(i.dateReelle),
+    heureDebutReelle: texte(i.heureDebutReelle) || texte(i.heureDebut),
+    heureFinReelle: texte(i.heureFinReelle) || texte(i.heureFin),
+    resultatTechnique: texte(i.resultatTechnique),
+    statutRapport: texte(i.statutRapport) || texte(i.statutOperationnel),
     actionsRealisees: actions.map((a) => String(a).trim()).filter(Boolean).slice(0, 60),
     rapport: String(i.rapportFinal || i.compteRendu || '').trim().slice(0, 20000),
     photos: photosChoisies.map((p) => ({ id: p.id, caption: p.caption, category: p.category })),

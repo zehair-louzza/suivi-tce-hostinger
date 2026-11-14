@@ -949,7 +949,7 @@ export function TechnicianMobileView({
       }
       setMissionPhotos((prev) => ({ ...prev, [m.id]: next }));
       markSync(m.id, 'saved');
-      toast.success(`Photo envoyée au bureau : ${label}`);
+      toast.success(`Photo envoyée au bureau : ${label} (${optimized.compressedSizeKo} Ko)`);
     } catch {
       markSync(m.id, 'error');
       toast.error('Photo non envoyée : elle n’a pas été enregistrée. Réessayez avec du réseau.');

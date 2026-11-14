@@ -1,5 +1,13 @@
-// Génération automatique du PDF de devis (+ rapport/photos de visite technique si présent).
-import { createPdfWriter, dateFrPdf, type PhotoPdf } from './pdfLayout.js';
+// Génération automatique du PDF professionnel de devis (+ visite technique et photos si présentes).
+import {
+  PALETTE,
+  createDocumentPdf,
+  dateFrPdf,
+  type ClientPdfInfo,
+  type LigneCarteInfo,
+  type PhotoPdf,
+  type SocietePdfInfo,
+} from './pdfLayout.js';
 
 export type ContenuDevisPdf = {
   reference: string;
@@ -25,65 +33,135 @@ export type ContenuDevisPdf = {
   } | null;
 };
 
-const euro = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
-
 export async function genererPdfDevis(p: {
   societe: string;
+  societeInfo?: SocietePdfInfo;
+  clientInfo?: ClientPdfInfo | null;
   contenu: ContenuDevisPdf;
   photos: PhotoPdf[];
 }): Promise<Buffer> {
   const c = p.contenu;
-  const w = await createPdfWriter(`Devis ${c.reference}`);
+  const societeInfo: SocietePdfInfo = p.societeInfo || { nom: p.societe };
+  const dateEm = dateFrPdf(c.dateEmission) || dateFrPdf(new Date().toISOString().slice(0, 10));
 
-  w.ecrire(p.societe, { taille: 11, font: w.gras, couleur: [0.39, 0.45, 0.55] });
-  w.ecrire(`Devis ${c.reference}`, { taille: 20, font: w.gras, espace: 6 });
+  const doc = await createDocumentPdf({
+    title: `Devis ${c.reference}`,
+    societe: societeInfo,
+    badgeType: 'DEVIS COMMERCIAL',
+    reference: c.reference,
+    dateLigne: `Émis le ${dateEm}`,
+    sousRefLigne: c.numeroDI ? `N° DI : ${c.numeroDI}` : null,
+    accent: PALETTE.blue,
+  });
 
-  w.ecrirePaires([
-    ['Client / Donneur d’ordre', c.client],
-    ['N° DI / Suivi', c.numeroDI],
-    ['Site / Adresse', c.site],
-    ["Corps d'état", c.corpsEtat],
-    ['Chargé d’affaires', c.responsable],
-    ['Date d’émission', dateFrPdf(c.dateEmission) || null],
-    ['Validité', c.validiteJours ? `${c.validiteJours} jours` : null],
-    ['Date limite / Échéance', dateFrPdf(c.echeance) || null],
+  // ── 1. Cartes Émetteur & Client / Chantier ─────────────────────────────────
+  const emetteurLignes: LigneCarteInfo[] = [];
+  if (societeInfo.adresse) emetteurLignes.push({ value: societeInfo.adresse });
+  if (societeInfo.siret) emetteurLignes.push({ label: 'SIRET', value: societeInfo.siret });
+  if (societeInfo.email) emetteurLignes.push({ label: 'Contact', value: societeInfo.email });
+  if (c.responsable) emetteurLignes.push({ label: 'Chargé d’affaires', value: c.responsable, bold: true });
+  if (c.corpsEtat) emetteurLignes.push({ label: "Corps d'état", value: c.corpsEtat });
+
+  const clientLignes: LigneCarteInfo[] = [];
+  if (p.clientInfo?.contact) clientLignes.push({ label: 'Interlocuteur', value: p.clientInfo.contact });
+  if (p.clientInfo?.email) clientLignes.push({ label: 'E-mail', value: p.clientInfo.email });
+  if (p.clientInfo?.telephone) clientLignes.push({ label: 'Tél.', value: p.clientInfo.telephone });
+  if (c.site) clientLignes.push({ label: 'Site des travaux', value: c.site, bold: true });
+  else if (p.clientInfo?.adresse) clientLignes.push({ label: 'Adresse client', value: p.clientInfo.adresse });
+  if (c.numeroDI) clientLignes.push({ label: 'N° DI / Suivi', value: c.numeroDI });
+
+  doc.dessinerDeuxColonnes(
+    {
+      titre: 'Émetteur / Prestataire',
+      nomPrincipal: societeInfo.nom,
+      lignes: emetteurLignes,
+      fondTeinte: PALETTE.white,
+      barreCouleur: PALETTE.navy,
+    },
+    {
+      titre: 'Client / Donneur d’ordre',
+      nomPrincipal: c.client || p.clientInfo?.nom || 'Client non renseigné',
+      lignes: clientLignes,
+      fondTeinte: PALETTE.surface,
+      barreCouleur: PALETTE.blue,
+    }
+  );
+
+  // ── 2. Bandeau dates & validité ────────────────────────────────────────────
+  const statutDevis = c.statutCommercial || 'Proposition commerciale';
+  const badgeCouleur = /accept/i.test(statutDevis)
+    ? PALETTE.emeraldDark
+    : /refus|annul|expir/i.test(statutDevis)
+    ? PALETTE.amberDark
+    : PALETTE.blue;
+
+  doc.dessinerBandeauKpi([
+    { label: "Date d'émission", value: dateEm },
+    { label: 'Durée de validité', value: c.validiteJours ? `${c.validiteJours} jours` : '30 jours' },
+    { label: 'Échéance souhaitée', value: dateFrPdf(c.echeance) || '-' },
+    { label: 'Statut', value: statutDevis, pillColor: badgeCouleur },
   ]);
 
+  // ── 3. Objet / Descriptif détaillé des travaux ─────────────────────────────
   if (c.objet) {
-    w.ecrire('Objet / Description des travaux', { taille: 13, font: w.gras, espace: 2 });
-    w.ecrire(c.objet, { taille: 10.5, espace: 8 });
+    doc.dessinerTitreSection('Objet et descriptif des travaux', PALETTE.navy);
+    doc.dessinerBlocTexte(c.objet, { fond: PALETTE.white });
   }
 
+  // ── 4. Tableau de chiffrage financier ──────────────────────────────────────
   if (c.montantHt != null) {
-    w.ecrire('Chiffrage financier', { taille: 13, font: w.gras, espace: 2 });
-    w.ecrire(`Montant HT : ${euro(c.montantHt)}`, { taille: 10.5 });
-    if (c.tauxTVA != null) {
-      const tvaMontant = Math.round(c.montantHt * (c.tauxTVA / 100) * 100) / 100;
-      w.ecrire(`TVA (${c.tauxTVA} %) : ${euro(tvaMontant)}`, { taille: 10.5 });
-    }
-    if (c.montantTtc != null) {
-      w.ecrire(`Total TTC : ${euro(c.montantTtc)}`, { taille: 11.5, font: w.gras });
-    }
-    w.espacer(8);
+    doc.dessinerTitreSection('Chiffrage financier détaillé', PALETTE.blue);
+    doc.dessinerTableauChiffrage({
+      designation: c.objet || `Prestation ${c.corpsEtat || 'Tous corps d’état'} — ${c.site || c.reference}`,
+      corpsEtat: c.corpsEtat,
+      tauxTVA: c.tauxTVA,
+      montantHt: c.montantHt,
+      montantTtc: c.montantTtc,
+    });
   }
 
+  // ── 5. Conditions et remarques ─────────────────────────────────────────────
   if (c.notes) {
-    w.ecrire('Conditions et remarques', { taille: 13, font: w.gras, espace: 2 });
-    w.ecrire(c.notes, { taille: 10.5, espace: 8 });
+    doc.dessinerTitreSection('Conditions, délais et remarques', PALETTE.navy);
+    doc.dessinerBlocTexte(c.notes, { fond: PALETTE.surface });
   }
 
+  // ── 6. Rapport de visite technique préalable (+ photos) ────────────────────
   if (c.visite && (c.visite.comptesRendus.length > 0 || p.photos.length > 0)) {
-    w.ecrire('Rapport de visite technique préalable', { taille: 13, font: w.gras, espace: 4 });
-    w.ecrirePaires([
-      ['Technicien visite', c.visite.technicien],
-      ['Date de visite', dateFrPdf(c.visite.dateVisite) || null],
-      ['Statut de visite', c.visite.statut],
+    doc.dessinerTitreSection('Rapport de visite technique préalable', PALETTE.violetDark);
+    doc.dessinerBandeauKpi([
+      { label: 'Technicien visite', value: c.visite.technicien || '-' },
+      { label: 'Date de visite', value: dateFrPdf(c.visite.dateVisite) || '-' },
+      { label: 'Statut visite', value: c.visite.statut || 'Réalisée', pillColor: PALETTE.violetDark },
     ]);
-    for (const cr of c.visite.comptesRendus) {
-      w.ecrire(cr, { taille: 10.5, espace: 6 });
+    if (c.visite.comptesRendus.length > 0) {
+      doc.dessinerBlocTexte(c.visite.comptesRendus.join('\n\n'), {
+        fond: PALETTE.white,
+        barreGauche: PALETTE.violetDark,
+      });
+    }
+    if (p.photos.length > 0) {
+      await doc.dessinerGrillePhotos(p.photos, `Photos de visite technique (${p.photos.length})`);
     }
   }
 
-  await w.ecrirePhotos(p.photos, `Photos de visite technique (${p.photos.length})`);
-  return w.finaliser(`${p.societe} - ${c.reference}`);
+  // ── 7. Accord client & mentions légales ────────────────────────────────────
+  doc.espacer(4);
+  doc.dessinerSignatures({
+    titreGauche: 'Pour le prestataire',
+    detailGauche: [
+      `Société : ${societeInfo.nom}`,
+      c.responsable ? `Chargé d'affaires : ${c.responsable}` : 'Direction Commerciale',
+      `Devis ${c.reference}`,
+    ],
+    titreDroite: 'Bon pour accord et exécution du devis',
+    detailDroite: [
+      `Client : ${c.client || '-'}`,
+      'Mention "Bon pour accord", date & cachet :',
+      'Signature :',
+    ],
+    mentionLegale: `Devis valable ${c.validiteJours || 30} jours à compter du ${dateEm}. Édité par ${societeInfo.nom} via la plateforme ANELEC SUIVI TCE. La validation électronique ou manuscrite vaut acceptation des conditions et du chiffrage ci-dessus.`,
+  });
+
+  return doc.finaliser();
 }

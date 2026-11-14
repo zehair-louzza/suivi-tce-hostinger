@@ -13,11 +13,17 @@ import { AppError } from '../middleware/errorHandler.js';
 import { APP_URL, sendDevisClientLinkEmail } from './emailService.js';
 import { notifier, ajouterHistorique } from './technicianAutomation.js';
 import { parsePhotosJson } from '../lib/terrainPhotos.js';
+import { chargerIdentiteDocument } from './pdfContext.js';
+import { genererPdfVisiteTechnique } from './visiteTechniquePdf.js';
 import { genererPdfDevis, type ContenuDevisPdf } from './devisPdf.js';
 import type { PhotoPdf } from './pdfLayout.js';
 import { choisirPhotos, photosTransmissibles, type PhotoTransmissible } from '../domain/rapportClient.js';
 import {
   DUREE_LIEN_JOURS,
+  comptesRendusVisiteDevis,
+  jourDevisIso,
+  normaliserVisiteRapport,
+  parseVisiteRapportInterne,
   adressesDepuisFiche,
   choisirDestinataires,
   fabriquerJeton,
@@ -124,30 +130,14 @@ export function octetsPhotoDevis(devis: any, photoId: string): { octets: Buffer;
   return { octets: Buffer.from(m[2].replace(/\s/g, ''), 'base64'), type: t === 'jpg' ? 'jpeg' : t };
 }
 
-export function comptesRendusVisiteDevis(devis: any): string[] {
-  try {
-    const events = JSON.parse(devis.historiqueJson || '[]');
-    if (!Array.isArray(events)) return [];
-    return events
-      .filter((e: any) => e?.action === 'COMPTE_RENDU_VISITE' && typeof e?.detail === 'string' && e.detail.trim())
-      .map((e: any) => String(e.detail).trim());
-  } catch {
-    return [];
-  }
-}
-
-function jourDevisIso(v: unknown): string | null {
-  if (!v) return null;
-  const d = v instanceof Date ? v : new Date(String(v));
-  return Number.isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10);
-}
+export { comptesRendusVisiteDevis, normaliserVisiteRapport, parseVisiteRapportInterne };
 
 export async function fabriquerPdfDevisDoc(
   companyId: number,
   devis: any,
   opts?: { inclureVisite?: boolean; photos?: { toutes?: unknown; ids?: unknown } }
 ): Promise<Buffer> {
-  const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
+  const identiteDoc = await chargerIdentiteDocument(companyId, devis?.client);
   const inclureVisite = opts?.inclureVisite !== false;
   const dispo = visitePhotosDisponibles(devis);
   let photosChoisies: PhotoTransmissible[] = [];
@@ -194,8 +184,58 @@ export async function fabriquerPdfDevisDoc(
       : null,
   };
   return genererPdfDevis({
-    societe: company?.name || 'Votre prestataire',
+    societe: identiteDoc.societe.nom,
+    societeInfo: identiteDoc.societe,
+    clientInfo: identiteDoc.client,
     contenu,
+    photos: photosPdf,
+  });
+}
+
+/** PDF interne de Visite Technique Préalable (constat, travaux à chiffrer, matériel, contraintes, photos). */
+export async function fabriquerPdfVisiteTechnique(
+  companyId: number,
+  devis: any,
+  opts?: { photos?: { toutes?: unknown; ids?: unknown } }
+): Promise<Buffer> {
+  const identiteDoc = await chargerIdentiteDocument(companyId, devis?.client);
+  const dispo = visitePhotosDisponibles(devis);
+  let photosChoisies: PhotoTransmissible[] = [];
+  if (dispo.length > 0) {
+    const demande =
+      opts?.photos && (opts.photos.toutes !== undefined || opts.photos.ids !== undefined)
+        ? opts.photos
+        : { toutes: true };
+    const choix = choisirPhotos(dispo, demande);
+    if (!choix.ok) throw new AppError(422, choix.message, 'PHOTO_INCONNUE');
+    photosChoisies = dispo.filter((x) => choix.ids.includes(x.id));
+  }
+  const photosPdf: PhotoPdf[] = [];
+  for (const ph of photosChoisies) {
+    const o = octetsPhotoDevis(devis, ph.id);
+    if (o) photosPdf.push({ id: ph.id, caption: ph.caption, category: ph.category, octets: o.octets, type: o.type });
+  }
+  const rapport = parseVisiteRapportInterne(devis) || {};
+  return genererPdfVisiteTechnique({
+    societe: identiteDoc.societe.nom,
+    societeInfo: identiteDoc.societe,
+    clientInfo: identiteDoc.client,
+    contenu: {
+      reference: referenceDevis(devis),
+      numeroDI: devis.numeroDI || null,
+      client: devis.client || null,
+      site: devis.siteAdresse || null,
+      objet: devis.objet || null,
+      corpsEtat: devis.corpsEtat || null,
+      responsable: devis.responsable || null,
+      technicien: devis.visiteTechnicien || null,
+      dateVisite: jourDevisIso(devis.visiteDate),
+      heureDebut: devis.visiteHeureDebut || null,
+      heureFin: devis.visiteHeureFin || null,
+      statutVisite: devis.visiteStatut || null,
+      rapport,
+      comptesRendusTerrain: comptesRendusVisiteDevis(devis),
+    },
     photos: photosPdf,
   });
 }

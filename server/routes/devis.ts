@@ -13,7 +13,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
 import { convertKeepingQuote } from '../services/linkedConversion.js';
 import { saveTechnicienGpsPosition } from './referentiels.js';
-import { parsePhotosJson, sanitizePhotosJson } from '../lib/terrainPhotos.js';
+import { parsePhotosJson, sanitizeAndOptimizePhotosJson } from '../lib/terrainPhotos.js';
 import { sendDevisProposalEmail } from '../services/emailService.js';
 import {
   adressesPourDevis,
@@ -21,6 +21,9 @@ import {
   dernierDocument,
   envoyerAuClient,
   fabriquerPdfDevisDoc,
+  fabriquerPdfVisiteTechnique,
+  normaliserVisiteRapport,
+  parseVisiteRapportInterne,
   octetsPhotoDevis,
   visitePhotosDisponibles,
   etatLien,
@@ -29,6 +32,7 @@ import {
   revoquerLiensActifs,
 } from '../services/devisClient.js';
 import { contenuDevisModifie, validerPdf } from '../domain/devisClient.js';
+import { preparerPdfDeposeCompresse } from '../services/pdfCompression.js';
 import {
   computeDevisCalculations,
   traitementToStatusCode,
@@ -67,6 +71,38 @@ function addHistoriqueEvent(
     details,
   });
   return JSON.stringify(list.slice(0, 100));
+}
+
+function appliquerVisiteRapportHistorique(
+  historiqueJson: string | null | undefined,
+  auteur: string,
+  rawRapport: unknown,
+  prevDevis: any | null,
+  technicien?: string | null
+): string | null | undefined {
+  if (rawRapport === undefined || rawRapport === null) return historiqueJson;
+  const next = normaliserVisiteRapport(rawRapport);
+  if (!next) return historiqueJson;
+  const prev = prevDevis ? parseVisiteRapportInterne(prevDevis) : null;
+  const changed =
+    !prev ||
+    next.constatTechnique !== prev.constatTechnique ||
+    next.travauxAPrevoir !== prev.travauxAPrevoir ||
+    next.materielNecessaire !== prev.materielNecessaire ||
+    next.contraintesAcces !== prev.contraintesAcces ||
+    next.estimationDuree !== prev.estimationDuree ||
+    next.redigePar !== prev.redigePar;
+  if (!changed) return historiqueJson;
+  return addHistoriqueEvent(
+    historiqueJson,
+    auteur,
+    'VISITE_RAPPORT_INTERNE',
+    JSON.stringify({
+      ...next,
+      redigePar: next.redigePar || technicien || auteur,
+      redigeLe: next.redigeLe || new Date().toISOString().slice(0, 10),
+    })
+  );
 }
 
 function toISO(dt?: Date | string | null): string | null {
@@ -206,6 +242,7 @@ export function transformDevis(d: any) {
       }
       return d.visiteStatut || null;
     })(),
+    visiteRapport: parseVisiteRapportInterne(d),
     gpsCloture: (() => {
       const hist = parseHistorique(d.historiqueJson);
       const evt = hist.find((h) => h.action === 'CLOTURE_GPS_TERRAIN' && h.details);
@@ -562,7 +599,7 @@ devisRouter.post(
     const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
     const echeance = parseDateOrNull(autoDevis.echeance);
 
-    const historiqueJson = addHistoriqueEvent(
+    let historiqueJson: string | null | undefined = addHistoriqueEvent(
       null,
       auteur,
       'Demande de devis enregistrée',
@@ -605,7 +642,16 @@ devisRouter.post(
         visiteHeureDebut: b.visiteHeureDebut || null,
         visiteHeureFin: b.visiteHeureFin || null,
         visiteStatut: b.visiteDate ? 'Planifiée' : 'À planifier',
-        historiqueJson,
+        visitePhotosJson: b.photos !== undefined ? await sanitizeAndOptimizePhotosJson(b.photos) : null,
+        historiqueJson: appliquerVisiteRapportHistorique(
+          typeof b.compteRendu === 'string' && b.compteRendu.trim()
+            ? addHistoriqueEvent(historiqueJson, auteur, 'COMPTE_RENDU_VISITE', b.compteRendu.trim().slice(0, 4000))
+            : historiqueJson,
+          auteur,
+          b.visiteRapport,
+          null,
+          b.visiteTechnicien
+        ),
         userId,
         companyId,
       },
@@ -697,7 +743,7 @@ devisRouter.patch(
         historiqueJson = addHistoriqueEvent(
           historiqueJson,
           gpsPayload.technicien,
-          'CLOTURE_GPS_TERRAIN',
+          "CLOTURE_GPS_TERRAIN",
           JSON.stringify(gpsPayload)
         );
         try {
@@ -709,17 +755,23 @@ devisRouter.patch(
     }
 
     // Compte-rendu d'une visite technique saisi sur le terrain : conservé dans l'historique du devis
-    if (typeof b.compteRendu === 'string' && b.compteRendu.trim()) {
+    if (typeof b.compteRendu === "string" && b.compteRendu.trim()) {
       historiqueJson = addHistoriqueEvent(
         historiqueJson,
         auteur,
-        'COMPTE_RENDU_VISITE',
+        "COMPTE_RENDU_VISITE",
         b.compteRendu.trim().slice(0, 4000)
       );
     }
 
     const updateData: any = {
-      historiqueJson,
+      historiqueJson: appliquerVisiteRapportHistorique(
+        historiqueJson,
+        auteur,
+        b.visiteRapport,
+        existing,
+        b.visiteTechnicien || existing.visiteTechnicien
+      ),
       version: { increment: 1 },
     };
 
@@ -775,7 +827,7 @@ devisRouter.patch(
     if (b.visiteHeureDebut !== undefined) updateData.visiteHeureDebut = b.visiteHeureDebut || null;
     if (b.visiteHeureFin !== undefined) updateData.visiteHeureFin = b.visiteHeureFin || null;
     if (b.visiteStatut !== undefined) updateData.visiteStatut = b.visiteStatut || null;
-    if (b.photos !== undefined) updateData.visitePhotosJson = sanitizePhotosJson(b.photos);
+    if (b.photos !== undefined) updateData.visitePhotosJson = await sanitizeAndOptimizePhotosJson(b.photos);
 
     // ── Saisies automatiques ──────────────────────────────────────────────────
     // La prochaine action suit l'avancement quand la personne ne l'a pas changée
@@ -1165,8 +1217,9 @@ devisRouter.post(
     const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64);
     if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
+    const pret = await preparerPdfDeposeCompresse(v.octets);
     const doc = await (prisma as any).devisDocument.create({
-      data: { companyId, devisId: devis.id, nomFichier: v.nom, taille: v.octets.length, sha256: v.sha256, contenu: v.octets, deposePar: auteur },
+      data: { companyId, devisId: devis.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256, contenu: pret.octets, deposePar: auteur },
       select: { id: true, nomFichier: true, taille: true, createdAt: true, deposePar: true },
     });
     // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
@@ -1178,7 +1231,7 @@ devisRouter.post(
           devis.historiqueJson,
           auteur,
           'PDF du devis déposé',
-          `${v.nom} (${Math.round(v.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le devis' : '')
+          `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le devis' : '')
         ),
       },
     });
@@ -1223,6 +1276,24 @@ devisRouter.post(
     res.setHeader('Content-Disposition', 'inline; filename="apercu-devis.pdf"');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
+  })
+);
+
+// Rapport PDF interne de Visite Technique Préalable (définition technique & préparation du devis)
+devisRouter.post(
+  "/:id/visite-rapport/apercu",
+  policy("devis.suiviClient"),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { companyId, devis } = await devisPourDocument(req, false);
+    const pdf = await fabriquerPdfVisiteTechnique(companyId, devis, {
+      photos: { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds },
+    });
+    const safeRef = referenceDevis(devis).replace(/[^A-Za-z0-9._-]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="visite-technique-${safeRef}.pdf"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store");
     res.send(pdf);
   })
 );

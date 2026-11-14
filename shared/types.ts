@@ -1085,6 +1085,18 @@ export interface GpsPositionPayload {
   source?: 'GPS_MOBILE' | 'GEOCODED_FALLBACK';
 }
 
+export const VisiteRapportInterneSchema = z.object({
+  constatTechnique: z.string().max(4000).optional().nullable(),
+  travauxAPrevoir: z.string().max(4000).optional().nullable(),
+  materielNecessaire: z.string().max(4000).optional().nullable(),
+  contraintesAcces: z.string().max(4000).optional().nullable(),
+  estimationDuree: z.string().max(200).optional().nullable(),
+  redigePar: z.string().max(120).optional().nullable(),
+  redigeLe: z.string().max(40).optional().nullable(),
+});
+
+export type VisiteRapportInterne = z.infer<typeof VisiteRapportInterneSchema>;
+
 export const DevisSchema = z.object({
   id: z.number().int().positive().optional(),
   reference: z.string().max(100).optional().nullable(),
@@ -1116,6 +1128,9 @@ export const DevisSchema = z.object({
   visiteHeureDebut: z.string().max(10).optional().nullable(),
   visiteHeureFin: z.string().max(10).optional().nullable(),
   visiteStatut: z.string().max(50).optional().nullable(),
+  visiteRapport: VisiteRapportInterneSchema.optional().nullable(),
+  compteRendu: z.string().max(4000).optional().nullable(),
+  photos: z.array(z.any()).optional(),
   gpsCloture: z.any().optional().nullable(),
   historique: z.array(z.any()).optional(),
   createdAt: z.number().int().positive().optional(),

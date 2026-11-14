@@ -29,8 +29,8 @@ export async function compressAndOptimizeImage(file: File): Promise<OptimizedPho
       const img = new Image();
       img.onerror = () => reject(new Error('Format d’image non supporté ou corrompu.'));
       img.onload = () => {
-        // Redimensionnement intelligent : max 820px
-        const maxInitialDim = 820;
+        // Redimensionnement intelligent : max 920px (haute lisibilité sur schémas & tableaux)
+        const maxInitialDim = 920;
         let { width, height } = img;
 
         if (width > maxInitialDim || height > maxInitialDim) {
@@ -60,23 +60,26 @@ export async function compressAndOptimizeImage(file: File): Promise<OptimizedPho
           return;
         }
 
+        // Fond blanc pour éviter un fond noir lors de la conversion JPEG de PNG/WebP transparents
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Passe 1 : Qualité 0.68
-        let quality = 0.68;
+        // Passe 1 : Qualité 0.78 (~35-65 Ko avec détail optimal sur étiquettes)
+        let quality = 0.78;
         let dataUrl = canvas.toDataURL('image/jpeg', quality);
 
-        // Si la taille dépasse ~75 Ko (environ 100 000 caractères base64), passe 2 avec qualité 0.58
-        if (dataUrl.length > 95000) {
-          quality = 0.58;
+        // Passe 2 : Qualité 0.70 si la taille dépasse ~70 Ko
+        if (dataUrl.length > 94000) {
+          quality = 0.7;
           dataUrl = canvas.toDataURL('image/jpeg', quality);
         }
 
-        // Si toujours > 75 Ko, passe 3 avec redimensionnement à 680px max
-        if (dataUrl.length > 95000 && (width > 680 || height > 680)) {
-          const secondMaxDim = 680;
+        // Passe 3 : Redimensionnement à 760px max à 0.65 uniquement si toujours > ~72 Ko
+        if (dataUrl.length > 96000 && (width > 760 || height > 760)) {
+          const secondMaxDim = 760;
           let w2 = width;
           let h2 = height;
           if (w2 > h2) {
@@ -88,10 +91,12 @@ export async function compressAndOptimizeImage(file: File): Promise<OptimizedPho
           }
           canvas.width = w2;
           canvas.height = h2;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w2, h2);
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, w2, h2);
-          dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+          dataUrl = canvas.toDataURL('image/jpeg', 0.65);
           width = w2;
           height = h2;
         }
