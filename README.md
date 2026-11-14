@@ -1,82 +1,47 @@
-# ANELEC GROUPE — Plateforme Intégrée TCE, Dispatching, Suivi GPS & Facturation
+<p align="center">
+  <img src="docs/images/01-logo-anelec-groupe.png" alt="Logo Officiel ANELEC GROUPE" width="380" />
+</p>
 
-> **Progiciel d'Entreprise Tout Corps d'État (TCE) — Multi-Tenant Supabase PostgreSQL**  
-> **Production Officielle :** [suivi.anelecgroupe.com](https://suivi.anelecgroupe.com)  
-> **Version :** Production 2026 Stable & Homologuée  
-> **Manuel Opérationnel & Guide Complet PDF :** [`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`](docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf)  
-> **Vidéo Commerciale & Publicitaire (Full HD 1080p, 44s) :** [`docs/video_publicitaire_anelec_tce.mp4`](docs/video_publicitaire_anelec_tce.mp4)
+<h1 align="center">ANELEC SUIVI TCE — Plateforme de Chiffrage de Devis, Automatisation &amp; Pilotage Chantier</h1>
 
 <p align="center">
-  <img src="docs/images/01-logo-anelec-groupe.png" alt="Logo Officiel ANELEC GROUPE" width="420" />
+  <strong>Progiciel SaaS Multi-Entreprises Tous Corps d'État (TCE) · Chiffrage de devis · Visites techniques · Automatisation · Planning Gantt · App Mobile PWA</strong><br />
+  Production officielle : <a href="https://suivi.anelecgroupe.com"><strong>suivi.anelecgroupe.com</strong></a> · Architecture Node.js / React / PostgreSQL 17 (Supabase)
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-18%20%2B%20TypeScript-1d4ed8?style=flat-square" alt="React 18 TypeScript" />
+  <img src="https://img.shields.io/badge/Express-4%20%2B%20Socket.IO-0f766e?style=flat-square" alt="Express Socket.IO" />
+  <img src="https://img.shields.io/badge/Prisma-5%20%2B%20PostgreSQL%2017-16a34a?style=flat-square" alt="Prisma PostgreSQL" />
+  <img src="https://img.shields.io/badge/Architecture-Multi--Tenant%20RBAC-0f172a?style=flat-square" alt="Multi-Tenant RBAC" />
 </p>
 
 ---
 
-## Sommaire Général
+## Sommaire
 
-1. [Création de Compte Entreprise, Connexion Google 1-Clic & Architecture Supabase Multi-Tenant](#1-création-de-compte-entreprise-connexion-google-1-clic--architecture-supabase-multi-tenant)
-2. [Vue d'Ensemble & Cycle Opérationnel TCE](#2-vue-densemble--cycle-opérationnel-tce)
-3. [Tableau de Bord & Pilotage d'Activité (CA, Volume & Filtres Temporels)](#3-tableau-de-bord--pilotage-dactivité-ca-volume--filtres-temporels)
-4. [Extraction « Situation Excel » Multi-Clients avec Dates de Début et de Fin](#4-extraction--situation-excel--multi-clients-avec-dates-de-début-et-de-fin)
-5. [Pipeline Devis (22 Colonnes), Visites Techniques & Reconversion Sécurisée](#5-pipeline-devis-22-colonnes-visites-techniques--reconversion-sécurisée)
-6. [Suivi des Interventions TCE (23 Colonnes) & Envoi de Rapports Officiels par E-mail](#6-suivi-des-interventions-tce-23-colonnes--envoi-de-rapports-officiels-par-e-mail)
-7. [Planning Gantt Multi-Ressources (60 fps) & Bourse de Dispatch](#7-planning-gantt-multi-ressources-60-fps--bourse-de-dispatch)
-8. [Application Mobile Technicien (PWA), 4 Onglets Tactiles, Clôture GPS & 7 Directions Artistiques](#8-application-mobile-technicien-pwa-4-onglets-tactiles-clôture-gps--7-directions-artistiques)
-9. [Carte Interactive, Positions Actuelles vs Trajet Restant & Mode Plein Écran PC](#9-carte-interactive-positions-actuelles-vs-trajet-restant--mode-plein-écran-pc)
-10. [Studio Facturation & Relation Client (5 Bacs B2B/B2C & Diagnostic Retards)](#10-studio-facturation--relation-client-5-bacs-b2bb2c--diagnostic-retards)
-11. [Profils Donneurs d'Ordre, Rentabilité Équipes & Administration SMTP](#11-profils-donneurs-dordre-rentabilité-équipes--administration-smtp)
-12. [Génération du Guide PDF Complet & Commandes Techniques](#12-génération-du-guide-pdf-complet--commandes-techniques)
-
----
-
-## 1. Création de Compte Entreprise, Connexion Google 1-Clic & Architecture Supabase Multi-Tenant
-
-### 1.1 Instructions Pas-à-Pas de Création de Compte Entreprise (Classique ou Google 1-Clic)
-
-La plateforme permet à chaque entreprise partenaire ou structure TCE de créer son propre espace de travail cloisonné en moins d'une minute :
-
-<p align="center">
-  <img src="docs/images/doc-01-creation-compte-google-entreprise.png" alt="Création de compte entreprise et pré-remplissage Google" width="95%" />
-</p>
-
-1. **Étape 1 — Choix du mode d'inscription (`Créer un espace entreprise`) :**
-   - Depuis la page d'accueil `/login`, cliquez sur l'onglet **« Créer un espace entreprise »**.
-   - **Option A — Inscription Rapide via Google :** Cliquez sur **« Continuer avec Google »** et sélectionnez votre compte Google. Si ce compte n'est pas encore inscrit, l'application **bascule automatiquement sur le formulaire de création de compte** en pré-remplissant votre **Nom complet** et votre **Adresse e-mail professionnelle** validée par Google. Il ne vous reste plus qu'à compléter les champs manquants (**Nom de l'entreprise**, **SIRET/SIREN**, **Mot de passe**) et cocher les CGU.
-   - **Option B — Inscription Manuelle :** Saisissez directement la raison sociale de l'entreprise, son numéro **SIRET (14 chiffres)** ou **SIREN (9 chiffres)**, votre nom complet, votre e-mail professionnel et un mot de passe sécurisé (minimum 8 caractères).
-2. **Étape 2 — Validation contractuelle CGU & RGPD :**
-   - Cochez la case d'acceptation des **Conditions Générales d'Utilisation (CGU)** et de la **Politique de Confidentialité RGPD**, puis cliquez sur **« Créer mon espace entreprise »**.
-3. **Étape 3 — Réception de l'E-mail d'Activation & Validation du Compte :**
-   - Un e-mail officiel d'activation est immédiatement expédié à l'adresse indiquée (via le serveur SMTP de production `zehair@anelecgroupe.com` avec bascule automatique sur le relais Supabase et lien d'activation de secours).
-   - Depuis la bannière de confirmation affichée à l'écran, vous pouvez également cliquer sur **« Renvoyer l'e-mail de confirmation »** ou activer directement votre espace.
-
-<p align="center">
-  <img src="docs/images/doc-02-activation-confirmation-email.png" alt="Bannière d'activation et renvoi d'email" width="49%" />
-  <img src="docs/images/doc-03-email-officiel-activation.png" alt="E-mail officiel d'activation ANELEC GROUPE" width="49%" />
-</p>
+1. [Vue d'Ensemble &amp; Chaîne de Valeur TCE](#1-vue-densemble--chaîne-de-valeur-tce)
+2. [Onboarding Entreprise, Multi-Tenant &amp; Identité Créateur](#2-onboarding-entreprise-multi-tenant--identité-créateur)
+3. [Tableau de Bord Décisionnel &amp; Situation Excel Multi-Clients](#3-tableau-de-bord-décisionnel--situation-excel-multi-clients)
+4. [Chiffrage de Devis, Visite Technique Préalable &amp; Conversion Idempotente](#4-chiffrage-de-devis-visite-technique-préalable--conversion-idempotente)
+5. [Charte PDF Vague-Nuage &amp; Compression Haute Qualité (PDF + Photos Terrain)](#5-charte-pdf-vague-nuage--compression-haute-qualité-pdf--photos-terrain)
+6. [Automatisations Métier &amp; Liens Clients Sécurisés (Devis &amp; Rapports)](#6-automatisations-métier--liens-clients-sécurisés-devis--rapports)
+7. [Planning Gantt Multi-Ressources &amp; Bourse de Dispatch](#7-planning-gantt-multi-ressources--bourse-de-dispatch)
+8. [Application Mobile Technicien (PWA), Tournées &amp; Clôture GPS](#8-application-mobile-technicien-pwa-tournées--clôture-gps)
+9. [Carte Interactive, Facturation B2B/B2C &amp; Rentabilité](#9-carte-interactive-facturation-b2bb2c--rentabilité)
+10. [Gouvernance RBAC (5 Profils), SEO &amp; Référencement IA (GEO/AIO)](#10-gouvernance-rbac-5-profils-seo--référencement-ia-geoaio)
+11. [Installation, Scripts, Tests &amp; Documentation Technique](#11-installation-scripts-tests--documentation-technique)
 
 ---
 
-### 1.2 Fonctionnement de la Base de Données Supabase (`PostgreSQL 17`) lors de la Création d'un Compte Entreprise
+## 1. Vue d'Ensemble & Chaîne de Valeur TCE
 
-Chaque création de compte déclenche une transaction structurée dans la base de données **Supabase PostgreSQL 17** afin d'isoler strictement les données de chaque entreprise (**Architecture Multi-Tenant par `companyId`**) :
+**ANELEC SUIVI TCE** centralise en temps réel l'ensemble du cycle opérationnel des entreprises du bâtiment Tous Corps d'État (TCE), d'électricité générale, CVC, plomberie et maintenance multitechnique :
 
-<p align="center">
-  <img src="docs/images/schema-05-supabase-multitenant-architecture.svg" alt="Architecture Multi-Tenant Supabase PostgreSQL" width="100%" />
-</p>
-
-| Étape Base de Données Supabase | Table PostgreSQL Cible | Opérations Exécutées Automatiquement |
-| :--- | :--- | :--- |
-| **1. Provisionnement du Tenant Entreprise** | `public.companies` | Vérification et normalisation du **SIRET (14 chiffres)** et du **SIREN (9 chiffres)**. Si l'entreprise n'existe pas encore dans `public.companies`, création d'un nouvel enregistrement avec un identifiant unique `company.id` (`active = true`). |
-| **2. Initialisation des Référentiels Métier** | `public.referentiels` | Insertion automatique (`createMany`) des référentiels de base propres à ce `companyId` : **`corpsEtat`** (*Électricité, Plomberie, CVC / Climatisation, Chauffage, Serrurerie, Menuiserie, Peinture, Tous corps d'état*), **`origines`** (*Donneur d'ordre, Client, Contrat de maintenance, Syndic*) et **`responsables`** (pré-initialisé avec le nom du créateur). |
-| **3. Création du Compte Administrateur** | `public.users` | Hachage irréversible du mot de passe via **`bcrypt` (12 rounds)**. Création de l'utilisateur avec `role = 'ADMIN'`, rattaché par clé étrangère `companyId = company.id`, statut initial `active = false`, `emailConfirmed = false`, et génération d'un jeton cryptographique unique `confirmationToken` de **256 bits** (`crypto.randomBytes(32)`). |
-| **4. Certification & Preuve Légale RGPD** | `public.users` | Lors du clic sur le lien de confirmation (`GET /api/auth/confirm-email?token=...`), mise à jour atomique dans Supabase : `active = true`, `emailConfirmed = true`, `confirmationToken = NULL`, enregistrement de la date exacte `termsAcceptedAt = NOW()` et de l'adresse IP `termsAcceptedIp`. |
-| **5. Cloisonnement Strict des Données (Isolation Multi-Tenant)** | `devis`, `interventions`, `pointages_techniciens`, `referentiels`, `users` | Le jeton JWT délivré à la connexion embarque `{ userId, email, role, companyId }`. Toutes les requêtes SQL générées par Prisma appliquent systématiquement le filtre indexé `WHERE "companyId" = req.user.companyId`. **Aucune entreprise ne peut voir ni modifier les devis, interventions, techniciens, tarifs ou pointages d'une autre entreprise.** |
-
----
-
-## 2. Vue d'Ensemble & Cycle Opérationnel TCE
-
-La plateforme **Suivi TCE ANELEC** fédère en temps réel l'ensemble de la chaîne opérationnelle : de la réception du besoin client (Syndics, Bailleurs, Donneurs d'ordre B2B, Clients B2C), en passant par le chiffrage et la visite technique, le planning Gantt, l'optimisation de tournée GPS, l'application mobile technicien, jusqu'à la facturation et l'analyse de rentabilité.
+* **Avant-vente & Chiffrage :** réception des demandes clients, organisation de la **Visite Technique Préalable (Usage Interne)** pour relever les contraintes terrain, puis **chiffrage de devis** structuré.
+* **Automatisations de flux :** envoi sécurisé des devis et rapports par lien unique signé, relances automatiques ouvrées (J+3 / J+7), alertes automatiques techniciens et conversion idempotente devis → chantier.
+* **Exécution terrain & Temps réel :** planning Gantt par compétences, optimisation de tournées sur carte Leaflet, application mobile PWA (pointage horodaté, géolocalisation GPS, photos terrain compressées MozJPEG).
+* **Pilotage financier :** studio de facturation B2B/B2C, extraction comptable **Situation Excel** multi-clients, analyse de rentabilité horaire et tableaux de bord multi-axes.
 
 <p align="center">
   <img src="docs/images/schema-01-cycle-tce.svg" alt="Cycle Complet TCE ANELEC" width="100%" />
@@ -84,214 +49,141 @@ La plateforme **Suivi TCE ANELEC** fédère en temps réel l'ensemble de la cha�
 
 ---
 
-## 3. Tableau de Bord & Pilotage d'Activité (CA, Volume & Filtres Temporels)
+## 2. Onboarding Entreprise, Multi-Tenant & Identité Créateur
 
-Le **Tableau de Bord** offre une lecture instantanée de la santé opérationnelle et financière de l'entreprise grâce à ses **3 volets métier** (*Synthèse*, *Opérations*, *Analyse*) et son module de **Suivi d'Activité & Chiffre d'Affaires par Donneur d'Ordre** :
+### 2.1 Création d'Espace Entreprise & Multi-Entreprises par E-mail
+Depuis `/login`, chaque entreprise provisionne son espace cloisonné en moins d'une minute :
+* **Inscription classique ou Google OAuth 2.0 :** renseignement de la raison sociale, validation stricte du **SIRET (14 chiffres) / SIREN (9 chiffres)**, acceptation contractuelle des CGU / Politique RGPD (horodatée avec IP) et confirmation par code / lien e-mail.
+* **Multi-entreprises native :** une même adresse e-mail peut détenir un compte indépendant dans plusieurs entreprises distinctes (unicité sur `(email, companyId)`), avec sélection sécurisée de l'entreprise **uniquement après validation du mot de passe ou du jeton Google**.
+
+<p align="center">
+  <img src="docs/images/doc-01-creation-compte-google-entreprise.png" alt="Création de compte entreprise et pré-remplissage Google" width="90%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/doc-02-activation-confirmation-email.png" alt="Bannière d'activation et code de confirmation" width="49%" />
+  <img src="docs/images/doc-03-email-officiel-activation.png" alt="E-mail officiel d'activation ANELEC GROUPE" width="49%" />
+</p>
+
+### 2.2 Cloisonnement PostgreSQL & Identité Créateur Signée en Dur
+* **Isolation stricte par `companyId` :** toutes les entités métier (`devis`, `interventions`, `demandes`, `pointages_techniciens`, `referentiels`, `notifications`, `company_mail_settings`) sont filtrées côté serveur à chaque requête via l'identifiant société extrait du JWT vérifié.
+* **Identité créateur canonique :** les coordonnées du créateur de la plateforme (`PLATFORM_CREATOR` dans `shared/types.ts`) sont vérifiées par e-mail et téléphone normalisé E.164 et persistées dans la table protégée par RLS `public.platform_creator` — indépendamment de tout identifiant auto-incrémenté.
+
+<p align="center">
+  <img src="docs/images/schema-05-supabase-multitenant-architecture.svg" alt="Architecture Multi-Tenant Supabase PostgreSQL" width="100%" />
+</p>
+
+---
+
+## 3. Tableau de Bord Décisionnel & Situation Excel Multi-Clients
+
+Le **Tableau de Bord** propose 3 volets métier (*Synthèse*, *Opérations*, *Analyse*) et un pilotage par donneur d'ordre :
+* **4 indicateurs financiers clés :** *CA Global HT*, *CA Facturé HT*, *Reste à Facturer HT* et *Panier Moyen HT / taux d'achèvement*.
+* **Filtres instantanés :** Année, Mois, Jour exact, Donneur d'Ordre et bascule **Chiffre d'Affaires (€) / Volume d'activité**.
+* **Export « Situation Excel » (`.xlsx`) :** sélection de plage de dates exacte (`Du` / `Au`) avec raccourcis rapides et cochage multi-clients pour générer un classeur comptable prêt à transmettre.
 
 <p align="center">
   <img src="docs/images/doc-04-dashboard-sky-ice-ca.png" alt="Tableau de bord Chiffre d'Affaires et KPIs" width="49%" />
   <img src="docs/images/doc-05-dashboard-volume-donneurs-ordre.png" alt="Ventilation par Donneur d'Ordre et Volume d'Activité" width="49%" />
 </p>
 
-* **4 Cartes Financière & Opérationnelle en En-tête :**
-  1. **CA Global HT :** Chiffre d'affaires total généré sur la période sélectionnée.
-  2. **CA Facturé HT :** Montant HT des chantiers déjà facturés.
-  3. **Reste à Facturer HT :** Trésorerie immédiatement facturable sur les chantiers terminés.
-  4. **Panier Moyen HT :** Montant moyen par intervention et taux d'achèvement global.
-* **Filtres Temporels Granulaires :** Filtrage instantané par **Année**, **Mois**, **Jour précis** et **Donneur d'Ordre**, avec bascule entre la vue **Chiffre d'Affaires (€)** et la vue **Volume d'Activité (Quantités)**.
-
----
-
-## 4. Extraction « Situation Excel » Multi-Clients avec Dates de Début et de Fin
-
-Depuis la barre supérieure globale, l'espace **Devis** ou l'espace **Interventions**, le bouton **« Situation Excel »** ouvre le générateur de rapports comptables et opérationnels :
-
 <p align="center">
-  <img src="docs/images/doc-06-export-situation-excel-dates.png" alt="Modale d'export Situation Excel avec dates de début et de fin" width="85%" />
+  <img src="docs/images/doc-06-export-situation-excel-dates.png" alt="Modale d'export Situation Excel multi-clients" width="85%" />
 </p>
 
-* **Plage de Dates Exacte (`Du JJ/MM/AAAA` → `Au JJ/MM/AAAA`) :**
-  - Sélectionnez la **Date de début (Jour / Mois / Année)** et la **Date de fin (Jour / Mois / Année)** pour extraire uniquement les dossiers de la période voulue.
-  - Raccourcis rapides en 1 clic : *Aujourd'hui*, *Ce mois-ci*, *Cette année*, ou *Toutes les dates*.
-* **Sélection Multi-Clients par Cases à Cocher :**
-  - Cochez un donneur d'ordre unique, plusieurs clients simultanément, ou **Tous les donneurs d'ordre** pour générer un classeur Excel `.xlsx` multi-onglets prêt à être transmis au client ou au cabinet comptable.
-
 ---
 
-## 5. Pipeline Devis (22 Colonnes), Visites Techniques & Reconversion Sécurisée
-
-Le module **Devis** centralise toutes les demandes de chiffrage sur 22 colonnes normalisées :
+## 4. Chiffrage de Devis, Visite Technique Préalable & Conversion Idempotente
 
 <p align="center">
   <img src="docs/images/doc-07-devis-pipeline.png" alt="Pipeline Devis 22 colonnes" width="95%" />
 </p>
 
-1. **Création & Visite Technique Préalable (`VIS • DEV`) :**
-   - Lors de la création d'un devis (`+ Devis`), si une visite sur place est requise pour relever les métrés, cochez **« Visite nécessaire »** et affectez un technicien : une mission de visite technique est automatiquement créée et synchronisée avec le planning et l'application mobile du technicien.
-2. **Envoi du Devis par E-mail au Client :**
-   - Envoyez la proposition commerciale directement par e-mail au donneur d'ordre avec suivi automatique dans l'historique du devis.
-3. **Conversion en Intervention & Grille Anti-Doublon :**
-   - Dès acceptation du devis, convertissez-le en intervention en 1 clic sans écraser le devis d'origine. En cas de reconversion (SAV, Reprise, Avenant, 2ème Phase), la grille intelligente qualifie le motif.
+* **Visite Technique Préalable (Usage Interne) :** avant d'éditer un devis, les équipes techniques documentent le constat sur site, les mesures, contraintes d'accès et photos terrain dans un module interne dédié générant un **rapport PDF de Visite Technique Préalable (Usage Interne)** pour fiabiliser le chiffrage sans exposition client.
+* **Chiffrage & Pipeline Devis :** gestion des montants HT/TTC, délais de validité, taux de TVA, statuts commerciaux (`À préparer`, `À valider en interne`, `Envoyé au client`, `Accepté`, `Refusé`, `En négociation`, `Expiré`) et historique horodaté complet.
+* **Conversion Devis → Intervention Idempotente :** toute conversion d'un devis accepté en chantier passe par `convertKeepingQuote` avec clé d'idempotence (`Idempotency-Key`), conservant intégralement le devis d'origine et qualifiant les reconversions multiples (SAV, Reprise, Avenant, 2ème Phase).
 
 ---
 
-## 6. Suivi des Interventions TCE (23 Colonnes) & Envoi de Rapports Officiels par E-mail
+## 5. Charte PDF Vague-Nuage & Compression Haute Qualité (PDF + Photos Terrain)
 
-Le module **Interventions** assure le suivi opérationnel complet des travaux et visites techniques :
+Tous les documents officiels générés par la plateforme respectent la **charte ANELEC GROUPE** :
+* **Identité visuelle unifiée :** en-tête organique en **vague-nuage**, logotype blanc vectorisé sur fond transparent, typographie claire sur fonds doux lisibles, et rappel encadré de l'adresse officielle `https://suivi.anelecgroupe.com` en en-tête et pied de page.
+* **Gabarits couverts :**
+  1. Devis commercial client (`devisPdf.ts`)
+  2. Rapport d'intervention officiel (`rapportPdf.ts`)
+  3. Rapport de Visite Technique Préalable — Usage Interne (`visiteTechniquePdf.ts`)
+* **Compression avancée sans perte visuelle perceptible :**
+  * **Flux PDF (`pdfCompression.ts`) :** déduplication et réencodage adaptatif des flux et images embarquées lors de la génération comme lors du dépôt manuel de PDF client.
+  * **Photos de chantier (`imageOptimizer.ts` + `terrainPhotos.ts`) :** pré-optimisation dans le navigateur avant envoi puis recompression serveur **MozJPEG (`sharp`)** afin de réduire drastiquement le stockage tout en préservant la précision des relevés terrain.
+
+---
+
+## 6. Automatisations Métier & Liens Clients Sécurisés (Devis & Rapports)
 
 <p align="center">
-  <img src="docs/images/doc-08-interventions-tce.png" alt="Suivi des Interventions TCE" width="49%" />
-  <img src="docs/images/doc-18-envoi-rapport-email-modal.png" alt="Envoi du rapport officiel par e-mail" width="49%" />
+  <img src="docs/images/doc-08-interventions-tce.png" alt="Suivi des Interventions TCE" width="90%" />
 </p>
 
-* **Suivi Temps Réel :** Statuts opérationnels (*À planifier, Planifiée, En cours, Intervention non terminée, Clôturée*), heures réelles de début et de fin, éléments de chiffrage et photos avant/après.
-* **Rapport Officiel PDF & Envoi par E-mail (Réservé à l'équipe bureau) :** Génération du rapport d'intervention certifié avec photos et envoi direct par e-mail au donneur d'ordre.
+La plateforme intègre trois moteurs d'automatisation paramétrables par entreprise (détails de recette dans [`docs/RECETTE_ROLES.md`](docs/RECETTE_ROLES.md)) :
+
+1. **Automatisation A — Affectation & Réponse Technicien :** notification immédiate à l'affectation (`À confirmer`), acceptation ou refus motivé obligatoire depuis le mobile, relance in-app paramétrable et escalade automatique (application + e-mail) vers le planificateur et la direction, avec option de pause week-end.
+2. **Automatisation B — Devis Client par Lien Sécurisé :** dépôt de PDF ou génération automatique, sélection explicite des destinataires depuis la fiche client, page publique sans compte client (consultation PDF, acceptation, refus motivé ou demande de modification), relances J+3 / J+7 (lun.–sam. 8 h–19 h), expiration à 30 jours et révocation immédiate du lien en cas de modification substantielle.
+3. **Automatisation C — Rapport Client par Lien Sécurisé :** accessible uniquement lorsque le rapport est `Validé & Clôturé` en interne ; sélection granulaire photo par photo des visuels transmissibles ; validation ou formulation de réserves motivées par le client (aucune validation tacite automatique à l'échéance des 30 jours).
 
 ---
 
-## 7. Planning Gantt Multi-Ressources (60 fps) & Bourse de Dispatch
-
-Le **Planning Gantt** permet aux planificateurs et dispatchers d'organiser les journées des techniciens par simple glisser-déposer :
+## 7. Planning Gantt Multi-Ressources & Bourse de Dispatch
 
 <p align="center">
   <img src="docs/images/04-dispatch-planning-gantt-pc.png" alt="Planning Gantt Multi-Ressources" width="95%" />
 </p>
 
-* **Bourse de Dispatch Latérale :** Liste des interventions et visites devis en attente de planification.
-* **Glisser-Déposer & Redimensionnement Horaire :** Affectez une mission à un technicien ou une équipe binôme et ajustez sa durée directement à la souris.
+* **Vue Gantt 07 h – 19 h temps réel :** visualisation claire par technicien et corps d'état, barre temporelle courante et indicateurs visuels de charge.
+* **Bourse de Dispatch latérale :** affectation en glisser-déposer des interventions et visites techniques en attente, avec redimensionnement direct de la durée.
 
 ---
 
-## 8. Application Mobile Technicien (PWA), 4 Onglets Tactiles, Clôture GPS & 7 Directions Artistiques
+## 8. Application Mobile Technicien (PWA), Tournées & Clôture GPS
 
-L'**application mobile terrain** (PWA installable sur iOS et Android) accompagne le technicien de sa prise de service le matin jusqu'à la clôture certifiée de ses interventions. Entièrement réarchitecturée pour une utilisation optimale à une main (zone du pouce), elle s'articule autour de **4 onglets tactiles**, intègre le **sélecteur des 7 Directions Artistiques** et certifie chaque étape par géolocalisation.
+Installable sur iOS et Android comme application web progressive (PWA) et utilisable à une main sur le terrain, l'interface mobile s'articule autour de **4 onglets tactiles** :
 
 <p align="center">
-  <img src="docs/images/mobile-01-missions.png" alt="App Mobile Technicien - 1. Missions" width="24%" />
-  <img src="docs/images/mobile-02-tournee.png" alt="App Mobile Technicien - 2. Ma Tournée" width="24%" />
-  <img src="docs/images/mobile-03-historique.png" alt="App Mobile Technicien - 3. Historique" width="24%" />
-  <img src="docs/images/mobile-04-profil.png" alt="App Mobile Technicien - 4. Profil et Thèmes" width="24%" />
+  <img src="docs/images/mobile-01-missions.png" alt="App Mobile - 1. Missions" width="24%" />
+  <img src="docs/images/mobile-02-tournee-carte.png" alt="App Mobile - 2. Ma Tournée" width="24%" />
+  <img src="docs/images/mobile-03-historique.png" alt="App Mobile - 3. Historique" width="24%" />
+  <img src="docs/images/mobile-04-profil.png" alt="App Mobile - 4. Profil & Thèmes" width="24%" />
 </p>
 
 <p align="center">
-  <img src="docs/images/mobile-01-missions.png" alt="1. Missions & Pointage dynamique" width="24%" />
-  <img src="docs/images/mobile-02-tournee-carte.png" alt="2. Tournée & Carte Leaflet temps réel" width="24%" />
-  <img src="docs/images/mobile-03-historique.png" alt="3. Historique des interventions clôturées" width="24%" />
-  <img src="docs/images/mobile-04-profil.png" alt="4. Profil technicien & métriques" width="24%" />
-</p>
-<p align="center">
-  <em>Figure 8.1 : Les 4 écrans natifs de l'App Mobile Technicien (1. Missions, 2. Ma Tournée avec carte Leaflet, 3. Historique, 4. Profil & 7 Thèmes).</em>
+  <img src="docs/images/doc-10-mobile-cloture-gps-modal.png" alt="Certification GPS lors de la clôture" width="45%" />
+  <img src="docs/images/doc-11-mobile-missions-cloturees-toast.png" alt="Confirmation de clôture mobile" width="45%" />
 </p>
 
-### 8.1 Les 4 Onglets de l'Application Mobile & Nouveautés Homologuées
-
-1. **Onglet « Missions » (Accueil, Prise & Fin de Service, Filtres Temporels) :**
-   - **Barre de statut smartphone native :** Affichage de l'heure en temps réel, indicateurs réseau et batterie.
-   - **En-tête épuré :** Logomark ANELEC et salutation dynamique (*« Bonjour [Nom] »*).
-   - **Boutons Pointage Métier Explicites :** 
-     - **Bouton « Commencer la journée » :** Horodate immédiatement la prise de service en base PostgreSQL (`pointages_techniciens`) et bascule en pastille verte **`● Pointé à [HH:MM]`**.
-     - **Bouton « Finir la journée » :** Permet au technicien de clôturer sa journée de service avec vérification des missions terminées et horodatage de fin (`heureFinJournee`).
-   - **Filtre Mois Direct & Choix des Jours de la Semaine :**
-     - Menu déroulant pour basculer instantanément de mois en mois (*Novembre 2026, Décembre 2026, Janvier 2027...*) avec navigation Semaine Précédente / Semaine Suivante et bouton raccourci **« Aujourd'hui »**.
-     - Bandeau tactile des 7 jours de la semaine (**Lun, Mar, Mer, Jeu, Ven, Sam, Dim**) affichant le numéro du jour et le **compteur de missions planifiées**. Le jour cliqué met à jour immédiatement les interventions du terrain.
-   - **Jauge de progression journalière :** Barre d'avancement visuelle en direct (ex. *« 1/3 missions terminées »*).
-   - **Cartes des missions du jour :** Créneau horaire, pastille de statut colorée (*En cours*, *Clôturée*, *Prévu*), nom du client ou bailleur, corps d'état & objet de la prestation, et adresse avec chevron tactile.
-
-2. **Onglet « Ma tournée » (Carte Interactive Leaflet Temps Réel & Ordre des Arrêts) :**
-   - **Affichage cartographique complet Leaflet :** Intégration de tuiles vectorielles claires (OpenStreetMap / Carto Positron), point de départ Siège/Dépôt (pastille bleue avec initiales), et **marqueurs numérotés 1, 2, 3** correspondant aux étapes ordonnancées.
-   - **Tracé d'itinéraire automatique :** Ligne en pointillés reliant le départ et l'ensemble des chantiers de la journée.
-   - **Redimensionnement dynamique sans bug d'affichage :** Écouteur `ResizeObserver` et invalidation automatique des tuiles à l'ouverture de l'onglet pour garantir un affichage net sur tous les modèles de smartphones et tablettes.
-   - **Ordonnancement séquentiel des arrêts :** Liste ordonnée sous la carte indiquant chaque arrêt avec son numéro, son heure de passage, son adresse et son badge de statut (*En cours*, *Suivant*, *Prévu*).
-
-3. **Onglet « Historique » (Chantiers Clôturés) :**
-   - **Archives des interventions passées :** Liste chronologique des chantiers terminés.
-   - **Cartes récapitulatives :** Référence métier officielle (`INT-2026-xxx`), pastille verte `● Clôturée`, nom du client, descriptif des travaux réalisés, date formatée et compteur de photos certifiées.
-
-4. **Onglet « Profil » & Sélecteur des 7 Directions Artistiques :**
-   - **Avatar grand format (64px) & Spécialités :** Profil du technicien avec corps d'état assignés (*Électricité • Plomberie • Serrurerie*).
-   - **4 KPI d'activité en temps réel :**
-     1. *Heures effectuées dans la semaine (avec repère légal 35 h)*
-     2. *Missions accomplies dans le mois*
-     3. *Photos d'intervention envoyées*
-     4. *Taux de clôture GPS : 100 %*
-   - **Sélecteur interactif des 7 Thèmes :** Le collaborateur peut changer l'apparence complète de son application en 1 tap parmi :
-     * **1. Atlas Clarity** (Mode SaaS épuré, blanc éclatant, bleu roi)
-     * **2. Craft Warmth** (Palette artisanale chaleureuse, tons sable & ambre)
-     * **3. Signal Command** (Ambiance cockpit sombre haute lisibilité)
-     * **4. Editorial Swiss** (Typographie helvétique rigoureuse et contrastée)
-     * **5. Bento Modular** (Grille modulaire géométrique aux accents ANELEC)
-     * **6. Original Clair** & **7. Original Sombre** (Thèmes historiques de la plateforme)
-   - **Bouton de déconnexion sécurisé :** « Se déconnecter ».
+* **Missions & Pointage horodaté :** boutons *Commencer / Finir la journée*, navigation jour/semaine/mois, fiches d'intervention avec accès GPS/téléphone, compte-rendu et capture de photos Avant / Après compressées.
+* **Ma tournée (Leaflet temps réel) :** carte d'itinéraire ordonnée depuis le dépôt jusqu'aux différents chantiers de la journée.
+* **Historique & Profil :** archivage des interventions clôturées, compteurs hebdomadaires et personnalisation de l'apparence selon la politique définie par l'entreprise.
+* **Clôture certifiée par GPS :** relevé de coordonnées et rayon de précision lors de la clôture, avec retrait immédiat de l'étape sur la carte générale de tournée.
 
 ---
 
-### 8.1.1 Accès Universel à l'App Mobile sur N'importe Quel Profil Utilisateur
+## 9. Carte Interactive, Facturation B2B/B2C & Rentabilité
 
-Que l'utilisateur soit connecté en tant qu'**Administrateur**, **Planificateur**, **Chiffrage & Devis**, **Rédacteur de rapports** ou **Consultation seule (Viewer)** :
-* **Bouton « Version Mobile » dans la Topbar :** Un bouton direct permet de basculer instantanément de l'interface bureau vers l'application mobile technicien sans quitter sa session.
-* **Option « Basculer vers l'App Mobile » dans le Menu « Mon profil » :** Accessible via la pastille utilisateur en bas de la barre latérale.
-* **Lien permanent « App Mobile Technicien » :** Présent dans le menu de gauche sous la rubrique *Espace Terrain* (accessible avec raccourci clavier `0`).
-* **Sélecteur Superviseur :** Lorsqu'un profil bureau ou admin consulte l'application mobile, un menu déroulant en en-tête lui permet de visualiser la tournée et les pointages de n'importe quel technicien de son entreprise.
-
----
-
-### 8.2 Fiche Détail de Mission & Clôture GPS Inviolable
-
-En touchant n'importe quelle carte de mission, le technicien bascule sur la vue d'intervention détaillée plein écran :
+### 9.1 Carte Interactive & Suivi de Tournées (`/carte`)
 
 <p align="center">
-  <img src="docs/images/doc-10-mobile-cloture-gps-modal.png" alt="Modale de localisation GPS obligatoire pour clôturer" width="45%" />
-  <img src="docs/images/doc-11-mobile-missions-cloturees-toast.png" alt="Missions déclarées terminées et notification sur fond blanc opaque" width="45%" />
+  <img src="docs/images/doc-09-carte-avant-cloture.png" alt="Carte avant clôture mobile" width="49%" />
+  <img src="docs/images/doc-12-carte-apres-retrait-missions-finies.png" alt="Carte mise à jour après clôture" width="49%" />
 </p>
 
-* **Tuiles Métriques du Chantier :** Créneau horaire planifié, Montant estimé HT et Durée indicative.
-* **Actions Rapides d'Accès :** Bouton **[Itinéraire]** ouvrant instantanément l'application GPS native du smartphone (Google Maps, Waze, Apple Plans) et bouton **[Appeler]** composant directement le numéro du contact sur site.
-* **Consignes d'Accès & Sécurité :** Digicodes, étage, porte, consignes particulières transmises par le donneur d'ordre.
-* **Photos Avant / Après avec Compression Locale Automatique (< 75 Ko) :** Galerie de vignettes et bouton d'ajout ouvrant la caméra mobile avec optimisation et réduction de poids instantanées côté client avant téléversement.
-* **Compte-Rendu & Rapport d'Intervention :** Zone de saisie libre des observations et travaux réalisés.
-* **Barre d'Actions Flottante Accessible au Pouce :** Boutons tactiles `[Démarrer sur site]`, `[Mettre en pause]` et `[Clôturer avec GPS]`.
-* **Certification GPS & Retrait Immédiat de la Carte :**
-  - La clôture d'une **Intervention (`INT-...`)** ou d'un **Bon de Devis / Visite Devis (`DEV-...` / `VIS-...`)** déclenche l'acquisition de la position géographique avec calcul du rayon de précision en mètres.
-  - La position est transmise au bureau et **la mission est automatiquement retirée de la carte générale des tournées** pour ne laisser que le reste à faire.
-  - Une confirmation nette sur **fond blanc 100 % opaque** s'affiche sans aucun chevauchement et disparaît après 2,5 secondes.
+* Bascule immédiate entre **Positions actuelles techniciens**, **Trajet restant optimisé**, et **Vue combinée**, avec mode **Cockpit Plein Écran PC**.
 
----
-
-## 9. Carte Interactive, Positions Actuelles vs Trajet Restant & Mode Plein Écran PC
-
-Le module **Carte et tournées** (`/carte`) offre au bureau opérationnel comme au technicien une visibilité complète en temps réel :
+### 9.2 Studio Facturation, Clients & Administration SMTP
 
 <p align="center">
-  <img src="docs/images/doc-09-carte-avant-cloture.png" alt="Carte AVANT clôture : 3 missions actives sur la carte" width="49%" />
-  <img src="docs/images/doc-12-carte-apres-retrait-missions-finies.png" alt="Carte APRÈS clôture mobile : missions finies retirées de la carte" width="49%" />
+  <img src="docs/images/doc-13-facturation-5-bacs-kpi.png" alt="Studio Facturation et les 5 Bacs" width="49%" />
+  <img src="docs/images/doc-14-facturation-diagnostic-retards.png" alt="Diagnostic des retards et relances clients" width="49%" />
 </p>
-
-* **Retrait Automatique des Missions Terminées :**
-  - Dès qu'une intervention ou un bon de devis est déclaré terminé sur mobile, son marqueur d'étape est **retiré de la carte**, le compteur d'avancement du technicien est incrémenté (ex. `2/3 finies (67%)`) et le trajet routier est recalculé uniquement sur les étapes restantes.
-* **3 Modes d'Affichage au Choix :**
-  1. **`⌖ Positions Actuelles Techniciens` :** Affiche uniquement la dernière position GPS transmise par chaque technicien.
-  2. **`→ Afficher le Trajet Restant` :** Affiche uniquement les étapes restantes à réaliser et le tracé routier optimisé.
-  3. **`❖ Les Deux (Positions + Trajet)` :** Combine les positions actuelles des techniciens et l'itinéraire des missions restantes.
-* **Mode Cockpit Plein Écran PC :** Le bouton **`⛶ Plein Écran PC`** agrandit la carte sur 100 % de l'écran avec un panneau latéral de suivi d'avancement en direct par technicien.
-
----
-
-## 10. Studio Facturation & Relation Client (5 Bacs B2B/B2C & Diagnostic Retards)
-
-L'espace **Facturation** (`/facturation`) structure le contrôle financier et la communication client :
-
-<p align="center">
-  <img src="docs/images/doc-13-facturation-5-bacs-kpi.png" alt="Studio Facturation et les 5 Bacs KPI" width="49%" />
-  <img src="docs/images/doc-14-facturation-diagnostic-retards.png" alt="Diagnostic 1-Clic des Retards et Réponses Clients" width="49%" />
-</p>
-
-* **5 Bacs de Tri Intelligents :** *À facturer (Prêtes)*, *À vérifier (En attente)*, *Non éligibles (En cours / Visites)*, *Retards & Relances (Diagnostic 1-Clic)* et *Facturées (B2B / B2C)*.
-* **Arbitrage Fiscal B2B / B2C :** Calcul automatique HT/TTC (autoliquidation B2B 0%, TVA 20%, TVA réduite B2C 10% et 5,5%).
-* **Diagnostic des Retards & Générateur de Réponse Client Initial :** Analyse automatique de la cause d'un retard ou blocage terrain et génération en 1 clic du courrier de réponse destiné au client.
-
----
-
-## 11. Profils Donneurs d'Ordre, Rentabilité Équipes & Administration SMTP
 
 <p align="center">
   <img src="docs/images/doc-16-profils-donneurs-ordre.png" alt="Profils et Donneurs d'Ordre" width="32%" />
@@ -299,37 +191,79 @@ L'espace **Facturation** (`/facturation`) structure le contrôle financier et la
   <img src="docs/images/doc-15-admin-workstation-smtp.png" alt="Administration et Supervision SMTP" width="32%" />
 </p>
 
-* **Profils & Donneurs d'Ordre :** Répertoire complet des syndics, bailleurs et clients B2B/B2C avec fiche technique détaillée (SIRET, contacts, délais contractuels, grille tarifaire par corps d'état et historique financier).
-* **Comptabilité & Rentabilité Équipes :** Calcul de la rentabilité horaire réelle (€ HT / heure pointée) et simulateur de coût horaire chargé.
-* **Utilisateurs, Accès & Supervision E-mails SMTP :** Gestion des comptes et permissions par rôle (`ADMIN`, `USER`, `TECHNICIEN`), création directe de comptes pré-activés, audit des pointages et panneau de test/diagnostic SMTP en temps réel.
+* **Facturation 5 bacs :** *À facturer*, *À vérifier*, *Non éligibles*, *Retards & Relances (Diagnostic 1-clic)* et *Facturées* avec gestion fiscale B2B/B2C (autoliquidation 0 %, 20 %, 10 %, 5,5 %).
+* **Donneurs d'ordre & Rentabilité :** fiches techniques multi-destinataires (devis / rapports / facturation), grilles tarifaires par corps d'état et simulateur de coût horaire chargé.
+* **Console Admin :** gestion des rôles et permissions, invitations e-mail, configuration SMTP dédiée par société chiffrée côté serveur, et audit hebdomadaire des pointages.
 
 ---
 
-## 12. Génération du Guide PDF Complet & Commandes Techniques
+## 10. Gouvernance RBAC (5 Profils), SEO & Référencement IA (GEO/AIO)
 
-### Générer le Manuel Utilisateur & Guide de Création de Compte au Format PDF
+### 10.1 Rôles & Cloisonnement Serveur (« Deny by Default »)
+Les autorisations sont vérifiées à chaque appel API dans `server/lib/guard.ts` et bornées par des plafonds stricts par rôle (`ROLE_DEFINITIONS` dans `shared/types.ts`) :
+
+| Code Rôle | Libellé | Accès Principal |
+| :--- | :--- | :--- |
+| `ADMIN` | Direction | Gouvernance totale de l'entreprise, utilisateurs, SMTP, facturation, suppressions |
+| `CHIFFRAGE_DEVIS` | Chargé d'études (chiffrage) | Devis, visites de chiffrage, conversion devis → intervention |
+| `CONDUCTEUR_TRAVAUX` | Planificateur | Demandes, planning Gantt, carte, interventions et affectation techniciens |
+| `REDACTEUR_RAPPORTS` | Rapports et facturation | Relecture et envoi sécurisé des rapports clients, facturation et donneurs d'ordre |
+| `TECHNICIEN` | Technicien | Application mobile PWA uniquement, sur ses seules missions (sans montants) |
+
+### 10.2 SEO & Référencement Moteurs IA (GEO / AIO)
+* **Découverte exhaustive :** `/robots.txt` ouvert aux principaux moteurs web (`Googlebot`, `Bingbot`, `Qwantbot`, `DuckDuckBot`, `YandexBot`, `Baiduspider`, `Applebot`) et moteurs IA (`GPTBot`, `OAI-SearchBot`, `ChatGPT-User`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`, `meta-externalagent`, `MistralAI-User`, `xAI-Bot`, etc.) tout en protégeant `/api/`, `/devis-client/`, `/rapport-client/` et `/invitation` (`Disallow` + `X-Robots-Tag: noindex`).
+* **Ressources sémantiques IA :** `/llms.txt`, `/llms-full.txt`, `/.well-known/ai-plugin.json`, `/sitemap.xml` et données structurées JSON-LD `@graph` (`WebSite`, `Organization`, `SoftwareApplication`, `FAQPage`) optimisées autour des mots-clés **chiffrage de devis**, **automatisation**, **visite technique préalable** et **suivi TCE**.
+
+---
+
+## 11. Installation, Scripts, Tests & Documentation Technique
+
+### 11.1 Démarrage Local Rapide
 
 ```sh
-# Générer le document PDF complet illustré (docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf)
-node scripts/generate-doc-pdf.mjs
-```
-
-### Commandes de Développement & Production
-
-```sh
-# 1. Installation des dépendances
+# 1. Installer les dépendances (inclut devDependencies)
 npm ci --include=dev
 
-# 2. Lancement en développement local
-npm run dev
+# 2. Configurer les variables d'environnement à partir du modèle
+cp .env.example .env
 
-# 3. Compilation complète de production (Client Vite + Serveur TypeScript)
+# 3. Générer le client Prisma et lancer l'environnement de développement
+npx prisma generate
+npm run dev
+```
+
+### 11.2 Build, Migrations & Tests Automatisés
+
+```sh
+# Compilation complète de production (Client Vite + Serveur Express TypeScript)
 npm run build
 
-# 4. Application des migrations PostgreSQL / Supabase
+# Démarrage production (utilisé sur Hostinger)
+node scripts/start.mjs
+
+# Application manuelle contrôlée des migrations PostgreSQL / Supabase
 node scripts/migrate.mjs
+
+# Suite E2E complète des rôles, isolation multi-entreprises et automatisations A/B/C
+npm run test:roles
+
+# Tests unitaires ciblés (accès, créateur, liens clients, workflows, mots de passe)
+npx tsx --test test/creatorIdentity.test.ts test/accessRules.test.ts test/devisClient.test.ts test/rapportClient.test.ts test/workflowAutomation.test.ts test/passwordPolicy.test.ts
 ```
+
+### 11.3 Index de la Documentation
+
+| Document | Contenu |
+| :--- | :--- |
+| [`docs/ARCHITECTURE_TECHNIQUE.md`](docs/ARCHITECTURE_TECHNIQUE.md) | Stack, organisation du dépôt, multi-tenant, RBAC, moteur PDF/MozJPEG et SEO/GEO |
+| [`docs/DEPLOIEMENT_ET_EXPLOITATION.md`](docs/DEPLOIEMENT_ET_EXPLOITATION.md) | Configuration Hostinger + Supabase, variables d'env, procédure Prisma 5 et check-list prod |
+| [`docs/RECETTE_ROLES.md`](docs/RECETTE_ROLES.md) | Cahier de recette détaillé des 5 rôles, automatisations A/B/C et multi-entreprises |
+| [`docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf`](docs/GUIDE_UTILISATEUR_PROCEDURES_ANELEC_TCE.pdf) | Manuel opérationnel complet illustré au format PDF |
+| [`docs/DOSSIER_PDF_MAQUETTES.md`](docs/DOSSIER_PDF_MAQUETTES.md) | Documentation du dossier PDF de la galerie de maquettes UI/UX isolée (`frontend/`) |
 
 ---
 
-© **ANELEC GROUPE** — 9 Rue des Colonnes, 75002 Paris. Tous droits réservés.
+<p align="center">
+  © 2026 <strong>ANELEC GROUPE SAS</strong> — 9 Rue des Colonnes, 75002 Paris · SIREN 933 108 607 · Tous droits réservés.<br />
+  Contact technique &amp; éditeur : Zehair Louzza (<a href="mailto:louzza.zehair@gmail.com">louzza.zehair@gmail.com</a> · <a href="tel:+33628618628">+33 6 28 61 86 28</a>)
+</p>

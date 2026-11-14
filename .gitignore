@@ -53,6 +53,7 @@ prisma/migrations/.migration_lock.toml
 .turbo
 scratch/
 .env.*
+!.env.example
 *.env
 credentials.json
 *.key

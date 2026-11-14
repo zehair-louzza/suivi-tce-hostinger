@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { BubbleBackdrop } from '../components/BubbleBackdrop';
 import { InstallAppButton } from '../components/InstallAppButton';
 import { LegalTermsModal } from '../components/LegalTermsModal';
-import { ProCheckIcon, ProExternalIcon, ProGlyph, ProLockIcon, ProMailIcon, ProRefreshIcon } from '../components/ProIcons';
+import { ProCheckIcon, ProExternalIcon, ProLockIcon, ProMailIcon, ProRefreshIcon } from '../components/ProIcons';
 
 /**
  * Composant OTP à 6 cases inspiré de GitHub / Stripe — chaque chiffre dans sa propre case,
@@ -1776,29 +1776,6 @@ export function LoginPage() {
           </div>
 
           <InstallAppButton variant="banner" />
-
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => navigate('/showcase')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                background: 'rgba(16, 185, 129, 0.08)',
-                color: '#059669',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <ProGlyph name="film" size={16} />
-              <span>Découvrir la Démo Interactive & Vidéo Publicitaire</span>
-            </button>
-          </div>
         </div>
       </div>
 
