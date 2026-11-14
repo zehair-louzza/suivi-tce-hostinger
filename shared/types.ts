@@ -376,7 +376,7 @@ export const STATUTS_COMMERCIAUX_DEVIS = [
 
   'À valider en interne',
   'Envoyé au client',
-  'En négociation',
+
   'Accepté',
   'Expiré',
   'Refusé',

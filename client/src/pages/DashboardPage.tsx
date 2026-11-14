@@ -1161,7 +1161,7 @@ export function DashboardPage() {
           devisList={devisList}
           onOpenNewDevis={openNewDevisDrawer}
           canCreate={canUserCreateDevis(user)}
-          onSelectDevis={(d) => setSelectedDevis(d)}
+          onSelectDevis={(d) => { setIsCreatingDevis(false); setDevisTab('qualif'); setSelectedDevis(d); }}
           onConvertDevis={(d) => {
             if (d.id) {
               convertDevisMut.mutate({ id: d.id });
@@ -1181,7 +1181,7 @@ export function DashboardPage() {
         <InterventionsStudioView
           interventionsList={interventionsList}
           onOpenNewIntv={openNewIntvDrawer}
-          onSelectIntv={(i) => setSelectedIntv(i)}
+          onSelectIntv={(i) => { setIsCreatingIntv(false); setIntvTab('planif'); setSelectedIntv(i); }}
           onValidateIntv={(i) => {
             if (i.id) {
               updateIntvMut.mutate({
@@ -1392,7 +1392,7 @@ export function DashboardPage() {
                   <StatusPill statut={selectedDevis.statutCommercial || 'À préparer'} />
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Fiche complète 22 colonnes ANELEC • Qualification & Chiffrage
+                  Fiche devis • Qualification & Chiffrage
                 </div>
               </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDevis(null)}>
@@ -1940,7 +1940,7 @@ export function DashboardPage() {
                   <StatusPill statut={selectedIntv.statutOperationnel || 'À planifier'} />
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Fiche complète 23 colonnes ANELEC • Synchronisée avec la Timeline Gantt
+                  Fiche intervention • Synchronisée avec la Timeline Gantt
                 </div>
               </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedIntv(null)}>

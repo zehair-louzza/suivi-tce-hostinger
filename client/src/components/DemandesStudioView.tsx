@@ -124,8 +124,8 @@ export function DemandesStudioView({
         <div>
           <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700 }}>Demandes reçues</h1>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Chaque demande porte le numéro de DI de son donneur d’ordre. Trois sorties : visite, chiffrage, ou
-            intervention directe.
+            Chaque demande porte le numéro de DI de son donneur d’ordre. Deux sorties : devis (avec ou sans visite) ou intervention directe.
+
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setFormOpen((v) => !v)} data-testid="btn-new-demande">
