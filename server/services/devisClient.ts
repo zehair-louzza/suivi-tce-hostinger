@@ -188,12 +188,17 @@ export async function envoyerAuClient(p: {
     throw new AppError(502, "L'e-mail n'a pas pu être envoyé. Vérifiez la boîte d'envoi de la société puis réessayez.", 'EMAIL_ERROR');
   }
 
+  const dateRelanceAuto = new Date(maintenant.getTime() + 3 * JOUR_MS);
+  const echeanceAuto = new Date(maintenant.getTime() + (devis.validiteJours || 30) * JOUR_MS);
   await db.devis.update({
     where: { id: devis.id },
     data: {
       statutCommercial: 'Envoyé au client',
       dateEnvoi: maintenant,
       envoiClientLe: maintenant,
+      dateRelance: dateRelanceAuto,
+      echeance: devis.echeance || echeanceAuto,
+      dateLimite: devis.dateLimite || devis.echeance || echeanceAuto,
       relanceClientJ3Le: null,
       relanceClientJ7Le: null,
       prochaineAction: 'Attendre la réponse du client',
@@ -245,6 +250,7 @@ export async function enregistrerReponseClient(jeton: string, body: unknown): Pr
     where: { id: devis.id },
     data: {
       statutCommercial,
+      dateRelance: null,
       prochaineAction: reponse === 'ACCEPTEE' ? 'Planifier les travaux' : reponse === 'MODIFICATION' ? 'Modifier le devis et le renvoyer' : null,
       historiqueJson: ajouterHistorique(devis.historiqueJson, `Client (${nom})`, REPONSE_LIBELLE[reponse], details),
     },

@@ -32,6 +32,7 @@ import {
   HistoriqueEvent,
   GpsPositionPayload,
   getEffectivePermissions,
+  applyDevisAutomations,
 } from '../../shared/types.js';
 
 export const devisRouter = secureRouter('devis');
@@ -531,14 +532,30 @@ devisRouter.post(
     }
 
     const client = String(b.client || 'Client à qualifier (Boîte de réception)').trim();
-    const traitement = b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
-    const statutCommercial = b.statutCommercial || 'À préparer';
-    const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
+    const rawTraitement = b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
+    const rawStatutCommercial = b.statutCommercial || 'À préparer';
     const amountVal = acc.canSeeAmounts ? parseOptionalFloat(b.amount ?? b.montantHt) : null;
     const site = b.site || b.siteAdresse || null;
     const notes = b.notes || b.commentaires || null;
     const dateCreated = parseDateOrNull(b.dateCreated || b.dateDemande) || new Date();
-    const echeance = parseDateOrNull(b.echeance || b.dateLimite);
+    const visiteReq = Boolean(b.visiteNecessaire === true || b.visiteNecessaire === 'true' || rawTraitement === 'En attente technicien');
+    const autoDevis = applyDevisAutomations({
+      dateCreated,
+      echeance: b.echeance || b.dateLimite,
+      dateEnvoi: b.dateEnvoi,
+      dateRelance: b.dateRelance,
+      validiteJours: parseOptionalInt(b.validiteJours) ?? 30,
+      statutCommercial: rawStatutCommercial,
+      traitement: rawTraitement,
+      prochaineAction: b.prochaineAction,
+      amount: amountVal ?? 0,
+      visiteNecessaire: visiteReq,
+      visiteDate: b.visiteDate,
+    });
+    const statutCommercial = autoDevis.statutCommercial || rawStatutCommercial;
+    const traitement = b.traitement || autoDevis.traitement || rawTraitement;
+    const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
+    const echeance = parseDateOrNull(autoDevis.echeance);
 
     const historiqueJson = addHistoriqueEvent(
       null,
@@ -560,16 +577,16 @@ devisRouter.post(
         dateDemande: dateCreated,
         echeance,
         dateLimite: echeance,
-        dateEnvoi: parseDateOrNull(b.dateEnvoi),
+        dateEnvoi: parseDateOrNull(autoDevis.dateEnvoi),
         statutCommercial,
         traitement,
         status: statusLegacy,
         amount: amountVal ?? 0,
         montantHt: amountVal,
         tauxTVA: parseTauxTVA(b.tauxTVA),
-        validiteJours: parseOptionalInt(b.validiteJours),
-        prochaineAction: b.prochaineAction || 'Chiffrer',
-        dateRelance: parseDateOrNull(b.dateRelance),
+        validiteJours: autoDevis.validiteJours ?? parseOptionalInt(b.validiteJours) ?? 30,
+        prochaineAction: b.prochaineAction || autoDevis.prochaineAction || 'Chiffrer',
+        dateRelance: parseDateOrNull(autoDevis.dateRelance),
         responsable: b.responsable || null,
         priorite: b.priorite || 'Normale',
         refInterventionTexte: b.refInterventionTexte || null,
@@ -759,21 +776,44 @@ devisRouter.patch(
     // La prochaine action suit l'avancement quand la personne ne l'a pas changée
     // elle-même : un montant posé sur un devis à préparer => « Envoyer au client » ;
     // un devis qui passe à Accepté => « Planifier les travaux ».
+    const candidateDevis = applyDevisAutomations(
+      {
+        dateCreated: updateData.dateCreated !== undefined ? updateData.dateCreated : existing.dateCreated,
+        echeance: updateData.echeance !== undefined ? updateData.echeance : (existing.echeance ?? existing.dateLimite),
+        dateEnvoi: updateData.dateEnvoi !== undefined ? updateData.dateEnvoi : existing.dateEnvoi,
+        dateRelance: updateData.dateRelance !== undefined ? updateData.dateRelance : existing.dateRelance,
+        validiteJours: updateData.validiteJours !== undefined ? updateData.validiteJours : existing.validiteJours,
+        statutCommercial: updateData.statutCommercial !== undefined ? updateData.statutCommercial : existing.statutCommercial,
+        traitement: updateData.traitement !== undefined ? updateData.traitement : existing.traitement,
+        prochaineAction: updateData.prochaineAction !== undefined ? updateData.prochaineAction : existing.prochaineAction,
+        amount: updateData.amount !== undefined ? updateData.amount : existing.amount,
+        visiteNecessaire: updateData.visiteNecessaire !== undefined ? updateData.visiteNecessaire : existing.visiteNecessaire,
+        visiteDate: updateData.visiteDate !== undefined ? updateData.visiteDate : existing.visiteDate,
+      },
+      existing as any
+    );
+    if (candidateDevis.statutCommercial && candidateDevis.statutCommercial !== existing.statutCommercial && b.statutCommercial === undefined) {
+      updateData.statutCommercial = candidateDevis.statutCommercial;
+    }
+    if (b.dateEnvoi === undefined && candidateDevis.dateEnvoi && !existing.dateEnvoi) {
+      updateData.dateEnvoi = parseDateOrNull(candidateDevis.dateEnvoi);
+    }
+    if (b.dateRelance === undefined && candidateDevis.dateRelance !== toISO(existing.dateRelance)) {
+      updateData.dateRelance = parseDateOrNull(candidateDevis.dateRelance);
+    }
+    if (b.echeance === undefined && b.dateLimite === undefined && candidateDevis.echeance && candidateDevis.echeance !== toISO(existing.echeance ?? existing.dateLimite)) {
+      const dlAuto = parseDateOrNull(candidateDevis.echeance);
+      updateData.echeance = dlAuto;
+      updateData.dateLimite = dlAuto;
+    }
+    if (newTraitement === undefined && candidateDevis.traitement && candidateDevis.traitement !== existing.traitement) {
+      updateData.traitement = candidateDevis.traitement;
+      updateData.status = traitementToStatusCode(candidateDevis.traitement).toUpperCase().replace('-', '_');
+    }
     const paSoumise = b.prochaineAction !== undefined ? b.prochaineAction || null : undefined;
     const paInchangee = paSoumise === undefined || paSoumise === (existing.prochaineAction || null);
-    if (paInchangee) {
-      const statutApres =
-        updateData.statutCommercial !== undefined ? updateData.statutCommercial : existing.statutCommercial;
-      const montantApres = updateData.amount !== undefined ? updateData.amount : existing.amount;
-      if (String(statutApres) === 'Accepté' && String(existing.statutCommercial) !== 'Accepté') {
-        updateData.prochaineAction = 'Planifier les travaux';
-      } else if (
-        Number(montantApres) > 0 &&
-        Number(existing.amount || 0) <= 0 &&
-        ['À préparer', 'En préparation'].includes(String(statutApres || ''))
-      ) {
-        updateData.prochaineAction = 'Envoyer au client';
-      }
+    if (paInchangee && candidateDevis.prochaineAction) {
+      updateData.prochaineAction = candidateDevis.prochaineAction;
     }
 
     const updated = await prisma.devis.update({

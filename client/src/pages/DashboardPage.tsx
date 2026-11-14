@@ -21,7 +21,9 @@ import {
   STATUTS_OPERATIONNELS_INTERVENTION,
   STATUTS_FACTURE,
   formatDateFR,
-  demandeApi
+  demandeApi,
+  applyDevisAutomations,
+  applyInterventionAutomations
 } from '../lib/api';
 import { evaluateTechniciansAvailability } from '../lib/techAvailability';
 import { Layout, AppSection } from '../components/Layout';
@@ -805,54 +807,74 @@ export function DashboardPage() {
 
 
 
+  const updateDevisDraft = (patch: Partial<Devis>) => {
+    setSelectedDevis((prev) => (prev ? applyDevisAutomations({ ...prev, ...patch }, prev) : prev));
+  };
+
+  const updateIntvDraft = (patch: Partial<Intervention>) => {
+    setSelectedIntv((prev) => (prev ? applyInterventionAutomations({ ...prev, ...patch }, prev) : prev));
+  };
+
+  useEffect(() => {
+    if (!selectedDevis || isCreatingDevis) return;
+    if (selectedDevis.statutCommercial === 'Envoyé au client' && selectedDevis.dateEnvoi && !selectedDevis.dateRelance) {
+      setSelectedDevis((cur) => (cur ? applyDevisAutomations(cur) : cur));
+    }
+  }, [selectedDevis?.id, isCreatingDevis]);
+
   const openNewDevisDrawer = () => {
     setIsCreatingDevis(true);
     setIsCustomDevisClient(false);
     setDevisTab('qualif');
-    setSelectedDevis({
-      reference: '',
-      numeroDI: '',
-      statutCommercial: 'À préparer',
-      traitement: 'À traiter',
-      priorite: 'Normale',
-      client: '',
-      site: '',
-      corpsEtat: 'Électricité',
-      objet: '',
-      origine: 'Client',
-      responsable: '',
-      prochaineAction: 'Chiffrer',
-      amount: 0,
-      validiteJours: 30,
-      visiteNecessaire: false,
-      visiteTechnicien: '',
-      visiteHeureDebut: '08:30',
-      visiteHeureFin: '10:30',
-      visiteStatut: 'À planifier',
-    });
+    setSelectedDevis(
+      applyDevisAutomations({
+        reference: '',
+        numeroDI: '',
+        statutCommercial: 'À préparer',
+        traitement: 'À traiter',
+        priorite: 'Normale',
+        client: '',
+        site: '',
+        corpsEtat: 'Électricité',
+        objet: '',
+        origine: 'Client',
+        responsable: user?.name || responsablesList[0] || '',
+        prochaineAction: 'Chiffrer',
+        amount: 0,
+        validiteJours: 30,
+        visiteNecessaire: false,
+        visiteTechnicien: '',
+        visiteHeureDebut: '08:30',
+        visiteHeureFin: '10:30',
+        visiteStatut: 'À planifier',
+      })
+    );
   };
 
   const openNewIntvDrawer = () => {
     setIsCreatingIntv(true);
     setIsCustomIntvClient(false);
     setIntvTab('planif');
-    setSelectedIntv({
-      reference: '',
-      numeroDI: '',
-      statutOperationnel: 'À planifier',
-      traitement: 'À traiter',
-      priorite: 'Normale',
-      client: '',
-      chantier: '',
-      corpsEtat: 'Électricité',
-      typeIntervention: 'Corrective',
-      objet: '',
-      entreprise: '',
-      heureDebut: '08:00',
-      heureFin: '12:00',
-      modePlanification: 'Planifiée',
-      statutFacture: 'Non facturée',
-    });
+    setSelectedIntv(
+      applyInterventionAutomations({
+        reference: '',
+        numeroDI: '',
+        statutOperationnel: 'À planifier',
+        traitement: 'À traiter',
+        priorite: 'Normale',
+        client: '',
+        chantier: '',
+        corpsEtat: 'Électricité',
+        typeIntervention: 'Corrective',
+        objet: '',
+        entreprise: '',
+        heureDebut: '08:00',
+        heureFin: '12:00',
+        modePlanification: 'Non planifiée',
+        statutRapport: 'Déclaré par technicien',
+        statutFacture: 'Non facturée',
+      })
+    );
   };
 
   /** Cas 1 : nouvelle intervention rattachée à un devis (infos reprises du devis). */
@@ -877,23 +899,26 @@ export function DashboardPage() {
     setIsCreatingIntv(true);
     setIsCustomIntvClient(false);
     setIntvTab('planif');
-    setSelectedIntv({
-      statutOperationnel: 'À planifier',
-      traitement: 'À traiter',
-      typeIntervention: 'Corrective',
-      heureDebut: '08:00',
-      heureFin: '12:00',
-      modePlanification: 'Planifiée',
-      statutFacture: 'Non facturée',
-      entreprise: '',
-      ...intvDefaultsFromDevis(d),
-    });
+    setSelectedIntv(
+      applyInterventionAutomations({
+        statutOperationnel: 'À planifier',
+        traitement: 'À traiter',
+        typeIntervention: 'Corrective',
+        heureDebut: '08:00',
+        heureFin: '12:00',
+        modePlanification: 'Non planifiée',
+        statutRapport: 'Déclaré par technicien',
+        statutFacture: 'Non facturée',
+        entreprise: '',
+        ...intvDefaultsFromDevis(d),
+      })
+    );
   };
   const pickSourceDevis = (d: Devis | null) => {
     setSelectedIntv((cur) => {
       if (!cur) return cur;
       if (!d) return { ...cur, devisId: undefined, origineDevisId: undefined, refDevisTexte: undefined };
-      return { ...cur, ...intvDefaultsFromDevis(d) };
+      return applyInterventionAutomations({ ...cur, ...intvDefaultsFromDevis(d) }, cur);
     });
   };
   /** Cas 3 : devis suite à intervention — le DI relie automatiquement les deux fiches. */
@@ -908,25 +933,27 @@ export function DashboardPage() {
     setIsCreatingDevis(true);
     setIsCustomDevisClient(false);
     setDevisTab('qualif');
-    setSelectedDevis({
-      reference: '',
-      numeroDI: di,
-      statutCommercial: 'À préparer',
-      traitement: 'À traiter',
-      priorite: i.priorite || 'Normale',
-      client: i.client || '',
-      site: i.chantier || '',
-      corpsEtat: i.corpsEtat || 'Électricité',
-      objet: i.objet || '',
-      origine: 'Intervention',
-      refInterventionTexte: i.reference || `#${i.id}`,
-      responsable: '',
-      prochaineAction: 'Chiffrer',
-      amount: 0,
-      validiteJours: 30,
-      visiteNecessaire: false,
-      notes: [i.resultatTechnique, i.elementsChiffrage].filter(Boolean).join('\n') || undefined,
-    });
+    setSelectedDevis(
+      applyDevisAutomations({
+        reference: '',
+        numeroDI: di,
+        statutCommercial: 'À préparer',
+        traitement: 'À traiter',
+        priorite: i.priorite || 'Normale',
+        client: i.client || '',
+        site: i.chantier || '',
+        corpsEtat: i.corpsEtat || 'Électricité',
+        objet: i.objet || '',
+        origine: 'Intervention',
+        refInterventionTexte: i.reference || `#${i.id}`,
+        responsable: user?.name || responsablesList[0] || '',
+        prochaineAction: 'Chiffrer',
+        amount: 0,
+        validiteJours: 30,
+        visiteNecessaire: false,
+        notes: [i.resultatTechnique, i.elementsChiffrage].filter(Boolean).join('\n') || undefined,
+      })
+    );
   };
 
   // Pastilles du menu : chacune compte ce que CE profil doit traiter dans la section (mêmes files que « Mon travail »),
@@ -1568,7 +1595,7 @@ export function DashboardPage() {
                     <select
                       className="select"
                       value={selectedDevis.statutCommercial || 'À préparer'}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, statutCommercial: e.target.value })}
+                      onChange={(e) => updateDevisDraft({ statutCommercial: e.target.value })}
                     >
                       {STATUTS_COMMERCIAUX_DEVIS.map((s) => (
                         <option key={s} value={s}>{s}</option>
@@ -1581,7 +1608,7 @@ export function DashboardPage() {
                       type="number"
                       className="input font-mono"
                       value={selectedDevis.amount ?? ''}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, amount: parseFloat(e.target.value) || 0 })}
+                      onChange={(e) => updateDevisDraft({ amount: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <TvaField
@@ -1622,8 +1649,7 @@ export function DashboardPage() {
                           type="checkbox"
                           checked={Boolean(selectedDevis.visiteNecessaire)}
                           onChange={(e) =>
-                            setSelectedDevis({
-                              ...selectedDevis,
+                            updateDevisDraft({
                               visiteNecessaire: e.target.checked,
                               visiteStatut: e.target.checked ? 'À planifier' : 'Non requise',
                             })
@@ -1642,7 +1668,7 @@ export function DashboardPage() {
                             style={{ padding: '1px 6px', fontSize: '10.5px', color: '#6d28d9' }}
                             onClick={() => {
                               const best = devisVisiteTechAvail[0];
-                              setSelectedDevis({ ...selectedDevis, visiteNecessaire: true, visiteTechnicien: best.technicien });
+                              updateDevisDraft({ visiteNecessaire: true, visiteTechnicien: best.technicien });
                               toast.success(`Technicien suggéré : ${best.optionLabel}`);
                             }}
                           >
@@ -1654,8 +1680,7 @@ export function DashboardPage() {
                         className="select"
                         value={selectedDevis.visiteTechnicien || ''}
                         onChange={(e) =>
-                          setSelectedDevis({
-                            ...selectedDevis,
+                          updateDevisDraft({
                             visiteNecessaire: true,
                             visiteTechnicien: e.target.value,
                           })
@@ -1674,8 +1699,7 @@ export function DashboardPage() {
                         className="input"
                         value={selectedDevis.visiteDate ? selectedDevis.visiteDate.slice(0, 10) : ''}
                         onChange={(e) =>
-                          setSelectedDevis({
-                            ...selectedDevis,
+                          updateDevisDraft({
                             visiteNecessaire: true,
                             visiteDate: e.target.value || null,
                           })
@@ -1724,12 +1748,7 @@ export function DashboardPage() {
                       type="date"
                       className="input"
                       value={selectedDevis.dateCreated ? selectedDevis.dateCreated.slice(0, 10) : ''}
-                      onChange={(e) =>
-                        setSelectedDevis({
-                          ...selectedDevis,
-                          dateCreated: e.target.value || undefined,
-                        })
-                      }
+                      onChange={(e) => updateDevisDraft({ dateCreated: e.target.value || undefined })}
                     />
                   </div>
                   <div>
@@ -1738,12 +1757,7 @@ export function DashboardPage() {
                       type="date"
                       className="input"
                       value={selectedDevis.echeance ? selectedDevis.echeance.slice(0, 10) : ''}
-                      onChange={(e) =>
-                        setSelectedDevis({
-                          ...selectedDevis,
-                          echeance: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => updateDevisDraft({ echeance: e.target.value || null })}
                     />
                   </div>
                   <div>
@@ -1752,12 +1766,7 @@ export function DashboardPage() {
                       type="date"
                       className="input"
                       value={selectedDevis.dateEnvoi ? selectedDevis.dateEnvoi.slice(0, 10) : ''}
-                      onChange={(e) =>
-                        setSelectedDevis({
-                          ...selectedDevis,
-                          dateEnvoi: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => updateDevisDraft({ dateEnvoi: e.target.value || null })}
                     />
                   </div>
                   <div>
@@ -1766,12 +1775,7 @@ export function DashboardPage() {
                       type="number"
                       className="input font-mono"
                       value={selectedDevis.validiteJours ?? 30}
-                      onChange={(e) =>
-                        setSelectedDevis({
-                          ...selectedDevis,
-                          validiteJours: parseInt(e.target.value, 10) || null,
-                        })
-                      }
+                      onChange={(e) => updateDevisDraft({ validiteJours: parseInt(e.target.value, 10) || null })}
                     />
                   </div>
 
@@ -1781,13 +1785,18 @@ export function DashboardPage() {
                       type="date"
                       className="input"
                       value={selectedDevis.dateRelance ? selectedDevis.dateRelance.slice(0, 10) : ''}
-                      onChange={(e) =>
-                        setSelectedDevis({
-                          ...selectedDevis,
-                          dateRelance: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => updateDevisDraft({ dateRelance: e.target.value || null })}
                     />
+                    {selectedDevis.statutCommercial === 'Envoyé au client' && selectedDevis.dateRelance && (
+                      <div style={{ fontSize: '10.5px', color: '#2563eb', marginTop: 3 }}>
+                        Calcul auto : J+3 après envoi au client
+                      </div>
+                    )}
+                    {['Accepté', 'Refusé', 'Annulé', 'Expiré'].includes(selectedDevis.statutCommercial || '') && !selectedDevis.dateRelance && (
+                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: 3 }}>
+                        Aucune relance requise ({selectedDevis.statutCommercial})
+                      </div>
+                    )}
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Notes / Commentaires de suivi</label>
@@ -1917,29 +1926,11 @@ export function DashboardPage() {
                       toast.error('Le numéro de DI du donneur d’ordre est obligatoire.');
                       return;
                     }
-                    // Le taux affiché en présélection est enregistré tel quel sur la pièce
-                    const sc = selectedDevis.statutCommercial || 'À préparer';
-                    const autoTraitement = selectedDevis.visiteNecessaire && !selectedDevis.visiteDate
-                      ? 'En attente technicien'
-                      : ['Accepté', 'Refusé', 'Annulé'].includes(sc)
-                      ? 'Traité'
-                      : sc === 'Envoyé au client'
-                      ? 'En attente client'
-                      : 'En cours de traitement';
-                    const autoAction = sc === 'À préparer'
-                      ? 'Chiffrer'
-                      : sc === 'À valider en interne'
-                      ? 'Faire valider'
-                      : sc === 'Envoyé au client'
-                      ? 'Relancer le client'
-                      : sc === 'Accepté'
-                      ? 'Planifier après accord'
-                      : 'Aucune';
+                    // Normalisation automatique cohérente des dates, statuts, relance et TVA
+                    const auto = applyDevisAutomations(selectedDevis);
                     const payload = {
-                      ...selectedDevis,
-                      traitement: autoTraitement,
-                      prochaineAction: autoAction,
-                      tauxTVA: selectedDevis.tauxTVA ?? tvaParDefaut(selectedDevis.client, clientProfiles),
+                      ...auto,
+                      tauxTVA: auto.tauxTVA ?? tvaParDefaut(auto.client, clientProfiles),
                     };
                     if (isCreatingDevis || !selectedDevis.id) {
                       createDevisMut.mutate(payload);
@@ -2138,8 +2129,7 @@ export function DashboardPage() {
                           style={{ padding: '1px 6px', fontSize: '10.5px', color: '#2563eb' }}
                           onClick={() => {
                             const best = intvTechAvail[0];
-                            const autoStatut = selectedIntv.datePlanifiee && (!selectedIntv.statutOperationnel || selectedIntv.statutOperationnel === 'À planifier') ? 'Planifiée' : selectedIntv.statutOperationnel;
-                            setSelectedIntv({ ...selectedIntv, entreprise: best.technicien, statutOperationnel: autoStatut });
+                            updateIntvDraft({ entreprise: best.technicien });
                             toast.success(`Affecté à ${best.optionLabel}`);
                           }}
                         >
@@ -2150,11 +2140,7 @@ export function DashboardPage() {
                     <select
                       className="select"
                       value={selectedIntv.entreprise || ''}
-                      onChange={(e) => {
-                        const tech = e.target.value;
-                        const autoStatut = tech && selectedIntv.datePlanifiee && (!selectedIntv.statutOperationnel || selectedIntv.statutOperationnel === 'À planifier') ? 'Planifiée' : selectedIntv.statutOperationnel;
-                        setSelectedIntv({ ...selectedIntv, entreprise: tech, statutOperationnel: autoStatut });
-                      }}
+                      onChange={(e) => updateIntvDraft({ entreprise: e.target.value })}
                     >
                       <option value="">À affecter</option>
                       {(intvTechAvail.length > 0 ? intvTechAvail : techniciensList.map((t) => ({ technicien: t, optionLabel: t }))).map((item) => (
@@ -2180,12 +2166,7 @@ export function DashboardPage() {
                       type="date"
                       className="input"
                       value={selectedIntv.datePlanifiee ? selectedIntv.datePlanifiee.slice(0, 10) : ''}
-                      onChange={(e) =>
-                        setSelectedIntv({
-                          ...selectedIntv,
-                          datePlanifiee: e.target.value || null,
-                        })
-                      }
+                      onChange={(e) => updateIntvDraft({ datePlanifiee: e.target.value || null })}
                     />
                   </div>
                   <div>
@@ -2193,7 +2174,7 @@ export function DashboardPage() {
                     <select
                       className="select"
                       value={selectedIntv.statutOperationnel || 'À planifier'}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, statutOperationnel: e.target.value })}
+                      onChange={(e) => updateIntvDraft({ statutOperationnel: e.target.value })}
                     >
                       {STATUTS_OPERATIONNELS_INTERVENTION.map((s) => (
                         <option key={s} value={s}>{s}</option>
@@ -2223,7 +2204,7 @@ export function DashboardPage() {
                     <select
                       className="select"
                       value={selectedIntv.priorite || 'Normale'}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, priorite: e.target.value })}
+                      onChange={(e) => updateIntvDraft({ priorite: e.target.value })}
                     >
                       {PRIORITES.map((p) => (
                         <option key={p} value={p}>{p}</option>
@@ -2477,7 +2458,7 @@ export function DashboardPage() {
                       <input
                         className="input"
                         value={selectedIntv.motifBlocage || ''}
-                        onChange={(e) => setSelectedIntv({ ...selectedIntv, motifBlocage: e.target.value })}
+                        onChange={(e) => updateIntvDraft({ motifBlocage: e.target.value })}
                       />
                     </div>
                   </div>
@@ -2524,8 +2505,7 @@ export function DashboardPage() {
                           }
                           lines.push('');
                           lines.push(`CONCLUSION : ${selectedIntv.resultatTechnique || 'Intervention réalisée sans réserve.'}`);
-                          setSelectedIntv({
-                            ...selectedIntv,
+                          updateIntvDraft({
                             rapportFinal: lines.join('\n'),
                             statutRapport: 'Validé & Clôturé',
                             statutOperationnel: 'Clôturée',
@@ -2628,7 +2608,7 @@ export function DashboardPage() {
                     <input
                       className="input font-mono"
                       value={selectedIntv.numeroFacture || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, numeroFacture: e.target.value })}
+                      onChange={(e) => updateIntvDraft({ numeroFacture: e.target.value })}
                     />
                   </div>
                 </div>
@@ -2722,10 +2702,11 @@ export function DashboardPage() {
                     toast.error('Le numéro de DI du donneur d’ordre est obligatoire.');
                     return;
                   }
+                  const auto = applyInterventionAutomations(selectedIntv);
                   const payload = {
-                    ...selectedIntv,
-                    modePlanification: selectedIntv.datePlanifiee ? 'Planifiée' : 'Non planifiée',
-                    tauxTVA: selectedIntv.tauxTVA ?? tvaParDefaut(selectedIntv.client, clientProfiles),
+                    ...auto,
+                    modePlanification: auto.datePlanifiee ? 'Planifiée' : 'Non planifiée',
+                    tauxTVA: auto.tauxTVA ?? tvaParDefaut(auto.client, clientProfiles),
                   };
                   if (isCreatingIntv || !selectedIntv.id) {
                     createIntvMut.mutate(payload);

@@ -45,6 +45,9 @@ import {
   computeDevisCalculations,
   computeInterventionCalculations,
   getTodayParisISO,
+  addDaysISO,
+  applyDevisAutomations,
+  applyInterventionAutomations,
 } from '../../../shared/types';
 
 export type {
@@ -92,6 +95,9 @@ export {
   computeDevisCalculations,
   computeInterventionCalculations,
   getTodayParisISO,
+  addDaysISO,
+  applyDevisAutomations,
+  applyInterventionAutomations,
 };
 
 export const api = axios.create({

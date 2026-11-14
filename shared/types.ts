@@ -594,7 +594,7 @@ function diffDaysISO(dateA: string, dateB: string): number {
   return Math.round((utc1 - utc2) / (1000 * 60 * 60 * 24));
 }
 
-function addDaysISO(dateISO: string, days: number): string {
+export function addDaysISO(dateISO: string, days: number): string {
   const [y, m, d] = dateISO.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + days);
@@ -758,6 +758,217 @@ export function computeInterventionCalculations(i: {
     dureeHeures,
   };
 }
+
+function toDateSlice(v?: string | Date | null): string | null {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  const str = String(v).trim();
+  return str.length >= 10 ? str.slice(0, 10) : null;
+}
+
+export function applyDevisAutomations<T extends Record<string, any>>(next: T, prev?: Partial<T> | null): T {
+  const out: any = { ...next };
+  const today = getTodayParisISO();
+
+  const dateCreated = toDateSlice(out.dateCreated ?? out.dateDemande) || toDateSlice(prev?.dateCreated) || today;
+  out.dateCreated = dateCreated;
+
+  const validite = typeof out.validiteJours === 'number' && out.validiteJours > 0 ? out.validiteJours : 30;
+  if (out.validiteJours === undefined || out.validiteJours === null) {
+    out.validiteJours = 30;
+  }
+
+  let statut = String(out.statutCommercial || 'À préparer');
+  const prevStatut = prev?.statutCommercial ? String(prev.statutCommercial) : undefined;
+
+  let dateEnvoi = toDateSlice(out.dateEnvoi);
+  const prevEnvoi = toDateSlice(prev?.dateEnvoi);
+
+  let dateRelance = toDateSlice(out.dateRelance);
+  const prevRelance = toDateSlice(prev?.dateRelance);
+
+  let echeance = toDateSlice(out.echeance ?? out.dateLimite);
+  const prevEcheance = toDateSlice(prev?.echeance ?? (prev as any)?.dateLimite);
+
+  // 1. Saisie d'un montant > 0 sur un brouillon sans date d'envoi => prêt à valider en interne
+  if (
+    prev &&
+    Number(out.amount || 0) > 0 &&
+    Number(prev.amount || 0) <= 0 &&
+    statut === 'À préparer' &&
+    statut === prevStatut &&
+    !dateEnvoi
+  ) {
+    statut = 'À valider en interne';
+  }
+
+  // 2. Date d'envoi saisie ou modifiée => passe en "Envoyé au client" + calcule J+3 relance & échéance
+  if (dateEnvoi && dateEnvoi !== prevEnvoi) {
+    if (['À préparer', 'À valider en interne'].includes(statut)) {
+      statut = 'Envoyé au client';
+    }
+    if (!dateRelance || dateRelance === prevRelance) {
+      dateRelance = addDaysISO(dateEnvoi, 3);
+    }
+    if (!echeance || echeance === prevEcheance) {
+      echeance = addDaysISO(dateEnvoi, validite);
+    }
+  }
+
+  // 3. Passage manuel à "Envoyé au client" => auto-remplit dateEnvoi, dateRelance (J+3), échéance (+validité)
+  if (statut === 'Envoyé au client' && prevStatut !== 'Envoyé au client') {
+    if (!dateEnvoi) dateEnvoi = today;
+    if (!dateRelance) dateRelance = addDaysISO(dateEnvoi, 3);
+    if (!echeance) echeance = addDaysISO(dateEnvoi, validite);
+  }
+
+  // 4. Recalcul échéance si validité modifiée alors que dateEnvoi est présente
+  if (dateEnvoi && prev && out.validiteJours !== prev.validiteJours && (!echeance || echeance === prevEcheance)) {
+    echeance = addDaysISO(dateEnvoi, validite);
+  }
+
+  // 5. Filet de sécurité : devis déjà "Envoyé au client" avec dateEnvoi mais sans dateRelance (et non effacée manuellement)
+  if (statut === 'Envoyé au client' && dateEnvoi && !dateRelance && !prevRelance) {
+    dateRelance = addDaysISO(dateEnvoi, 3);
+  }
+
+  // 6. Auto-expiration si envoyé et date d'expiration dépassée
+  if (statut === 'Envoyé au client' && dateEnvoi && validite > 0) {
+    const exp = addDaysISO(dateEnvoi, validite);
+    if (exp < today && prevStatut !== 'Expiré') {
+      statut = 'Expiré';
+    }
+  }
+
+  // 7. Échéance par défaut à la création (J+7 pour chiffrer/répondre)
+  if (!echeance && statut === 'À préparer' && !prev) {
+    echeance = addDaysISO(dateCreated, 7);
+  }
+
+  // 8. États terminaux : aucune relance en attente (évite les fausses alertes)
+  const isTerminal = ['Accepté', 'Refusé', 'Annulé', 'Expiré'].includes(statut);
+  if (isTerminal && (!prev || statut !== prevStatut || dateRelance === prevRelance)) {
+    dateRelance = null;
+  }
+
+  out.statutCommercial = statut;
+  out.dateEnvoi = dateEnvoi;
+  out.dateRelance = dateRelance;
+  out.echeance = echeance;
+
+  // 9. Déduction automatique de traitement & prochaineAction (respecte les choix manuels)
+  const visiteChanged = Boolean(out.visiteNecessaire) !== Boolean(prev?.visiteNecessaire) || toDateSlice(out.visiteDate) !== toDateSlice(prev?.visiteDate);
+  const statutChanged = !prev || statut !== prevStatut;
+  const traitementTouched = prev && out.traitement !== prev.traitement;
+  if (!traitementTouched && (!out.traitement || statutChanged || visiteChanged)) {
+    out.traitement =
+      out.visiteNecessaire && !toDateSlice(out.visiteDate)
+        ? 'En attente technicien'
+        : isTerminal
+        ? 'Traité'
+        : statut === 'Envoyé au client'
+        ? 'En attente client'
+        : statut === 'À préparer' && !prev
+        ? 'À traiter'
+        : 'En cours de traitement';
+  }
+  const actionTouched = prev && out.prochaineAction !== prev.prochaineAction;
+  if (!actionTouched && (!out.prochaineAction || statutChanged)) {
+    out.prochaineAction =
+      statut === 'À préparer'
+        ? 'Chiffrer'
+        : statut === 'À valider en interne'
+        ? 'Faire valider'
+        : statut === 'Envoyé au client'
+        ? 'Relancer le client'
+        : statut === 'Accepté'
+        ? 'Planifier après accord'
+        : 'Aucune';
+  }
+
+  return out;
+}
+
+function slaDaysForPriority(priorite?: string | null): number {
+  const p = String(priorite || 'Normale').toLowerCase();
+  if (p.includes('urg')) return 1;
+  if (p.includes('haut')) return 3;
+  if (p.includes('bass')) return 14;
+  return 7;
+}
+
+export function applyInterventionAutomations<T extends Record<string, any>>(next: T, prev?: Partial<T> | null): T {
+  const out: any = { ...next };
+  const today = getTodayParisISO();
+
+  const dateDemande = toDateSlice(out.dateDemande) || toDateSlice(prev?.dateDemande) || today;
+  out.dateDemande = dateDemande;
+
+  const tech = String(out.entreprise || out.technicien || '').trim();
+  const prevTech = String(prev?.entreprise || (prev as any)?.technicien || '').trim();
+
+  const datePlan = toDateSlice(out.datePlanifiee);
+  const prevPlan = toDateSlice(prev?.datePlanifiee);
+
+  let echeance = toDateSlice(out.echeance ?? out.dateEcheance);
+  const prevEcheance = toDateSlice(prev?.echeance ?? (prev as any)?.dateEcheance);
+
+  let statut = String(out.statutOperationnel || 'À planifier');
+
+
+  // 1. Technicien renseigné => Affectée (sans date) ou Planifiée (avec date) + créneau par défaut
+  if (tech && datePlan && ['À planifier', 'Affectée'].includes(statut) && (!prev || tech !== prevTech || datePlan !== prevPlan)) {
+    statut = 'Planifiée';
+    if (!out.heureDebut) out.heureDebut = '08:00';
+    if (!out.heureFin) out.heureFin = '12:00';
+  } else if (tech && !datePlan && statut === 'À planifier' && (!prev || tech !== prevTech)) {
+    statut = 'Affectée';
+  }
+
+  // 2. Technicien retiré => repasse à "À planifier" si était "Planifiée" ou "Affectée"
+  if (!tech && prevTech && ['Planifiée', 'Affectée'].includes(statut)) {
+    statut = 'À planifier';
+  }
+
+  // 3. Échéance auto selon datePlanifiee ou SLA priorité
+  if (datePlan && datePlan !== prevPlan && (!echeance || echeance === prevEcheance)) {
+    echeance = datePlan;
+  } else if (!echeance || (prev && out.priorite !== prev.priorite && echeance === prevEcheance)) {
+    echeance = datePlan || addDaysISO(dateDemande, slaDaysForPriority(out.priorite));
+  }
+
+  // 4. Motif de blocage saisi => bascule auto en "Suspendue" + traitement "Bloqué"
+  const motif = String(out.motifBlocage || '').trim();
+  const prevMotif = String(prev?.motifBlocage || '').trim();
+  if (motif && motif !== prevMotif && !['Clôturée', 'Annulée'].includes(statut)) {
+    statut = 'Suspendue';
+    out.traitement = 'Bloqué';
+  }
+
+  // 5. Réalisation / Clôture => date réelle du jour & statut rapport validé
+  if (['Terminée - à valider', 'Clôturée'].includes(statut) && !toDateSlice(out.dateReelle)) {
+    out.dateReelle = today;
+  }
+  if (statut === 'Clôturée' && (!out.statutRapport || ['En attente', 'Déclaré par technicien'].includes(out.statutRapport))) {
+    out.statutRapport = 'Validé';
+  }
+
+  // 6. N° de facture saisi => statut facture auto "Facturée"
+  const numFact = String(out.numeroFacture || '').trim();
+  const prevNumFact = String(prev?.numeroFacture || '').trim();
+  if (numFact && numFact !== prevNumFact) {
+    out.statutFacture = 'Facturée';
+  } else if (!out.statutFacture) {
+    out.statutFacture = 'Non facturée';
+  }
+
+  out.statutOperationnel = statut;
+  out.echeance = echeance;
+  out.modePlanification = datePlan ? 'Planifiée' : 'Non planifiée';
+
+  return out;
+}
+
 
 // ============================================================================
 // 4. PARSEUR D'INTERVALLES HORAIRES CLAVIER & SOURIS ("08:30-11:00", "8h-12h", etc.)

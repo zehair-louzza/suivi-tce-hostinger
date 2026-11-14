@@ -29,6 +29,7 @@ import {
   HistoriqueEvent,
   GpsPositionPayload,
   getEffectivePermissions,
+  applyInterventionAutomations,
 } from '../../shared/types.js';
 
 import { sanitizePhotosJson } from '../lib/terrainPhotos.js';
@@ -478,12 +479,26 @@ interventionRouter.post(
         b.typeIntervention === 'Visite technique devis'
     );
     const explicitDatePlan = parseDateOrNull(b.datePlanifiee);
-    const traitement = b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
-    const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
     const tech = b.entreprise || b.technicien || null;
-    const statutOperationnel =
-      b.statutOperationnel ||
-      (explicitDatePlan ? (tech ? 'Planifiée' : 'À planifier') : 'À planifier');
+    const autoIntv = applyInterventionAutomations({
+      dateDemande: b.dateDemande,
+      datePlanifiee: explicitDatePlan ? toISO(explicitDatePlan) : null,
+      echeance: b.echeance || b.dateEcheance,
+      priorite: b.priorite || 'Normale',
+      entreprise: tech,
+      statutOperationnel: b.statutOperationnel || 'À planifier',
+      traitement: b.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter'),
+      heureDebut: b.heureDebut,
+      heureFin: b.heureFin,
+      motifBlocage: b.motifBlocage,
+      numeroFacture: b.numeroFacture,
+      statutFacture: b.statutFacture,
+      statutRapport: b.statutRapport,
+      dateReelle: b.dateReelle || b.dateFin,
+    });
+    const traitement = b.traitement || autoIntv.traitement || (b.status ? statusCodeToTraitement(b.status) : 'À traiter');
+    const statusLegacy = traitementToStatusCode(traitement).toUpperCase().replace('-', '_');
+    const statutOperationnel = b.statutOperationnel || autoIntv.statutOperationnel || 'À planifier';
     const modePlanification =
       b.modePlanification || (explicitDatePlan ? 'Planifiée' : 'Non planifiée');
 
@@ -522,7 +537,7 @@ interventionRouter.post(
         modePlanification,
         corpsEtat: b.corpsEtat || 'Tous corps d’état',
         priorite: b.priorite || 'Normale',
-        dateDemande: parseDateOrNull(b.dateDemande) || new Date(),
+        dateDemande: parseDateOrNull(autoIntv.dateDemande) || new Date(),
         datePlanifiee: explicitDatePlan || new Date(),
         statutOperationnel,
         traitement,
@@ -530,13 +545,13 @@ interventionRouter.post(
         entreprise: tech,
         technicien: tech,
         dateDebut: parseDateOrNull(b.dateDebut),
-        dateReelle: parseDateOrNull(b.dateReelle || b.dateFin),
-        dateFin: parseDateOrNull(b.dateReelle || b.dateFin),
-        dateEcheance: parseDateOrNull(b.echeance || b.dateEcheance),
+        dateReelle: parseDateOrNull(autoIntv.dateReelle || b.dateReelle || b.dateFin),
+        dateFin: parseDateOrNull(autoIntv.dateReelle || b.dateReelle || b.dateFin),
+        dateEcheance: parseDateOrNull(autoIntv.echeance),
         resultatTechnique: b.resultatTechnique || null,
         motifBlocage: b.motifBlocage || null,
         numeroFacture: b.numeroFacture || null,
-        statutFacture: b.statutFacture || 'Non facturée',
+        statutFacture: autoIntv.statutFacture || b.statutFacture || 'Non facturée',
         compteRendu: b.compteRendu || null,
         notes: b.notes || null,
         amount: parseOptionalFloat(b.amount) ?? 0,
@@ -895,6 +910,41 @@ interventionRouter.patch(
         updateData.heureFinReelle !== undefined ? updateData.heureFinReelle : existing.heureFinReelle;
       const finPlanifiee = updateData.heureFin !== undefined ? updateData.heureFin : existing.heureFin;
       if (!finApres && finPlanifiee) updateData.heureFinReelle = finPlanifiee;
+    }
+
+    // Automations transverses (SLA échéance, Affectée/Planifiée, Blocage, Facturée)
+    const clearedPlan = b.datePlanifiee === null;
+    const autoPatched = applyInterventionAutomations(
+      {
+        dateDemande: updateData.dateDemande !== undefined ? updateData.dateDemande : existing.dateDemande,
+        datePlanifiee: clearedPlan ? null : (updateData.datePlanifiee !== undefined ? updateData.datePlanifiee : existing.datePlanifiee),
+        echeance: updateData.dateEcheance !== undefined ? updateData.dateEcheance : existing.dateEcheance,
+        priorite: updateData.priorite !== undefined ? updateData.priorite : existing.priorite,
+        entreprise: updateData.entreprise !== undefined ? updateData.entreprise : existing.entreprise,
+        statutOperationnel: updateData.statutOperationnel !== undefined ? updateData.statutOperationnel : existing.statutOperationnel,
+        traitement: updateData.traitement !== undefined ? updateData.traitement : existing.traitement,
+        heureDebut: updateData.heureDebut !== undefined ? updateData.heureDebut : existing.heureDebut,
+        heureFin: updateData.heureFin !== undefined ? updateData.heureFin : existing.heureFin,
+        motifBlocage: updateData.motifBlocage !== undefined ? updateData.motifBlocage : existing.motifBlocage,
+        numeroFacture: updateData.numeroFacture !== undefined ? updateData.numeroFacture : existing.numeroFacture,
+        statutFacture: updateData.statutFacture !== undefined ? updateData.statutFacture : existing.statutFacture,
+        statutRapport: updateData.statutRapport !== undefined ? updateData.statutRapport : existing.statutRapport,
+        dateReelle: updateData.dateReelle !== undefined ? updateData.dateReelle : existing.dateReelle,
+      },
+      existing as any
+    );
+    if (b.statutOperationnel === undefined && autoPatched.statutOperationnel && autoPatched.statutOperationnel !== existing.statutOperationnel) {
+      updateData.statutOperationnel = autoPatched.statutOperationnel;
+    }
+    if (b.echeance === undefined && b.dateEcheance === undefined && autoPatched.echeance && autoPatched.echeance !== toISO(existing.dateEcheance)) {
+      updateData.dateEcheance = parseDateOrNull(autoPatched.echeance);
+    }
+    if (b.statutFacture === undefined && autoPatched.statutFacture && autoPatched.statutFacture !== existing.statutFacture) {
+      updateData.statutFacture = autoPatched.statutFacture;
+    }
+    if (newTraitement === undefined && autoPatched.traitement && autoPatched.traitement !== existing.traitement) {
+      updateData.traitement = autoPatched.traitement;
+      updateData.status = traitementToStatusCode(autoPatched.traitement).toUpperCase().replace('-', '_');
     }
     let patchedDossierDevis: { id: number; numeroDI?: string | null } | null = null;
     if (b.numeroDI !== undefined || b.devisId !== undefined) {

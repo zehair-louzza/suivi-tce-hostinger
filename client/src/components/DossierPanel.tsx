@@ -111,13 +111,21 @@ export function DossierPanel({
   const totalLabel = dossier
     ? `${dossier.travaux.length} intervention${dossier.travaux.length > 1 ? 's' : ''}${dossier.visites.length ? ` · ${dossier.visites.length} visite${dossier.visites.length > 1 ? 's' : ''}` : ''}`
     : '';
-  const tone = cas === 'directe' ? '#f59e0b' : cas === 'devis-suite-intervention' ? '#8b5cf6' : cas === 'sur-devis' ? '#0ea5e9' : '#64748b';
+  let caseLabel = CASE_LABEL[cas];
+  let tone = cas === 'directe' ? '#f59e0b' : cas === 'devis-suite-intervention' ? '#8b5cf6' : cas === 'sur-devis' ? '#0ea5e9' : '#64748b';
+  if (cas === 'devis-seul' && devis?.statutCommercial) {
+    const s = devis.statutCommercial;
+    if (s === 'Accepté') { caseLabel = 'Devis accepté — prêt à planifier'; tone = '#16a34a'; }
+    else if (s === 'Envoyé au client') { caseLabel = 'Devis envoyé au client'; tone = '#2563eb'; }
+    else if (s === 'À valider en interne') { caseLabel = 'Devis à valider en interne'; tone = '#d97706'; }
+    else if (['Refusé', 'Expiré', 'Annulé'].includes(s)) { caseLabel = 'Devis ' + s.toLowerCase(); tone = '#64748b'; }
+  }
 
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={chip(tone)}>{CASE_LABEL[cas]}</span>
+          <span style={chip(tone)}>{caseLabel}</span>
           <strong style={{ fontSize: 13 }}>{dossier?.di ? `Dossier ${dossier.di}` : 'Pas de numéro de DI'}</strong>
         </div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen((v) => !v)}>
