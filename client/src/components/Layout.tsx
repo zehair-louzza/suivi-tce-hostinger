@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '../stores/authStore';
-import { useTheme, THEMES } from '../stores/themeStore';
+import { useTheme, THEMES, SIDEBAR_MODELS, SidebarModelId } from '../stores/themeStore';
+import { SidebarPreviewMini } from './SidebarPreviewMini';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BubbleBackdrop } from './BubbleBackdrop';
@@ -65,14 +66,49 @@ export function Layout({
   const roleLabel = ROLE_PERIMETRE[espace]?.titre || 'Collaborateur';
   const companyName = (user?.companyName || '').trim() || 'Mon entreprise';
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('anelec_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('anelec_sidebar_collapsed', next ? '1' : '0');
+      } catch {
+        // ignore storage restrictions
+      }
+      return next;
+    });
+  };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [parisTime, setParisTime] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   // L'apparence est entièrement gérée par le ThemeProvider (défaut entreprise +
   // préférence individuelle).
-  const { current: currentTheme, allowUserOverride, setUserPref, isPending: isThemePending } = useTheme();
+  const {
+    current: currentTheme,
+    allowUserOverride,
+    setUserPref,
+    isPending: isThemePending,
+    sidebarModel,
+    sidebarCompanyDefault,
+    sidebarUserPref,
+    setSidebarUserPref,
+  } = useTheme();
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [popoverTab, setPopoverTab] = useState<'theme' | 'sidebar'>('theme');
+  const [m5Query, setM5Query] = useState('');
+  const [m5OpenGroups, setM5OpenGroups] = useState<Record<string, boolean>>({
+    'ESPACE DE TRAVAIL': true,
+    GESTION: true,
+    ADMINISTRATION: true,
+    'ESPACE TERRAIN': true,
+  });
+  const [m3ActiveGroupTitle, setM3ActiveGroupTitle] = useState<string>('ESPACE DE TRAVAIL');
   const isDarkTheme = THEMES.find((t) => t.id === currentTheme)?.mood === 'dark';
   const toggleQuickTheme = async () => {
     try {
@@ -336,6 +372,24 @@ export function Layout({
   const visibleNavItems = visibleGroups.flatMap((g) => g.items);
 
   const activeMeta = visibleNavItems.find((item) => item.id === activeSection) || allItems[0];
+  const effectiveCollapsed = collapsed && !mobileMenuOpen;
+  const userInitials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : 'ZL';
+  const activeGroupTitle =
+    visibleGroups.find((g) => g.items.some((i) => i.id === activeSection))?.title ||
+    visibleGroups[0]?.title ||
+    'ESPACE DE TRAVAIL';
+  const selectedM3Group =
+    visibleGroups.find((g) => g.title === m3ActiveGroupTitle) ||
+    visibleGroups.find((g) => g.title === activeGroupTitle) ||
+    visibleGroups[0];
 
   const handleSelectSection = (sec: AppSection) => {
     setMobileMenuOpen(false);
@@ -343,7 +397,218 @@ export function Layout({
       toast.error('Accès non autorisé à ce service');
       return;
     }
+    const parentGroup = visibleGroups.find((g) => g.items.some((i) => i.id === sec));
+    if (parentGroup) {
+      setM3ActiveGroupTitle(parentGroup.title);
+      setM5OpenGroups((prev) => ({ ...prev, [parentGroup.title]: true }));
+    }
     onSectionChange?.(sec);
+  };
+
+  const renderCollapseChevron = (flipped = effectiveCollapsed) => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+      {flipped ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
+    </svg>
+  );
+
+  const renderBrandBar = (showInlineToggle: boolean) => (
+    <div className="sb-brand-bar">
+      <div
+        onClick={() => handleSelectSection(isMobileTechOnly ? 'mobile_tech' : 'aujourdhui')}
+        style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0, overflow: 'hidden' }}
+      >
+        <CompanyMark name={companyName} />
+        {!effectiveCollapsed && (
+          <div style={{ minWidth: 0 }}>
+            <div className="sb-brand-title" data-testid="sidebar-company-name" title={companyName}>
+              {companyName}
+            </div>
+            <div className="sb-brand-sub">Pilotage TCE BTP</div>
+          </div>
+        )}
+      </div>
+      {showInlineToggle && (
+        <button
+          type="button"
+          onClick={() => (mobileMenuOpen ? setMobileMenuOpen(false) : toggleCollapsed())}
+          className="sb-inline-toggle"
+          title={mobileMenuOpen ? 'Fermer le menu' : 'Replier la barre latérale'}
+          aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Replier la barre latérale'}
+        >
+          {mobileMenuOpen ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          ) : (
+            renderCollapseChevron(false)
+          )}
+        </button>
+      )}
+    </div>
+  );
+
+  const renderNavItem = (item: NavItemDef, showSubtitle = false) => {
+    const isActive = activeSection === item.id;
+    const hasBadge = item.badge !== undefined && item.badge > 0;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => handleSelectSection(item.id)}
+        className={`sb-item ${isActive ? 'is-active' : ''}`}
+        title={`${item.label} — ${item.subtitle}`}
+        style={showSubtitle ? { alignItems: 'flex-start', paddingBlock: 7 } : undefined}
+      >
+        <span className="sb-item-icon" style={showSubtitle ? { marginTop: 2 } : undefined}>
+          {item.icon}
+          {effectiveCollapsed && hasBadge && (
+            <span className={`sb-dot ${item.urgent ? 'is-urgent' : ''}`} />
+          )}
+        </span>
+        {!effectiveCollapsed && (
+          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <span className="sb-item-label">{item.label}</span>
+            {showSubtitle && (
+              <span className="sb-brand-sub" style={{ marginTop: 1 }}>
+                {item.subtitle}
+              </span>
+            )}
+          </span>
+        )}
+        {!effectiveCollapsed && hasBadge && (
+          <span className={`sb-badge ${item.urgent ? 'is-urgent' : ''}`}>{item.badge}</span>
+        )}
+      </button>
+    );
+  };
+
+  const renderSyncPill = () => {
+    if (!canUserAccessSection('planning', user)) return null;
+    if (effectiveCollapsed) {
+      return (
+        <div
+          className="sb-sync-pill"
+          title="Moteur Planning · Sync active"
+          style={{ justifyContent: 'center', padding: '7px 0', marginInline: 'auto', width: 40 }}
+        >
+          <span className="sb-sync-dot" />
+        </div>
+      );
+    }
+    return (
+      <div className="sb-sync-pill">
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <span className="sb-sync-dot" />
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Moteur Planning · Sync active
+          </span>
+        </span>
+        {sidebarModel === 'line' && <span className="sb-live-tag">LIVE</span>}
+      </div>
+    );
+  };
+
+  const renderFooter = (floatingCardWrap = false, omitCollapsedTestId = false) => {
+    if (!user) return null;
+    const inner = (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: effectiveCollapsed ? 'center' : 'space-between',
+          gap: '6px',
+          width: '100%',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setProfileOpen(true)}
+          data-testid={effectiveCollapsed && omitCollapsedTestId ? undefined : 'sidebar-profile-trigger'}
+          title={effectiveCollapsed ? `${user.name || 'Utilisateur'} — Mon profil` : 'Mon profil'}
+          className="sb-profile-btn"
+          style={effectiveCollapsed ? { justifyContent: 'center', flex: 'unset', padding: '2px' } : undefined}
+        >
+          <div className="sb-avatar">{userInitials}</div>
+          {!effectiveCollapsed && (
+            <div style={{ minWidth: 0 }}>
+              <div className="sb-brand-title" style={{ fontSize: '13px', fontWeight: 600 }}>
+                {user.name || 'Utilisateur'}
+              </div>
+              <div className="sb-brand-sub" style={{ fontSize: '11px' }}>
+                {roleLabel}
+              </div>
+            </div>
+          )}
+        </button>
+        {!effectiveCollapsed && (
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="sb-logout-btn"
+            title="Se déconnecter"
+            aria-label="Se déconnecter"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="sb-footer">
+        {floatingCardWrap ? <div className="sb-floating-footer-card">{inner}</div> : inner}
+      </div>
+    );
+  };
+
+  const renderStandardGroups = () => (
+    <div className="sb-groups-stack">
+      {visibleGroups.map((group, idx) => (
+        <div key={group.title}>
+          {effectiveCollapsed ? (
+            idx > 0 && <div className="sb-collapsed-sep" />
+          ) : (
+            <div className="sb-section-label">{group.title}</div>
+          )}
+          <div className="sb-items-stack">{group.items.map((item) => renderNavItem(item))}</div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderRailPillarIcon = (title: string, fallbackIcon: ReactNode) => {
+    switch (title) {
+      case 'ESPACE DE TRAVAIL':
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+          </svg>
+        );
+      case 'GESTION':
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <line x1="6" y1="10" x2="18" y2="10" />
+            <line x1="6" y1="14" x2="13" y2="14" />
+          </svg>
+        );
+      case 'ADMINISTRATION':
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        );
+      default:
+        return fallbackIcon;
+    }
   };
 
   return (
@@ -355,170 +620,348 @@ export function Layout({
         onClick={() => setMobileMenuOpen(false)}
       />
 
-      {/* LEFT SIDEBAR NAVIGATION (ServiceTitan / Linear / Praxedo Standard) */}
-      <aside className={`enterprise-sidebar ${collapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-brand">
-          <div
-            onClick={() => handleSelectSection(isMobileTechOnly ? 'mobile_tech' : 'aujourdhui')}
-            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', overflow: 'hidden' }}
-          >
-            <CompanyMark name={companyName} />
-            {!collapsed && (
-              <span
-                data-testid="sidebar-company-name"
-                style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--sidebar-hover-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}
-                title={companyName}
-              >
-                {companyName}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            className="desktop-only-el"
-            style={{
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              color: 'var(--muted)',
-              width: '26px',
-              height: '26px',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-            title={collapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {collapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
-            </svg>
-          </button>
-        </div>
-
-        <nav className="sidebar-nav">
-          {visibleGroups.map((group) => (
-            <div key={group.title} className="sidebar-group" style={{ marginBottom: '8px' }}>
-              {!collapsed && (
-                <div className="sidebar-section-label">{group.title}</div>
-              )}
-              {group.items.map((item) => {
-                const isActive = activeSection === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelectSection(item.id)}
-                    className={`sidebar-item ${isActive ? 'active' : ''}`}
-                    title={`${item.label} — ${item.subtitle}`}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {item.icon}
-                    </span>
-                    {!collapsed && (
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.label}
-                      </span>
-                    )}
-                    {!collapsed && item.badge !== undefined && item.badge > 0 && (
-                      <span className={`sidebar-badge ${item.urgent ? 'urgent' : ''}`}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-
-          {!collapsed && canUserAccessSection('planning', user) && (
-            <div style={{ marginTop: 'auto', paddingTop: '16px', paddingBottom: '6px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  background: 'var(--sidebar-hover-bg)',
-                  border: '1px solid var(--sidebar-border)',
-                  fontSize: '11px',
-                  color: 'var(--color-sidebar-muted)',
-                }}
-              >
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Moteur Planning · Sync active
-                </span>
+      {/* LEFT SIDEBAR NAVIGATION (6 modèles harmonisés × 7 Directions Artistiques) */}
+      <aside
+        className={`enterprise-sidebar sb-v2 sb-model-${sidebarModel} ${effectiveCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}
+        data-sidebar-model={sidebarModel}
+      >
+        {sidebarModel === 'rail' ? (
+          <>
+            <div className="sb-rail-col">
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div
+                  onClick={() => handleSelectSection(isMobileTechOnly ? 'mobile_tech' : 'aujourdhui')}
+                  style={{ cursor: 'pointer' }}
+                  title={companyName}
+                >
+                  <CompanyMark name={companyName} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  {visibleGroups.map((group) => {
+                    const isGroupActive = selectedM3Group?.title === group.title;
+                    const groupHasUrgent = group.items.some((i) => i.urgent && (i.badge || 0) > 0);
+                    const groupHasBadge = group.items.some((i) => (i.badge || 0) > 0);
+                    return (
+                      <button
+                        key={group.title}
+                        type="button"
+                        onClick={() => {
+                          setM3ActiveGroupTitle(group.title);
+                          if (effectiveCollapsed && group.items[0]) {
+                            handleSelectSection(group.items[0].id);
+                          }
+                        }}
+                        className={`sb-rail-btn ${isGroupActive ? 'is-active' : ''}`}
+                        title={group.title}
+                        aria-label={group.title}
+                      >
+                        {renderRailPillarIcon(group.title, group.items[0]?.icon)}
+                        {groupHasBadge && (
+                          <span className={`sb-rail-dot ${groupHasUrgent ? 'is-urgent' : ''}`} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </nav>
 
-        <div className="sidebar-footer">
-          {!collapsed && user && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                data-testid="sidebar-profile-trigger"
-                title="Mon profil"
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  minWidth: 0,
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '4px 6px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  color: 'inherit',
-                  transition: 'background 120ms ease',
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sidebar-hover-bg)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-              >
-                <div className="avatar">
-                  {user.name ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() : 'ZL'}
+              {effectiveCollapsed && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  {!mobileMenuOpen && (
+                    <button
+                      type="button"
+                      onClick={toggleCollapsed}
+                      className="sb-inline-toggle"
+                      style={{ color: '#cbd5e1', background: 'rgba(255,255,255,0.08)' }}
+                      title="Déplier la barre latérale"
+                      aria-label="Déplier la barre latérale"
+                    >
+                      {renderCollapseChevron(true)}
+                    </button>
+                  )}
+                  {user && (
+                    <button
+                      type="button"
+                      onClick={() => setProfileOpen(true)}
+                      data-testid="sidebar-profile-trigger"
+                      title={`${user.name || 'Utilisateur'} — Mon profil`}
+                      className="sb-profile-btn"
+                      style={{ flex: 'unset', padding: 2, justifyContent: 'center' }}
+                    >
+                      <div className="sb-avatar">{userInitials}</div>
+                    </button>
+                  )}
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--sidebar-hover-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {user.name || 'Utilisateur'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-sidebar-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {roleLabel}
-                  </div>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--color-sidebar-muted)',
-                  cursor: 'pointer',
-                  padding: '6px',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                title="Se déconnecter"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-              </button>
+              )}
             </div>
-          )}
-        </div>
+
+            {!effectiveCollapsed && (
+              <div className="sb-rail-panel">
+                {renderBrandBar(true)}
+                <nav className="sb-nav">
+                  <div className="sb-groups-stack">
+                    {selectedM3Group && (
+                      <div>
+                        <div className="sb-section-label">{selectedM3Group.title}</div>
+                        <div className="sb-items-stack">
+                          {selectedM3Group.items.map((item) => renderNavItem(item, true))}
+                        </div>
+                      </div>
+                    )}
+                    {visibleGroups.length > 1 && (
+                      <div>
+                        <div className="sb-section-label" style={{ marginTop: 4 }}>Autres pôles</div>
+                        <div className="sb-items-stack">
+                          {visibleGroups
+                            .filter((g) => g.title !== selectedM3Group?.title)
+                            .map((g) => {
+                              const firstItem = g.items[0];
+                              const count = g.items.reduce((acc, i) => acc + (i.badge || 0), 0);
+                              return (
+                                <button
+                                  key={g.title}
+                                  type="button"
+                                  onClick={() => setM3ActiveGroupTitle(g.title)}
+                                  className="sb-item"
+                                  title={`Basculer vers ${g.title}`}
+                                >
+                                  <span className="sb-item-icon">
+                                    {renderRailPillarIcon(g.title, firstItem?.icon)}
+                                  </span>
+                                  <span className="sb-item-label" style={{ textTransform: 'capitalize' }}>
+                                    {g.title.toLowerCase()}
+                                  </span>
+                                  {count > 0 && <span className="sb-badge">{count}</span>}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {renderSyncPill()}
+                </nav>
+                {renderFooter(false, true)}
+              </div>
+            )}
+          </>
+        ) : sidebarModel === 'floating' ? (
+          <div className="sb-floating-card">
+            {effectiveCollapsed && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="sb-edge-toggle"
+                title="Déplier la barre latérale"
+                aria-label="Déplier la barre latérale"
+              >
+                {renderCollapseChevron(true)}
+              </button>
+            )}
+            {renderBrandBar(!effectiveCollapsed || mobileMenuOpen)}
+            {(onQuickNewDevis || onQuickNewIntervention) && (
+              <div style={{ padding: effectiveCollapsed ? '8px 10px 0' : '8px 10px 0' }}>
+                <button
+                  type="button"
+                  className="sb-quick-cta"
+                  onClick={() => (onQuickNewDevis || onQuickNewIntervention)?.()}
+                  title={onQuickNewDevis ? 'Nouveau devis' : 'Nouvelle intervention'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  {!effectiveCollapsed && (
+                    <span>{onQuickNewDevis ? 'Nouveau devis' : 'Nouvelle intervention'}</span>
+                  )}
+                </button>
+              </div>
+            )}
+            <nav className="sb-nav">
+              {renderStandardGroups()}
+              {renderSyncPill()}
+            </nav>
+            {renderFooter(true)}
+          </div>
+        ) : sidebarModel === 'cards' ? (
+          <>
+            {effectiveCollapsed && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="sb-edge-toggle"
+                title="Déplier la barre latérale"
+                aria-label="Déplier la barre latérale"
+              >
+                {renderCollapseChevron(true)}
+              </button>
+            )}
+            {renderBrandBar(!effectiveCollapsed || mobileMenuOpen)}
+            <nav className="sb-nav">
+              <div className="sb-groups-stack">
+                {visibleGroups
+                  .filter((g) => g.title !== 'ESPACE TERRAIN')
+                  .map((group, idx) =>
+                    effectiveCollapsed ? (
+                      <div key={group.title}>
+                        {idx > 0 && <div className="sb-collapsed-sep" />}
+                        <div className="sb-items-stack">{group.items.map((item) => renderNavItem(item))}</div>
+                      </div>
+                    ) : (
+                      <div key={group.title} className="sb-card-group">
+                        <div className="sb-section-label">{group.title}</div>
+                        <div className="sb-items-stack">{group.items.map((item) => renderNavItem(item))}</div>
+                      </div>
+                    ),
+                  )}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {visibleNavItems.some((i) => i.id === 'mobile_tech') && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSection('mobile_tech')}
+                    className={`sb-field-cta ${activeSection === 'mobile_tech' ? 'is-active' : ''}`}
+                    title="App Mobile Technicien — Pointage, interventions & photos"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: activeSection === 'mobile_tech' ? 'currentColor' : 'var(--sb-field-icon)', flexShrink: 0 }}>
+                      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                      <line x1="12" y1="18" x2="12.01" y2="18" />
+                    </svg>
+                    {!effectiveCollapsed && <span>App Mobile Technicien</span>}
+                  </button>
+                )}
+                {renderSyncPill()}
+              </div>
+            </nav>
+            {renderFooter()}
+          </>
+        ) : sidebarModel === 'accordion' ? (
+          <>
+            {effectiveCollapsed && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="sb-edge-toggle"
+                title="Déplier la barre latérale"
+                aria-label="Déplier la barre latérale"
+              >
+                {renderCollapseChevron(true)}
+              </button>
+            )}
+            {renderBrandBar(!effectiveCollapsed || mobileMenuOpen)}
+            {!effectiveCollapsed && (
+              <div className="sb-search-box">
+                <div className="sb-search-wrap">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    style={{ position: 'absolute', left: 9, color: 'var(--sb-muted)', pointerEvents: 'none' }}
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={m5Query}
+                    onChange={(e) => setM5Query(e.target.value)}
+                    placeholder="Filtrer les modules..."
+                    className="sb-search-input"
+                    aria-label="Filtrer les modules"
+                  />
+                  {m5Query && (
+                    <button
+                      type="button"
+                      onClick={() => setM5Query('')}
+                      style={{
+                        position: 'absolute',
+                        right: 6,
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--sb-muted)',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        lineHeight: 1,
+                        padding: 2,
+                      }}
+                      title="Effacer"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            <nav className="sb-nav">
+              {effectiveCollapsed ? (
+                renderStandardGroups()
+              ) : (
+                <div className="sb-groups-stack">
+                  {visibleGroups.map((group) => {
+                    const normalized = m5Query.trim().toLowerCase();
+                    const matchingItems = normalized
+                      ? group.items.filter(
+                          (item) =>
+                            item.label.toLowerCase().includes(normalized) ||
+                            item.subtitle.toLowerCase().includes(normalized),
+                        )
+                      : group.items;
+                    if (matchingItems.length === 0) return null;
+                    const isOpen = normalized !== '' || m5OpenGroups[group.title] !== false;
+                    return (
+                      <div key={group.title}>
+                        <button
+                          type="button"
+                          className="sb-acc-trigger"
+                          onClick={() =>
+                            setM5OpenGroups((prev) => ({
+                              ...prev,
+                              [group.title]: !(prev[group.title] !== false),
+                            }))
+                          }
+                        >
+                          <span>{group.title}</span>
+                          <span>{isOpen ? '▾' : '▸'}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="sb-items-stack" style={{ marginTop: 2 }}>
+                            {matchingItems.map((item) => renderNavItem(item))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {renderSyncPill()}
+            </nav>
+            {renderFooter()}
+          </>
+        ) : (
+          /* classic (Modèle 1) & line (Modèle 2) */
+          <>
+            {(sidebarModel === 'classic' || effectiveCollapsed) && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="sb-edge-toggle"
+                title={effectiveCollapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
+                aria-label={effectiveCollapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
+              >
+                {renderCollapseChevron()}
+              </button>
+            )}
+            {renderBrandBar(sidebarModel === 'line' ? !effectiveCollapsed || mobileMenuOpen : mobileMenuOpen)}
+            <nav className="sb-nav">
+              {renderStandardGroups()}
+              {renderSyncPill()}
+            </nav>
+            {renderFooter()}
+          </>
+        )}
       </aside>
       <ProfileMenu open={profileOpen} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />
 
@@ -580,6 +1023,7 @@ export function Layout({
             {!isMobileTechOnly && (
               <button
                 type="button"
+                data-testid="mobile-menu-trigger"
                 className="mobile-only-flex btn btn-secondary btn-sm"
                 onClick={() => setMobileMenuOpen((o) => !o)}
                 style={{ padding: '6px 8px', flexShrink: 0 }}
@@ -803,9 +1247,10 @@ export function Layout({
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
+                data-testid="topbar-appearance-toggle"
                 onClick={() => setThemeDropdownOpen((open) => !open)}
                 className="btn btn-secondary btn-sm"
-                title="Choisir la direction artistique / thème de l'interface"
+                title="Choisir la direction artistique et le modèle de menu latéral"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -885,7 +1330,7 @@ export function Layout({
                       right: 0,
                       top: 'calc(100% + 8px)',
                       zIndex: 1000,
-                      width: '320px',
+                      width: '352px',
                       maxWidth: 'calc(100vw - 20px)',
                       background: 'var(--bg-surface, #ffffff)',
                       border: '1px solid var(--border-subtle, #e2e8f0)',
@@ -894,7 +1339,7 @@ export function Layout({
                       padding: '12px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '8px',
+                      gap: '10px',
                     }}
                   >
                     <div
@@ -902,16 +1347,15 @@ export function Layout({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        paddingBottom: '8px',
-                        borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
+                        gap: '8px',
                       }}
                     >
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                          <ProGlyph name="palette" size={14} style={{ marginRight: 6 }} />Direction Artistique
+                          <ProGlyph name="palette" size={14} style={{ marginRight: 6 }} />Apparence & Menu latéral
                         </div>
                         <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
-                          Choisissez votre design préféré en direct
+                          Personnalisez votre espace en direct
                         </div>
                       </div>
                       <span
@@ -922,118 +1366,280 @@ export function Layout({
                           borderRadius: '999px',
                           background: 'rgba(4, 120, 87, 0.1)',
                           color: '#047857',
+                          flexShrink: 0,
                         }}
                       >
-                        7 styles
+                        {popoverTab === 'theme' ? '7 styles' : '6 modèles'}
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '340px', overflowY: 'auto' }}>
-                      {THEMES.map((t) => {
-                        const isCurrent = t.id === currentTheme;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            disabled={isThemePending}
-                            onClick={async () => {
-                              try {
-                                await setUserPref(t.id);
-                                setThemeDropdownOpen(false);
-                                toast.success(`Design "${t.name}" appliqué !`);
-                              } catch {
-                                toast.error('Impossible d’appliquer ce thème');
-                              }
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '10px',
-                              padding: '8px 10px',
-                              borderRadius: '10px',
-                              border: isCurrent ? '1.5px solid var(--accent-primary, #047857)' : '1px solid transparent',
-                              background: isCurrent ? 'var(--color-primary-soft, rgba(4,120,87,0.08))' : 'transparent',
-                              cursor: 'pointer',
-                              textAlign: 'left',
-                              width: '100%',
-                              transition: 'all 0.15s ease',
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isCurrent) e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.04))';
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isCurrent) e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                              {/* Swatches pill */}
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  gap: '2px',
-                                  padding: '3px',
-                                  background: 'rgba(0,0,0,0.08)',
-                                  borderRadius: '6px',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {t.swatches.slice(0, 3).map((c, i) => (
-                                  <span
-                                    key={i}
-                                    style={{
-                                      width: '9px',
-                                      height: '14px',
-                                      borderRadius: '2px',
-                                      background: c,
-                                      display: 'inline-block',
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                              <div style={{ minWidth: 0 }}>
+                    {/* Onglets Direction Artistique / Menu latéral */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '4px',
+                        padding: '3px',
+                        borderRadius: '9px',
+                        background: 'var(--color-surface-subtle, rgba(15, 23, 42, 0.05))',
+                        border: '1px solid var(--border-subtle, #e2e8f0)',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setPopoverTab('theme')}
+                        data-testid="popover-tab-theme"
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '7px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          background: popoverTab === 'theme' ? 'var(--bg-surface, #ffffff)' : 'transparent',
+                          color: popoverTab === 'theme' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          boxShadow: popoverTab === 'theme' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 140ms ease',
+                        }}
+                      >
+                        Direction (7)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPopoverTab('sidebar')}
+                        data-testid="popover-tab-sidebar"
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '7px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          background: popoverTab === 'sidebar' ? 'var(--bg-surface, #ffffff)' : 'transparent',
+                          color: popoverTab === 'sidebar' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          boxShadow: popoverTab === 'sidebar' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 140ms ease',
+                        }}
+                      >
+                        Menu latéral (6)
+                      </button>
+                    </div>
+
+                    {popoverTab === 'theme' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '340px', overflowY: 'auto' }}>
+                        {THEMES.map((t) => {
+                          const isCurrent = t.id === currentTheme;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              disabled={isThemePending}
+                              onClick={async () => {
+                                try {
+                                  await setUserPref(t.id);
+                                  toast.success(`Design "${t.name}" appliqué !`);
+                                } catch {
+                                  toast.error('Impossible d’appliquer ce thème');
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
+                                border: isCurrent ? '1.5px solid var(--accent-primary, #047857)' : '1px solid transparent',
+                                background: isCurrent ? 'var(--color-primary-soft, rgba(4,120,87,0.08))' : 'transparent',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                width: '100%',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isCurrent) e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.04))';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isCurrent) e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                 <div
                                   style={{
-                                    fontWeight: isCurrent ? 800 : 600,
-                                    fontSize: '12px',
-                                    color: 'var(--text-primary)',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
+                                    display: 'flex',
+                                    gap: '2px',
+                                    padding: '3px',
+                                    background: 'rgba(0,0,0,0.08)',
+                                    borderRadius: '6px',
+                                    flexShrink: 0,
                                   }}
                                 >
-                                  {t.name}
+                                  {t.swatches.slice(0, 3).map((c, i) => (
+                                    <span
+                                      key={i}
+                                      style={{
+                                        width: '9px',
+                                        height: '14px',
+                                        borderRadius: '2px',
+                                        background: c,
+                                        display: 'inline-block',
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: isCurrent ? 800 : 600,
+                                      fontSize: '12px',
+                                      color: 'var(--text-primary)',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
+                                    {t.name}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: '10px',
+                                      color: 'var(--text-muted)',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
+                                    {t.tagline}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {isCurrent && (
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    color: 'var(--accent-primary, #047857)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '340px', overflowY: 'auto' }}>
+                        {SIDEBAR_MODELS.map((m) => {
+                          const isCurrent = m.id === sidebarModel;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              disabled={isThemePending}
+                              data-testid={`popover-sidebar-${m.id}`}
+                              onClick={async () => {
+                                try {
+                                  await setSidebarUserPref(m.id as SidebarModelId);
+                                  toast.success(`Menu latéral « ${m.name} » activé !`);
+                                } catch {
+                                  toast.error('Impossible de changer le modèle de menu');
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '7px 9px',
+                                borderRadius: '10px',
+                                border: isCurrent ? '1.5px solid var(--accent-primary, #047857)' : '1px solid var(--border-subtle, #e2e8f0)',
+                                background: isCurrent ? 'var(--color-primary-soft, rgba(4,120,87,0.08))' : 'transparent',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                width: '100%',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <SidebarPreviewMini modelId={m.id} themeId={currentTheme} width={68} height={50} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                  <span
+                                    style={{
+                                      fontSize: '9.5px',
+                                      fontWeight: 700,
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      background: 'var(--color-surface-subtle, rgba(15,23,42,0.06))',
+                                      color: 'var(--text-secondary)',
+                                    }}
+                                  >
+                                    {`M${m.number}`}
+                                  </span>
+                                  <strong
+                                    style={{
+                                      fontSize: '12px',
+                                      color: 'var(--text-primary)',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
+                                    {m.name}
+                                  </strong>
                                 </div>
                                 <div
                                   style={{
                                     fontSize: '10px',
                                     color: 'var(--text-muted)',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
+                                    marginTop: '2px',
+                                    lineHeight: 1.35,
                                   }}
                                 >
-                                  {t.tagline}
+                                  {m.tagline}
                                 </div>
                               </div>
-                            </div>
-
-                            {isCurrent && (
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  color: 'var(--accent-primary, #047857)',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                ✓
-                              </span>
-                            )}
+                              {isCurrent && (
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    color: 'var(--accent-primary, #047857)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                        {sidebarUserPref && sidebarUserPref !== sidebarCompanyDefault && (
+                          <button
+                            type="button"
+                            disabled={isThemePending}
+                            onClick={async () => {
+                              await setSidebarUserPref(null);
+                              toast.success('Retour au menu par défaut de l’entreprise.');
+                            }}
+                            style={{
+                              marginTop: '2px',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: '1px dashed var(--border-subtle, #cbd5e1)',
+                              background: 'transparent',
+                              color: 'var(--text-secondary)',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Revenir au défaut ({SIDEBAR_MODELS.find((x) => x.id === sidebarCompanyDefault)?.name})
                           </button>
-                        );
-                      })}
-                    </div>
+                        )}
+                      </div>
+                    )}
 
                     <div
                       style={{
@@ -1154,24 +1760,7 @@ function CompanyMark({ name }: { name: string }) {
     .join('')
     .toUpperCase() || 'E';
   return (
-    <div
-      aria-hidden="true"
-      style={{
-        width: '36px',
-        height: '36px',
-        borderRadius: '10px',
-        background: 'var(--accent, #2563eb)',
-        color: '#ffffff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        fontWeight: 800,
-        fontSize: '13px',
-        letterSpacing: '0.5px',
-        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.18)',
-      }}
-    >
+    <div aria-hidden="true" className="sb-brand-mark">
       {initials}
     </div>
   );

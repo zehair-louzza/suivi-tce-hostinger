@@ -17,6 +17,7 @@ import './styles/mock-design-system.css';
 import './styles/atlas-clarity.css';
 import './styles/craft-warmth.css';
 import './styles/bento-modular.css';
+import './styles/sidebar-models.css';
 import { registerServiceWorker } from './components/InstallAppButton';
 
 // Purge service workers pour garantir la dernière version sans cache rémanent

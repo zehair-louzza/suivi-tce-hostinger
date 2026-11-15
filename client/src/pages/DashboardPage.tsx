@@ -27,6 +27,8 @@ import {
 } from '../lib/api';
 import { evaluateTechniciansAvailability } from '../lib/techAvailability';
 import { Layout, AppSection } from '../components/Layout';
+import { RemoteClockInExceptionBar } from '../components/RemoteClockInExceptionBar';
+import { canUserApproveRemoteClockIn } from '../../../shared/types';
 
 
 
@@ -1283,7 +1285,9 @@ export function DashboardPage() {
       )}
 
       {activeSection === 'planning' && canUserAccessSection('planning', user) && (
-        <PlanningStudioView
+        <>
+          {canUserApproveRemoteClockIn(user) && <RemoteClockInExceptionBar techniciens={techniciensList} />}
+          <PlanningStudioView
           devisList={devisList}
           interventionsList={interventionsList}
           techniciens={techniciensList}
@@ -1304,6 +1308,7 @@ export function DashboardPage() {
             await updateIntvMut.mutateAsync({ id: intvId, data: payload });
           }}
         />
+        </>
       )}
 
       {/* =====================================================================

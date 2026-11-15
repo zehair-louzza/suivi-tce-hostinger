@@ -22,6 +22,7 @@ import {
   descriptionEntreprise,
   type AuthUserRow,
   areThemeColumnsAvailable,
+  areSidebarColumnsAvailable,
   isMissingSchemaError,
 } from '../lib/userSelect.js';
 
@@ -173,6 +174,7 @@ export function formatPublicUser(u: {
   active?: boolean;
   companyId?: number | null;
   themePref?: string | null;
+  sidebarModelPref?: string | null;
   company?: {
     id: number;
     name: string;
@@ -180,6 +182,7 @@ export function formatPublicUser(u: {
     siren?: string | null;
     defaultTheme?: string | null;
     allowThemeOverride?: boolean | null;
+    defaultSidebarModel?: string | null;
     accueilMaFile?: boolean | null;
     siegeAdresse?: string | null;
     siegeLat?: number | null;
@@ -195,6 +198,9 @@ export function formatPublicUser(u: {
   const allowThemeOverride = u.company?.allowThemeOverride !== false;
   const userThemePref = u.themePref || null;
   const resolvedTheme = allowThemeOverride && userThemePref ? userThemePref : companyDefaultTheme;
+  const sidebarCompanyDefault = u.company?.defaultSidebarModel || 'classic';
+  const sidebarUserPref = u.sidebarModelPref || null;
+  const sidebarResolved = sidebarUserPref || sidebarCompanyDefault;
   return {
     id: u.id,
     email: u.email,
@@ -225,6 +231,9 @@ export function formatPublicUser(u: {
       allowOverride: allowThemeOverride,
       userPref: userThemePref,
       resolved: resolvedTheme,
+      sidebarCompanyDefault,
+      sidebarUserPref,
+      sidebarResolved,
     },
     createdAt: u.createdAt,
   };
@@ -724,15 +733,16 @@ authRouter.get(
 // Liste blanche des thèmes accessibles aux utilisateurs
 const ALLOWED_THEMES = ['light', 'dark', 'atlas', 'craft', 'signal', 'swiss', 'bento'] as const;
 const ThemeIdSchema = z.enum(ALLOWED_THEMES);
+const ALLOWED_SIDEBAR_MODELS = ['classic', 'line', 'rail', 'cards', 'accordion', 'floating'] as const;
+const SidebarModelIdSchema = z.enum(ALLOWED_SIDEBAR_MODELS);
 
 /**
  * PATCH /api/auth/me/theme
  * ------------------------------------------------------------------
- * Enregistre la préférence de thème personnelle de l'utilisateur.
- * - Si l'entreprise n'autorise pas la personnalisation, la requête est
- *   rejetée pour informer l'utilisateur (403 THEME_OVERRIDE_DISABLED).
- * - Envoyer `{ theme: null }` ou `{ theme: "reset" }` supprime la
- *   préférence personnelle (retour au défaut entreprise).
+ * Enregistre la préférence d'apparence personnelle de l'utilisateur :
+ * - `theme` (7 Directions Artistiques, soumise à `allowThemeOverride`)
+ * - `sidebarModel` (6 modèles de menu latéral, toujours personnalisable par l'utilisateur)
+ * - Envoyer `null` ou `"reset"` supprime la préférence personnelle (retour au défaut entreprise).
  */
 authRouter.patch(
   '/me/theme',
@@ -740,19 +750,39 @@ authRouter.patch(
   asyncHandler(async (req, res) => {
     if (!req.user) throw new AppError(401, 'Non authentifié', 'UNAUTHORIZED');
 
-    const raw = (req.body ?? {}) as { theme?: string | null };
-    const value = raw.theme;
-    let nextTheme: string | null;
-    if (value === null || value === undefined || value === '' || value === 'reset') {
-      nextTheme = null;
-    } else {
-      const parsed = ThemeIdSchema.safeParse(value);
-      if (!parsed.success) throw new AppError(400, 'Thème inconnu', 'INVALID_THEME');
-      nextTheme = parsed.data;
+    const raw = (req.body ?? {}) as { theme?: string | null; sidebarModel?: string | null };
+    const hasTheme = Object.prototype.hasOwnProperty.call(raw, 'theme');
+    const hasSidebar = Object.prototype.hasOwnProperty.call(raw, 'sidebarModel');
+    if (!hasTheme && !hasSidebar) {
+      throw new AppError(400, 'Paramètre de thème ou de menu manquant', 'INVALID_PAYLOAD');
     }
 
-    // La persistance d'apparence nécessite les colonnes de thème en base.
-    if (!areThemeColumnsAvailable()) {
+    let nextTheme: string | null | undefined;
+    if (hasTheme) {
+      const value = raw.theme;
+      if (value === null || value === undefined || value === '' || value === 'reset') {
+        nextTheme = null;
+      } else {
+        const parsed = ThemeIdSchema.safeParse(value);
+        if (!parsed.success) throw new AppError(400, 'Thème inconnu', 'INVALID_THEME');
+        nextTheme = parsed.data;
+      }
+    }
+
+    let nextSidebar: string | null | undefined;
+    if (hasSidebar) {
+      const sVal = raw.sidebarModel;
+      if (sVal === null || sVal === undefined || sVal === '' || sVal === 'reset') {
+        nextSidebar = null;
+      } else {
+        const parsed = SidebarModelIdSchema.safeParse(sVal);
+        if (!parsed.success) throw new AppError(400, 'Modèle de menu inconnu', 'INVALID_SIDEBAR_MODEL');
+        nextSidebar = parsed.data;
+      }
+    }
+
+    // La persistance du thème nécessite les colonnes de thème en base.
+    if (hasTheme && !areThemeColumnsAvailable()) {
       throw new AppError(
         503,
         "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
@@ -760,9 +790,11 @@ authRouter.patch(
       );
     }
 
+    const updateData: Record<string, string | null> = {};
+
     try {
-      // Vérifier que l'entreprise autorise la personnalisation (sauf pour reset).
-      if (nextTheme !== null) {
+      // Vérifier que l'entreprise autorise la personnalisation de direction artistique (sauf reset).
+      if (hasTheme && nextTheme !== null && nextTheme !== undefined) {
         const u = await prisma.user.findUnique({
           where: { id: req.user.userId },
           select: { companyId: true, company: { select: { allowThemeOverride: true } } },
@@ -776,12 +808,26 @@ authRouter.patch(
         }
       }
 
-      await prisma.user.update({
-        where: { id: req.user.userId },
-        data: { themePref: nextTheme },
-      });
+      if (hasTheme) updateData.themePref = nextTheme ?? null;
+      if (hasSidebar && areSidebarColumnsAvailable()) updateData.sidebarModelPref = nextSidebar ?? null;
+
+      if (Object.keys(updateData).length > 0) {
+        await prisma.user.update({
+          where: { id: req.user.userId },
+          data: updateData,
+        });
+      }
     } catch (e) {
       if (isMissingSchemaError(e)) {
+        // Repli sûr si seule la colonne sidebarModelPref manque encore
+        if (hasSidebar && !hasTheme) {
+          const updated = await findPublicUserUnique({ id: req.user.userId });
+          return res.json({
+            user: updated ? formatPublicUser(updated) : null,
+            persistedLocally: true,
+            message: 'Modèle de menu appliqué localement.',
+          });
+        }
         throw new AppError(
           503,
           "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
@@ -794,7 +840,7 @@ authRouter.patch(
     const updated = await findPublicUserUnique({ id: req.user.userId });
     res.json({
       user: updated ? formatPublicUser(updated) : null,
-      message: nextTheme ? 'Apparence personnelle mise à jour.' : 'Apparence personnelle réinitialisée.',
+      message: 'Préférences d’apparence mises à jour.',
     });
   })
 );

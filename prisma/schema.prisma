@@ -19,6 +19,7 @@ model Company {
   siegeLng             Float?
   defaultTheme         String               @default("light")
   allowThemeOverride   Boolean              @default(true)
+  defaultSidebarModel  String               @default("classic")
   /// Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse
   accueilMaFile        Boolean              @default(false)
   /// Automatisations « technicien » : acceptation de mission, relance, alerte au planificateur
@@ -39,6 +40,7 @@ model Company {
   devis                Devis[]
   interventions        Intervention[]
   pointagesTechniciens PointageTechnicien[]
+  pointagesDerogations PointageDerogation[]
   referentiels         Referentiel[]
   invitations          CompanyInvitation[]
   demandes             Demande[]
@@ -73,6 +75,7 @@ model User {
   termsAcceptedAt    DateTime?
   termsAcceptedIp    String?
   themePref          String?
+  sidebarModelPref   String?
   companyId          Int?
   company            Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())
@@ -342,6 +345,12 @@ model PointageTechnicien {
   dateJour                String
   heureArriveeBureau      String?
   timestampArrivee        DateTime?
+  latitudeArrivee         Float?
+  longitudeArrivee        Float?
+  precisionGpsArrivee     Float?
+  distanceBureauMetres    Float?
+  derogationHorsBureau    Boolean   @default(false)
+  derogationAccordeePar   String?
   heureFinJournee         String?
   timestampFin            DateTime?
   statutJournee           String    @default("EN_SERVICE")
@@ -354,6 +363,25 @@ model PointageTechnicien {
   @@index([companyId], map: "pointages_techniciens_companyid_idx")
   @@index([userId], map: "pointages_techniciens_userid_idx")
   @@map("pointages_techniciens")
+}
+
+// Dérogation de pointage matin hors bureau (<= 30 m) accordée par un responsable habilité
+model PointageDerogation {
+  id                Int      @id @default(autoincrement())
+  companyId         Int
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  technicien        String
+  dateJour          String
+  active            Boolean  @default(true)
+  motif             String?
+  accordeePar       String
+  accordeeParUserId Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([technicien, dateJour, companyId], map: "pointages_derogations_tech_date_company_key")
+  @@index([companyId], map: "pointages_derogations_companyid_idx")
+  @@map("pointages_derogations")
 }
 
 // Invitation e-mail pour rejoindre une entreprise (jeton à usage unique, stocké haché)

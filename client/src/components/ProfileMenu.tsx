@@ -10,7 +10,7 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '../stores/authStore';
-import { PersonalThemePicker } from './AppearancePanel';
+import { PersonalThemePicker, PersonalSidebarModelPicker } from './AppearancePanel';
 
 interface ProfileMenuProps {
   open: boolean;
@@ -151,6 +151,10 @@ export function ProfileMenu({ open, onClose, onLogout }: ProfileMenuProps) {
         >
           <section>
             <PersonalThemePicker />
+          </section>
+
+          <section style={{ borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>
+            <PersonalSidebarModelPicker />
           </section>
 
           <section style={{ borderTop: '1px solid var(--color-border)', paddingTop: 14 }}>

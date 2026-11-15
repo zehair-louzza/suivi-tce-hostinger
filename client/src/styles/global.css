@@ -117,17 +117,6 @@ html, body, #root {
   font-weight: 600;
 }
 
-.sidebar-item.active::before {
-  content: '';
-  position: absolute;
-  left: -10px;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: var(--sidebar-accent);
-}
-
 .sidebar-badge {
   margin-left: auto;
   padding: 1px 7px;
@@ -1338,7 +1327,6 @@ html, body, #root {
 .sidebar-item.active {
   background: var(--sidebar-active-bg) !important;
   color: var(--sidebar-active-text) !important;
-  border-left: 3px solid var(--sidebar-accent) !important;
   font-weight: 700 !important;
 }
 

@@ -85,6 +85,7 @@ export const POLICY = {
   'admin.automations.manage': admin,
   'admin.pointages.read': anyMember, // direction et planificateur : l'équipe ; les autres : le leur (filtré dans la route)
   'admin.pointages.clock': anyMember, // chacun pointe pour lui-même (forcé côté serveur)
+  'admin.pointages.exception': (a) => a.isAdmin || Boolean(a.perms.canApproveRemoteClockIn),
 } satisfies Record<string, Rule>;
 
 export type Action = keyof typeof POLICY;
@@ -143,6 +144,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   'admin.automations.manage': 'régler les automatisations de la société',
   'admin.pointages.read': 'consulter les pointages',
   'admin.pointages.clock': 'pointer',
+  'admin.pointages.exception': 'activer une dérogation de pointage hors bureau',
 };
 
 /** Profils (par défaut) autorisés pour une action — même table de règles que l'application réelle. */

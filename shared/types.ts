@@ -1297,6 +1297,7 @@ export interface UserPermissions {
   canWriteReports: boolean;
   canManageBilling: boolean;
   canDeleteRecords: boolean;
+  canApproveRemoteClockIn?: boolean;
   canAccessMobileTech: boolean;
   mobileOnly: boolean;
 }
@@ -1315,12 +1316,16 @@ export interface CompanyInfo {
 }
 
 export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';
+export type SidebarModelId = 'classic' | 'line' | 'rail' | 'cards' | 'accordion' | 'floating';
 
 export interface UserThemeSettings {
   companyDefault: ThemeId;
   allowOverride: boolean;
   userPref: ThemeId | null;
   resolved: ThemeId;
+  sidebarCompanyDefault?: SidebarModelId;
+  sidebarUserPref?: SidebarModelId | null;
+  sidebarResolved?: SidebarModelId;
 }
 
 export interface User {
@@ -1335,6 +1340,7 @@ export interface User {
   companyName?: string | null;
   companySiret?: string | null;
   company?: CompanyInfo | null;
+  isCreator?: boolean;
   theme?: UserThemeSettings;
   createdAt?: number | string;
 }
@@ -1348,6 +1354,28 @@ export interface TerrainPhoto {
   auteur?: string;
 }
 
+export const CLOCK_IN_PERIMETER_METERS = 30;
+
+/** Distance géodésique Haversine en mètres entre deux points GPS (WGS84). */
+export function haversineDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export interface PointageDerogationItem {
+  id: number;
+  technicien: string;
+  dateJour: string;
+  active: boolean;
+  motif?: string | null;
+  accordeePar: string;
+  updatedAt?: string;
+}
+
 export interface PointageTechnicienItem {
   id: number;
   technicien: string;
@@ -1355,6 +1383,12 @@ export interface PointageTechnicienItem {
   dateJour: string;
   heureArriveeBureau?: string | null;
   timestampArrivee?: string | null;
+  latitudeArrivee?: number | null;
+  longitudeArrivee?: number | null;
+  precisionGpsArrivee?: number | null;
+  distanceBureauMetres?: number | null;
+  derogationHorsBureau?: boolean;
+  derogationAccordeePar?: string | null;
   heureFinJournee?: string | null;
   timestampFin?: string | null;
   statutJournee: 'EN_SERVICE' | 'TERMINEE';
@@ -1543,6 +1577,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
       canWriteReports: true,
       canManageBilling: true,
       canDeleteRecords: true,
+      canApproveRemoteClockIn: true,
       canAccessMobileTech: true,
       mobileOnly: false,
     },
@@ -1570,6 +1605,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
       canWriteReports: false,
       canManageBilling: false,
       canDeleteRecords: false,
+      canApproveRemoteClockIn: false,
       canAccessMobileTech: false,
       mobileOnly: false,
     },
@@ -1597,6 +1633,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
       canWriteReports: true,
       canManageBilling: false,
       canDeleteRecords: false,
+      canApproveRemoteClockIn: false,
       canAccessMobileTech: true,
       mobileOnly: false,
     },
@@ -1624,6 +1661,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
       canWriteReports: true,
       canManageBilling: true,
       canDeleteRecords: false,
+      canApproveRemoteClockIn: false,
       canAccessMobileTech: false,
       mobileOnly: false,
     },
@@ -1651,6 +1689,7 @@ export const ROLE_DEFINITIONS: Record<string, RoleDefinition> = {
       canWriteReports: false,
       canManageBilling: false,
       canDeleteRecords: false,
+      canApproveRemoteClockIn: false,
       canAccessMobileTech: true,
       mobileOnly: true,
     },
@@ -1672,6 +1711,7 @@ export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[
     'canWriteReports',
     'canEditInterventions',
     'canManageReferentiels',
+    'canApproveRemoteClockIn',
   ],
   CONDUCTEUR_TRAVAUX: [...NEVER_FOR_NON_ADMIN, 'canManageBilling', 'canEditDevis'],
   REDACTEUR_RAPPORTS: [
@@ -1680,6 +1720,7 @@ export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[
     'canConvertDevis',
     'canEditPlanning',
     'canManageReferentiels',
+    'canApproveRemoteClockIn',
   ],
   // Technicien : uniquement l'espace mobile et la mise à jour de SES missions
   TECHNICIEN: [
@@ -1691,6 +1732,7 @@ export const ROLE_FORBIDDEN_PERMISSIONS: Record<string, (keyof UserPermissions)[
     'canEditPlanning',
     'canWriteReports',
     'canManageBilling',
+    'canApproveRemoteClockIn',
   ],
 };
 
@@ -1890,6 +1932,15 @@ export function canUserCloseIntervention(user?: User | null): boolean {
   const perms = user.permissions || getEffectivePermissions(role, null);
   const isAdmin = user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
   return isAdmin || Boolean(perms.canEditInterventions) || Boolean(perms.canWriteReports);
+}
+
+/** Droit d'activer une dérogation de pointage matin hors bureau (> 30 m) : direction ou responsable habilité. */
+export function canUserApproveRemoteClockIn(user?: User | null): boolean {
+  if (!user || isUserMobileOnly(user)) return false;
+  const role = (user.role || '').toUpperCase();
+  const perms = user.permissions || getEffectivePermissions(role, null);
+  const isAdmin = user.isCreator || user.id === 1 || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  return isAdmin || Boolean(perms.canApproveRemoteClockIn);
 }
 
 export function isUserMobileOnly(user?: User | null): boolean {

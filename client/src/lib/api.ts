@@ -26,6 +26,7 @@ import {
   UserRoleCode,
   TerrainPhoto,
   PointageTechnicienItem,
+  PointageDerogationItem,
   EquipeJournaliere,
   ClientProfile,
   ClientProfileType,
@@ -626,11 +627,22 @@ export const adminApi = {
   deleteUser: (id: number) => api.delete<{ message: string }>(`/admin/users/${id}`),
   listPointages: (params?: { dateJour?: string; technicien?: string }) =>
     api.get<{ data: PointageTechnicienItem[] }>('/admin/pointages', { params }),
+  listPointageDerogations: (params?: { dateJour?: string }) =>
+    api.get<{ data: PointageDerogationItem[] }>('/admin/pointages/derogations', { params }),
+  setPointageDerogation: (payload: {
+    technicien: string;
+    dateJour?: string;
+    active: boolean;
+    motif?: string | null;
+  }) => api.put<{ data: PointageDerogationItem; message: string }>('/admin/pointages/derogations', payload),
   clockIn: (payload: {
     technicien: string;
     dateJour?: string;
     heureArriveeBureau?: string;
     commentaireJournee?: string;
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
   }) => api.post<{ data: PointageTechnicienItem; message: string }>('/admin/pointages/clock-in', payload),
   clockOut: (payload: {
     technicien: string;

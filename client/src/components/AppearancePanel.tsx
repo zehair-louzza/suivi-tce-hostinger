@@ -11,7 +11,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { useTheme, THEMES, ThemeId, ThemeDescriptor } from '../stores/themeStore';
+import {
+  useTheme,
+  THEMES,
+  ThemeId,
+  ThemeDescriptor,
+  SidebarModelId,
+  SidebarModelDescriptor,
+  SIDEBAR_MODELS,
+} from '../stores/themeStore';
+import { SidebarPreviewMini } from './SidebarPreviewMini';
 import { useAuth } from '../stores/authStore';
 import { api, adminApi } from '../lib/api';
 import { geocodeAddress } from '../lib/geocoding';
@@ -154,17 +163,145 @@ function ThemeCard({ theme, isDefault, isCurrent, onSelect, onHover }: ThemeCard
   );
 }
 
+interface SidebarModelCardProps {
+  model: SidebarModelDescriptor;
+  themeId: ThemeId;
+  isDefault: boolean;
+  isCurrent: boolean;
+  onSelect: (id: SidebarModelId) => void;
+  onHover: (id: SidebarModelId | null) => void;
+}
+
+function SidebarModelCard({ model, themeId, isDefault, isCurrent, onSelect, onHover }: SidebarModelCardProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(model.id)}
+      onMouseEnter={() => onHover(model.id)}
+      onMouseLeave={() => onHover(null)}
+      data-testid={`sidebar-model-card-${model.id}`}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: 14,
+        textAlign: 'left',
+        borderRadius: 'var(--rounded-card, 12px)',
+        background: 'var(--color-surface)',
+        border: isCurrent
+          ? '2px solid var(--color-primary)'
+          : isDefault
+          ? '1.5px solid var(--color-primary)'
+          : '1px solid var(--color-border)',
+        boxShadow: isCurrent ? '0 0 0 3px var(--color-primary-soft)' : 'none',
+        cursor: 'pointer',
+        transition: 'border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <SidebarPreviewMini modelId={model.id} themeId={themeId} width={78} height={58} />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: 6,
+                background: 'var(--color-surface-subtle)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              {`M${model.number}`}
+            </span>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '2px 7px',
+                borderRadius: 999,
+                background: 'var(--color-primary-soft)',
+                color: 'var(--color-primary)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {model.badgeTag}
+            </span>
+          </div>
+          <strong style={{ fontSize: 14, color: 'var(--color-text)' }}>{model.name}</strong>
+        </div>
+      </div>
+
+      <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+        {model.tagline}
+      </span>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
+        {isDefault && (
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: 'var(--color-primary)',
+              color: 'var(--color-inverse-text, #fff)',
+            }}
+          >
+            Défaut entreprise
+          </span>
+        )}
+        {isCurrent && !isDefault && (
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: 'var(--color-info-soft)',
+              color: 'var(--color-info)',
+            }}
+          >
+            Aperçu actif
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
 export function AppearancePanel() {
-  const { current, companyDefault, allowUserOverride, isPending, setCompanyDefault, setAllowUserOverride, previewTheme } = useTheme();
+  const {
+    current,
+    companyDefault,
+    allowUserOverride,
+    isPending,
+    setCompanyDefault,
+    setAllowUserOverride,
+    previewTheme,
+    sidebarModel,
+    sidebarCompanyDefault,
+    setSidebarCompanyDefault,
+    previewSidebarModel,
+  } = useTheme();
   const { user } = useAuth();
   const [hover, setHover] = useState<ThemeId | null>(null);
   const [pending, setPending] = useState<ThemeId | null>(null);
+  const [sidebarHover, setSidebarHover] = useState<SidebarModelId | null>(null);
+  const [sidebarPending, setSidebarPending] = useState<SidebarModelId | null>(null);
 
   const previewId = hover || pending || current;
+  const sidebarPreviewId = sidebarHover || sidebarPending || sidebarModel;
   // Appliquer l'aperçu temporairement pendant le survol (non persistant).
   const applyPreview = (id: ThemeId | null) => {
     setHover(id);
     previewTheme(id);
+  };
+
+  const applySidebarPreview = (id: SidebarModelId | null) => {
+    setSidebarHover(id);
+    previewSidebarModel(id);
   };
 
   const confirm = async (id: ThemeId) => {
@@ -180,6 +317,22 @@ export function AppearancePanel() {
       toast.error(err?.response?.data?.error || "Impossible d'enregistrer le thème. Réessayez.");
     } finally {
       setPending(null);
+    }
+  };
+
+  const confirmSidebar = async (id: SidebarModelId) => {
+    try {
+      setSidebarPending(id);
+      await setSidebarCompanyDefault(id);
+      setSidebarHover(null);
+      toast.success(
+        `Menu latéral « ${SIDEBAR_MODELS.find((m) => m.id === id)?.name} » défini comme défaut de l'entreprise.`,
+        { duration: 3000 },
+      );
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Impossible d'enregistrer le modèle de menu. Réessayez.");
+    } finally {
+      setSidebarPending(null);
     }
   };
 
@@ -316,6 +469,64 @@ export function AppearancePanel() {
         </div>
       </section>
 
+      {/* Choix du modèle de menu latéral par défaut */}
+      <section
+        data-testid="appearance-sidebar-models"
+        style={{
+          padding: 18,
+          borderRadius: 'var(--rounded-card, 10px)',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <strong style={{ fontSize: 15.5, color: 'var(--color-text)', display: 'block' }}>
+              Modèle de menu latéral par défaut (6 architectures)
+            </strong>
+            <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+              Chaque modèle s’harmonise automatiquement avec les 7 Directions Artistiques. Survolez pour prévisualiser en direct.
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '4px 10px',
+              borderRadius: 999,
+              background: 'var(--color-surface-subtle)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text)',
+            }}
+          >
+            Défaut : {SIDEBAR_MODELS.find((m) => m.id === sidebarCompanyDefault)?.name}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 12,
+          }}
+        >
+          {SIDEBAR_MODELS.map((m) => (
+            <SidebarModelCard
+              key={m.id}
+              model={m}
+              themeId={previewId}
+              isDefault={m.id === sidebarCompanyDefault}
+              isCurrent={m.id === sidebarPreviewId}
+              onSelect={confirmSidebar}
+              onHover={applySidebarPreview}
+            />
+          ))}
+        </div>
+      </section>
+
       {/* Note de bas */}
       <section
         style={{
@@ -420,6 +631,136 @@ export function PersonalThemePicker() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <strong style={{ fontSize: 13, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</strong>
                 <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.mood === 'dark' ? 'Sombre' : 'Clair'} · {t.tags.slice(0, 2).join(' · ')}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sélecteur personnel de modèle de menu latéral pour le modal « Mon profil ».
+ * Laisse chaque utilisateur choisir l'un des 6 modèles, harmonisé avec sa Direction Artistique.
+ */
+export function PersonalSidebarModelPicker() {
+  const {
+    current,
+    sidebarCompanyDefault,
+    sidebarUserPref,
+    allowUserOverride,
+    isPending,
+    setSidebarUserPref,
+  } = useTheme();
+
+  if (!allowUserOverride) {
+    const activeModel = SIDEBAR_MODELS.find((m) => m.id === sidebarCompanyDefault);
+    return (
+      <div
+        style={{
+          padding: 14,
+          borderRadius: 'var(--rounded-card, 10px)',
+          background: 'var(--color-surface-subtle)',
+          border: '1px solid var(--color-border)',
+          fontSize: 13,
+          color: 'var(--color-text-secondary)',
+        }}
+      >
+        <strong style={{ color: 'var(--color-text)', display: 'block', marginBottom: 4 }}>Modèle de menu latéral</strong>
+        Le modèle <strong>{activeModel?.name}</strong> est défini par votre administrateur.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-testid="personal-sidebar-picker">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div>
+          <strong style={{ fontSize: 14, color: 'var(--color-text)' }}>Mon menu latéral</strong>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+            6 dispositions adaptatives harmonisées avec votre Direction Artistique.
+          </div>
+        </div>
+        {sidebarUserPref && (
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={async () => {
+              await setSidebarUserPref(null);
+              toast.success('Retour au modèle de menu par défaut.');
+            }}
+            data-testid="sidebar-reset-user"
+            className="btn-secondary"
+            style={{ fontSize: 12, padding: '6px 10px' }}
+          >
+            Revenir au défaut entreprise
+          </button>
+        )}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          gap: 10,
+        }}
+      >
+        {SIDEBAR_MODELS.map((m) => {
+          const isActive = (sidebarUserPref || sidebarCompanyDefault) === m.id;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              disabled={isPending}
+              onClick={async () => {
+                await setSidebarUserPref(m.id);
+                toast.success(`Menu latéral « ${m.name} » activé.`);
+              }}
+              data-testid={`sidebar-personal-${m.id}`}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 'var(--rounded-card, 10px)',
+                background: 'var(--color-surface)',
+                border: isActive ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                cursor: isPending ? 'wait' : 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                opacity: isPending ? 0.65 : 1,
+              }}
+            >
+              <SidebarPreviewMini modelId={m.id} themeId={current} width={64} height={48} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      background: 'var(--color-surface-subtle)',
+                      color: 'var(--color-text-secondary)',
+                      border: '1px solid var(--color-border)',
+                    }}
+                  >
+                    {`M${m.number}`}
+                  </span>
+                  <strong
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--color-text)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {m.name}
+                  </strong>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.3 }}>
+                  {m.badgeTag}
+                </span>
               </div>
             </button>
           );

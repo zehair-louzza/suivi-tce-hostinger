@@ -24,9 +24,14 @@ import { prisma } from './prisma.js';
 
 let themeColumnsAvailable = true;
 let phoneColumnAvailable = true;
+let sidebarColumnsAvailable = true;
 
 export function areThemeColumnsAvailable(): boolean {
   return themeColumnsAvailable;
+}
+
+export function areSidebarColumnsAvailable(): boolean {
+  return sidebarColumnsAvailable;
 }
 
 /** Erreurs Prisma signalant une colonne/table/relation manquante dans la base. */
@@ -51,6 +56,7 @@ export interface AuthUserRow {
   createdAt: Date;
   password?: string;
   themePref?: string | null;
+  sidebarModelPref?: string | null;
   company?: {
     id: number;
     name: string;
@@ -58,6 +64,8 @@ export interface AuthUserRow {
     siren: string | null;
     defaultTheme?: string | null;
     allowThemeOverride?: boolean | null;
+    defaultSidebarModel?: string | null;
+    accueilMaFile?: boolean | null;
     siegeAdresse?: string | null;
     siegeLat?: number | null;
     siegeLng?: number | null;
@@ -106,6 +114,9 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
     companySelect.allowThemeOverride = true;
     companySelect.accueilMaFile = true;
   }
+  if (sidebarColumnsAvailable) {
+    companySelect.defaultSidebarModel = true;
+  }
   const select: Record<string, unknown> = {
     id: true,
     email: true,
@@ -121,6 +132,7 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
   };
   if (phoneColumnAvailable) select.phone = true;
   if (themeColumnsAvailable) select.themePref = true;
+  if (sidebarColumnsAvailable) select.sidebarModelPref = true;
   if (opts.withPassword) select.password = true;
   return select as Prisma.UserSelect;
 }
@@ -129,6 +141,26 @@ async function withThemeFallback<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
+    if (sidebarColumnsAvailable && isMissingSchemaError(e)) {
+      sidebarColumnsAvailable = false;
+      console.warn(
+        '[auth] Colonnes de modèle de menu latéral absentes — repli activé. Exécutez `prisma migrate deploy` pour activer la synchro BDD.'
+      );
+      try {
+        return await run();
+      } catch (e2) {
+        if ((themeColumnsAvailable || phoneColumnAvailable) && isMissingSchemaError(e2)) {
+          themeColumnsAvailable = false;
+          phoneColumnAvailable = false;
+          console.warn(
+            "[auth] Colonnes optionnelles (thème/téléphone) absentes de la base — repli activé. " +
+              'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
+          );
+          return await run();
+        }
+        throw e2;
+      }
+    }
     if ((themeColumnsAvailable || phoneColumnAvailable) && isMissingSchemaError(e)) {
       themeColumnsAvailable = false;
       phoneColumnAvailable = false;

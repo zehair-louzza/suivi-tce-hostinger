@@ -22,7 +22,7 @@ import { PhotoLightbox, PhotoItem } from './PhotoLightbox';
 import { useAuth } from '../stores/authStore';
 import { AppearancePanel } from './AppearancePanel';
 import { ProAlertIcon, ProFileTextIcon, ProMailIcon } from './ProIcons';
-import { ROLE_ESPACE, ROLE_PERIMETRE, canUserAccessSection } from '../../../shared/types';
+import { ROLE_ESPACE, ROLE_PERIMETRE, canUserAccessSection, canUserApproveRemoteClockIn } from '../../../shared/types';
 
 interface AdminWorkstationProps {
   techniciens: string[];
@@ -87,6 +87,11 @@ const PERMISSION_LABELS: { key: keyof UserPermissions; label: string; desc: stri
     desc: 'Autoriser la suppression définitive d’enregistrements',
   },
   {
+    key: 'canApproveRemoteClockIn',
+    label: 'Dérogation Pointage Matin (hors 30 m)',
+    desc: 'Autoriser un technicien à commencer sa journée à distance sans être au bureau',
+  },
+  {
     key: 'mobileOnly',
     label: 'Interface Mobile Technicien Uniquement',
     desc: 'Ouvre directement l’application mobile terrain épurée à la connexion',
@@ -103,6 +108,7 @@ const INTERACTIVE_PERMS: { key: keyof UserPermissions; label: string; short: str
   { key: 'canWriteReports', label: 'Rapports', short: 'Rapports', color: '#10b981' },
   { key: 'canManageBilling', label: 'Facturation', short: 'Facturation', color: '#f59e0b' },
   { key: 'canManageReferentiels', label: 'Référentiels', short: 'Référentiels', color: '#6366f1' },
+  { key: 'canApproveRemoteClockIn', label: 'Dérog. Pointage', short: 'Dérog.', color: '#0d9488' },
   { key: 'mobileOnly', label: 'App Mobile', short: 'Mobile', color: '#64748b' },
 ];
 
@@ -407,6 +413,24 @@ export function AdminWorkstation({
       return res.data.data;
     },
   });
+
+  const derogationsQuery = useQuery({
+    queryKey: ['admin-pointage-derogations', pointageDate],
+    queryFn: async () => {
+      const res = await adminApi.listPointageDerogations({ dateJour: pointageDate });
+      return res.data.data;
+    },
+  });
+
+  const toggleDerogationMut = useMutation({
+    mutationFn: adminApi.setPointageDerogation,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-pointage-derogations'] });
+      toast.success(res.data.message);
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Action impossible'),
+  });
+  const canManageDerogations = canUserApproveRemoteClockIn(user);
 
   const smtpStatusQuery = useQuery({
     queryKey: ['admin-smtp-status'],
@@ -1340,6 +1364,7 @@ export function AdminWorkstation({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
             {techniciens.map((tech) => {
               const pt = pointages.find((p) => p.technicien === tech && p.dateJour === pointageDate);
+              const derog = (derogationsQuery.data || []).find((d) => d.technicien === tech && d.dateJour === pointageDate && d.active);
               const techIntvsDay = interventionsList.filter(
                 (i) => i.entreprise === tech && i.datePlanifiee === pointageDate
               );
@@ -1426,6 +1451,58 @@ export function AdminWorkstation({
                       <strong className="font-mono">
                         {Math.floor(pt.dureeMinutes / 60)}h{String(pt.dureeMinutes % 60).padStart(2, '0')}
                       </strong>
+                    </div>
+                  )}
+
+                  {pt?.heureArriveeBureau && (
+                    <div style={{ fontSize: '11px', color: pt.derogationHorsBureau ? '#0f766e' : 'var(--text-secondary)' }}>
+                      {pt.derogationHorsBureau
+                        ? `Exception hors bureau · validée par ${pt.derogationAccordeePar || 'responsable'}${pt.distanceBureauMetres != null ? ` (${Math.round(pt.distanceBureauMetres)} m)` : ''}`
+                        : pt.distanceBureauMetres != null
+                        ? `GPS certifié à ${Math.round(pt.distanceBureauMetres)} m du siège (≤ 30 m)`
+                        : 'Pointage enregistré'}
+                    </div>
+                  )}
+
+                  {canManageDerogations && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        padding: '7px 10px',
+                        borderRadius: '7px',
+                        background: derog ? 'rgba(13, 148, 136, 0.08)' : 'var(--bg-subtle)',
+                        border: derog ? '1px solid rgba(13, 148, 136, 0.35)' : '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', lineHeight: 1.3 }}>
+                        <strong style={{ color: derog ? '#0f766e' : 'var(--text-primary)' }}>
+                          {derog ? 'Exception hors 30 m active' : 'Périmètre 30 m requis'}
+                        </strong>
+                        {derog && (
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '10.5px' }}>
+                            Par {derog.accordeePar}{derog.motif ? ` · ${derog.motif}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${derog ? 'btn-secondary' : 'btn-primary'}`}
+                        disabled={toggleDerogationMut.isPending}
+                        onClick={() => {
+                          if (derog) {
+                            toggleDerogationMut.mutate({ technicien: tech, dateJour: pointageDate, active: false });
+                          } else {
+                            const motif = window.prompt(`Motif de l’exception hors bureau pour ${tech} (facultatif) :`, 'Départ direct chantier');
+                            if (motif === null) return;
+                            toggleDerogationMut.mutate({ technicien: tech, dateJour: pointageDate, active: true, motif: motif.trim() || null });
+                          }
+                        }}
+                      >
+                        {derog ? 'Retirer exception' : 'Autoriser hors bureau'}
+                      </button>
                     </div>
                   )}
 

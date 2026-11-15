@@ -1,0 +1,1217 @@
+/* ============================================================================
+   ANELEC — 6 MODÈLES DE MENU LATÉRAL × 7 DIRECTIONS ARTISTIQUES
+   ----------------------------------------------------------------------------
+   Harmonise les 6 architectures de barre latérale (classic, line, rail, cards,
+   accordion, floating) avec chacune des 7 directions artistiques :
+   light (Clarté), craft (Chronologie), signal (Signal), atlas (Atlas),
+   bento (Bento), swiss (Éditorial), dark (Mode sombre).
+
+   Corrige définitivement :
+   - la double bordure bleue cassée sur l'élément actif ;
+   - le logo T coupé en mode réduit ;
+   - la troncature « Profils & Donneurs d'ordre » (largeur 256px+) ;
+   - le débordement vertical sur écran portable (éléments compacts + footer figé) ;
+   - la disparition de l'avatar ZL lorsque le menu est replié.
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   1. JETONS HARMONISÉS PAR DIRECTION ARTISTIQUE
+   ---------------------------------------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  --sb-is-dark: 1;
+  --sb-bg: #142536;
+  --sb-card-bg: #1b2f44;
+  --sb-footer-bg: #101e2d;
+  --sb-outer-bg: #0f1d2b;
+  --sb-border: rgba(255, 255, 255, 0.11);
+  --sb-text: #cbd5e1;
+  --sb-text-strong: #ffffff;
+  --sb-muted: #8ea4b9;
+  --sb-hover-bg: rgba(255, 255, 255, 0.08);
+  --sb-active-bg: #263d4d;
+  --sb-active-text: #ffffff;
+  --sb-active-icon: #00bf63;
+  --sb-active-ring: rgba(0, 191, 99, 0.45);
+  --sb-active-badge-bg: rgba(255, 255, 255, 0.16);
+  --sb-active-badge-text: #ffffff;
+  --sb-line-active-bg: rgba(255, 255, 255, 0.09);
+  --sb-line-active-text: #ffffff;
+  --sb-line-accent: #00bf63;
+  --sb-solid-bg: #047857;
+  --sb-solid-text: #ffffff;
+  --sb-solid-badge-bg: rgba(255, 255, 255, 0.22);
+  --sb-solid-badge-text: #ffffff;
+  --sb-accent: #00bf63;
+  --sb-brand-bg: #00bf63;
+  --sb-brand-text: #ffffff;
+  --sb-avatar-bg: #047857;
+  --sb-avatar-text: #ffffff;
+  --sb-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-badge-text: #ffffff;
+  --sb-urgent-bg: rgba(239, 68, 68, 0.24);
+  --sb-urgent-text: #fecaca;
+  --sb-float-btn-bg: #1b2f44;
+  --sb-float-btn-text: #cbd5e1;
+  --sb-cta-bg: #00bf63;
+  --sb-cta-text: #ffffff;
+  --sb-field-bg: rgba(0, 191, 99, 0.14);
+  --sb-field-border: rgba(0, 191, 99, 0.4);
+  --sb-field-text: #a7f3d0;
+  --sb-field-icon: #00bf63;
+  --sb-radius: 8px;
+  --sb-radius-float: 12px;
+  --sb-radius-mark: 9px;
+  --sb-rail-bg: #0f1d2b;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #f8fafc;
+  --sb-panel-text: #0f172a;
+  --sb-panel-muted: #64748b;
+  --sb-panel-border: #e5e7eb;
+  --sb-panel-active-bg: #ecfdf5;
+  --sb-panel-active-text: #047857;
+}
+
+:root[data-theme="craft"] {
+  --sb-bg: #2a2118;
+  --sb-card-bg: #362b20;
+  --sb-footer-bg: #221a13;
+  --sb-outer-bg: #1e1710;
+  --sb-border: rgba(255, 255, 255, 0.12);
+  --sb-text: #e6dac6;
+  --sb-text-strong: #fffdf8;
+  --sb-muted: #c4b197;
+  --sb-hover-bg: rgba(255, 255, 255, 0.08);
+  --sb-active-bg: #fbf7ef;
+  --sb-active-text: #2a2118;
+  --sb-active-icon: #2a2118;
+  --sb-active-ring: rgba(251, 247, 239, 0.65);
+  --sb-active-badge-bg: rgba(42, 33, 24, 0.12);
+  --sb-active-badge-text: #2a2118;
+  --sb-line-active-bg: rgba(255, 255, 255, 0.09);
+  --sb-line-active-text: #fffdf8;
+  --sb-line-accent: #f59e0b;
+  --sb-solid-bg: #b45309;
+  --sb-solid-text: #ffffff;
+  --sb-solid-badge-bg: rgba(255, 255, 255, 0.22);
+  --sb-solid-badge-text: #ffffff;
+  --sb-accent: #f59e0b;
+  --sb-brand-bg: #b45309;
+  --sb-brand-text: #ffffff;
+  --sb-avatar-bg: #047857;
+  --sb-avatar-text: #ffffff;
+  --sb-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-badge-text: #fffdf8;
+  --sb-urgent-bg: rgba(239, 68, 68, 0.24);
+  --sb-urgent-text: #fecaca;
+  --sb-float-btn-bg: #362b20;
+  --sb-float-btn-text: #e6dac6;
+  --sb-cta-bg: #b45309;
+  --sb-cta-text: #ffffff;
+  --sb-field-bg: rgba(245, 158, 11, 0.14);
+  --sb-field-border: rgba(245, 158, 11, 0.4);
+  --sb-field-text: #fde68a;
+  --sb-field-icon: #fbbf24;
+  --sb-radius: 12px;
+  --sb-radius-float: 18px;
+  --sb-radius-mark: 12px;
+  --sb-rail-bg: #221a13;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #fbf7ef;
+  --sb-panel-text: #2a2118;
+  --sb-panel-muted: #75664f;
+  --sb-panel-border: #e6dac6;
+  --sb-panel-active-bg: #fef3c7;
+  --sb-panel-active-text: #b45309;
+}
+
+:root[data-theme="signal"] {
+  --sb-bg: #e8edf2;
+  --sb-card-bg: #ffffff;
+  --sb-footer-bg: #dfe5ec;
+  --sb-outer-bg: #dfe5ec;
+  --sb-border: #cdd6e0;
+  --sb-text: #182230;
+  --sb-text-strong: #0f172a;
+  --sb-muted: #526175;
+  --sb-hover-bg: rgba(24, 34, 48, 0.06);
+  --sb-active-bg: #ffffff;
+  --sb-active-text: #047857;
+  --sb-active-icon: #047857;
+  --sb-active-ring: #cbd5e1;
+  --sb-active-badge-bg: #d1fae5;
+  --sb-active-badge-text: #047857;
+  --sb-line-active-bg: #ffffff;
+  --sb-line-active-text: #047857;
+  --sb-line-accent: #047857;
+  --sb-solid-bg: #047857;
+  --sb-solid-text: #ffffff;
+  --sb-solid-badge-bg: rgba(255, 255, 255, 0.22);
+  --sb-solid-badge-text: #ffffff;
+  --sb-accent: #047857;
+  --sb-brand-bg: #047857;
+  --sb-brand-text: #ffffff;
+  --sb-avatar-bg: #182230;
+  --sb-avatar-text: #ffffff;
+  --sb-badge-bg: #d5dde6;
+  --sb-badge-text: #182230;
+  --sb-urgent-bg: #fee2e2;
+  --sb-urgent-text: #b91c1c;
+  --sb-float-btn-bg: #ffffff;
+  --sb-float-btn-text: #475569;
+  --sb-cta-bg: #182230;
+  --sb-cta-text: #ffffff;
+  --sb-field-bg: #fef3c7;
+  --sb-field-border: #f5b400;
+  --sb-field-text: #78350f;
+  --sb-field-icon: #b45309;
+  --sb-radius: 4px;
+  --sb-radius-float: 6px;
+  --sb-radius-mark: 4px;
+  --sb-rail-bg: #182230;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #f6f8fa;
+  --sb-panel-text: #182230;
+  --sb-panel-muted: #526175;
+  --sb-panel-border: #d5dde6;
+  --sb-panel-active-bg: #ecfdf5;
+  --sb-panel-active-text: #047857;
+}
+
+:root[data-theme="atlas"] {
+  --sb-bg: #ffffff;
+  --sb-card-bg: #ffffff;
+  --sb-footer-bg: #f8fafc;
+  --sb-outer-bg: #f8fafc;
+  --sb-border: #e5e7eb;
+  --sb-text: #334155;
+  --sb-text-strong: #0f172a;
+  --sb-muted: #64748b;
+  --sb-hover-bg: #f3f4f8;
+  --sb-active-bg: #eff6ff;
+  --sb-active-text: #1d4ed8;
+  --sb-active-icon: #1d4ed8;
+  --sb-active-ring: #bfdbfe;
+  --sb-active-badge-bg: #dbeafe;
+  --sb-active-badge-text: #1d4ed8;
+  --sb-line-active-bg: #eff6ff;
+  --sb-line-active-text: #1d4ed8;
+  --sb-line-accent: #1d4ed8;
+  --sb-solid-bg: #1d4ed8;
+  --sb-solid-text: #ffffff;
+  --sb-solid-badge-bg: rgba(255, 255, 255, 0.22);
+  --sb-solid-badge-text: #ffffff;
+  --sb-accent: #1d4ed8;
+  --sb-brand-bg: #0ea5a4;
+  --sb-brand-text: #ffffff;
+  --sb-avatar-bg: #1e463a;
+  --sb-avatar-text: #ffffff;
+  --sb-badge-bg: #eff6ff;
+  --sb-badge-text: #1d4ed8;
+  --sb-urgent-bg: #fee2e2;
+  --sb-urgent-text: #b91c1c;
+  --sb-float-btn-bg: #ffffff;
+  --sb-float-btn-text: #475569;
+  --sb-cta-bg: #0f172a;
+  --sb-cta-text: #ffffff;
+  --sb-field-bg: #f0fdfa;
+  --sb-field-border: #99f6e4;
+  --sb-field-text: #115e59;
+  --sb-field-icon: #0ea5a4;
+  --sb-radius: 8px;
+  --sb-radius-float: 12px;
+  --sb-radius-mark: 9px;
+  --sb-rail-bg: #0f172a;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #f8fafc;
+  --sb-panel-text: #0f172a;
+  --sb-panel-muted: #64748b;
+  --sb-panel-border: #e5e7eb;
+  --sb-panel-active-bg: #eff6ff;
+  --sb-panel-active-text: #1d4ed8;
+}
+
+:root[data-theme="bento"] {
+  --sb-bg: #111827;
+  --sb-card-bg: #1b2434;
+  --sb-footer-bg: #0c111c;
+  --sb-outer-bg: #0c111c;
+  --sb-border: rgba(255, 255, 255, 0.11);
+  --sb-text: #e5e7eb;
+  --sb-text-strong: #ffffff;
+  --sb-muted: #9ca3af;
+  --sb-hover-bg: rgba(255, 255, 255, 0.08);
+  --sb-active-bg: #f5b400;
+  --sb-active-text: #111827;
+  --sb-active-icon: #111827;
+  --sb-active-ring: #f5b400;
+  --sb-active-badge-bg: rgba(17, 24, 39, 0.15);
+  --sb-active-badge-text: #111827;
+  --sb-line-active-bg: rgba(255, 255, 255, 0.09);
+  --sb-line-active-text: #ffffff;
+  --sb-line-accent: #f5b400;
+  --sb-solid-bg: #f5b400;
+  --sb-solid-text: #111827;
+  --sb-solid-badge-bg: rgba(17, 24, 39, 0.15);
+  --sb-solid-badge-text: #111827;
+  --sb-accent: #f5b400;
+  --sb-brand-bg: #f5b400;
+  --sb-brand-text: #111827;
+  --sb-avatar-bg: #16a34a;
+  --sb-avatar-text: #ffffff;
+  --sb-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-badge-text: #ffffff;
+  --sb-urgent-bg: rgba(239, 68, 68, 0.24);
+  --sb-urgent-text: #fecaca;
+  --sb-float-btn-bg: #1b2434;
+  --sb-float-btn-text: #e5e7eb;
+  --sb-cta-bg: #f5b400;
+  --sb-cta-text: #111827;
+  --sb-field-bg: rgba(22, 163, 74, 0.18);
+  --sb-field-border: rgba(22, 163, 74, 0.45);
+  --sb-field-text: #86efac;
+  --sb-field-icon: #4ade80;
+  --sb-radius: 14px;
+  --sb-radius-float: 20px;
+  --sb-radius-mark: 12px;
+  --sb-rail-bg: #111827;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #f8fafc;
+  --sb-panel-text: #0b0f19;
+  --sb-panel-muted: #6b7280;
+  --sb-panel-border: #e3e6ec;
+  --sb-panel-active-bg: #fef3c7;
+  --sb-panel-active-text: #92400e;
+}
+
+:root[data-theme="swiss"] {
+  --sb-bg: #0b1220;
+  --sb-card-bg: #131d31;
+  --sb-footer-bg: #070c16;
+  --sb-outer-bg: #070c16;
+  --sb-border: #243047;
+  --sb-text: #d8d8d4;
+  --sb-text-strong: #ffffff;
+  --sb-muted: #a3a39f;
+  --sb-hover-bg: rgba(255, 255, 255, 0.06);
+  --sb-active-bg: #1e293b;
+  --sb-active-text: #ffffff;
+  --sb-active-icon: #e07a5f;
+  --sb-active-ring: #e07a5f;
+  --sb-active-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-active-badge-text: #ffffff;
+  --sb-line-active-bg: rgba(255, 255, 255, 0.09);
+  --sb-line-active-text: #ffffff;
+  --sb-line-accent: #e07a5f;
+  --sb-solid-bg: #e07a5f;
+  --sb-solid-text: #0b1220;
+  --sb-solid-badge-bg: rgba(11, 18, 32, 0.14);
+  --sb-solid-badge-text: #0b1220;
+  --sb-accent: #e07a5f;
+  --sb-brand-bg: #0b3b8f;
+  --sb-brand-text: #ffffff;
+  --sb-avatar-bg: #e07a5f;
+  --sb-avatar-text: #0b1220;
+  --sb-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-badge-text: #ffffff;
+  --sb-urgent-bg: rgba(239, 68, 68, 0.24);
+  --sb-urgent-text: #fecaca;
+  --sb-float-btn-bg: #131d31;
+  --sb-float-btn-text: #d8d8d4;
+  --sb-cta-bg: #e07a5f;
+  --sb-cta-text: #0b1220;
+  --sb-field-bg: rgba(224, 122, 95, 0.14);
+  --sb-field-border: rgba(224, 122, 95, 0.45);
+  --sb-field-text: #fbd3c6;
+  --sb-field-icon: #e07a5f;
+  --sb-radius: 0px;
+  --sb-radius-float: 0px;
+  --sb-radius-mark: 0px;
+  --sb-rail-bg: #0b1220;
+  --sb-panel-bg: #ffffff;
+  --sb-panel-card-hover: #f5f5f3;
+  --sb-panel-text: #0b1220;
+  --sb-panel-muted: #52524e;
+  --sb-panel-border: #d4d4d0;
+  --sb-panel-active-bg: #fce7dd;
+  --sb-panel-active-text: #0b3b8f;
+}
+
+:root[data-theme="dark"] {
+  --sb-bg: #0a1017;
+  --sb-card-bg: #111a26;
+  --sb-footer-bg: #060a0f;
+  --sb-outer-bg: #060a0f;
+  --sb-border: #1e2d3d;
+  --sb-text: #b8c8d7;
+  --sb-text-strong: #f0f4f8;
+  --sb-muted: #74899e;
+  --sb-hover-bg: #162232;
+  --sb-active-bg: rgba(16, 185, 129, 0.16);
+  --sb-active-text: #ffffff;
+  --sb-active-icon: #00bf63;
+  --sb-active-ring: rgba(0, 191, 99, 0.45);
+  --sb-active-badge-bg: rgba(255, 255, 255, 0.14);
+  --sb-active-badge-text: #f0f4f8;
+  --sb-line-active-bg: rgba(16, 185, 129, 0.16);
+  --sb-line-active-text: #ffffff;
+  --sb-line-accent: #00bf63;
+  --sb-solid-bg: #10b981;
+  --sb-solid-text: #052e16;
+  --sb-solid-badge-bg: rgba(5, 46, 22, 0.16);
+  --sb-solid-badge-text: #052e16;
+  --sb-accent: #00bf63;
+  --sb-brand-bg: #00bf63;
+  --sb-brand-text: #052e16;
+  --sb-avatar-bg: #10b981;
+  --sb-avatar-text: #052e16;
+  --sb-badge-bg: rgba(255, 255, 255, 0.12);
+  --sb-badge-text: #e2e8f0;
+  --sb-urgent-bg: rgba(239, 68, 68, 0.24);
+  --sb-urgent-text: #fca5a5;
+  --sb-float-btn-bg: #111a26;
+  --sb-float-btn-text: #cbd5e1;
+  --sb-cta-bg: #10b981;
+  --sb-cta-text: #052e16;
+  --sb-field-bg: rgba(0, 191, 99, 0.12);
+  --sb-field-border: rgba(0, 191, 99, 0.35);
+  --sb-field-text: #6ee7b7;
+  --sb-field-icon: #00bf63;
+  --sb-radius: 8px;
+  --sb-radius-float: 12px;
+  --sb-radius-mark: 9px;
+  --sb-rail-bg: #0a1017;
+  --sb-panel-bg: #111a26;
+  --sb-panel-card-hover: #162232;
+  --sb-panel-text: #f0f4f8;
+  --sb-panel-muted: #94a3b8;
+  --sb-panel-border: #1e2d3d;
+  --sb-panel-active-bg: rgba(0, 191, 99, 0.16);
+  --sb-panel-active-text: #00bf63;
+}
+
+/* ----------------------------------------------------------------------------
+   2. SOCLE PROPRE COMMUN DES 6 BARRES LATÉRALES (Remplace les conflits CSS)
+   ---------------------------------------------------------------------------- */
+.enterprise-sidebar.sb-v2 {
+  width: 256px;
+  min-width: 256px;
+  height: 100vh;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: var(--sb-bg) !important;
+  color: var(--sb-text) !important;
+  border-right: 1px solid var(--sb-border) !important;
+  transition: width 180ms cubic-bezier(0.16, 1, 0.3, 1), min-width 180ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 60;
+}
+
+.enterprise-sidebar.sb-v2.collapsed {
+  width: 72px;
+  min-width: 72px;
+  padding-inline: 0 !important;
+}
+
+/* Bouton de repli flottant sur bord droit (jamais compressé contre le logo T) */
+.sb-edge-toggle {
+  position: absolute;
+  right: -12px;
+  top: 18px;
+  z-index: 30;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--sb-float-btn-bg);
+  border: 1px solid var(--sb-border);
+  color: var(--sb-float-btn-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.sb-edge-toggle:hover {
+  transform: scale(1.06);
+  color: var(--sb-text-strong);
+}
+
+.sb-inline-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--sb-radius);
+  background: var(--sb-hover-bg);
+  border: 1px solid transparent;
+  color: var(--sb-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.sb-inline-toggle:hover {
+  color: var(--sb-text-strong);
+  border-color: var(--sb-border);
+}
+
+.sb-brand-bar {
+  min-height: 54px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--sb-border);
+  flex-shrink: 0;
+}
+
+.enterprise-sidebar.sb-v2.collapsed .sb-brand-bar {
+  justify-content: center;
+  padding: 10px 8px;
+}
+
+.sb-brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--sb-radius-mark);
+  background: var(--sb-brand-bg);
+  color: var(--sb-brand-text);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.sb-brand-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--sb-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-brand-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sb-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Zone de navigation fluide (zéro défilement sur écran courant, scroll discret si mini fenêtre) */
+.sb-nav {
+  flex: 1 1 0%;
+  min-height: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-border) transparent;
+}
+
+.sb-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sb-nav::-webkit-scrollbar-thumb {
+  background: var(--sb-border);
+  border-radius: 999px;
+}
+
+.sb-groups-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb-section-label {
+  padding: 2px 10px 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sb-muted);
+}
+
+.sb-items-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sb-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: var(--sb-radius);
+  border: none;
+  background: transparent;
+  color: var(--sb-text);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.sb-item:hover {
+  background: var(--sb-hover-bg);
+  color: var(--sb-text-strong);
+}
+
+.sb-item.is-active {
+  background: var(--sb-active-bg);
+  color: var(--sb-active-text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--sb-active-ring);
+}
+
+.sb-item-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--sb-muted);
+}
+
+.sb-item:hover .sb-item-icon {
+  color: var(--sb-text-strong);
+}
+
+.sb-item.is-active .sb-item-icon {
+  color: var(--sb-active-icon);
+}
+
+.sb-item-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  font-family: var(--font-mono);
+  background: var(--sb-badge-bg);
+  color: var(--sb-badge-text);
+  flex-shrink: 0;
+}
+
+.sb-badge.is-urgent {
+  background: var(--sb-urgent-bg);
+  color: var(--sb-urgent-text);
+}
+
+.sb-item.is-active .sb-badge:not(.is-urgent) {
+  background: var(--sb-active-badge-bg);
+  color: var(--sb-active-badge-text);
+}
+
+/* Mode réduit : icônes centrées + pastille d'alerte discrète */
+.enterprise-sidebar.sb-v2.collapsed .sb-item {
+  width: 40px;
+  height: 32px;
+  min-height: 32px;
+  margin-inline: auto;
+  justify-content: center;
+  padding: 0;
+}
+
+.sb-collapsed-sep {
+  margin: 4px 10px;
+  border-top: 1px solid var(--sb-border);
+}
+
+.sb-dot {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--sb-accent);
+  border: 1.5px solid var(--sb-bg);
+}
+
+.sb-dot.is-urgent {
+  background: #ef4444;
+}
+
+/* Indicateur Sync Planning + Pied de page ZL toujours visible */
+.sb-sync-pill {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--sb-radius);
+  background: var(--sb-hover-bg);
+  border: 1px solid var(--sb-border);
+  font-size: 11px;
+  color: var(--sb-muted);
+  flex-shrink: 0;
+}
+
+.sb-sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #10b981;
+  flex-shrink: 0;
+}
+
+.sb-footer {
+  padding: 10px;
+  border-top: 1px solid var(--sb-border);
+  background: var(--sb-footer-bg);
+  flex-shrink: 0;
+}
+
+.sb-profile-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  border-radius: var(--sb-radius);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: background-color 140ms ease;
+}
+
+.sb-profile-btn:hover {
+  background: var(--sb-hover-bg);
+}
+
+.sb-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sb-radius-mark);
+  background: var(--sb-avatar-bg);
+  color: var(--sb-avatar-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sb-logout-btn {
+  padding: 6px;
+  border-radius: var(--sb-radius);
+  border: none;
+  background: transparent;
+  color: var(--sb-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.sb-logout-btn:hover {
+  background: var(--sb-hover-bg);
+  color: var(--sb-text-strong);
+}
+
+/* ----------------------------------------------------------------------------
+   3. MODÈLE 2 — « FILET ARCHITECTURAL NET » (line)
+   ---------------------------------------------------------------------------- */
+.enterprise-sidebar.sb-model-line .sb-item.is-active {
+  border-radius: 0 var(--sb-radius) var(--sb-radius) 0;
+  background: var(--sb-line-active-bg);
+  color: var(--sb-line-active-text);
+  font-weight: 700;
+  box-shadow: none;
+  padding-left: 12px;
+}
+
+.enterprise-sidebar.sb-model-line .sb-item.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-line .sb-item.is-active .sb-item-icon {
+  color: var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-line .sb-item.is-active .sb-badge:not(.is-urgent) {
+  background: var(--sb-badge-bg);
+  color: var(--sb-badge-text);
+}
+
+.enterprise-sidebar.sb-model-line.collapsed .sb-item.is-active {
+  padding-left: 0;
+  border-radius: var(--sb-radius);
+  box-shadow: inset 0 0 0 1.5px var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-line.collapsed .sb-item.is-active::after {
+  display: none;
+}
+
+.sb-live-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--sb-line-accent);
+}
+
+/* ----------------------------------------------------------------------------
+   4. MODÈLE 3 — « DOUBLE RAIL BTP » (rail)
+   ---------------------------------------------------------------------------- */
+.enterprise-sidebar.sb-v2.sb-model-rail {
+  width: 270px;
+  min-width: 270px;
+  flex-direction: row !important;
+  overflow: hidden !important;
+  border-right: 1px solid var(--sb-panel-border) !important;
+  background: var(--sb-panel-bg) !important;
+}
+
+.enterprise-sidebar.sb-v2.sb-model-rail.collapsed {
+  width: 58px;
+  min-width: 58px;
+}
+
+.sb-rail-col {
+  width: 58px;
+  min-width: 58px;
+  height: 100%;
+  background: var(--sb-rail-bg);
+  color: #cbd5e1;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.sb-rail-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--sb-radius);
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.sb-rail-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
+}
+
+.sb-rail-btn.is-active {
+  background: var(--sb-solid-bg);
+  color: var(--sb-solid-text);
+}
+
+.sb-rail-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--sb-accent);
+  border: 1.5px solid var(--sb-rail-bg);
+}
+
+.sb-rail-dot.is-urgent {
+  background: #ef4444;
+}
+
+.sb-rail-panel {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--sb-panel-bg);
+  color: var(--sb-panel-text);
+}
+
+.sb-rail-panel .sb-brand-bar {
+  border-bottom-color: var(--sb-panel-border);
+  padding: 10px 14px;
+}
+
+.sb-rail-panel .sb-brand-title {
+  color: var(--sb-panel-text);
+}
+
+.sb-rail-panel .sb-brand-sub {
+  color: var(--sb-panel-muted);
+}
+
+.sb-rail-panel .sb-section-label {
+  color: var(--sb-panel-muted);
+}
+
+.sb-rail-panel .sb-item {
+  color: var(--sb-panel-text);
+  padding: 5px 8px;
+}
+
+.sb-rail-panel .sb-item:hover {
+  background: var(--sb-panel-card-hover);
+  color: var(--sb-panel-text);
+}
+
+.sb-rail-panel .sb-item .sb-item-icon {
+  color: var(--sb-panel-muted);
+}
+
+.sb-rail-panel .sb-item.is-active {
+  background: var(--sb-panel-active-bg);
+  color: var(--sb-panel-active-text);
+  box-shadow: none;
+}
+
+.sb-rail-panel .sb-item.is-active .sb-item-icon {
+  color: var(--sb-panel-active-text);
+}
+
+.sb-rail-panel .sb-badge:not(.is-urgent) {
+  background: rgba(100, 116, 139, 0.14);
+  color: var(--sb-panel-text);
+}
+
+:root[data-theme="dark"] .sb-rail-panel .sb-badge:not(.is-urgent) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
+
+.sb-rail-panel .sb-badge.is-urgent {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+:root[data-theme="dark"] .sb-rail-panel .sb-badge.is-urgent {
+  background: rgba(239, 68, 68, 0.24);
+  color: #fca5a5;
+}
+
+.sb-rail-panel .sb-footer {
+  background: var(--sb-panel-card-hover);
+  border-top-color: var(--sb-panel-border);
+  padding: 10px 12px;
+}
+
+.sb-rail-panel .sb-logout-btn {
+  color: var(--sb-panel-muted);
+}
+
+/* ----------------------------------------------------------------------------
+   5. MODÈLE 4 — « CARTES GROUPÉES & TERRAIN DÉDIÉ » (cards)
+   ---------------------------------------------------------------------------- */
+.enterprise-sidebar.sb-v2.sb-model-cards {
+  width: 264px;
+  min-width: 264px;
+  background: var(--sb-outer-bg) !important;
+}
+
+.enterprise-sidebar.sb-v2.sb-model-cards.collapsed {
+  width: 76px;
+  min-width: 76px;
+}
+
+.sb-card-group {
+  background: var(--sb-card-bg);
+  border: 1px solid var(--sb-border);
+  border-radius: var(--sb-radius-float);
+  padding: 6px;
+}
+
+.enterprise-sidebar.sb-v2.sb-model-cards .sb-item.is-active {
+  background: var(--sb-solid-bg);
+  color: var(--sb-solid-text);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.enterprise-sidebar.sb-v2.sb-model-cards .sb-item.is-active .sb-item-icon {
+  color: var(--sb-solid-text);
+}
+
+.enterprise-sidebar.sb-v2.sb-model-cards .sb-item.is-active .sb-badge:not(.is-urgent) {
+  background: var(--sb-solid-badge-bg);
+  color: var(--sb-solid-badge-text);
+}
+
+.sb-field-cta {
+  margin-top: 6px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--sb-radius-float);
+  border: 1px solid var(--sb-field-border);
+  background: var(--sb-field-bg);
+  color: var(--sb-field-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 140ms ease, filter 140ms ease;
+}
+
+.sb-field-cta:hover {
+  filter: brightness(1.04);
+}
+
+.sb-field-cta.is-active {
+  background: var(--sb-solid-bg);
+  border-color: var(--sb-solid-bg);
+  color: var(--sb-solid-text);
+}
+
+.enterprise-sidebar.sb-v2.collapsed .sb-field-cta {
+  justify-content: center;
+  padding: 8px;
+}
+
+/* ----------------------------------------------------------------------------
+   6. MODÈLE 5 — « ACCORDÉON REPLIABLE + FILTRE » (accordion)
+   ---------------------------------------------------------------------------- */
+.sb-search-box {
+  padding: 8px 10px 4px;
+  flex-shrink: 0;
+}
+
+.sb-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sb-search-input {
+  width: 100%;
+  padding: 6px 26px 6px 28px;
+  border-radius: var(--sb-radius);
+  border: 1px solid var(--sb-border);
+  background: var(--sb-card-bg);
+  color: var(--sb-text-strong);
+  font-size: 12px;
+  outline: none;
+}
+
+.sb-search-input::placeholder {
+  color: var(--sb-muted);
+}
+
+.sb-search-input:focus {
+  border-color: var(--sb-accent);
+}
+
+.sb-acc-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sb-muted);
+  cursor: pointer;
+}
+
+.sb-acc-trigger:hover {
+  color: var(--sb-text-strong);
+}
+
+.enterprise-sidebar.sb-model-accordion .sb-item.is-active {
+  border-radius: 0 var(--sb-radius) var(--sb-radius) 0;
+  background: var(--sb-line-active-bg);
+  color: var(--sb-line-active-text);
+  font-weight: 700;
+  box-shadow: none;
+  padding-left: 12px;
+}
+
+.enterprise-sidebar.sb-model-accordion .sb-item.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-accordion .sb-item.is-active .sb-item-icon {
+  color: var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-accordion .sb-item.is-active .sb-badge:not(.is-urgent) {
+  background: var(--sb-badge-bg);
+  color: var(--sb-badge-text);
+}
+
+.enterprise-sidebar.sb-model-accordion.collapsed .sb-item.is-active {
+  padding-left: 0;
+  border-radius: var(--sb-radius);
+  box-shadow: inset 0 0 0 1.5px var(--sb-line-accent);
+}
+
+.enterprise-sidebar.sb-model-accordion.collapsed .sb-item.is-active::after {
+  display: none;
+}
+
+/* ----------------------------------------------------------------------------
+   7. MODÈLE 6 — « PANNEAU FLOTTANT HYBRIDE » (floating)
+   ---------------------------------------------------------------------------- */
+.enterprise-sidebar.sb-v2.sb-model-floating {
+  width: 266px;
+  min-width: 266px;
+  background: transparent !important;
+  border-right: none !important;
+  padding: 8px 0 8px 8px !important;
+}
+
+.enterprise-sidebar.sb-v2.sb-model-floating.collapsed {
+  width: 78px;
+  min-width: 78px;
+  padding: 8px 0 8px 8px !important;
+}
+
+.sb-floating-card {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sb-bg);
+  color: var(--sb-text);
+  border: 1px solid var(--sb-border);
+  border-radius: var(--sb-radius-float);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+}
+
+.sb-quick-cta {
+  width: 100%;
+  height: 33px;
+  border-radius: var(--sb-radius);
+  border: none;
+  background: var(--sb-cta-bg);
+  color: var(--sb-cta-text);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 0 10px;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.sb-quick-cta:hover {
+  filter: brightness(1.06);
+}
+
+.sb-floating-footer-card {
+  border-radius: var(--sb-radius);
+  background: var(--sb-footer-bg);
+  border: 1px solid var(--sb-border);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+/* ----------------------------------------------------------------------------
+   8. RESPONSIVE MOBILE (Tiroir coulissant plein écran pour les 6 modèles)
+   ---------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .enterprise-sidebar.sb-v2,
+  .enterprise-sidebar.sb-v2.collapsed,
+  .enterprise-sidebar.sb-v2.sb-model-cards,
+  .enterprise-sidebar.sb-v2.sb-model-rail,
+  .enterprise-sidebar.sb-v2.sb-model-floating {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(292px, 86vw) !important;
+    min-width: min(292px, 86vw) !important;
+    height: 100dvh !important;
+    padding: 0 !important;
+    z-index: 150 !important;
+    visibility: hidden;
+    transform: translateX(-105%);
+    overflow: hidden !important;
+  }
+
+  .enterprise-sidebar.sb-v2.mobile-open {
+    visibility: visible !important;
+    transform: translateX(0) !important;
+  }
+
+  .enterprise-sidebar.sb-v2.sb-model-floating .sb-floating-card {
+    border-radius: 0 !important;
+    border-left: none;
+    border-top: none;
+    border-bottom: none;
+  }
+
+  .sb-edge-toggle {
+    display: none !important;
+  }
+}

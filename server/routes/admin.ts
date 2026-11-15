@@ -11,7 +11,7 @@ import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { normaliserDelai, normaliserDelaiAlerte } from '../domain/technicianResponse.js';
 import { basePublicUserSelect, findUserInCompany, isMissingSchemaError } from '../lib/userSelect.js';
-import { PLATFORM_CREATOR, ROLE_DEFINITIONS, getEffectivePermissions, isKnownRole, isPlatformCreatorIdentity, sanitizePermissionsForRole } from '../../shared/types.js';
+import { CLOCK_IN_PERIMETER_METERS, PLATFORM_CREATOR, ROLE_DEFINITIONS, getEffectivePermissions, haversineDistanceMeters, isKnownRole, isPlatformCreatorIdentity, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
   APP_URL,
   sendWelcomeUserEmail,
@@ -308,6 +308,12 @@ adminRouter.get(
       dateJour: r.dateJour,
       heureArriveeBureau: r.heureArriveeBureau,
       timestampArrivee: r.timestampArrivee ? r.timestampArrivee.toISOString() : null,
+      latitudeArrivee: (r as any).latitudeArrivee ?? null,
+      longitudeArrivee: (r as any).longitudeArrivee ?? null,
+      precisionGpsArrivee: (r as any).precisionGpsArrivee ?? null,
+      distanceBureauMetres: (r as any).distanceBureauMetres ?? null,
+      derogationHorsBureau: Boolean((r as any).derogationHorsBureau),
+      derogationAccordeePar: (r as any).derogationAccordeePar ?? null,
       heureFinJournee: r.heureFinJournee,
       timestampFin: r.timestampFin ? r.timestampFin.toISOString() : null,
       statutJournee: r.statutJournee as 'EN_SERVICE' | 'TERMINEE',
@@ -317,6 +323,88 @@ adminRouter.get(
     }));
 
     res.json({ data: formatted });
+  })
+);
+
+adminRouter.get(
+  '/pointages/derogations',
+  policy('admin.pointages.read'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    const { parisDateISO } = getParisNow();
+    const dateJour = String(req.query.dateJour || parisDateISO).trim() || parisDateISO;
+    const companyId = tenantOf(caller);
+
+    const canManageTeam = caller.isAdmin || caller.effectiveRole === 'CONDUCTEUR_TRAVAUX' || Boolean(caller.perms.canApproveRemoteClockIn);
+    const ownTech = (caller.technicienNom || caller.name || '').trim();
+
+    const rows = await (prisma as any).pointageDerogation.findMany({
+      where: {
+        companyId,
+        dateJour,
+        ...(!canManageTeam && ownTech ? { technicien: ownTech } : {}),
+      },
+      orderBy: [{ technicien: 'asc' }],
+    });
+
+    res.json({ data: rows });
+  })
+);
+
+const DerogationSchema = z.object({
+  technicien: z.string().min(1, 'Nom du technicien requis').max(120),
+  dateJour: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide (AAAA-MM-JJ)').optional(),
+  active: z.boolean(),
+  motif: z.string().max(300).optional().nullable(),
+});
+
+adminRouter.put(
+  '/pointages/derogations',
+  policy('admin.pointages.exception'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const caller = await getCallerUser(req);
+    if (!caller.isAdmin && !caller.perms.canApproveRemoteClockIn) {
+      throw new AppError(403, 'Seule une personne habilitée peut activer une dérogation de pointage hors bureau.', 'FORBIDDEN');
+    }
+    const parsed = DerogationSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError(400, parsed.error.issues[0]?.message || 'Paramètres invalides', 'VALIDATION_ERROR');
+    }
+    const { parisDateISO } = getParisNow();
+    const companyId = tenantOf(caller);
+    const technicien = parsed.data.technicien.trim();
+    const dateJour = parsed.data.dateJour || parisDateISO;
+    const active = parsed.data.active;
+    const motif = parsed.data.motif ? parsed.data.motif.trim() : null;
+    const accordeePar = (caller.name || caller.email || 'Responsable').trim();
+
+    const saved = await (prisma as any).pointageDerogation.upsert({
+      where: {
+        technicien_dateJour_companyId: { technicien, dateJour, companyId },
+      },
+      update: {
+        active,
+        motif,
+        accordeePar,
+        accordeeParUserId: caller.id,
+      },
+      create: {
+        companyId,
+        technicien,
+        dateJour,
+        active,
+        motif,
+        accordeePar,
+        accordeeParUserId: caller.id,
+      },
+    });
+
+    res.json({
+      data: saved,
+      message: active
+        ? `Dérogation pointage hors bureau activée pour ${technicien} le ${dateJour}`
+        : `Dérogation pointage hors bureau retirée pour ${technicien} le ${dateJour}`,
+    });
   })
 );
 
@@ -333,6 +421,32 @@ adminRouter.post(
     let heureArriveeBureau = String(req.body?.heureArriveeBureau || '').trim();
     const commentaireJournee = req.body?.commentaireJournee;
 
+    const rawLat = req.body?.latitude ?? req.body?.lat;
+    const rawLng = req.body?.longitude ?? req.body?.lng;
+    const rawAcc = req.body?.accuracy ?? req.body?.precisionGps;
+    const hasGps = rawLat !== undefined && rawLat !== null && rawLng !== undefined && rawLng !== null && rawLat !== '' && rawLng !== '';
+    let latitudeArrivee: number | null = null;
+    let longitudeArrivee: number | null = null;
+    let precisionGpsArrivee: number | null = null;
+
+    if (hasGps) {
+      latitudeArrivee = Number(rawLat);
+      longitudeArrivee = Number(rawLng);
+      if (
+        !Number.isFinite(latitudeArrivee) ||
+        !Number.isFinite(longitudeArrivee) ||
+        latitudeArrivee < -90 ||
+        latitudeArrivee > 90 ||
+        longitudeArrivee < -180 ||
+        longitudeArrivee > 180
+      ) {
+        throw new AppError(400, 'Coordonnées GPS invalides pour le pointage.', 'INVALID_GPS');
+      }
+      if (rawAcc !== undefined && rawAcc !== null && Number.isFinite(Number(rawAcc))) {
+        precisionGpsArrivee = Math.max(0, Math.round(Number(rawAcc)));
+      }
+    }
+
     // Pour les techniciens : horodatage automatique inviolable au moment exact du clic
     if (!caller.isAdmin) {
       technicien = (caller.technicienNom || caller.name || '').trim();
@@ -346,6 +460,25 @@ adminRouter.post(
 
     if (!technicien) {
       throw new AppError(400, 'Nom du technicien requis pour le pointage matin', 'VALIDATION_ERROR');
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { siegeAdresse: true, siegeLat: true, siegeLng: true },
+    });
+
+    const derogation = await (prisma as any).pointageDerogation.findFirst({
+      where: { companyId, technicien, dateJour, active: true },
+    });
+
+    let distanceBureauMetres: number | null = null;
+    if (
+      latitudeArrivee !== null &&
+      longitudeArrivee !== null &&
+      typeof company?.siegeLat === 'number' &&
+      typeof company?.siegeLng === 'number'
+    ) {
+      distanceBureauMetres = Math.round(haversineDistanceMeters(latitudeArrivee, longitudeArrivee, company.siegeLat, company.siegeLng) * 10) / 10;
     }
 
     // Si technicien et déjà pointé le matin : interdiction de modifier l'heure
@@ -368,6 +501,32 @@ adminRouter.post(
           message: `Arrivée déjà enregistrée et certifiée à ${existing.heureArriveeBureau} (non modifiable)`,
         });
       }
+
+      // Contrôle strict GPS + périmètre de 30 m du siège (sauf dérogation active accordée par un responsable habilité)
+      if (!hasGps) {
+        throw new AppError(
+          400,
+          `Activez le GPS de votre téléphone pour effectuer votre pointage du matin (périmètre ${CLOCK_IN_PERIMETER_METERS} m autour du siège).`,
+          'GPS_REQUIRED'
+        );
+      }
+      if (!derogation?.active) {
+        if (typeof company?.siegeLat !== 'number' || typeof company?.siegeLng !== 'number') {
+          throw new AppError(
+            422,
+            'Les coordonnées GPS du siège de l\u2019entreprise ne sont pas configurées. Demandez à la direction de renseigner le siège ou d\u2019activer une exception.',
+            'SIEGE_NON_CONFIGURE'
+          );
+        }
+        if (distanceBureauMetres !== null && distanceBureauMetres > CLOCK_IN_PERIMETER_METERS) {
+          throw new AppError(
+            403,
+            `Pointage refusé : vous êtes à ${Math.round(distanceBureauMetres)} m du siège de l'entreprise (périmètre maximum autorisé : ${CLOCK_IN_PERIMETER_METERS} m). Rapprochez-vous du bureau ou demandez une dérogation à un responsable habilité.`,
+            'OUTSIDE_PERIMETER',
+            { distanceMetres: Math.round(distanceBureauMetres), perimeterMetres: CLOCK_IN_PERIMETER_METERS }
+          );
+        }
+      }
     }
 
     let upserted;
@@ -383,6 +542,12 @@ adminRouter.post(
         update: {
           heureArriveeBureau,
           timestampArrivee: now,
+          latitudeArrivee,
+          longitudeArrivee,
+          precisionGpsArrivee,
+          distanceBureauMetres,
+          derogationHorsBureau: Boolean(derogation?.active),
+          derogationAccordeePar: derogation?.active ? derogation.accordeePar : null,
           statutJournee: 'EN_SERVICE',
           ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
         },
@@ -393,8 +558,18 @@ adminRouter.post(
           dateJour,
           heureArriveeBureau,
           timestampArrivee: now,
+          latitudeArrivee,
+          longitudeArrivee,
+          precisionGpsArrivee,
+          distanceBureauMetres,
+          derogationHorsBureau: Boolean(derogation?.active),
+          derogationAccordeePar: derogation?.active ? derogation.accordeePar : null,
           statutJournee: 'EN_SERVICE',
-          commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
+          commentaireJournee:
+            commentaireJournee ||
+            (derogation?.active
+              ? `Début de journée hors bureau autorisé par ${derogation.accordeePar}`
+              : 'Arrivée au bureau certifiée par GPS (périmètre 30 m)'),
         },
       });
     } catch (upsertErr) {
@@ -407,6 +582,12 @@ adminRouter.post(
           data: {
             heureArriveeBureau,
             timestampArrivee: now,
+            latitudeArrivee,
+            longitudeArrivee,
+            precisionGpsArrivee,
+            distanceBureauMetres,
+            derogationHorsBureau: Boolean(derogation?.active),
+            derogationAccordeePar: derogation?.active ? derogation.accordeePar : null,
             statutJournee: 'EN_SERVICE',
             ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
           },
@@ -420,8 +601,18 @@ adminRouter.post(
             dateJour,
             heureArriveeBureau,
             timestampArrivee: now,
+            latitudeArrivee,
+            longitudeArrivee,
+            precisionGpsArrivee,
+            distanceBureauMetres,
+            derogationHorsBureau: Boolean(derogation?.active),
+            derogationAccordeePar: derogation?.active ? derogation.accordeePar : null,
             statutJournee: 'EN_SERVICE',
-            commentaireJournee: commentaireJournee || 'Arrivée au bureau certifiée par bouton mobile',
+            commentaireJournee:
+              commentaireJournee ||
+              (derogation?.active
+                ? `Début de journée hors bureau autorisé par ${derogation.accordeePar}`
+                : 'Arrivée au bureau certifiée par GPS (périmètre 30 m)'),
           },
         });
       }
@@ -432,7 +623,7 @@ adminRouter.post(
         ...upserted,
         dureeMinutes: computeDurationMinutes(upserted.heureArriveeBureau, upserted.heureFinJournee),
       },
-      message: `Prise de service certifiée à ${heureArriveeBureau} pour ${technicien}`,
+      message: derogation?.active ? `Prise de service hors bureau autorisée à ${heureArriveeBureau} pour ${technicien}` : `Prise de service certifiée par GPS à ${heureArriveeBureau} pour ${technicien}`,
     });
   })
 );
@@ -960,8 +1151,10 @@ adminRouter.delete(
 // ============================================================================
 
 const ALLOWED_THEMES = ['light', 'dark', 'atlas', 'craft', 'signal', 'swiss', 'bento'] as const;
+const ALLOWED_SIDEBAR_MODELS = ['classic', 'line', 'rail', 'cards', 'accordion', 'floating'] as const;
 const CompanyAppearanceSchema = z.object({
   defaultTheme: z.enum(ALLOWED_THEMES).optional(),
+  defaultSidebarModel: z.enum(ALLOWED_SIDEBAR_MODELS).optional(),
   allowThemeOverride: z.boolean().optional(),
   /** Ouvrir le tableau de bord sur « Ma file » plutôt que sur la synthèse */
   accueilMaFile: z.boolean().optional(),
@@ -984,6 +1177,7 @@ adminRouter.get(
       id: number;
       name: string;
       defaultTheme?: string | null;
+      defaultSidebarModel?: string | null;
       allowThemeOverride?: boolean | null;
       accueilMaFile?: boolean | null;
       siegeAdresse?: string | null;
@@ -993,27 +1187,37 @@ adminRouter.get(
     try {
       company = await prisma.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true, siegeAdresse: true, siegeLat: true, siegeLng: true },
+        select: { id: true, name: true, defaultTheme: true, defaultSidebarModel: true, allowThemeOverride: true, accueilMaFile: true, siegeAdresse: true, siegeLat: true, siegeLng: true },
       });
     } catch (e) {
       if (!isMissingSchemaError(e)) throw e;
-      // Colonnes absentes : on renvoie les valeurs par défaut.
-      company = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { id: true, name: true },
-      });
+      try {
+        company = await prisma.company.findUnique({
+          where: { id: companyId },
+          select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true, siegeAdresse: true, siegeLat: true, siegeLng: true },
+        });
+      } catch (e2) {
+        if (!isMissingSchemaError(e2)) throw e2;
+        // Colonnes absentes : on renvoie les valeurs par défaut.
+        company = await prisma.company.findUnique({
+          where: { id: companyId },
+          select: { id: true, name: true },
+        });
+      }
     }
     if (!company) throw new AppError(404, 'Entreprise introuvable', 'COMPANY_NOT_FOUND');
     res.json({
       companyId: company.id,
       companyName: company.name,
       defaultTheme: company.defaultTheme || 'light',
+      defaultSidebarModel: company.defaultSidebarModel || 'classic',
       allowThemeOverride: company.allowThemeOverride !== false,
       accueilMaFile: company.accueilMaFile === true,
       siegeAdresse: company.siegeAdresse || null,
       siegeLat: company.siegeLat || null,
       siegeLng: company.siegeLng || null,
       availableThemes: ALLOWED_THEMES,
+      availableSidebarModels: ALLOWED_SIDEBAR_MODELS,
     });
   })
 );
@@ -1034,38 +1238,62 @@ adminRouter.patch(
     if (!parsed.success) {
       throw new AppError(400, 'Paramètres invalides', 'INVALID_PAYLOAD');
     }
-    const { defaultTheme, allowThemeOverride, accueilMaFile } = parsed.data;
-    if (defaultTheme === undefined && allowThemeOverride === undefined && accueilMaFile === undefined) {
+    const { defaultTheme, defaultSidebarModel, allowThemeOverride, accueilMaFile } = parsed.data;
+    if (defaultTheme === undefined && defaultSidebarModel === undefined && allowThemeOverride === undefined && accueilMaFile === undefined) {
       throw new AppError(400, 'Rien à mettre à jour', 'EMPTY_PAYLOAD');
     }
 
     const companyId = tenantOf(caller);
-    let updated;
+    let updated: { id: number; name: string; defaultTheme?: string | null; defaultSidebarModel?: string | null; allowThemeOverride?: boolean | null; accueilMaFile?: boolean | null };
     try {
       updated = await prisma.company.update({
         where: { id: companyId },
         data: {
           ...(defaultTheme !== undefined ? { defaultTheme } : {}),
+          ...(defaultSidebarModel !== undefined ? { defaultSidebarModel } : {}),
           ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
           ...(accueilMaFile !== undefined ? { accueilMaFile } : {}),
         },
-        select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true },
+        select: { id: true, name: true, defaultTheme: true, defaultSidebarModel: true, allowThemeOverride: true, accueilMaFile: true },
       });
     } catch (e) {
-      if (isMissingSchemaError(e)) {
+      if (isMissingSchemaError(e) && defaultSidebarModel === undefined) {
+        try {
+          updated = await prisma.company.update({
+            where: { id: companyId },
+            data: {
+              ...(defaultTheme !== undefined ? { defaultTheme } : {}),
+              ...(allowThemeOverride !== undefined ? { allowThemeOverride } : {}),
+              ...(accueilMaFile !== undefined ? { accueilMaFile } : {}),
+            },
+            select: { id: true, name: true, defaultTheme: true, allowThemeOverride: true, accueilMaFile: true },
+          });
+        } catch (e2) {
+          if (isMissingSchemaError(e2)) {
+            throw new AppError(
+              503,
+              "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
+              'THEME_PERSISTENCE_UNAVAILABLE'
+            );
+          }
+          throw e2;
+        }
+      } else if (isMissingSchemaError(e)) {
         throw new AppError(
           503,
           "La personnalisation de l'apparence n'est pas encore disponible (base de données en cours de mise à jour).",
           'THEME_PERSISTENCE_UNAVAILABLE'
         );
+      } else {
+        throw e;
       }
-      throw e;
     }
 
     res.json({
       companyId: updated.id,
       companyName: updated.name,
       defaultTheme: updated.defaultTheme || 'light',
+      defaultSidebarModel: updated.defaultSidebarModel || 'classic',
       allowThemeOverride: updated.allowThemeOverride !== false,
       accueilMaFile: updated.accueilMaFile === true,
       message: "Apparence de l'entreprise mise à jour.",

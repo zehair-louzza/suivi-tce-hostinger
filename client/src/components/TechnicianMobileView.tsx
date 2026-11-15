@@ -20,6 +20,7 @@ import { MissionResponseCard } from './MissionResponseCard';
 import { NotificationBell } from './NotificationBell';
 import { geocodeAddress } from '../lib/geocoding';
 import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
+import { CLOCK_IN_PERIMETER_METERS, haversineDistanceMeters } from '../../../shared/types';
 
 interface TechnicianMobileViewProps {
   techniciens: string[];
@@ -559,6 +560,7 @@ export function TechnicianMobileView({
 }: TechnicianMobileViewProps) {
   const queryClient = useQueryClient();
   const { user, logout } = useAuth();
+  const hq = useCompanyHQ();
   const { current: currentTheme, themes, userPref, allowUserOverride, setUserPref, isPending: themePending } = useTheme();
   const skin = skinFor(currentTheme);
   const isTablet = useMediaQuery('(min-width: 768px)');
@@ -574,6 +576,9 @@ export function TechnicianMobileView({
   const [missionReports, setMissionReports] = useState<Record<number, string>>({});
   const [syncState, setSyncState] = useState<Record<number, 'saving' | 'saved' | 'error'>>({});
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [clockInLocating, setClockInLocating] = useState(false);
+  const [clockInGpsError, setClockInGpsError] = useState<string | null>(null);
+  const [lastClockInDist, setLastClockInDist] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
   const [runningMissions, setRunningMissions] = useState<Record<number, boolean>>({});
 
@@ -593,6 +598,20 @@ export function TechnicianMobileView({
     enabled: Boolean(currentTechnicien && selectedDate),
   });
 
+  const derogationsQuery = useQuery({
+    queryKey: ['admin-pointage-derogations', selectedDate, currentTechnicien],
+    queryFn: async () => {
+      const res = await adminApi.listPointageDerogations({ dateJour: selectedDate });
+      return res.data.data;
+    },
+    enabled: Boolean(currentTechnicien && selectedDate),
+  });
+
+  const activeDerogation = useMemo(
+    () => (derogationsQuery.data || []).find((d) => d.technicien === currentTechnicien && d.dateJour === selectedDate && d.active) || null,
+    [derogationsQuery.data, currentTechnicien, selectedDate]
+  );
+
   const currentPointage = (pointagesQuery.data || [])[0] || null;
   const isPointed = Boolean(currentPointage?.heureArriveeBureau);
   const isTerminee = currentPointage?.statutJournee === 'TERMINEE' || Boolean(currentPointage?.heureFinJournee);
@@ -601,11 +620,14 @@ export function TechnicianMobileView({
   const clockInMut = useMutation({
     mutationFn: adminApi.clockIn,
     onSuccess: (res) => {
+      setClockInGpsError(null);
       queryClient.invalidateQueries({ queryKey: ['admin-pointages'] });
       toast.success(res.data.message || `Journée commencée à ${getNowHHMM()}`);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Erreur lors du commencement de journée');
+      const msg = err.response?.data?.error || 'Erreur lors du commencement de journée';
+      setClockInGpsError(msg);
+      toast.error(msg);
     },
   });
 
@@ -851,13 +873,45 @@ export function TechnicianMobileView({
     return allTechMissionsCombined.find((m: Intervention) => m.id === openMissionId) || null;
   }, [allTechMissionsCombined, openMissionId]);
 
-  // Handlers Pointage
+  // Handlers Pointage : GPS obligatoire et périmètre 30 m du siège (sauf dérogation active)
   const handleStartDay = () => {
-    clockInMut.mutate({
-      technicien: currentTechnicien,
-      dateJour: selectedDate,
-      heureArriveeBureau: getNowHHMM(),
-    });
+    setClockInGpsError(null);
+    if (!navigator.geolocation) {
+      const msg = `La géolocalisation GPS est requise pour pointer le matin (périmètre ${CLOCK_IN_PERIMETER_METERS} m autour du siège).`;
+      setClockInGpsError(msg);
+      toast.error(msg);
+      return;
+    }
+    setClockInLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setClockInLocating(false);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        if (hq.configured) {
+          setLastClockInDist(Math.round(haversineDistanceMeters(lat, lng, hq.coords.lat, hq.coords.lng)));
+        }
+        clockInMut.mutate({
+          technicien: currentTechnicien,
+          dateJour: selectedDate,
+          heureArriveeBureau: getNowHHMM(),
+          latitude: lat,
+          longitude: lng,
+          accuracy,
+        });
+      },
+      (geoErr) => {
+        setClockInLocating(false);
+        const msg =
+          geoErr.code === 1
+            ? `Autorisation GPS refusée. Activez le GPS pour pointer dans un rayon de ${CLOCK_IN_PERIMETER_METERS} m autour du siège.`
+            : `Impossible d’obtenir votre position GPS (${geoErr.message || 'signal indisponible'}). Activez le GPS et réessayez.`;
+        setClockInGpsError(msg);
+        toast.error(msg);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
   };
 
   const handleEndDay = () => {
@@ -1119,17 +1173,34 @@ export function TechnicianMobileView({
             </span>
             <div>
               <strong>Prêt à démarrer ?</strong>
-              <span>Pointez votre arrivée pour commencer la journée.</span>
+              <span>
+                {activeDerogation
+                  ? `Dérogation hors bureau active (${activeDerogation.accordeePar})${activeDerogation.motif ? ` — ${activeDerogation.motif}` : ''}. GPS requis pour démarrer.`
+                  : `GPS obligatoire · pointage validé dans un rayon de ${CLOCK_IN_PERIMETER_METERS} m autour du siège.`}
+              </span>
             </div>
           </div>
+          {clockInGpsError && (
+            <div style={{ fontSize: '12.5px', color: '#b91c1c', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '10px', padding: '9px 12px', marginBottom: '10px', fontWeight: 600 }}>
+              {clockInGpsError}{lastClockInDist !== null && !activeDerogation ? ` (dernière mesure : ${lastClockInDist} m)` : ''}
+            </div>
+          )}
           <button
             type="button"
             className="t-btn t-btn--primary t-btn--xl t-btn--block"
-            disabled={clockInMut.isPending || user?.role === 'ADMIN'}
+            disabled={clockInLocating || clockInMut.isPending || user?.role === 'ADMIN'}
             onClick={handleStartDay}
           >
             <Ic n="play" size={22} />
-            <span>{user?.role === 'ADMIN' ? 'Aperçu Direction (pointage désactivé)' : clockInMut.isPending ? 'Enregistrement…' : 'Commencer la journée'}</span>
+            <span>
+              {user?.role === 'ADMIN'
+                ? 'Aperçu Direction (pointage désactivé)'
+                : clockInLocating
+                ? 'Localisation GPS (rayon 30 m)…'
+                : clockInMut.isPending
+                ? 'Vérification GPS…'
+                : 'Commencer la journée'}
+            </span>
           </button>
         </>
       ) : (
@@ -1141,6 +1212,11 @@ export function TechnicianMobileView({
             <strong>{isTerminee ? 'Journée terminée' : 'Journée commencée'}</strong>
             <span>
               Arrivée pointée à {currentPointage?.heureArriveeBureau}
+              {currentPointage?.derogationHorsBureau
+                ? ` · hors bureau (${currentPointage.derogationAccordeePar || 'dérogation'})`
+                : currentPointage?.distanceBureauMetres != null
+                ? ` · à ${Math.round(currentPointage.distanceBureauMetres)} m du siège`
+                : ''}
               {isTerminee && currentPointage?.heureFinJournee ? ` · fin ${currentPointage.heureFinJournee}` : ''}
             </span>
           </div>

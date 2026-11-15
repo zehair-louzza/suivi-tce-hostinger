@@ -15,8 +15,74 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import { api } from '../lib/api';
 import { useAuthStore } from './authStore';
+import type { SidebarModelId as SharedSidebarModelId, UserThemeSettings } from '../../../shared/types';
 
 export type ThemeId = 'light' | 'dark' | 'atlas' | 'craft' | 'signal' | 'swiss' | 'bento';
+export type SidebarModelId = SharedSidebarModelId;
+
+export interface SidebarModelDescriptor {
+  id: SidebarModelId;
+  number: 1 | 2 | 3 | 4 | 5 | 6;
+  name: string;
+  badgeTag: string;
+  tagline: string;
+  highlights: string[];
+}
+
+export const SIDEBAR_MODELS: SidebarModelDescriptor[] = [
+  {
+    id: 'classic',
+    number: 1,
+    name: 'Classique Épuré',
+    badgeTag: 'Pilule Douce · Bouton Bordure',
+    tagline: 'Évolution directe du menu avec bouton repli flottant sur la bordure, logo T centré et profil ZL préservé.',
+    highlights: ['Transition familière', 'Zéro double bordure', 'Avatar ZL visible en réduit'],
+  },
+  {
+    id: 'line',
+    number: 2,
+    name: 'Filet Architectural Net',
+    badgeTag: 'Barre Accent 3px · Sync LIVE',
+    tagline: 'Filet vertical net de 3 px collé à gauche et indicateur compact Sync Planning · LIVE.',
+    highlights: ['Filet actif net 3px', 'Badge LIVE compact', 'Contraste élevé sur 7 thèmes'],
+  },
+  {
+    id: 'rail',
+    number: 3,
+    name: 'Double Rail BTP',
+    badgeTag: 'Rail Fixe 56px + Volet',
+    tagline: 'Rail permanent à gauche pour les 4 pôles métier + avatar ZL, couplé au volet détaillé repliable.',
+    highlights: ['Rail permanent ultra-propre', 'Pôles métier immédiats', 'Idéal écran large'],
+  },
+  {
+    id: 'cards',
+    number: 4,
+    name: 'Cartes Groupées & Terrain',
+    badgeTag: 'Pilule Pleine · Accès Mobile',
+    tagline: 'Sections regroupées en cartes distinctes, pilule active pleine et bouton isolé pour l’App Mobile Technicien.',
+    highlights: ['Pilule active impossible à rater', 'Accès Terrain mis en avant', 'Confort tactile'],
+  },
+  {
+    id: 'accordion',
+    number: 5,
+    name: 'Accordéon Repliable + Filtre',
+    badgeTag: 'Recherche Intégrée · Petit Écran',
+    tagline: 'Champ « Filtrer un module... » et sections repliables au clic : zéro défilement même sur petit portable.',
+    highlights: ['Filtrage instantané', 'Groupes repliables', 'Compact sans scrollbar'],
+  },
+  {
+    id: 'floating',
+    number: 6,
+    name: 'Panneau Flottant Hybride',
+    badgeTag: 'Flottant + Action Rapide',
+    tagline: 'Panneau détaché du bord adapté aux angles du thème, raccourci « + Nouvelle demande / Devis » et carte profil.',
+    highlights: ['Panneau flottant moderne', 'Raccourci création rapide', 'Carte profil avec statut'],
+  },
+];
+
+export const DEFAULT_SIDEBAR_MODEL: SidebarModelId = 'classic';
+const ALL_SIDEBAR_IDS = SIDEBAR_MODELS.map((m) => m.id);
+const isValidSidebar = (v: unknown): v is SidebarModelId => typeof v === 'string' && (ALL_SIDEBAR_IDS as string[]).includes(v);
 
 export interface ThemeDescriptor {
   id: ThemeId;
@@ -141,6 +207,8 @@ const isValid = (v: unknown): v is ThemeId => typeof v === 'string' && (ALL_IDS 
 const K_COMPANY = 'anelec_theme_company_default';
 const K_USER = 'anelec_theme_user_pref';
 const K_ALLOW = 'anelec_theme_allow_user_override';
+const K_SIDEBAR_COMPANY = 'anelec_sidebar_company_default';
+const K_SIDEBAR_USER = 'anelec_sidebar_user_pref';
 
 function readCompanyDefault(): ThemeId {
   const v = localStorage.getItem(K_COMPANY);
@@ -153,11 +221,28 @@ function readUserPref(): ThemeId | null {
 function readAllowOverride(): boolean {
   return localStorage.getItem(K_ALLOW) !== 'false';
 }
-function writeCache(companyDefault: ThemeId, userPref: ThemeId | null, allowOverride: boolean) {
+function readSidebarCompanyDefault(): SidebarModelId {
+  const v = localStorage.getItem(K_SIDEBAR_COMPANY);
+  return isValidSidebar(v) ? v : DEFAULT_SIDEBAR_MODEL;
+}
+function readSidebarUserPref(): SidebarModelId | null {
+  const v = localStorage.getItem(K_SIDEBAR_USER);
+  return isValidSidebar(v) ? v : null;
+}
+function writeCache(
+  companyDefault: ThemeId,
+  userPref: ThemeId | null,
+  allowOverride: boolean,
+  sidebarCompanyDefault: SidebarModelId,
+  sidebarUserPref: SidebarModelId | null,
+) {
   localStorage.setItem(K_COMPANY, companyDefault);
   localStorage.setItem(K_ALLOW, String(allowOverride));
   if (userPref) localStorage.setItem(K_USER, userPref);
   else localStorage.removeItem(K_USER);
+  localStorage.setItem(K_SIDEBAR_COMPANY, sidebarCompanyDefault);
+  if (sidebarUserPref) localStorage.setItem(K_SIDEBAR_USER, sidebarUserPref);
+  else localStorage.removeItem(K_SIDEBAR_USER);
 }
 
 function applyTheme(id: ThemeId): void {
@@ -170,8 +255,16 @@ function applyTheme(id: ThemeId): void {
   window.setTimeout(() => html.removeAttribute('data-theme-switching'), 260);
 }
 
+function applySidebarModel(id: SidebarModelId): void {
+  document.documentElement.setAttribute('data-sidebar-model', id);
+}
+
 function resolve(companyDefault: ThemeId, userPref: ThemeId | null, allow: boolean): ThemeId {
   return allow && userPref ? userPref : companyDefault;
+}
+
+function resolveSidebar(companyDefault: SidebarModelId, userPref: SidebarModelId | null): SidebarModelId {
+  return userPref || companyDefault;
 }
 
 export interface ThemeContextValue {
@@ -186,6 +279,13 @@ export interface ThemeContextValue {
   previewTheme: (id: ThemeId | null) => void;
   themes: ThemeDescriptor[];
   previewFor: (id: ThemeId) => ThemeDescriptor | undefined;
+  sidebarModel: SidebarModelId;
+  sidebarCompanyDefault: SidebarModelId;
+  sidebarUserPref: SidebarModelId | null;
+  sidebarModels: SidebarModelDescriptor[];
+  setSidebarCompanyDefault: (id: SidebarModelId) => Promise<void>;
+  setSidebarUserPref: (id: SidebarModelId | null) => Promise<void>;
+  previewSidebarModel: (id: SidebarModelId | null) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -195,67 +295,85 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [companyDefault, setCompanyDefaultState] = useState<ThemeId>(DEFAULT_THEME);
   const [userPref, setUserPrefState] = useState<ThemeId | null>(null);
   const [allowUserOverride, setAllowUserOverrideState] = useState<boolean>(true);
+  const [sidebarModel, setSidebarModel] = useState<SidebarModelId>(DEFAULT_SIDEBAR_MODEL);
+  const [sidebarCompanyDefault, setSidebarCompanyDefaultState] = useState<SidebarModelId>(DEFAULT_SIDEBAR_MODEL);
+  const [sidebarUserPref, setSidebarUserPrefState] = useState<SidebarModelId | null>(null);
   const [isPending, setIsPending] = useState<boolean>(false);
+
+  const syncFromServerTheme = useCallback((ut: UserThemeSettings) => {
+    const cd = (isValid(ut.companyDefault) ? ut.companyDefault : DEFAULT_THEME) as ThemeId;
+    const up = (isValid(ut.userPref) ? ut.userPref : null) as ThemeId | null;
+    const allow = ut.allowOverride !== false;
+    const scd = (isValidSidebar(ut.sidebarCompanyDefault) ? ut.sidebarCompanyDefault : DEFAULT_SIDEBAR_MODEL) as SidebarModelId;
+    const sup = (
+      ut.sidebarUserPref === undefined
+        ? readSidebarUserPref()
+        : (isValidSidebar(ut.sidebarUserPref) ? ut.sidebarUserPref : null)
+    ) as SidebarModelId | null;
+    setCompanyDefaultState(cd);
+    setUserPrefState(up);
+    setAllowUserOverrideState(allow);
+    setSidebarCompanyDefaultState(scd);
+    setSidebarUserPrefState(sup);
+    writeCache(cd, up, allow, scd, sup);
+    const resolved = resolve(cd, up, allow);
+    const resolvedSb = resolveSidebar(scd, sup);
+    setCurrent(resolved);
+    setSidebarModel(resolvedSb);
+    applyTheme(resolved);
+    applySidebarModel(resolvedSb);
+  }, []);
 
   // 1) Au boot : lire le cache local pour un rendu instantané.
   useEffect(() => {
     const cd = readCompanyDefault();
     const up = readUserPref();
     const allow = readAllowOverride();
+    const scd = readSidebarCompanyDefault();
+    const sup = readSidebarUserPref();
     setCompanyDefaultState(cd);
     setUserPrefState(up);
     setAllowUserOverrideState(allow);
+    setSidebarCompanyDefaultState(scd);
+    setSidebarUserPrefState(sup);
     const resolved = resolve(cd, up, allow);
+    const resolvedSb = resolveSidebar(scd, sup);
     setCurrent(resolved);
+    setSidebarModel(resolvedSb);
     applyTheme(resolved);
+    applySidebarModel(resolvedSb);
   }, []);
 
   // 2) Dès que /me a répondu, prendre le serveur comme source de vérité.
   useEffect(() => {
     const unsub = useAuthStore.subscribe((state) => {
-      const u = state.user;
-      if (!u || !u.theme) return;
-      const cd = (isValid(u.theme.companyDefault) ? u.theme.companyDefault : DEFAULT_THEME) as ThemeId;
-      const up = (isValid(u.theme.userPref) ? u.theme.userPref : null) as ThemeId | null;
-      const allow = u.theme.allowOverride !== false;
-      setCompanyDefaultState(cd);
-      setUserPrefState(up);
-      setAllowUserOverrideState(allow);
-      writeCache(cd, up, allow);
-      const resolved = resolve(cd, up, allow);
-      setCurrent(resolved);
-      applyTheme(resolved);
+      if (state.user?.theme) syncFromServerTheme(state.user.theme);
     });
-    // Appliquer immédiatement si un user est déjà en mémoire (navigation interne)
     const u = useAuthStore.getState().user;
-    if (u?.theme) {
-      const cd = (isValid(u.theme.companyDefault) ? u.theme.companyDefault : DEFAULT_THEME) as ThemeId;
-      const up = (isValid(u.theme.userPref) ? u.theme.userPref : null) as ThemeId | null;
-      const allow = u.theme.allowOverride !== false;
-      setCompanyDefaultState(cd);
-      setUserPrefState(up);
-      setAllowUserOverrideState(allow);
-      writeCache(cd, up, allow);
-      const resolved = resolve(cd, up, allow);
-      setCurrent(resolved);
-      applyTheme(resolved);
-    }
+    if (u?.theme) syncFromServerTheme(u.theme);
     return () => unsub();
-  }, []);
+  }, [syncFromServerTheme]);
 
   // Multi-onglets
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (![K_COMPANY, K_USER, K_ALLOW].includes(e.key || '')) return;
+      if (![K_COMPANY, K_USER, K_ALLOW, K_SIDEBAR_COMPANY, K_SIDEBAR_USER].includes(e.key || '')) return;
       const cd = readCompanyDefault();
       const up = readUserPref();
       const allow = readAllowOverride();
+      const scd = readSidebarCompanyDefault();
+      const sup = readSidebarUserPref();
       setCompanyDefaultState(cd);
       setUserPrefState(up);
       setAllowUserOverrideState(allow);
+      setSidebarCompanyDefaultState(scd);
+      setSidebarUserPrefState(sup);
       const resolved = resolve(cd, up, allow);
+      const resolvedSb = resolveSidebar(scd, sup);
       setCurrent(resolved);
+      setSidebarModel(resolvedSb);
       applyTheme(resolved);
+      applySidebarModel(resolvedSb);
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -268,47 +386,82 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute('data-theme', resolved);
   }, [companyDefault, userPref, allowUserOverride]);
 
+  const previewSidebarModel = useCallback((id: SidebarModelId | null) => {
+    const resolvedSb = id ?? resolveSidebar(sidebarCompanyDefault, sidebarUserPref);
+    applySidebarModel(resolvedSb);
+  }, [sidebarCompanyDefault, sidebarUserPref]);
+
   const setCompanyDefault = useCallback(async (id: ThemeId) => {
     setIsPending(true);
     try {
       await api.patch('/admin/appearance', { defaultTheme: id });
       setCompanyDefaultState(id);
-      writeCache(id, userPref, allowUserOverride);
+      writeCache(id, userPref, allowUserOverride, sidebarCompanyDefault, sidebarUserPref);
       const resolved = resolve(id, userPref, allowUserOverride);
       setCurrent(resolved);
       applyTheme(resolved);
     } finally {
       setIsPending(false);
     }
-  }, [userPref, allowUserOverride]);
+  }, [userPref, allowUserOverride, sidebarCompanyDefault, sidebarUserPref]);
+
+  const setSidebarCompanyDefault = useCallback(async (id: SidebarModelId) => {
+    setIsPending(true);
+    try {
+      await api.patch('/admin/appearance', { defaultSidebarModel: id });
+      setSidebarCompanyDefaultState(id);
+      writeCache(companyDefault, userPref, allowUserOverride, id, sidebarUserPref);
+      const resolvedSb = resolveSidebar(id, sidebarUserPref);
+      setSidebarModel(resolvedSb);
+      applySidebarModel(resolvedSb);
+    } finally {
+      setIsPending(false);
+    }
+  }, [companyDefault, userPref, allowUserOverride, sidebarUserPref]);
 
   const setUserPref = useCallback(async (id: ThemeId | null) => {
     setIsPending(true);
     try {
-      await api.patch('/auth/me/theme', { theme: id ?? 'reset' });
+      const res = await api.patch('/auth/me/theme', { theme: id ?? 'reset' });
+      if (res.data?.user) useAuthStore.setState({ user: res.data.user });
       setUserPrefState(id);
-      writeCache(companyDefault, id, allowUserOverride);
+      writeCache(companyDefault, id, allowUserOverride, sidebarCompanyDefault, sidebarUserPref);
       const resolved = resolve(companyDefault, id, allowUserOverride);
       setCurrent(resolved);
       applyTheme(resolved);
     } finally {
       setIsPending(false);
     }
-  }, [companyDefault, allowUserOverride]);
+  }, [companyDefault, allowUserOverride, sidebarCompanyDefault, sidebarUserPref]);
+
+  const setSidebarUserPref = useCallback(async (id: SidebarModelId | null) => {
+    setIsPending(true);
+    setSidebarUserPrefState(id);
+    writeCache(companyDefault, userPref, allowUserOverride, sidebarCompanyDefault, id);
+    const resolvedSb = resolveSidebar(sidebarCompanyDefault, id);
+    setSidebarModel(resolvedSb);
+    applySidebarModel(resolvedSb);
+    try {
+      const res = await api.patch('/auth/me/theme', { sidebarModel: id ?? 'reset' });
+      if (res.data?.user) useAuthStore.setState({ user: res.data.user });
+    } finally {
+      setIsPending(false);
+    }
+  }, [companyDefault, userPref, allowUserOverride, sidebarCompanyDefault]);
 
   const setAllowUserOverride = useCallback(async (allow: boolean) => {
     setIsPending(true);
     try {
       await api.patch('/admin/appearance', { allowThemeOverride: allow });
       setAllowUserOverrideState(allow);
-      writeCache(companyDefault, userPref, allow);
+      writeCache(companyDefault, userPref, allow, sidebarCompanyDefault, sidebarUserPref);
       const resolved = resolve(companyDefault, userPref, allow);
       setCurrent(resolved);
       applyTheme(resolved);
     } finally {
       setIsPending(false);
     }
-  }, [companyDefault, userPref]);
+  }, [companyDefault, userPref, sidebarCompanyDefault, sidebarUserPref]);
 
   const value = useMemo<ThemeContextValue>(() => ({
     current,
@@ -322,7 +475,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     previewTheme,
     themes: THEMES,
     previewFor: (id: ThemeId) => THEMES.find((t) => t.id === id),
-  }), [current, companyDefault, userPref, allowUserOverride, isPending, setCompanyDefault, setUserPref, setAllowUserOverride, previewTheme]);
+    sidebarModel,
+    sidebarCompanyDefault,
+    sidebarUserPref,
+    sidebarModels: SIDEBAR_MODELS,
+    setSidebarCompanyDefault,
+    setSidebarUserPref,
+    previewSidebarModel,
+  }), [
+    current,
+    companyDefault,
+    userPref,
+    allowUserOverride,
+    isPending,
+    setCompanyDefault,
+    setUserPref,
+    setAllowUserOverride,
+    previewTheme,
+    sidebarModel,
+    sidebarCompanyDefault,
+    sidebarUserPref,
+    setSidebarCompanyDefault,
+    setSidebarUserPref,
+    previewSidebarModel,
+  ]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
