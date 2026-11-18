@@ -1,6 +1,6 @@
 // Chiffrement symétrique des secrets stockés en base (mots de passe SMTP des entreprises).
 // AES-256-GCM, format : v1:<iv>:<tag>:<texte chiffré> (base64url).
-// La clé vient de MAIL_SECRET_KEY, à défaut dérivée de JWT_SECRET (déjà obligatoire en production).
+// La clé provient de MAIL_SECRET_KEY (>= 32 caractères requis pour enregistrer de nouveaux secrets SMTP en production).
 import crypto from 'crypto';
 import { config } from '../config.js';
 
