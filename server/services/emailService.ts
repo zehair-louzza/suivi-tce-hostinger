@@ -16,11 +16,9 @@ const DEFAULT_SMTP_USER = process.env.SMTP_USER || 'zehair@anelecgroupe.com';
 const DEFAULT_SMTP_PASS = process.env.SMTP_PASS || '';
 export const APP_URL = process.env.APP_URL || 'https://suivi.anelecgroupe.com';
 
-// Supabase Auth Relay fallback (projet officiel ANELEC TCE)
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://qfhxptwsuotqnrihzhxw.supabase.co';
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmaHhwdHdzdW90cW5yaWh6aHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjM0NjgsImV4cCI6MjA4OTUzOTQ2OH0.r83-3B_3e25I2J9u-mN04t2-wF_2t0p_X-p4vH-bI0w';
+// Supabase Auth Relay fallback (uniquement si SUPABASE_URL et SUPABASE_ANON_KEY sont définis)
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim();
+const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || '').trim();
 
 /** Échappe le HTML des valeurs saisies par les utilisateurs avant de les mettre dans un e-mail. */
 export function esc(value: unknown): string {
@@ -448,6 +446,9 @@ async function triggerSupabaseAuthEmailRelay(
   mode: 'signup' | 'recovery' = 'signup'
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return { ok: false, error: 'SUPABASE_URL / SUPABASE_ANON_KEY non configurés' };
+    }
     if (mode === 'recovery') {
       // Les comptes étant stockés dans public.users avec jeton resetToken, Supabase /recover ne peut pas délivrer le lien de réinitialisation.
       return { ok: false, error: 'Relais Supabase Auth non applicable à reset-password' };

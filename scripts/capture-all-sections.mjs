@@ -79,6 +79,11 @@ try {
 
   // Login
   console.log('Logging in as Admin...');
+  const adminEmail = process.env.AUDIT_ADMIN_EMAIL || '';
+  const adminPassword = process.env.AUDIT_ADMIN_PASSWORD || '';
+  if (!adminEmail || !adminPassword) {
+    throw new Error('AUDIT_ADMIN_EMAIL and AUDIT_ADMIN_PASSWORD must be provided in environment.');
+  }
   await cdp.send('Runtime.evaluate', {
     expression: `
       (async () => {
@@ -92,8 +97,8 @@ try {
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
         };
-        setVal(emailInput, 'audit.bot@anelecgroupe.com');
-        setVal(passInput, 'AuditSecure2026!Anelec');
+        setVal(emailInput, ${JSON.stringify(adminEmail)});
+        setVal(passInput, ${JSON.stringify(adminPassword)});
         submitBtn.click();
       })()
     `,

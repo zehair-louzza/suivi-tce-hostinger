@@ -618,10 +618,11 @@ authRouter.post(
       throw new AppError(400, 'Jeton Supabase manquant', 'TOKEN_REQUIRED');
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://qfhxptwsuotqnrihzhxw.supabase.co';
-    const supabaseAnonKey =
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmaHhwdHdzdW90cW5yaWh6aHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjM0NjgsImV4cCI6MjA4OTUzOTQ2OH0.r83-3B_3e25I2J9u-mN04t2-wF_2t0p_X-p4vH-bI0w';
+    const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
+    const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new AppError(503, 'Relais Supabase Auth non configuré (SUPABASE_URL / SUPABASE_ANON_KEY)', 'SUPABASE_NOT_CONFIGURED');
+    }
 
     const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {

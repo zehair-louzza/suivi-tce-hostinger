@@ -45,8 +45,13 @@ async function main() {
     // Tenter de se connecter ou vérifier le formulaire
     if (hasLogin) {
       console.log('Tentative de connexion...');
-      await page.type('input[type="email"], input[name="email"]', 'louzza.zehair@gmail.com');
-      await page.type('input[type="password"], input[name="password"]', 'Anelec2026!');
+      const prodEmail = process.env.PROD_ADMIN_EMAIL || '';
+      const prodPassword = process.env.PROD_ADMIN_PASSWORD || '';
+      if (!prodEmail || !prodPassword) {
+        throw new Error('PROD_ADMIN_EMAIL et PROD_ADMIN_PASSWORD doivent être définis dans l’environnement.');
+      }
+      await page.type('input[type="email"], input[name="email"]', prodEmail);
+      await page.type('input[type="password"], input[name="password"]', prodPassword);
       const submitBtn = await page.$('button[type="submit"]');
       if (submitBtn) {
         await submitBtn.click();
