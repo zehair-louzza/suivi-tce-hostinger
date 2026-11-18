@@ -4,7 +4,38 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 import { clearGeocodeCache } from '../lib/geocoding';
+import { arreterTempsReel } from '../lib/realtime';
 import { User } from '../../../shared/types';
+
+function clearClientSessionArtifacts() {
+  try {
+    sessionStorage.removeItem('anelec_oauth_hash');
+    sessionStorage.removeItem('anelec_google_credential');
+    sessionStorage.removeItem('anelec_google_profile');
+    sessionStorage.removeItem('anelec_google_oauth_tx');
+    sessionStorage.removeItem('pending_google_company_name');
+    sessionStorage.removeItem('pending_google_siret');
+    sessionStorage.removeItem('pending_google_terms');
+  } catch {
+    // ignore storage errors
+  }
+  try {
+    localStorage.removeItem('anelec_allow_direct_devis_billing');
+    localStorage.removeItem('anelec_sidebar_collapsed');
+  } catch {
+    // ignore storage errors
+  }
+  try {
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage('CLEAR_AUTH_CACHES');
+    }
+  } catch {
+    // ignore sw errors
+  }
+  arreterTempsReel();
+  queryClient.clear();
+  clearGeocodeCache();
+}
 import { Fragment } from 'react';
 
 interface AuthState {
@@ -194,6 +225,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
           });
+          clearClientSessionArtifacts();
         }
       },
 
@@ -257,7 +289,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     // Si l'URL contient un retour OAuth Google (#id_token / #access_token) ou confirmation Supabase (#type=signup),
-    // on sauvegarde le hash en sessionStorage et on déverrouille immédiatement l'affichage de LoginPage
+    // ne jamais écraser une session déjà authentifiée (protection Login CSRF).
     if (
       typeof window !== 'undefined' &&
       window.location.hash &&
@@ -265,13 +297,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.location.hash.includes('access_token=') ||
         window.location.hash.includes('type=signup'))
     ) {
-      try {
-        sessionStorage.setItem('anelec_oauth_hash', window.location.hash.substring(1));
-      } catch {
-        // ignore storage error
+      const currentState = useAuthStore.getState();
+      if (currentState.isAuthenticated || Boolean(currentState.accessToken)) {
+        try {
+          sessionStorage.removeItem('anelec_oauth_hash');
+        } catch {
+          // ignore storage error
+        }
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } else {
+        try {
+          sessionStorage.setItem('anelec_oauth_hash', window.location.hash.substring(1));
+        } catch {
+          // ignore storage error
+        }
+        useAuthStore.setState({ isLoading: false, isAuthenticated: false });
+        return;
       }
-      useAuthStore.setState({ isLoading: false, isAuthenticated: false });
-      return;
     }
 
     // Sécurité globale anti-blocage (ex: réseau lent, transition d'état)
@@ -323,6 +365,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [isAuthenticated]);
 
+  // Synchronisation inter-onglets : si un autre onglet se déconnecte ou change de compte/société, on répercute aussitôt
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'auth-storage') return;
+      try {
+        if (!e.newValue) {
+          useAuthStore.setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+          clearClientSessionArtifacts();
+          return;
+        }
+        const parsed = JSON.parse(e.newValue);
+        const nextState = parsed?.state;
+        if (!nextState?.isAuthenticated || !nextState?.accessToken) {
+          useAuthStore.setState({ user: null, accessToken: null, isAuthenticated: false, isLoading: false });
+          clearClientSessionArtifacts();
+          return;
+        }
+        const curIdentity = identityOf(useAuthStore.getState().user);
+        const nextIdentity = identityOf(nextState.user);
+        if (nextIdentity !== curIdentity || nextState.accessToken !== useAuthStore.getState().accessToken) {
+          useAuthStore.setState({
+            user: nextState.user ?? null,
+            accessToken: nextState.accessToken ?? null,
+            isAuthenticated: Boolean(nextState.isAuthenticated),
+            isLoading: false,
+          });
+        }
+      } catch {
+        // ignore malformed cross-tab storage event
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   return <Fragment>{children}</Fragment>;
 }
 
@@ -332,8 +409,7 @@ export function useAuth() {
 }
 
 // Isolation entre entreprises sur un même appareil : dès que l'identité connectée change
-// (déconnexion, autre compte, autre entreprise), on vide toutes les données en cache.
-// Un utilisateur qui se connecte ensuite ne peut jamais voir, même brièvement, celles du précédent.
+// (déconnexion, autre compte, autre entreprise), on vide toutes les données en cache et coupe le temps réel.
 const identityOf = (u: { id?: number; companyId?: number | null } | null | undefined) =>
   u ? `${u.id ?? ''}:${u.companyId ?? ''}` : null;
 
@@ -342,6 +418,5 @@ useAuthStore.subscribe((state) => {
   const identity = identityOf(state.user);
   if (identity === lastIdentity) return;
   lastIdentity = identity;
-  queryClient.clear();
-  clearGeocodeCache();
+  clearClientSessionArtifacts();
 });

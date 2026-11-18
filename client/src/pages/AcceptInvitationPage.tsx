@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { authApi } from '../lib/api';
+import { arreterTempsReel } from '../lib/realtime';
 import { useAuthStore } from '../stores/authStore';
 import { PasswordRules } from '../components/PasswordRules';
 import { validatePassword, ACCOUNT_RULES_TEXT } from '../../../shared/passwordPolicy';
@@ -15,13 +16,23 @@ type InvitationInfo = {
 };
 
 /**
- * Page publique d'acceptation d'une invitation : /invitation?token=...
+ * Page publique d'acceptation d'une invitation : /invitation#token=... (ou ?token=... historique).
  * L'adresse e-mail et l'entreprise viennent de l'invitation (non modifiables).
  */
 export function AcceptInvitationPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const token = params.get('token') || '';
+  const [token] = useState(() => {
+    const hashRaw = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
+    const hashParams = new URLSearchParams(hashRaw);
+    return hashParams.get('token') || params.get('token') || '';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window.location.hash || window.location.search)) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const [info, setInfo] = useState<InvitationInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +75,7 @@ export function AcceptInvitationPage() {
     setSubmitting(true);
     try {
       const res = await authApi.acceptInvitation({ token, name: name.trim(), password, acceptTerms: true });
+      arreterTempsReel();
       useAuthStore.setState({
         user: res.data.user,
         accessToken: res.data.accessToken,

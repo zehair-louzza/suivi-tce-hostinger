@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProGlyph } from './ProIcons';
+import { safeImageSrc } from '../lib/companyHQ';
 
 export interface PhotoItem {
   id: string;
@@ -52,10 +53,13 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
     setZoom(1);
   };
 
+  const safeCurrentUrl = safeImageSrc(currentPhoto.url);
+
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!safeCurrentUrl) return;
     const link = document.createElement('a');
-    link.href = currentPhoto.url;
+    link.href = safeCurrentUrl;
     link.download = `photo-terrain-${currentPhoto.category || 'anelec'}-${currentPhoto.id}.jpg`;
     document.body.appendChild(link);
     link.click();
@@ -225,7 +229,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
         )}
 
         <img
-          src={currentPhoto.url}
+          src={safeCurrentUrl || ''}
           alt={currentPhoto.caption || 'Photo'}
           onClick={(e) => e.stopPropagation()}
           style={{
@@ -302,7 +306,7 @@ export function PhotoLightbox({ photos, initialIndex = 0, onClose }: PhotoLightb
               }}
             >
               <img
-                src={ph.url}
+                src={safeImageSrc(ph.url) || ''}
                 alt=""
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

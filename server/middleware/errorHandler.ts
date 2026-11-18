@@ -37,17 +37,29 @@ export function errorHandler(
   }
 
   // Prisma errors
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === 'P2002') {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError ||
+    (err instanceof Error &&
+      err.name === 'PrismaClientKnownRequestError' &&
+      typeof (err as { code?: unknown }).code === 'string')
+  ) {
+    const prismaCode = (err as { code?: string }).code;
+    if (prismaCode === 'P2002') {
       return res.status(409).json({
         error: 'Conflit : cette entrée existe déjà',
         code: 'DUPLICATE_ENTRY',
       });
     }
-    if (err.code === 'P2025') {
+    if (prismaCode === 'P2025') {
       return res.status(404).json({
         error: 'Ressource non trouvée',
         code: 'NOT_FOUND',
+      });
+    }
+    if (prismaCode === 'P2003') {
+      return res.status(409).json({
+        error: 'Suppression impossible : des éléments dépendants sont encore rattachés à cette ressource',
+        code: 'FOREIGN_KEY_CONSTRAINT',
       });
     }
   }

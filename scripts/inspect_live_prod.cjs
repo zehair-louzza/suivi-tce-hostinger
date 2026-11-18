@@ -2,9 +2,20 @@ const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
 
-const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const artifactDir = 'C:\\Users\\Zeh\\.gemini\\antigravity\\brain\\d2fd77b6-f5a7-44a6-956a-412bdfedd8dd';
+const chromePath =
+  process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const artifactDir = process.env.ARTIFACT_DIR || path.resolve(process.cwd(), 'reports');
 const screenDir = path.join(artifactDir, 'live_production_inspection');
+const appUrl = process.env.APP_URL || 'https://suivi.anelecgroupe.com/';
+const auditEmail = process.env.ANELEC_AUDIT_EMAIL;
+const auditPassword = process.env.ANELEC_AUDIT_PASSWORD;
+
+if (!auditEmail || !auditPassword) {
+  console.error(
+    'Variables ANELEC_AUDIT_EMAIL et ANELEC_AUDIT_PASSWORD requises pour exécuter inspect_live_prod.cjs.'
+  );
+  process.exit(1);
+}
 
 if (!fs.existsSync(screenDir)) fs.mkdirSync(screenDir, { recursive: true });
 
@@ -32,7 +43,7 @@ async function main() {
 
   try {
     console.log('1. Navigation vers la page d’accueil / login...');
-    await page.goto('https://suivi.anelecgroupe.com/', { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.goto(appUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     await page.screenshot({ path: path.join(screenDir, '01-prod-home.png') });
 
     const currentUrl = page.url();
@@ -45,8 +56,8 @@ async function main() {
     // Tenter de se connecter ou vérifier le formulaire
     if (hasLogin) {
       console.log('Tentative de connexion...');
-      await page.type('input[type="email"], input[name="email"]', 'louzza.zehair@gmail.com');
-      await page.type('input[type="password"], input[name="password"]', 'Anelec2026!');
+      await page.type('input[type="email"], input[name="email"]', auditEmail);
+      await page.type('input[type="password"], input[name="password"]', auditPassword);
       const submitBtn = await page.$('button[type="submit"]');
       if (submitBtn) {
         await submitBtn.click();

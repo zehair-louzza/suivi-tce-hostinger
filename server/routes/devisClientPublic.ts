@@ -78,6 +78,8 @@ devisClientPublicRouter.get(
     if (!lien || !lien.documentId) throw LIEN_INVALIDE;
     const etat = etatLien(lien);
     if (etat === 'revoque' || etat === 'expire') throw LIEN_INVALIDE;
+    const company = await db.company.findUnique({ where: { id: lien.companyId }, select: { active: true } });
+    if (!company || company.active === false) throw LIEN_INVALIDE;
     const doc = await db.devisDocument.findFirst({ where: { id: lien.documentId, companyId: lien.companyId, devisId: lien.devisId } });
     if (!doc) throw LIEN_INVALIDE;
     res.setHeader('Content-Type', 'application/pdf');

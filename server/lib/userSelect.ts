@@ -25,6 +25,7 @@ import { prisma } from './prisma.js';
 let themeColumnsAvailable = true;
 let phoneColumnAvailable = true;
 let sidebarColumnsAvailable = true;
+let tokenVersionColumnAvailable = true;
 
 export function areThemeColumnsAvailable(): boolean {
   return themeColumnsAvailable;
@@ -42,6 +43,15 @@ export function isMissingSchemaError(e: unknown): boolean {
   );
 }
 
+/** Vérifie si l'erreur Prisma mentionne explicitement l'une des colonnes ciblées. */
+export function missingSchemaMentionsColumn(e: unknown, columns: string[]): boolean {
+  if (!isMissingSchemaError(e)) return false;
+  const prismaErr = e as Prisma.PrismaClientKnownRequestError;
+  const metaCol = typeof prismaErr.meta?.column === 'string' ? prismaErr.meta.column : '';
+  const haystack = `${metaCol} ${prismaErr.message || ''}`.toLowerCase();
+  return columns.some((col) => haystack.includes(col.toLowerCase()));
+}
+
 export interface AuthUserRow {
   id: number;
   email: string;
@@ -52,6 +62,8 @@ export interface AuthUserRow {
   permissionsJson: string | null;
   active: boolean;
   emailConfirmed: boolean;
+  tokenVersion?: number;
+  confirmationToken?: string | null;
   companyId: number | null;
   createdAt: Date;
   password?: string;
@@ -60,6 +72,7 @@ export interface AuthUserRow {
   company?: {
     id: number;
     name: string;
+    active?: boolean;
     siret: string | null;
     siren: string | null;
     defaultTheme?: string | null;
@@ -87,6 +100,7 @@ export const basePublicUserSelect = {
     select: {
       id: true,
       name: true,
+      active: true,
       siret: true,
       siren: true,
       siegeAdresse: true,
@@ -103,6 +117,7 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
   const companySelect: Record<string, boolean> = {
     id: true,
     name: true,
+    active: true,
     siret: true,
     siren: true,
     siegeAdresse: true,
@@ -130,6 +145,7 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
     company: { select: companySelect },
     createdAt: true,
   };
+  if (tokenVersionColumnAvailable) select.tokenVersion = true;
   if (phoneColumnAvailable) select.phone = true;
   if (themeColumnsAvailable) select.themePref = true;
   if (sidebarColumnsAvailable) select.sidebarModelPref = true;
@@ -138,40 +154,64 @@ function buildSelect(opts: SelectOpts = {}): Prisma.UserSelect {
 }
 
 async function withThemeFallback<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (e) {
-    if (sidebarColumnsAvailable && isMissingSchemaError(e)) {
-      sidebarColumnsAvailable = false;
-      console.warn(
-        '[auth] Colonnes de modèle de menu latéral absentes — repli activé. Exécutez `prisma migrate deploy` pour activer la synchro BDD.'
-      );
-      try {
-        return await run();
-      } catch (e2) {
-        if ((themeColumnsAvailable || phoneColumnAvailable) && isMissingSchemaError(e2)) {
-          themeColumnsAvailable = false;
-          phoneColumnAvailable = false;
-          console.warn(
-            "[auth] Colonnes optionnelles (thème/téléphone) absentes de la base — repli activé. " +
-              'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
-          );
-          return await run();
-        }
-        throw e2;
-      }
-    }
-    if ((themeColumnsAvailable || phoneColumnAvailable) && isMissingSchemaError(e)) {
-      themeColumnsAvailable = false;
-      phoneColumnAvailable = false;
-      console.warn(
-        "[auth] Colonnes optionnelles (thème/téléphone) absentes de la base — repli activé. " +
-          'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
-      );
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
       return await run();
+    } catch (e) {
+      if (!isMissingSchemaError(e)) throw e;
+
+      if (tokenVersionColumnAvailable && missingSchemaMentionsColumn(e, ['tokenversion'])) {
+        tokenVersionColumnAvailable = false;
+        console.warn(
+          '[auth] Colonne tokenVersion absente — révocation globale dégradée. Exécutez `prisma migrate deploy`.'
+        );
+        continue;
+      }
+      if (sidebarColumnsAvailable && missingSchemaMentionsColumn(e, ['sidebarmodelpref', 'defaultsidebarmodel'])) {
+        sidebarColumnsAvailable = false;
+        console.warn(
+          '[auth] Colonnes de modèle de menu latéral absentes — repli activé. Exécutez `prisma migrate deploy` pour activer la synchro BDD.'
+        );
+        continue;
+      }
+      if (phoneColumnAvailable && missingSchemaMentionsColumn(e, ['phone'])) {
+        phoneColumnAvailable = false;
+        console.warn('[auth] Colonne phone absente de la base — repli activé.');
+        continue;
+      }
+      if (
+        themeColumnsAvailable &&
+        missingSchemaMentionsColumn(e, ['themepref', 'defaulttheme', 'allowthemeoverride', 'accueilmafile'])
+      ) {
+        themeColumnsAvailable = false;
+        console.warn(
+          "[auth] Colonnes optionnelles de thème absentes de la base — repli activé. " +
+            'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
+        );
+        continue;
+      }
+
+      // Repli sans jamais désactiver tokenVersion sur une erreur ambiguë
+      if (sidebarColumnsAvailable) {
+        sidebarColumnsAvailable = false;
+        console.warn(
+          '[auth] Colonnes de modèle de menu latéral absentes — repli activé. Exécutez `prisma migrate deploy` pour activer la synchro BDD.'
+        );
+        continue;
+      }
+      if (themeColumnsAvailable || phoneColumnAvailable) {
+        themeColumnsAvailable = false;
+        phoneColumnAvailable = false;
+        console.warn(
+          "[auth] Colonnes optionnelles (thème/téléphone) absentes de la base — repli activé. " +
+            'Exécutez `prisma migrate deploy` pour synchroniser le schéma.'
+        );
+        continue;
+      }
+      throw e;
     }
-    throw e;
   }
+  return await run();
 }
 
 /** Lecture résiliente d'un utilisateur unique (clé unique). */

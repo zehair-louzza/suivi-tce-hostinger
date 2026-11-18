@@ -1,17 +1,29 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-const OUT_DIR = 'C:\\Users\\Zeh\\suivi-tce-hostinger\\docs\\images';
+const AUDIT_EMAIL = process.env.ANELEC_AUDIT_EMAIL;
+const AUDIT_PASSWORD = process.env.ANELEC_AUDIT_PASSWORD;
+if (!AUDIT_EMAIL || !AUDIT_PASSWORD) {
+  console.error(
+    'Variables ANELEC_AUDIT_EMAIL et ANELEC_AUDIT_PASSWORD requises pour exécuter capture-all-sections.mjs.'
+  );
+  process.exit(1);
+}
+
+const CHROME_PATH =
+  process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const OUT_DIR = process.env.OUT_DIR || path.resolve(process.cwd(), 'docs', 'images');
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const chrome = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', [
+const chrome = spawn(CHROME_PATH, [
   '--headless=new',
   '--remote-debugging-port=9222',
   '--disable-gpu',
   '--no-first-run',
   '--window-size=1440,900',
-  '--user-data-dir=C:\\Users\\Zeh\\AppData\\Local\\Temp\\chrome-inspect-all-profile'
+  `--user-data-dir=${path.join(os.tmpdir(), 'chrome-inspect-all-profile')}`,
 ]);
 
 await new Promise(r => setTimeout(r, 1500));
@@ -92,8 +104,8 @@ try {
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
         };
-        setVal(emailInput, 'audit.bot@anelecgroupe.com');
-        setVal(passInput, 'AuditSecure2026!Anelec');
+        setVal(emailInput, ${JSON.stringify(AUDIT_EMAIL)});
+        setVal(passInput, ${JSON.stringify(AUDIT_PASSWORD)});
         submitBtn.click();
       })()
     `,

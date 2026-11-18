@@ -69,9 +69,9 @@ export async function resolveInterventionDossier(
 }
 
 /** Si le devis lié n'a pas encore de DI, il hérite de celui de l'intervention. */
-export async function pushDIToDevis(devis: { id: number; numeroDI?: string | null } | null, di: string | null) {
+export async function pushDIToDevis(devis: { id: number; numeroDI?: string | null } | null, di: string | null, tx: any = prisma) {
   if (!devis || !di || devis.numeroDI) return;
-  await prisma.devis.update({ where: { id: devis.id }, data: { numeroDI: di } });
+  await tx.devis.update({ where: { id: devis.id }, data: { numeroDI: di } });
 }
 
 /**
@@ -83,14 +83,15 @@ export async function pushDIToDevis(devis: { id: number; numeroDI?: string | nul
  */
 export async function syncDevisDossier(
   devis: { id: number; numeroDI?: string | null; referenceMetier?: string | null; client?: string | null },
-  companyId: number
+  companyId: number,
+  tx: any = prisma
 ) {
   const di = devis.numeroDI || null;
   if (!di) return;
   const ref = devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}`;
 
   // 1. Interventions orphelines portant ce DI : rattachées seulement si le client correspond
-  const orphelines = await prisma.intervention.findMany({
+  const orphelines = await tx.intervention.findMany({
     where: { companyId, numeroDI: di, devisId: null },
     select: { id: true, client: true },
   });
@@ -100,20 +101,20 @@ export async function syncDevisDossier(
     )
     .map((i: { id: number }) => i.id);
   if (aRattacher.length > 0) {
-    await prisma.intervention.updateMany({
+    await tx.intervention.updateMany({
       where: { id: { in: aRattacher }, companyId },
       data: { devisId: devis.id, origineDevisId: devis.id, refDevisTexte: ref },
     });
   }
 
   // 2. Interventions déjà liées à ce devis : elles reprennent son DI
-  const liees = await prisma.intervention.findMany({
+  const liees = await tx.intervention.findMany({
     where: { companyId, devisId: devis.id },
     select: { id: true, numeroDI: true },
   });
   const aAligner = liees.filter((i: { numeroDI: string | null }) => i.numeroDI !== di).map((i: { id: number }) => i.id);
   if (aAligner.length > 0) {
-    await prisma.intervention.updateMany({
+    await tx.intervention.updateMany({
       where: { id: { in: aAligner }, companyId },
       data: { numeroDI: di },
     });

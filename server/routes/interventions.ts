@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { nextCompanyRef } from '../lib/companySeq.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadIntervention, describeRefusal, limitInterventionBody, shapeIntervention } from '../lib/access.js';
+import { canReadDevis, canReadIntervention, coercePagination, describeRefusal, limitInterventionBody, shapeIntervention } from '../lib/access.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -36,6 +36,7 @@ import {
 import { sanitizeAndOptimizePhotosJson } from '../lib/terrainPhotos.js';
 import { validerPdf } from '../domain/devisClient.js';
 import { preparerPdfDeposeCompresse } from '../services/pdfCompression.js';
+import { assertDocumentStorageQuota } from '../lib/storageQuotas.js';
 import {
   STATUT_RESERVES,
   STATUT_VALIDE_CLIENT,
@@ -294,8 +295,7 @@ interventionRouter.get(
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || '';
     const technicienParam = (req.query.technicien as string) || '';
-    const page = parseInt(req.query.page as string, 10) || 1;
-    const limit = parseInt(req.query.limit as string, 10) || 300;
+    const { page, limit } = coercePagination(req.query.page, req.query.limit, 300, 300);
     const companyId = requireCompanyId(req.user?.companyId);
 
     const acc = await loadAccess(req);
@@ -353,15 +353,33 @@ interventionRouter.get(
       }
     }
 
-    const [items, total] = await Promise.all([
-      prisma.intervention.findMany({
-        where,
-        orderBy: [{ datePlanifiee: 'asc' }, { createdAt: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.intervention.count({ where }),
-    ]);
+    const MAX_SCOPED_SCAN = 1000;
+    const [rawItems, rawTotal] = acc.isFieldOnly
+      ? [
+          await prisma.intervention.findMany({
+            where,
+            orderBy: [{ datePlanifiee: 'asc' }, { createdAt: 'desc' }],
+            take: Math.min(page * limit + 200, MAX_SCOPED_SCAN),
+          }),
+          0,
+        ]
+      : await Promise.all([
+          prisma.intervention.findMany({
+            where,
+            orderBy: [{ datePlanifiee: 'asc' }, { createdAt: 'desc' }],
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          prisma.intervention.count({ where }),
+        ]);
+
+    const scopedItems = acc.isFieldOnly
+      ? rawItems.filter((row: any) => canReadIntervention(acc, row))
+      : rawItems;
+    const total = acc.isFieldOnly ? scopedItems.length : rawTotal;
+    const items = acc.isFieldOnly
+      ? scopedItems.slice((page - 1) * limit, page * limit)
+      : scopedItems;
 
     // Chaque rôle ne reçoit que ses champs (montants, facturation, historique interne retirés selon le rôle)
     let transformed = items.map((row: any) => shapeIntervention(acc, transformIntervention(row)) as any);
@@ -393,7 +411,10 @@ interventionRouter.get(
       throw new AppError(403, 'Statistiques non accessibles avec votre profil', 'FORBIDDEN');
     }
     const companyId = acc.companyId;
-    const items = await prisma.intervention.findMany({ where: { companyId } });
+    const allItems = await prisma.intervention.findMany({ where: { companyId } });
+    const items = acc.linkedOnly
+      ? allItems.filter((row: any) => canReadIntervention(acc, row))
+      : allItems;
     const transformed = items.map(transformIntervention);
 
     const result: Record<string, number> = {
@@ -406,7 +427,7 @@ interventionRouter.get(
       interventionsBloquees: 0,
       interventionsCloturees: 0,
       aPlanifier: 0,
-      nonFactureesCloturees: 0,
+      ...(acc.canSeeBilling ? { nonFactureesCloturees: 0 } : {}),
     };
 
     for (const i of transformed) {
@@ -422,7 +443,7 @@ interventionRouter.get(
       }
       if (i.statutOperationnel === 'Clôturée') {
         result.interventionsCloturees += 1;
-        if (!i.isVisiteDevis && i.statutFacture !== 'Facturée') {
+        if (acc.canSeeBilling && !i.isVisiteDevis && i.statutFacture !== 'Facturée') {
           result.nonFactureesCloturees += 1;
         }
       }
@@ -463,23 +484,48 @@ interventionRouter.post(
     const userId = req.user!.userId;
     const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
-    const b = req.body || {};
+    const rawBody = req.body || {};
 
     // Contrôle d'accès : direction, planificateur, chargé d'études (visites de chiffrage uniquement)
     const acc = await loadAccess(req);
     const wantsVisite = Boolean(
-      b.isVisiteDevis === true || b.isVisiteDevis === 'true' || b.typeIntervention === 'Visite technique devis'
+      rawBody.isVisiteDevis !== false &&
+        rawBody.isVisiteDevis !== 'false' &&
+        (rawBody.isVisiteDevis === true ||
+          rawBody.isVisiteDevis === 'true' ||
+          rawBody.typeIntervention === 'Visite technique devis')
     );
     if (acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin && !wantsVisite) {
       throw new AppError(403, 'Votre profil ne crée que des visites de chiffrage', 'FORBIDDEN');
     }
 
+    refuserStatutClient(rawBody.statutRapport, null);
+    const limited = limitInterventionBody(acc, rawBody, { isVisiteDevis: wantsVisite });
+    if (limited.dropped.length > 0 && Object.keys(limited.clean).length === 0) {
+      const refusal = describeRefusal('intervention', limited.dropped);
+      throw new AppError(403, refusal.message, 'FIELD_FORBIDDEN', refusal.parts);
+    }
+    const b = limited.clean;
+    const refusalNotice = limited.dropped.length > 0 ? describeRefusal('intervention', limited.dropped).message : undefined;
+    if (b.amount !== undefined) {
+      const parsedAmount = parseOptionalFloat(b.amount);
+      if (parsedAmount !== null && parsedAmount < 0) {
+        throw new AppError(400, 'Le montant ne peut pas être négatif', 'VALIDATION_ERROR');
+      }
+    }
+
     const chantier = String(b.chantier || b.siteAdresse || b.site || b.client || 'Site à préciser').trim();
-    const isVisiteDevis = Boolean(
-      b.isVisiteDevis === true ||
-        b.isVisiteDevis === 'true' ||
-        b.typeIntervention === 'Visite technique devis'
-    );
+    const isVisiteDevis =
+      acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin
+        ? true
+        : Boolean(
+            b.isVisiteDevis === true ||
+              b.isVisiteDevis === 'true' ||
+              b.typeIntervention === 'Visite technique devis'
+          );
+    if (acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin && !isVisiteDevis) {
+      throw new AppError(403, 'Votre profil ne crée que des visites de chiffrage', 'FORBIDDEN');
+    }
     const explicitDatePlan = parseDateOrNull(b.datePlanifiee);
     const tech = b.entreprise || b.technicien || null;
     const autoIntv = applyInterventionAutomations({
@@ -514,6 +560,12 @@ interventionRouter.post(
     );
 
     const requestedDevisId = await assertOwnDevisId(b.devisId ?? b.origineDevisId, companyId);
+    if (requestedDevisId) {
+      const targetDevis = await prisma.devis.findFirst({ where: { id: requestedDevisId, companyId } });
+      if (!targetDevis || !canReadDevis(acc, targetDevis)) {
+        throw new AppError(404, 'Devis lié introuvable', 'NOT_FOUND');
+      }
+    }
     // Le numéro de DI est la clé de suivi du dossier : il rattache l'intervention au devis qui le porte
     const dossier = await resolveInterventionDossier(companyId, {
       numeroDI: normalizeDI(b.numeroDI),
@@ -535,7 +587,10 @@ interventionRouter.post(
         siteAdresse: chantier,
         objet: b.objet ? String(b.objet).trim() : null,
         origine: b.origine || "Donneur d'ordre",
-        typeIntervention: b.typeIntervention || (isVisiteDevis ? 'Visite technique devis' : 'Corrective'),
+        typeIntervention:
+          acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin
+            ? 'Visite technique devis'
+            : (b.typeIntervention || (isVisiteDevis ? 'Visite technique devis' : 'Corrective')),
         modePlanification,
         corpsEtat: b.corpsEtat || 'Tous corps d’état',
         priorite: b.priorite || 'Normale',
@@ -604,6 +659,7 @@ interventionRouter.post(
 
     res.status(201).json({
       data: shapeIntervention(acc, transformed),
+      notice: refusalNotice,
       message: 'Intervention créée avec succès',
     });
   })
@@ -663,7 +719,22 @@ interventionRouter.post(
         version: { increment: 1 },
       };
     }
-    const updated: any = await prisma.intervention.update({ where: { id }, data });
+    const updated: any = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.intervention.updateMany({
+        where: {
+          id,
+          companyId,
+          reponseTechnicien: 'EN_ATTENTE',
+          ...(typeof (existing as any).version === 'number' ? { version: (existing as any).version } : {}),
+          ...(existing.entreprise ? { entreprise: existing.entreprise } : {}),
+        },
+        data,
+      });
+      if (claimed.count !== 1) {
+        throw new AppError(409, 'Cette mission n\'attend plus de réponse de votre part.', 'NO_PENDING_RESPONSE');
+      }
+      return tx.intervention.findFirst({ where: { id, companyId } });
+    });
 
     let remplacants: string[] = [];
     if (reponse === 'REFUSEE') {
@@ -719,6 +790,68 @@ interventionRouter.patch(
     const b = limited.clean;
     const refusalNotice = limited.dropped.length > 0 ? describeRefusal('intervention', limited.dropped).message : undefined;
 
+    const dejaValideClient = String(existing.statutRapport || '') === STATUT_VALIDE_CLIENT;
+    const modifyingStatut = b.statutRapport !== undefined && String(b.statutRapport || '') !== String(existing.statutRapport || '');
+    if (dejaValideClient && modifyingStatut) {
+      throw new AppError(409, 'Ce rapport a déjà été validé par le client et ne peut plus être modifié.', 'RAPPORT_VERROUILLE');
+    }
+
+    if (acc.isFieldOnly) {
+      const ALLOWED_TERRAIN_STATUTS = new Set([
+        'Affectée',
+        'Planifiée',
+        'En route',
+        'Sur site',
+        'En cours',
+        'Suspendue',
+        'Reportée',
+        'Bloquée',
+        'En attente',
+        'Terminée - à valider',
+        'Clôturée',
+      ]);
+      const ALLOWED_TERRAIN_TRAITEMENTS = new Set([
+        'À traiter',
+        'En cours de traitement',
+        'En attente client',
+        'En attente fournisseur',
+        'Bloqué',
+        'Traité',
+      ]);
+      if (b.statutOperationnel !== undefined && !ALLOWED_TERRAIN_STATUTS.has(String(b.statutOperationnel))) {
+        throw new AppError(403, 'Statut opérationnel non autorisé pour un profil terrain', 'FORBIDDEN');
+      }
+      const submittedTraitement =
+        b.traitement !== undefined ? b.traitement : b.status ? statusCodeToTraitement(b.status) : undefined;
+      if (submittedTraitement !== undefined && !ALLOWED_TERRAIN_TRAITEMENTS.has(String(submittedTraitement))) {
+        throw new AppError(403, 'Traitement non autorisé pour un profil terrain', 'FORBIDDEN');
+      }
+    }
+
+    if (!acc.isAdmin && !acc.perms.canEditDevis) {
+      const nextDevisIdRaw = b.devisId !== undefined ? (parseInt(String(b.devisId), 10) || null) : undefined;
+      const changingDevisId = nextDevisIdRaw !== undefined && nextDevisIdRaw !== (existing.devisId || null);
+      const changingRefDevis =
+        b.refDevisTexte !== undefined &&
+        String(b.refDevisTexte || '').trim() !== String(existing.refDevisTexte || '').trim();
+      const changingNumeroDI =
+        b.numeroDI !== undefined &&
+        (normalizeDI(b.numeroDI) || null) !== (existing.numeroDI || null);
+      const changingIsVisite =
+        b.isVisiteDevis !== undefined &&
+        Boolean(b.isVisiteDevis === true || b.isVisiteDevis === 'true') !== Boolean(existing.isVisiteDevis);
+      if (changingDevisId || changingRefDevis || changingNumeroDI || changingIsVisite) {
+        throw new AppError(403, 'Permission insuffisante pour modifier le devis rattaché', 'FORBIDDEN');
+      }
+    }
+
+    if (b.amount !== undefined) {
+      const parsedAmt = parseOptionalFloat(b.amount);
+      if (parsedAmt !== null && parsedAmt < 0) {
+        throw new AppError(400, 'Le montant ne peut pas être négatif', 'VALIDATION_ERROR');
+      }
+    }
+
     const changes: string[] = [];
     if (b.entreprise !== undefined && b.entreprise !== existing.entreprise) {
       changes.push(`Technicien : ${existing.entreprise || 'Non affecté'} → ${b.entreprise || 'Non affecté'}`);
@@ -746,12 +879,22 @@ interventionRouter.patch(
         : existing.historiqueJson;
 
     if (b.gpsCloture && typeof b.gpsCloture === 'object') {
+      const canSetOtherGpsTech = acc.isAdmin || (acc.perms.canEditPlanning && acc.role !== 'CHIFFRAGE_DEVIS');
+      const gpsTech =
+        !canSetOtherGpsTech && acc.boundTech
+          ? acc.boundTech
+          : !canSetOtherGpsTech
+            ? auteur
+            : String(b.gpsCloture.technicien || b.entreprise || existing.entreprise || acc.boundTech || auteur).trim().slice(0, 120);
+      const lat = Number(b.gpsCloture.lat);
+      const lng = Number(b.gpsCloture.lng);
+      const rawAcc = b.gpsCloture.accuracy !== undefined && b.gpsCloture.accuracy !== null ? Number(b.gpsCloture.accuracy) : undefined;
       const gpsPayload: GpsPositionPayload = {
-        lat: Number(b.gpsCloture.lat),
-        lng: Number(b.gpsCloture.lng),
-        accuracy: b.gpsCloture.accuracy ? Number(b.gpsCloture.accuracy) : undefined,
+        lat,
+        lng,
+        accuracy: rawAcc !== undefined && Number.isFinite(rawAcc) && rawAcc >= 0 && rawAcc <= 50_000 ? rawAcc : undefined,
         timestamp: b.gpsCloture.timestamp || new Date().toISOString(),
-        technicien: String(b.gpsCloture.technicien || b.entreprise || existing.entreprise || auteur).trim(),
+        technicien: gpsTech,
         missionId: id,
         missionRef: String(b.reference || existing.referenceMetier || `INT-${new Date().getFullYear()}-${String(id).padStart(3, '0')}`),
         chantier: String(b.chantier || existing.chantier || ''),
@@ -759,7 +902,7 @@ interventionRouter.patch(
         statut: 'CLOTUREE',
         source: b.gpsCloture.source || 'GPS_MOBILE',
       };
-      if (!Number.isNaN(gpsPayload.lat) && !Number.isNaN(gpsPayload.lng)) {
+      if (Number.isFinite(lat) && Math.abs(lat) <= 90 && Number.isFinite(lng) && Math.abs(lng) <= 180) {
         historiqueJson = addHistoriqueEvent(
           historiqueJson,
           gpsPayload.technicien,
@@ -896,7 +1039,7 @@ interventionRouter.patch(
     const DONE = ['Terminée - à valider', 'Clôturée'];
     const statutApres =
       b.statutOperationnel !== undefined ? b.statutOperationnel : existing.statutOperationnel;
-    if (DONE.includes(String(statutApres || ''))) {
+    if (DONE.includes(String(statutApres || '')) && !dejaValideClient) {
       const dateApres =
         updateData.dateReelle !== undefined ? updateData.dateReelle : existing.dateReelle;
       if (!dateApres) {
@@ -970,44 +1113,72 @@ interventionRouter.patch(
       }
     }
 
-    const updated = await prisma.intervention.update({
-      where: { id },
-      data: updateData,
+    const reportContentChanged = contenuRapportModifie(existing as any, { ...existing, ...updateData } as any);
+    if (dejaValideClient && (modifyingStatut || reportContentChanged)) {
+      throw new AppError(409, 'Ce rapport a déjà été validé par le client et ne peut plus être modifié.', 'RAPPORT_VERROUILLE');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const casWhere: any = {
+        id,
+        companyId,
+        ...(typeof (existing as any).version === 'number' ? { version: (existing as any).version } : {}),
+      };
+      if (modifyingStatut || reportContentChanged) {
+        casWhere.statutRapport = { not: STATUT_VALIDE_CLIENT };
+      }
+      const lockRes = await tx.intervention.updateMany({
+        where: casWhere,
+        data: updateData,
+      });
+      if (lockRes.count !== 1) {
+        const fresh = await tx.intervention.findFirst({ where: { id, companyId }, select: { statutRapport: true } });
+        if (fresh && String(fresh.statutRapport || '') === STATUT_VALIDE_CLIENT && (modifyingStatut || reportContentChanged)) {
+          throw new AppError(409, 'Ce rapport a déjà été validé par le client et ne peut plus être modifié.', 'RAPPORT_VERROUILLE');
+        }
+        throw new AppError(409, 'Cette intervention vient d’être modifiée : rechargez la fiche avant de réessayer.', 'VERSION_CONFLICT');
+      }
+      const txUpdated = await tx.intervention.findFirst({ where: { id, companyId } });
+      if (!txUpdated) throw new AppError(404, 'Intervention non trouvée', 'NOT_FOUND');
+
+      // Rapport modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué atomiquement
+      if (contenuRapportModifie(existing as any, txUpdated as any)) {
+        const revoques = await revoquerLiensRapportActifs(companyId, id, 'Rapport modifié après envoi', tx);
+        const dejaValide = String(existing.statutRapport || '') === STATUT_VALIDE_CLIENT;
+        if (revoques > 0 || dejaValide) {
+          return tx.intervention.update({
+            where: { id },
+            data: {
+              historiqueJson: ajouterHistorique(
+                txUpdated.historiqueJson,
+                'Automatique',
+                revoques > 0 ? 'Automatique — lien du rapport révoqué' : 'Automatique — rapport modifié après validation du client',
+                revoques > 0
+                  ? "Le rapport a été modifié après son envoi : renvoyez-le au client pour qu'il réponde sur la bonne version"
+                  : 'La version validée par le client n’est plus identique au rapport actuel'
+              ),
+            },
+          });
+        }
+      }
+      return txUpdated;
     });
 
     await pushDIToDevis(patchedDossierDevis, updated.numeroDI || null);
-
-    // Rapport modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué
-    if (contenuRapportModifie(existing as any, updated as any)) {
-      const revoques = await revoquerLiensRapportActifs(companyId, id, 'Rapport modifié après envoi');
-      const dejaValide = String(existing.statutRapport || '') === STATUT_VALIDE_CLIENT;
-      if (revoques > 0 || dejaValide) {
-        await prisma.intervention.update({
-          where: { id },
-          data: {
-            historiqueJson: ajouterHistorique(
-              updated.historiqueJson,
-              'Automatique',
-              revoques > 0 ? 'Automatique — lien du rapport révoqué' : 'Automatique — rapport modifié après validation du client',
-              revoques > 0
-                ? "Le rapport a été modifié après son envoi : renvoyez-le au client pour qu'il réponde sur la bonne version"
-                : 'La version validée par le client n’est plus identique au rapport actuel'
-            ),
-          },
-        });
-      }
-    }
 
     if (nouvelleAffectation) {
       await notifierAffectation(companyId, updated).catch((e) => console.error('Notification affectation :', e?.message));
     }
 
+    const canSyncParentDevis =
+      acc.role !== 'REDACTEUR_RAPPORTS' &&
+      (Boolean(existing.isVisiteDevis && existing.devisId) || acc.isAdmin || acc.perms.canEditDevis);
     const linkedDevisId = updated.devisId || updated.origineDevisId;
-    let parentDevis = linkedDevisId
+    let parentDevis = canSyncParentDevis && linkedDevisId
       ? await prisma.devis.findFirst({ where: { id: linkedDevisId, companyId } })
       : null;
 
-    if (!parentDevis && updated.refDevisTexte) {
+    if (canSyncParentDevis && !parentDevis && (acc.isAdmin || acc.perms.canEditDevis) && updated.refDevisTexte) {
       parentDevis = await prisma.devis.findFirst({
         where: { companyId, referenceMetier: updated.refDevisTexte.trim() },
       });
@@ -1164,29 +1335,36 @@ interventionRouter.post(
   policy('rapports.document'),
   asyncHandler(async (req: Request, res: Response) => {
     const { companyId, intervention } = await interventionPourRapport(req);
+    if (String(intervention.statutRapport || '') === STATUT_VALIDE_CLIENT) {
+      throw new AppError(409, 'Ce rapport a déjà été validé par le client et ne peut plus être modifié.', 'RAPPORT_VERROUILLE');
+    }
     const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64, 'rapport');
     if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
     const auteur = auteurDe(req);
     const pret = await preparerPdfDeposeCompresse(v.octets);
-    const doc = await (prisma as any).rapportDocument.create({
-      data: {
-        companyId, interventionId: intervention.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256,
-        contenu: pret.octets, origine: 'DEPOSE', deposePar: auteur,
-      },
-      select: { id: true, nomFichier: true, taille: true, origine: true, createdAt: true, deposePar: true },
-    });
-    // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
-    const revoques = await revoquerLiensRapportActifs(companyId, intervention.id, 'Nouveau PDF déposé après envoi');
-    await prisma.intervention.update({
-      where: { id: intervention.id },
-      data: {
-        historiqueJson: ajouterHistorique(
-          intervention.historiqueJson,
-          auteur,
-          'PDF du rapport déposé',
-          `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le rapport' : '')
-        ),
-      },
+    const { doc, revoques } = await prisma.$transaction(async (tx: any) => {
+      await assertDocumentStorageQuota(tx, companyId, { interventionId: intervention.id }, pret.octets.length);
+      const txDoc = await tx.rapportDocument.create({
+        data: {
+          companyId, interventionId: intervention.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256,
+          contenu: pret.octets, origine: 'DEPOSE', deposePar: auteur,
+        },
+        select: { id: true, nomFichier: true, taille: true, origine: true, createdAt: true, deposePar: true },
+      });
+      // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
+      const txRevoques = await revoquerLiensRapportActifs(companyId, intervention.id, 'Nouveau PDF déposé après envoi', tx);
+      await tx.intervention.update({
+        where: { id: intervention.id },
+        data: {
+          historiqueJson: ajouterHistorique(
+            intervention.historiqueJson,
+            auteur,
+            'PDF du rapport déposé',
+            `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (txRevoques ? ' • lien client précédent révoqué, renvoyez le rapport' : '')
+          ),
+        },
+      });
+      return { doc: txDoc, revoques: txRevoques };
     });
     res.status(201).json({ data: doc, lienRevoque: revoques > 0, message: 'PDF du rapport enregistré' });
   })
@@ -1296,7 +1474,7 @@ interventionRouter.post(
   '/:id/rapport-envoyer-client',
   policy('rapports.sendClient'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { companyId, intervention } = await interventionPourRapport(req);
+    const { companyId, intervention, acc } = await interventionPourRapport(req);
     if (req.body?.confirme !== true) {
       throw new AppError(400, "Confirmez avoir vérifié le rapport avant de l'envoyer au client.", 'CONFIRMATION_REQUISE');
     }
@@ -1318,7 +1496,7 @@ interventionRouter.post(
       /* temps réel facultatif */
     }
     res.json({
-      data: transformed,
+      data: shapeIntervention(acc, transformed),
       envoyes: r.envoyes,
       echecs: r.echecs,
       message: `Rapport envoyé à ${r.envoyes.join(', ')}` + (r.echecs.length ? ` (échec pour ${r.echecs.join(', ')})` : ''),

@@ -15,7 +15,7 @@ import {
 } from '../lib/geocoding';
 import { Intervention, Devis, GpsPositionPayload, referentielsApi } from '../lib/api';
 import { ProGlyph } from './ProIcons';
-import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
+import { useCompanyHQ, escapeHtml, safeExternalUrl, safeHexColor } from '../lib/companyHQ';
 
 interface TourneeMapOptimizerProps {
   interventions: Intervention[];
@@ -704,8 +704,11 @@ export function TourneeMapOptimizer({
         bounds.extend([tm.coords.lat, tm.coords.lng]);
         hasExtendedBounds = true;
 
-        const initials = tm.technicien.slice(0, 2).toUpperCase();
-        const timeStr = tm.lastTimestamp ? formatTimeFromISO(tm.lastTimestamp) : '';
+        const initials = escapeHtml(tm.technicien.slice(0, 2).toUpperCase());
+        const techEsc = escapeHtml(tm.technicien);
+        const statusColorSafe = safeHexColor(tm.statusColor, '#059669');
+        const progressSafe = Math.max(0, Math.min(100, Number(tm.progressPercent) || 0));
+        const timeStr = tm.lastTimestamp ? escapeHtml(formatTimeFromISO(tm.lastTimestamp)) : '';
 
         const techIcon = L.divIcon({
           className: 'anelec-map-tech-live-pin',
@@ -718,7 +721,7 @@ export function TourneeMapOptimizer({
                 margin-bottom: 3px; display: flex; align-items: center; gap: 4px;
               ">
                 <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;"></span>
-                <span>${tm.technicien} (${tm.completedMissionsCount}/${tm.totalMissionsCount})</span>
+                <span>${techEsc} (${Number(tm.completedMissionsCount) || 0}/${Number(tm.totalMissionsCount) || 0})</span>
               </div>
               <div style="
                 width: 38px; height: 38px; border-radius: 50%;
@@ -741,41 +744,41 @@ export function TourneeMapOptimizer({
           <div style="font-family: inherit; font-size: 12px; line-height: 1.45; min-width: 250px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
               <span style="background: ${color}; color: #fff; padding: 3px 8px; border-radius: 6px; font-weight: 800; font-size: 11.5px;">
-                ${tm.technicien}
+                ${techEsc}
               </span>
               <span style="font-weight: 700; color: #059669; font-size: 11px;">
-                ${tm.sourceLabel}${timeStr ? ` • ${timeStr}` : ''}
+                ${escapeHtml(tm.sourceLabel)}${timeStr ? ` • ${timeStr}` : ''}
               </span>
             </div>
-            <div style="font-weight: 700; font-size: 12px; color: ${tm.statusColor}; margin-bottom: 6px;">
-              ${tm.statusLabel}
+            <div style="font-weight: 700; font-size: 12px; color: ${statusColorSafe}; margin-bottom: 6px;">
+              ${escapeHtml(tm.statusLabel)}
             </div>
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px;">
               <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; margin-bottom: 4px;">
                 <span>Avancement travaux :</span>
-                <span>${tm.completedMissionsCount} / ${tm.totalMissionsCount} terminées (${tm.progressPercent}%)</span>
+                <span>${Number(tm.completedMissionsCount) || 0} / ${Number(tm.totalMissionsCount) || 0} terminées (${progressSafe}%)</span>
               </div>
               <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                <div style="width: ${tm.progressPercent}%; height: 100%; background: #10b981;"></div>
+                <div style="width: ${progressSafe}%; height: 100%; background: #10b981;"></div>
               </div>
             </div>
             ${
               tm.lastCompletedMission
                 ? `<div style="font-size: 11px; color: #047857; margin-bottom: 4px;">
-                    ✓ <strong>Dernière finie :</strong> ${tm.lastCompletedMission.reference} — ${tm.lastCompletedMission.client}
+                    ✓ <strong>Dernière finie :</strong> ${escapeHtml(tm.lastCompletedMission.reference)} — ${escapeHtml(tm.lastCompletedMission.client)}
                    </div>`
                 : ''
             }
             ${
               tm.nextPendingMission
                 ? `<div style="font-size: 11px; color: #0284c7; margin-bottom: 4px;">
-                    → <strong>Prochaine étape :</strong> ${tm.nextPendingMission.reference} (${tm.nextPendingMission.client})
+                    → <strong>Prochaine étape :</strong> ${escapeHtml(tm.nextPendingMission.reference)} (${escapeHtml(tm.nextPendingMission.client)})
                    </div>`
                 : `<div style="font-size: 11px; color: #059669; font-weight: 700;">✓ Toutes les missions affectées sont terminées !</div>`
             }
             <div style="font-size: 10.5px; color: #64748b; margin-top: 4px;">
               Coordonnées GPS : ${tm.coords.lat.toFixed(5)}, ${tm.coords.lng.toFixed(5)}
-              ${tm.accuracy ? ` (±${tm.accuracy}m)` : ''}
+              ${tm.accuracy ? ` (±${Number(tm.accuracy) || 0}m)` : ''}
             </div>
           </div>
         `);
@@ -815,26 +818,26 @@ export function TourneeMapOptimizer({
           <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 230px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
               <span style="background: ${bgColor}; color: #fff; padding: 2px 7px; border-radius: 6px; font-weight: 800; font-size: 11px;">
-                Étape ${stop.sequenceNumber} • ${isDevis ? 'Visite Devis' : 'Restant à faire'}
+                Étape ${Number(stop.sequenceNumber) || 0} • ${isDevis ? 'Visite Devis' : 'Restant à faire'}
               </span>
               <span style="font-weight: 700; color: #64748b; font-size: 11px;">
-                ${stop.heurePrevue}
+                ${escapeHtml(stop.heurePrevue)}
               </span>
             </div>
             <div style="font-weight: 800; font-size: 13.5px; color: #0f172a;">
-              ${stop.client}
+              ${escapeHtml(stop.client)}
             </div>
             <div style="color: #475569; font-size: 11.5px; margin: 3px 0;">
-              ${cleanAddressString(stop.address || stop.chantierOrSite)}
+              ${escapeHtml(cleanAddressString(stop.address || stop.chantierOrSite))}
             </div>
             <div style="color: #059669; font-size: 11px; font-weight: 600; margin-bottom: 8px;">
-              • ${stop.corpsEtat || 'Tous corps d’état'}
+              • ${escapeHtml(stop.corpsEtat || 'Tous corps d’état')}
             </div>
             <div style="display: flex; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 6px;">
-              <a href="${navUrls.googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #00bf63; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
+              <a href="${escapeHtml(safeExternalUrl(navUrls.googleMapsUrl))}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #00bf63; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
                 Google Maps
               </a>
-              <a href="${navUrls.wazeUrl}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #0284c7; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
+              <a href="${escapeHtml(safeExternalUrl(navUrls.wazeUrl))}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background: #0284c7; color: #fff; text-decoration: none; padding: 5px 8px; border-radius: 6px; font-weight: 700; font-size: 11px;">
                 → Waze
               </a>
             </div>
@@ -887,13 +890,13 @@ export function TourneeMapOptimizer({
               ✓ Intervention Terminée & Clôturée
             </div>
             <div style="font-weight: 800; font-size: 13px; color: #0f172a;">
-              ${doneStop.reference} — ${doneStop.client}
+              ${escapeHtml(doneStop.reference)} — ${escapeHtml(doneStop.client)}
             </div>
             <div style="color: #475569; font-size: 11.5px; margin: 3px 0;">
-              ${cleanAddressString(doneStop.address || doneStop.chantierOrSite)}
+              ${escapeHtml(cleanAddressString(doneStop.address || doneStop.chantierOrSite))}
             </div>
             <div style="color: #059669; font-size: 11px; font-weight: 700;">
-              ${doneStop.technicien || 'Technicien'} • Retirée du trajet restant
+              ${escapeHtml(doneStop.technicien || 'Technicien')} • Retirée du trajet restant
             </div>
           </div>
         `);

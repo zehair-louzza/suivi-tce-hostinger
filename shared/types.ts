@@ -29,7 +29,8 @@ export function isPlatformCreatorIdentity(user?: { email?: string | null; phone?
   if (!user) return false;
   const emailMatch = (user.email || '').trim().toLowerCase() === PLATFORM_CREATOR.email;
   const phoneMatch = normaliserTelephoneFr(user.phone) === PLATFORM_CREATOR.phone;
-  return emailMatch || phoneMatch;
+  if ((user.email || '').trim()) return emailMatch;
+  return phoneMatch;
 }
 
 // ============================================================================
@@ -1755,7 +1756,13 @@ export function isPermissionAllowedForRole(role: string | null | undefined, key:
 
 /** Retire d'un jeu de droits ceux que le rôle n'a pas le droit de porter (à l'enregistrement). */
 export function sanitizePermissionsForRole<T extends Partial<UserPermissions>>(role: string | null | undefined, perms: T): T {
-  const forbidden = ROLE_FORBIDDEN_PERMISSIONS[(role || '').toUpperCase()] || [];
+  const normRoleKey = (role || '').trim().toUpperCase();
+  const forbidden: (keyof UserPermissions)[] = Object.prototype.hasOwnProperty.call(
+    ROLE_FORBIDDEN_PERMISSIONS,
+    normRoleKey
+  )
+    ? ROLE_FORBIDDEN_PERMISSIONS[normRoleKey]
+    : (Object.keys(ROLE_DEFINITIONS.ADMIN.defaultPermissions) as (keyof UserPermissions)[]);
   const out: any = { ...perms };
   for (const k of forbidden) if (k in out) out[k] = false;
   return out;
@@ -1771,7 +1778,13 @@ export function getEffectivePermissions(
   customPermissionsJson?: string | null
 ): UserPermissions {
   const merged = mergePermissions(role, customPermissionsJson);
-  const forbidden = ROLE_FORBIDDEN_PERMISSIONS[(role || '').toUpperCase()] || [];
+  const normRoleKey = (role || '').trim().toUpperCase();
+  const forbidden: (keyof UserPermissions)[] = Object.prototype.hasOwnProperty.call(
+    ROLE_FORBIDDEN_PERMISSIONS,
+    normRoleKey
+  )
+    ? ROLE_FORBIDDEN_PERMISSIONS[normRoleKey]
+    : (Object.keys(ROLE_DEFINITIONS.ADMIN.defaultPermissions) as (keyof UserPermissions)[]);
   for (const k of forbidden) (merged as any)[k] = false;
   return merged;
 }
@@ -1780,7 +1793,25 @@ function mergePermissions(
   role?: string | null,
   customPermissionsJson?: string | null
 ): UserPermissions {
-  const normRole = (role || 'USER').toUpperCase();
+  const emptyPerms: UserPermissions = {
+    canManageUsers: false,
+    canManageReferentiels: false,
+    canEditDevis: false,
+    canViewFinancials: false,
+    canConvertDevis: false,
+    canEditPlanning: false,
+    canEditInterventions: false,
+    canWriteReports: false,
+    canManageBilling: false,
+    canDeleteRecords: false,
+    canApproveRemoteClockIn: false,
+    canAccessMobileTech: false,
+    mobileOnly: false,
+  };
+  const normRole = (role || '').trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(ROLE_DEFINITIONS, normRole)) {
+    return emptyPerms;
+  }
   const base =
     ROLE_DEFINITIONS[normRole]?.defaultPermissions ||
     (normRole === 'ADMIN'
@@ -1792,7 +1823,14 @@ function mergePermissions(
   if (!customPermissionsJson) return { ...base };
   try {
     const parsed = JSON.parse(customPermissionsJson);
-    return { ...base, ...parsed };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...base };
+    const merged: Record<string, boolean> = { ...base };
+    for (const k of Object.keys(emptyPerms)) {
+      if (typeof (parsed as Record<string, unknown>)[k] === 'boolean') {
+        merged[k] = (parsed as Record<string, boolean>)[k];
+      }
+    }
+    return merged as unknown as UserPermissions;
   } catch {
     return { ...base };
   }

@@ -11,6 +11,7 @@ import { requireCompanyId } from '../lib/tenant.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { normaliserDelai, normaliserDelaiAlerte } from '../domain/technicianResponse.js';
 import { basePublicUserSelect, findUserInCompany, isMissingSchemaError } from '../lib/userSelect.js';
+import { disconnectUserSockets } from '../socket/index.js';
 import { CLOCK_IN_PERIMETER_METERS, PLATFORM_CREATOR, ROLE_DEFINITIONS, getEffectivePermissions, haversineDistanceMeters, isKnownRole, isPlatformCreatorIdentity, sanitizePermissionsForRole } from '../../shared/types.js';
 import {
   APP_URL,
@@ -68,15 +69,15 @@ async function getCallerUser(req: Request) {
   if (!u || u.active === false) {
     throw new AppError(403, 'Compte désactivé ou inexistant', 'FORBIDDEN');
   }
-  let hasAdminPerm = false;
-  try {
-    const p = u.permissionsJson ? JSON.parse(u.permissionsJson) : null;
-    if (p?.canManageUsers) hasAdminPerm = true;
-  } catch {}
+  const rawRole = (u.role || '').trim().toUpperCase();
   const isCreator = isPlatformCreatorIdentity(u);
-  const effectiveRole = (isCreator && (!u.role || u.role === 'ADMIN')) || u.role === 'ADMIN' ? 'ADMIN' : u.role;
+  const effectiveRole = isCreator && (!rawRole || rawRole === 'ADMIN') ? 'ADMIN' : rawRole;
+  const knownRole = effectiveRole === 'ADMIN' || Boolean((ROLE_DEFINITIONS as Record<string, unknown>)[effectiveRole]);
+  if (!knownRole) {
+    throw new AppError(403, 'Profil utilisateur non reconnu', 'FORBIDDEN');
+  }
   const perms = getEffectivePermissions(effectiveRole as any, u.permissionsJson);
-  const isAdmin = effectiveRole === 'ADMIN' || hasAdminPerm;
+  const isAdmin = effectiveRole === 'ADMIN' || Boolean(perms.canManageUsers);
   return { ...u, effectiveRole, isAdmin, perms };
 }
 
@@ -124,31 +125,47 @@ adminRouter.post(
     }
 
     const { email, password, name, role, technicienNom, permissions } = req.body || {};
-    if (!email || !password || !name) {
-      throw new AppError(400, 'Nom, email et mot de passe sont obligatoires', 'VALIDATION_ERROR');
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || !password || !cleanName) {
+      throw new AppError(400, 'Nom, email valide et mot de passe sont obligatoires', 'VALIDATION_ERROR');
     }
-    if (role !== undefined && !isKnownRole(role)) {
+    if (role !== undefined && !isKnownRole(String(role))) {
       throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
     }
-    const cleanEmail = String(email).trim().toLowerCase();
+    const targetRole = (role ? String(role) : 'CONDUCTEUR_TRAVAUX').trim().toUpperCase();
+    let sanitizedPermsJson: string | null = null;
+    if (permissions !== undefined && permissions !== null) {
+      if (typeof permissions !== 'object' || Array.isArray(permissions)) {
+        throw new AppError(400, 'Format des droits personnalisés invalide', 'VALIDATION_ERROR');
+      }
+      const allowedKeys = Object.keys(ROLE_DEFINITIONS[targetRole].defaultPermissions);
+      const cleanPerms: Record<string, boolean> = {};
+      for (const k of allowedKeys) {
+        if (typeof (permissions as Record<string, unknown>)[k] === 'boolean') {
+          cleanPerms[k] = (permissions as Record<string, boolean>)[k];
+        }
+      }
+      const capped = sanitizePermissionsForRole(targetRole, cleanPerms);
+      sanitizedPermsJson = Object.keys(capped).length ? JSON.stringify(capped) : null;
+    }
+
     // Doublon PAR entreprise : la même adresse peut avoir un compte dans une autre entreprise (compte distinct).
     const existing = await findUserInCompany(cleanEmail, tenantOf(caller));
     if (existing) {
       throw new AppError(409, 'Cet email est déjà attribué à un utilisateur de votre entreprise', 'EMAIL_EXISTS');
     }
 
-    assertStrongPassword(String(password), { email: cleanEmail, name: String(name) });
+    assertStrongPassword(String(password), { email: cleanEmail, name: cleanName });
     const hashedPassword = await bcrypt.hash(String(password), 12);
     const created = await prisma.user.create({
       data: {
         email: cleanEmail,
         password: hashedPassword,
-        name: String(name).trim(),
-        role: role || 'CONDUCTEUR_TRAVAUX',
-        technicienNom: technicienNom ? String(technicienNom).trim() : null,
-        permissionsJson: permissions
-          ? JSON.stringify(sanitizePermissionsForRole(role || 'CONDUCTEUR_TRAVAUX', permissions))
-          : null,
+        name: cleanName,
+        role: targetRole,
+        technicienNom: technicienNom ? String(technicienNom).trim() || null : null,
+        permissionsJson: sanitizedPermsJson,
         companyId: tenantOf(caller),
         active: true,
         emailConfirmed: true,
@@ -187,6 +204,9 @@ adminRouter.put(
     }
 
     const id = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new AppError(400, 'Identifiant utilisateur invalide', 'VALIDATION_ERROR');
+    }
     const { name, email, password, role, technicienNom, permissions, active } = req.body || {};
 
     const existing = await prisma.user.findUnique({ where: { id } });
@@ -198,19 +218,49 @@ adminRouter.put(
     }
 
     const updateData: any = {};
-    if (name !== undefined) updateData.name = String(name).trim();
-    if (email !== undefined) updateData.email = String(email).trim().toLowerCase();
+    let shouldRevokeSessions = false;
+    if (name !== undefined) {
+      const cleanName = typeof name === 'string' ? name.trim() : '';
+      if (!cleanName) throw new AppError(400, 'Le nom ne peut pas être vide', 'VALIDATION_ERROR');
+      updateData.name = cleanName;
+    }
+    if (email !== undefined) {
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        throw new AppError(400, 'Adresse e-mail invalide', 'VALIDATION_ERROR');
+      }
+      if (cleanEmail !== existing.email.toLowerCase()) shouldRevokeSessions = true;
+      updateData.email = cleanEmail;
+    }
     if (role !== undefined) {
-      if (!isKnownRole(role)) throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
-      updateData.role = String(role);
+      if (!isKnownRole(String(role))) throw new AppError(400, 'Rôle inconnu', 'VALIDATION_ERROR');
+      const nextRole = String(role).trim().toUpperCase();
+      if (nextRole !== (existing.role || '').toUpperCase()) shouldRevokeSessions = true;
+      updateData.role = nextRole;
     }
     if (technicienNom !== undefined) {
-      updateData.technicienNom = technicienNom ? String(technicienNom).trim() : null;
+      updateData.technicienNom = technicienNom ? String(technicienNom).trim() || null : null;
     }
     if (permissions !== undefined || role !== undefined) {
       // Plafond du rôle appliqué à l'enregistrement, y compris quand seul le rôle change
-      let base: any = permissions;
-      if (permissions === undefined) {
+      const targetRole = updateData.role || (existing.role || '').trim().toUpperCase();
+      let base: Record<string, boolean> | null = null;
+      if (permissions !== undefined) {
+        if (permissions !== null && (typeof permissions !== 'object' || Array.isArray(permissions))) {
+          throw new AppError(400, 'Format des droits personnalisés invalide', 'VALIDATION_ERROR');
+        }
+        if (permissions) {
+          const allowedKeys = Object.keys(ROLE_DEFINITIONS[targetRole]?.defaultPermissions || {});
+          const cleanPerms: Record<string, boolean> = {};
+          for (const k of allowedKeys) {
+            if (typeof (permissions as Record<string, unknown>)[k] === 'boolean') {
+              cleanPerms[k] = (permissions as Record<string, boolean>)[k];
+            }
+          }
+          base = cleanPerms;
+        }
+        shouldRevokeSessions = true;
+      } else {
         try {
           base = existing.permissionsJson ? JSON.parse(existing.permissionsJson) : null;
         } catch {
@@ -218,15 +268,24 @@ adminRouter.put(
         }
       }
       updateData.permissionsJson = base
-        ? JSON.stringify(sanitizePermissionsForRole(role !== undefined ? role : existing.role, base))
+        ? JSON.stringify(sanitizePermissionsForRole(targetRole, base))
         : null;
     }
-    if (active !== undefined && !isPlatformCreatorIdentity(existing)) {
-      updateData.active = Boolean(active);
+    if (active !== undefined) {
+      if (isPlatformCreatorIdentity(existing) && Boolean(active) === false) {
+        throw new AppError(400, 'Impossible de désactiver le compte créateur de la plateforme', 'FORBIDDEN');
+      }
+      const nextActive = Boolean(active);
+      if (nextActive !== existing.active) shouldRevokeSessions = true;
+      updateData.active = nextActive;
     }
     if (password) {
       assertStrongPassword(String(password), { email: updateData.email ?? existing.email, name: updateData.name ?? existing.name });
       updateData.password = await bcrypt.hash(String(password).trim(), 12);
+      shouldRevokeSessions = true;
+    }
+    if (shouldRevokeSessions) {
+      updateData.tokenVersion = { increment: 1 };
     }
 
     const updated = await prisma.user.update({
@@ -234,6 +293,9 @@ adminRouter.put(
       data: updateData,
       select: publicUserSelect,
     });
+    if (shouldRevokeSessions) {
+      disconnectUserSockets(id);
+    }
 
     res.json({
       data: formatPublicUser(updated),
@@ -252,20 +314,38 @@ adminRouter.delete(
     }
 
     const id = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new AppError(400, 'Identifiant utilisateur invalide', 'VALIDATION_ERROR');
+    }
     if (id === req.user?.userId) {
       throw new AppError(400, 'Impossible de supprimer votre propre compte connecté', 'FORBIDDEN');
     }
     const existing = await prisma.user.findUnique({ where: { id } });
-    if (existing && isPlatformCreatorIdentity(existing)) {
-      throw new AppError(400, 'Impossible de supprimer le compte créateur de la plateforme', 'FORBIDDEN');
-    }
     if (!existing) {
       throw new AppError(404, 'Utilisateur introuvable', 'NOT_FOUND');
     }
-    if (existing.companyId !== tenantOf(caller)) {
+    const tenantId = tenantOf(caller);
+    if (existing.companyId !== tenantId) {
       throw new AppError(403, 'Accès non autorisé à cet utilisateur', 'FORBIDDEN');
     }
-    await prisma.user.delete({ where: { id } });
+    if (isPlatformCreatorIdentity(existing)) {
+      throw new AppError(400, 'Impossible de supprimer le compte créateur de la plateforme', 'FORBIDDEN');
+    }
+    await prisma.$transaction(async (tx) => {
+      const userInterventions = await tx.intervention.findMany({
+        where: { userId: id, companyId: tenantId },
+        select: { id: true },
+      });
+      const interventionIds = userInterventions.map((i) => i.id);
+      await tx.conversionRequest.deleteMany({
+        where:
+          interventionIds.length > 0
+            ? { OR: [{ actorId: id }, { interventionId: { in: interventionIds } }] }
+            : { actorId: id },
+      });
+      await tx.user.delete({ where: { id } });
+    });
+    disconnectUserSockets(id);
     res.json({ message: 'Compte utilisateur supprimé' });
   })
 );
@@ -283,16 +363,19 @@ adminRouter.get(
     let technicien = (req.query.technicien as string) || '';
 
     // Pointages de toute l'équipe : direction et planificateur uniquement. Tous les autres, y compris le
-    // chargé d'études, ne voient que le leur.
+    // chargé d'études, ne voient que le leur (fail-closed si aucun nom lié).
     if (!caller.isAdmin && caller.effectiveRole !== 'CONDUCTEUR_TRAVAUX') {
       technicien = (caller.technicienNom || caller.name || '').trim();
+      if (!technicien) {
+        return res.json({ data: [] });
+      }
     }
 
     const companyId = tenantOf(caller);
     const where: any = {
       companyId,
       ...(dateJour ? { dateJour } : {}),
-      ...(technicien ? { technicien } : {}),
+      ...(technicien ? { technicien: { equals: technicien, mode: 'insensitive' } } : {}),
     };
 
     const rows = await prisma.pointageTechnicien.findMany({
@@ -337,12 +420,15 @@ adminRouter.get(
 
     const canManageTeam = caller.isAdmin || caller.effectiveRole === 'CONDUCTEUR_TRAVAUX' || Boolean(caller.perms.canApproveRemoteClockIn);
     const ownTech = (caller.technicienNom || caller.name || '').trim();
+    if (!canManageTeam && !ownTech) {
+      return res.json({ data: [] });
+    }
 
     const rows = await (prisma as any).pointageDerogation.findMany({
       where: {
         companyId,
         dateJour,
-        ...(!canManageTeam && ownTech ? { technicien: ownTech } : {}),
+        ...(!canManageTeam ? { technicien: { equals: ownTech, mode: 'insensitive' } } : {}),
       },
       orderBy: [{ technicien: 'asc' }],
     });
@@ -577,6 +663,15 @@ adminRouter.post(
         where: { technicien, dateJour, companyId },
       });
       if (existingRow) {
+        if (!caller.isAdmin && existingRow.heureArriveeBureau) {
+          return res.json({
+            data: {
+              ...existingRow,
+              dureeMinutes: computeDurationMinutes(existingRow.heureArriveeBureau, existingRow.heureFinJournee),
+            },
+            message: `Arrivée déjà enregistrée et certifiée à ${existingRow.heureArriveeBureau} (non modifiable)`,
+          });
+        }
         upserted = await prisma.pointageTechnicien.update({
           where: { id: existingRow.id },
           data: {
@@ -657,7 +752,18 @@ adminRouter.post(
       throw new AppError(400, 'Nom du technicien requis pour la fin de journée', 'VALIDATION_ERROR');
     }
 
-    // Si technicien et déjà clôturé : interdiction de modifier l'heure
+    const rawLat = req.body?.latitude ?? req.body?.lat;
+    const rawLng = req.body?.longitude ?? req.body?.lng;
+    const hasOutGps = rawLat !== undefined && rawLat !== null && rawLng !== undefined && rawLng !== null && rawLat !== '' && rawLng !== '';
+    if (hasOutGps) {
+      const lat = Number(rawLat);
+      const lng = Number(rawLng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new AppError(400, 'Coordonnées GPS invalides pour le pointage.', 'INVALID_GPS');
+      }
+    }
+
+    // Pour les non-administrateurs : la clôture exige une prise de service du matin déjà enregistrée (avec GPS/30m ou dérogation)
     if (!caller.isAdmin) {
       const existing = await prisma.pointageTechnicien.findUnique({
         where: {
@@ -668,7 +774,26 @@ adminRouter.post(
           },
         },
       });
-      if (existing?.heureFinJournee) {
+      if (!existing || !existing.heureArriveeBureau) {
+        throw new AppError(
+          409,
+          "Veuillez d'abord pointer votre prise de service du matin avant de clôturer la journée.",
+          'CLOCK_IN_REQUIRED'
+        );
+      }
+      if (!existing.derogationHorsBureau && (existing.latitudeArrivee == null || existing.longitudeArrivee == null)) {
+        const derog = await (prisma as any).pointageDerogation.findFirst({
+          where: { companyId, technicien, dateJour, active: true },
+        });
+        if (!derog?.active) {
+          throw new AppError(
+            403,
+            "Prise de service matinale non certifiée par GPS ni dérogation : clôture refusée.",
+            'GPS_REQUIRED'
+          );
+        }
+      }
+      if (existing.heureFinJournee) {
         return res.json({
           data: {
             ...existing,
@@ -677,6 +802,23 @@ adminRouter.post(
           message: `Fin de journée déjà enregistrée et certifiée à ${existing.heureFinJournee} (non modifiable)`,
         });
       }
+      const updatedOut = await prisma.pointageTechnicien.update({
+        where: { id: existing.id },
+        data: {
+          heureFinJournee,
+          timestampFin: now,
+          statutJournee: 'TERMINEE',
+          ...(derniereInterventionRef !== undefined ? { derniereInterventionRef } : {}),
+          ...(commentaireJournee !== undefined ? { commentaireJournee } : {}),
+        },
+      });
+      return res.json({
+        data: {
+          ...updatedOut,
+          dureeMinutes: computeDurationMinutes(updatedOut.heureArriveeBureau, updatedOut.heureFinJournee),
+        },
+        message: `Fin de journée certifiée à ${heureFinJournee} pour ${technicien}`,
+      });
     }
 
     let upserted;
@@ -794,26 +936,51 @@ adminRouter.delete(
       throw new AppError(404, 'Espace entreprise introuvable', 'NOT_FOUND');
     }
 
+    let destroyedUserIds: number[] = [];
     // Suppression en cascade irréversible de l'ensemble des données de l'entreprise
     await prisma.$transaction(async (tx) => {
-      // 1. Supprimer tous les pointages techniciens de l'entreprise
+      const companyInterventions = await tx.intervention.findMany({
+        where: { companyId },
+        select: { id: true },
+      });
+      const companyUsers = await tx.user.findMany({
+        where: { companyId },
+        select: { id: true },
+      });
+      const interventionIds = companyInterventions.map((i) => i.id);
+      const userIds = companyUsers.map((u) => u.id);
+      destroyedUserIds = userIds;
+      if (interventionIds.length > 0 || userIds.length > 0) {
+        const orConds = [];
+        if (userIds.length > 0) orConds.push({ actorId: { in: userIds } });
+        if (interventionIds.length > 0) orConds.push({ interventionId: { in: interventionIds } });
+        await tx.conversionRequest.deleteMany({ where: { OR: orConds } });
+      }
+
+      // 1. Supprimer tous les pointages et dérogations techniciens de l'entreprise
+      await tx.pointageDerogation.deleteMany({ where: { companyId } });
       await tx.pointageTechnicien.deleteMany({ where: { companyId } });
 
       // 2. Supprimer tous les référentiels métiers et compétences
       await tx.referentiel.deleteMany({ where: { companyId } });
 
-      // 3. Supprimer toutes les interventions de l'entreprise
+      // 3. Supprimer toutes les interventions, demandes et devis de l'entreprise
+      await tx.demande.deleteMany({ where: { companyId } });
       await tx.intervention.deleteMany({ where: { companyId } });
-
-      // 4. Supprimer tous les devis de l'entreprise
       await tx.devis.deleteMany({ where: { companyId } });
 
-      // 5. Supprimer tous les comptes utilisateurs de l'entreprise
+      // 4. Supprimer tous les comptes utilisateurs de l'entreprise
       await tx.user.deleteMany({ where: { companyId } });
 
-      // 6. Supprimer l'entreprise elle-même
+      // 5. Supprimer l'entreprise elle-même
       await tx.company.delete({ where: { id: companyId } });
     });
+
+    for (const uid of destroyedUserIds) {
+      disconnectUserSockets(uid);
+    }
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
 
     res.json({
       message: "L'espace entreprise " + company.name + " ainsi que l'ensemble de ses devis, interventions, plannings, pointages et comptes utilisateurs ont été DÉFINITIVEMENT et IRRÉVERSIBLEMENT supprimés de la base de données.",
@@ -964,7 +1131,7 @@ async function issueAndSendInvitation(
     data: { tokenHash: hashInvitationToken(token), expiresAt, lastSentAt: new Date() },
   });
   const company = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
-  const inviteLink = `${APP_URL}/invitation?token=${encodeURIComponent(token)}`;
+  const inviteLink = `${APP_URL}/invitation#token=${encodeURIComponent(token)}`;
   const delivery = await sendInvitationEmail({
     companyId,
     companyName: company?.name || 'votre entreprise',
@@ -1018,7 +1185,7 @@ adminRouter.post(
       throw new AppError(403, 'Seul un administrateur peut inviter un autre administrateur', 'FORBIDDEN');
     }
 
-    // Droits personnalisés : uniquement des booléens sur des droits existants ; canManageUsers réservé aux administrateurs
+    // Droits personnalisés : uniquement des booléens sur des droits existants, plafonnés par sanitizePermissionsForRole
     let permissionsJson: string | null = null;
     if (permissions) {
       const allowed = Object.keys(roleDef.defaultPermissions);
@@ -1027,7 +1194,8 @@ adminRouter.post(
         if (typeof permissions[k] === 'boolean') clean[k] = permissions[k];
       }
       if (caller.effectiveRole !== 'ADMIN') delete clean.canManageUsers;
-      permissionsJson = Object.keys(clean).length ? JSON.stringify(clean) : null;
+      const capped = sanitizePermissionsForRole(role, clean);
+      permissionsJson = Object.keys(capped).length ? JSON.stringify(capped) : null;
     }
 
     const companyId = tenantOf(caller);
@@ -1083,6 +1251,8 @@ adminRouter.post(
     }
 
     const { invitation, delivery, inviteLink } = await issueAndSendInvitation(caller, invitationId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     res.status(201).json({
       data: publicInvitation(invitation),
       emailSent: delivery.sent,
@@ -1107,6 +1277,9 @@ adminRouter.post(
       throw new AppError(403, 'Action réservée aux profils habilités', 'FORBIDDEN');
     }
     const id = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new AppError(400, 'Identifiant d’invitation invalide', 'VALIDATION_ERROR');
+    }
     const inv = await prisma.companyInvitation.findFirst({ where: { id, companyId: tenantOf(caller) } });
     if (!inv) throw new AppError(404, 'Invitation introuvable', 'NOT_FOUND');
     if (inv.acceptedAt || inv.revokedAt) {
@@ -1116,6 +1289,8 @@ adminRouter.post(
       throw new AppError(429, 'Invitation envoyée à l’instant : patientez une minute avant de la renvoyer', 'RESEND_COOLDOWN');
     }
     const { invitation, delivery, inviteLink } = await issueAndSendInvitation(caller, inv.id);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     res.json({
       data: publicInvitation(invitation),
       emailSent: delivery.sent,
@@ -1137,6 +1312,9 @@ adminRouter.delete(
       throw new AppError(403, 'Action réservée aux profils habilités', 'FORBIDDEN');
     }
     const id = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new AppError(400, 'Identifiant d’invitation invalide', 'VALIDATION_ERROR');
+    }
     const result = await prisma.companyInvitation.updateMany({
       where: { id, companyId: tenantOf(caller), acceptedAt: null, revokedAt: null },
       data: { revokedAt: new Date() },

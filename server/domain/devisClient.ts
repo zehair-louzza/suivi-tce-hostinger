@@ -240,6 +240,10 @@ export function validerPdf(nomFichier: unknown, contenuBase64: unknown, libelle 
   if (octets.length === 0) return { ok: false, message: 'Le fichier est vide.' };
   if (octets.length > TAILLE_MAX_PDF) return { ok: false, message: 'Le PDF dépasse 8 Mo : compressez-le avant de le déposer.' };
   if (octets.subarray(0, 5).toString('latin1') !== '%PDF-') return { ok: false, message: "Ce fichier n'est pas un vrai PDF." };
+  const rawLatin1 = octets.toString('latin1');
+  if (/\/(?:JavaScript|JS(?=\s|\(|\[|\/|\<)|Launch(?=\s|\/|\<)|RichMedia\b)/i.test(rawLatin1)) {
+    return { ok: false, message: 'Ce PDF contient des scripts ou actions actives non autorisées.' };
+  }
   return { ok: true, nom, octets, sha256: crypto.createHash('sha256').update(octets).digest('hex') };
 }
 

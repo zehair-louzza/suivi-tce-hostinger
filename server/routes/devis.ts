@@ -7,7 +7,8 @@ import { policy, secureRouter } from '../lib/guard.js';
 import { prisma } from '../lib/prisma.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { canReadDevis, describeRefusal, limitDevisBody, shapeDevis } from '../lib/access.js';
+import { canReadDevis, coercePagination, describeRefusal, limitDevisBody, shapeDevis, shapeIntervention } from '../lib/access.js';
+import { transformIntervention } from './interventions.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -33,6 +34,7 @@ import {
 } from '../services/devisClient.js';
 import { contenuDevisModifie, validerPdf } from '../domain/devisClient.js';
 import { preparerPdfDeposeCompresse } from '../services/pdfCompression.js';
+import { assertDocumentStorageQuota } from '../lib/storageQuotas.js';
 import {
   computeDevisCalculations,
   traitementToStatusCode,
@@ -420,8 +422,7 @@ devisRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || '';
-    const page = parseInt(req.query.page as string, 10) || 1;
-    const limit = parseInt(req.query.limit as string, 10) || 200;
+    const { page, limit } = coercePagination(req.query.page, req.query.limit, 200, 200);
     const companyId = requireCompanyId(req.user?.companyId);
 
     const where: any = {
@@ -445,7 +446,8 @@ devisRouter.get(
 
     // Cloisonnement par rôle : le terrain ne voit que ses visites ; sans droit Devis, on ne voit que les visites
     // qui nous sont affectées (et, avec le droit de conversion, les devis acceptés à convertir).
-    if (!acc.isAdmin && (acc.isFieldOnly || !acc.perms.canEditDevis)) {
+    const isRestrictedScope = !acc.isAdmin && (acc.isFieldOnly || !acc.perms.canEditDevis);
+    if (isRestrictedScope) {
       const mine = acc.boundTech
         ? [{ visiteTechnicien: { contains: acc.boundTech, mode: 'insensitive' } }]
         : [];
@@ -463,16 +465,35 @@ devisRouter.get(
       where.AND = [...(where.AND || []), { OR: scope }];
     }
 
-    const [items, total] = await Promise.all([
-      prisma.devis.findMany({
-        where,
-        include: { interventions: true },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.devis.count({ where }),
-    ]);
+    const MAX_SCOPED_SCAN = 1000;
+    const [rawItems, rawTotal] = isRestrictedScope
+      ? [
+          await prisma.devis.findMany({
+            where,
+            include: { interventions: true },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: Math.min(page * limit + 200, MAX_SCOPED_SCAN),
+          }),
+          0,
+        ]
+      : await Promise.all([
+          prisma.devis.findMany({
+            where,
+            include: { interventions: true },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          prisma.devis.count({ where }),
+        ]);
+
+    const scopedItems = isRestrictedScope
+      ? rawItems.filter((row: any) => canReadDevis(acc, row))
+      : rawItems;
+    const total = isRestrictedScope ? scopedItems.length : rawTotal;
+    const items = isRestrictedScope
+      ? scopedItems.slice((page - 1) * limit, page * limit)
+      : scopedItems;
 
     // Chaque rôle ne reçoit que ses champs (montants et détails internes retirés selon le rôle)
     let transformed = items.map((row: any) => shapeDevis(acc, transformDevis(row)) as any);
@@ -503,7 +524,10 @@ devisRouter.get(
       throw new AppError(403, 'Statistiques non accessibles avec votre profil', 'FORBIDDEN');
     }
     const companyId = acc.companyId;
-    const items = await prisma.devis.findMany({ where: { companyId } });
+    const allItems = await prisma.devis.findMany({ where: { companyId } });
+    const items = acc.isAdmin || acc.perms.canEditDevis
+      ? allItems
+      : allItems.filter((row: any) => canReadDevis(acc, row));
     const transformed = items.map(transformDevis);
 
     const result: Record<string, number> = {
@@ -727,12 +751,22 @@ devisRouter.patch(
         : existing.historiqueJson;
 
     if (b.gpsCloture && typeof b.gpsCloture === 'object') {
+      const canSetOtherGpsTech = acc.isAdmin || (acc.perms.canEditPlanning && acc.role !== 'CHIFFRAGE_DEVIS');
+      const gpsTech =
+        !canSetOtherGpsTech && acc.boundTech
+          ? acc.boundTech
+          : !canSetOtherGpsTech
+            ? auteur
+            : String(b.gpsCloture.technicien || b.visiteTechnicien || existing.visiteTechnicien || acc.boundTech || auteur).trim().slice(0, 120);
+      const lat = Number(b.gpsCloture.lat);
+      const lng = Number(b.gpsCloture.lng);
+      const rawAcc = b.gpsCloture.accuracy !== undefined && b.gpsCloture.accuracy !== null ? Number(b.gpsCloture.accuracy) : undefined;
       const gpsPayload: GpsPositionPayload = {
-        lat: Number(b.gpsCloture.lat),
-        lng: Number(b.gpsCloture.lng),
-        accuracy: b.gpsCloture.accuracy ? Number(b.gpsCloture.accuracy) : undefined,
+        lat,
+        lng,
+        accuracy: rawAcc !== undefined && Number.isFinite(rawAcc) && rawAcc >= 0 && rawAcc <= 50_000 ? rawAcc : undefined,
         timestamp: b.gpsCloture.timestamp || new Date().toISOString(),
-        technicien: String(b.gpsCloture.technicien || b.visiteTechnicien || existing.visiteTechnicien || auteur).trim(),
+        technicien: gpsTech,
         missionId: -id,
         missionRef: String(b.reference || existing.referenceMetier || `DEV-${new Date().getFullYear()}-${String(id).padStart(3, '0')}`),
         chantier: String(b.site || existing.siteAdresse || existing.client || ''),
@@ -740,7 +774,7 @@ devisRouter.patch(
         statut: 'CLOTUREE',
         source: b.gpsCloture.source || 'GPS_MOBILE',
       };
-      if (!Number.isNaN(gpsPayload.lat) && !Number.isNaN(gpsPayload.lng)) {
+      if (Number.isFinite(lat) && Math.abs(lat) <= 90 && Number.isFinite(lng) && Math.abs(lng) <= 180) {
         historiqueJson = addHistoriqueEvent(
           historiqueJson,
           gpsPayload.technicien,
@@ -874,29 +908,33 @@ devisRouter.patch(
       updateData.prochaineAction = candidateDevis.prochaineAction;
     }
 
-    const updated = await prisma.devis.update({
-      where: { id },
-      data: updateData,
-      include: { interventions: true },
+    const updated = await prisma.$transaction(async (tx) => {
+      const txUpdated = await tx.devis.update({
+        where: { id },
+        data: updateData,
+        include: { interventions: true },
+      });
+
+      // Devis modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué atomiquement
+      if (contenuDevisModifie(existing as any, txUpdated as any) && (await revoquerLiensActifs(companyId, id, 'Devis modifié après envoi', tx)) > 0) {
+        return tx.devis.update({
+          where: { id },
+          data: {
+            historiqueJson: addHistoriqueEvent(
+              txUpdated.historiqueJson,
+              'Automatique',
+              'Automatique — lien client révoqué',
+              'Le devis a été modifié après son envoi : renvoyez-le au client pour qu\'il réponde sur la bonne version'
+            ),
+          },
+          include: { interventions: true },
+        });
+      }
+      return txUpdated;
     });
 
     await syncVisiteDevisIntervention(updated, userId, auteur);
     await syncDevisDossier(updated, companyId);
-
-    // Devis modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué
-    if (contenuDevisModifie(existing as any, updated as any) && (await revoquerLiensActifs(companyId, id, 'Devis modifié après envoi')) > 0) {
-      await prisma.devis.update({
-        where: { id },
-        data: {
-          historiqueJson: addHistoriqueEvent(
-            updated.historiqueJson,
-            'Automatique',
-            'Automatique — lien client révoqué',
-            'Le devis a été modifié après son envoi : renvoyez-le au client pour qu\'il réponde sur la bonne version'
-          ),
-        },
-      });
-    }
 
     const refreshed = await prisma.devis.findUnique({
       where: { id },
@@ -952,6 +990,9 @@ devisRouter.post(
   policy('devis.convert'),
   asyncHandler(async (req: Request, res: Response) => {
     const devisId = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(devisId) || devisId < 1) {
+      throw new AppError(400, 'Identifiant devis invalide', 'VALIDATION_ERROR');
+    }
     const userId = req.user!.userId;
     const companyId = requireCompanyId(req.user?.companyId);
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
@@ -960,7 +1001,7 @@ devisRouter.post(
     // Contrôle d'accès : conversion de devis réservée aux profils habilités
     const callerUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, phone: true, name: true, role: true, permissionsJson: true },
+      select: { id: true, email: true, phone: true, name: true, role: true, permissionsJson: true, companyId: true, active: true },
     });
     const callerRole = (callerUser?.role || req.user?.role || '').toUpperCase();
     const callerPerms = getEffectivePermissions(callerRole, callerUser?.permissionsJson);
@@ -970,12 +1011,21 @@ devisRouter.post(
     }
 
     // Si une clé d'idempotence stricte est fournie sans mode planning spécifique, on supporte aussi convertKeepingQuote
+    if (!callerUser || callerUser.active === false || callerUser.companyId !== companyId) {
+      throw new AppError(403, 'Compte inactif ou non rattaché à cette entreprise', 'FORBIDDEN');
+    }
+
     const idempotencyKey = req.get('Idempotency-Key');
     if (idempotencyKey && !b.mode && b.isVisiteDevis === undefined) {
-      const result = await convertKeepingQuote(userId, devisId, req.body, idempotencyKey);
-      if (!result.replayed) notify(() => socketEvents.interventionCreated(result.ownerId, companyId, result.data));
+      const result = await convertKeepingQuote(userId, devisId, req.body, idempotencyKey, companyId);
+      const canSeeAmounts = isAdmin || Boolean(callerPerms.canViewFinancials);
+      const responseData =
+        result.data && typeof result.data === 'object'
+          ? { ...(result.data as Record<string, any>), amount: canSeeAmounts ? (result.data as any).amount : null }
+          : result.data;
+      if (!result.replayed) notify(() => socketEvents.interventionCreated(result.ownerId, result.companyId ?? companyId, result.data));
       return res.status(result.replayed ? 200 : 201).json({
-        data: result.data,
+        data: responseData,
         replayed: result.replayed,
         message: result.replayed
           ? 'Demande déjà réalisée : aucune nouvelle intervention'
@@ -983,16 +1033,28 @@ devisRouter.post(
       });
     }
 
+    const acc = await loadAccess(req);
+    if (!acc.isKnownRole || acc.isFieldOnly) {
+      throw new AppError(403, 'Permission insuffisante pour convertir un devis', 'FORBIDDEN');
+    }
     const devis = await prisma.devis.findFirst({
       where: { id: devisId, companyId },
       include: { interventions: true },
     });
 
-    if (!devis) {
+    if (!devis || !canReadDevis(acc, devis)) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
     }
 
     const isVisite = Boolean(b.isVisiteDevis || b.mode === 'visite');
+    const ACCEPTED_STATUTS = ['Accepté', 'Signé', 'Facturé', 'Gagné', 'ACCEPTE', 'SIGNE', 'FACTURE', 'GAGNE'];
+    if (!isVisite && !ACCEPTED_STATUTS.includes(String(devis.statutCommercial || '').trim())) {
+      throw new AppError(409, 'Le devis doit être accepté avant sa transformation en intervention.', 'DEVIS_NON_ACCEPTE');
+    }
+    if (isVisite && !acc.isAdmin && !acc.perms.canEditPlanning && !acc.perms.canEditDevis) {
+      throw new AppError(403, 'Permission insuffisante pour créer une visite devis', 'FORBIDDEN');
+    }
+
     const refDevis = devis.referenceMetier || `DEV-${new Date().getFullYear()}-${String(devis.id).padStart(3, '0')}`;
     const datePlan = parseDateOrNull(b.datePlanifiee) || devis.visiteDate || new Date();
     const technicien = b.entreprise || devis.visiteTechnicien || null;
@@ -1011,90 +1073,97 @@ devisRouter.post(
       statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
     });
     const ouvreAttente = technicien && (await reglagesSociete(companyId)).actif && (await comptesTechnicien(companyId, String(technicien))).length > 0;
-    const intervention = await prisma.intervention.create({
-      data: {
-        ...(ouvreAttente ? { reponseTechnicien: 'EN_ATTENTE', affecteLe: new Date() } : {}),
-        referenceMetier: isVisite ? await nextCompanyRef(companyId, 'VIS') : null,
-        refDevisTexte: refDevis,
-        numeroDI: devis.numeroDI || null,
-        client: devis.client,
-        chantier: devis.siteAdresse || devis.client,
-        siteAdresse: devis.siteAdresse || devis.client,
-        objet: isVisite
-          ? `[Visite Devis] ${devis.objet || devis.client}`
-          : devis.objet || `Travaux suite au devis ${refDevis}`,
-        origine: devis.origine || 'Devis client',
-        typeIntervention: isVisite ? 'Visite technique devis' : b.typeIntervention || 'Travaux complémentaires',
-        modePlanification: autoConv.modePlanification,
-        corpsEtat: devis.corpsEtat || 'Tous corps d’état',
-        priorite: b.priorite || devis.priorite || 'Normale',
-        dateDemande: parseDateOrNull(autoConv.dateDemande) || new Date(),
-        datePlanifiee: datePlan,
-        dateEcheance: parseDateOrNull(autoConv.echeance),
-        statutOperationnel: autoConv.statutOperationnel,
-        traitement: 'À traiter',
-        status: 'A_TRAITER',
-        statutFacture: isVisite ? 'Non facturable' : (autoConv.statutFacture || 'Non facturée'),
-        statutRapport: 'En attente',
-        entreprise: technicien,
-        technicien,
-        heureDebut: autoConv.heureDebut || heureDebut,
-        heureFin: autoConv.heureFin || heureFin,
-        isVisiteDevis: isVisite,
-        amount: isVisite ? 0 : devis.amount || 0,
-        tauxTVA: isVisite ? null : (devis.tauxTVA ?? null),
-        notes: b.notes || devis.notes || null,
-        origineDevisId: devis.id,
-        origineDevisClient: devis.client,
-        origineDevisDate: devis.dateCreated,
-        devisId: devis.id,
-        userId,
-        companyId: devis.companyId || companyId,
-        historiqueJson: addHistoriqueEvent(
-          null,
-          auteur,
-          isVisite ? 'Visite technique créée depuis le devis' : 'Intervention créée depuis le devis',
-          `Contexte copié depuis ${refDevis} (${devis.client})`
-        ),
-      },
-    });
 
-    if (!intervention.referenceMetier) {
-      await prisma.intervention.update({
-        where: { id: intervention.id },
-        data: { referenceMetier: await nextCompanyRef(companyId, 'INT') },
+    const { intervention, updatedDevis } = await prisma.$transaction(async (tx) => {
+      const refVisite = isVisite ? await nextCompanyRef(companyId, 'VIS', undefined, tx) : null;
+      let txIntervention = await tx.intervention.create({
+        data: {
+          ...(ouvreAttente ? { reponseTechnicien: 'EN_ATTENTE', affecteLe: new Date() } : {}),
+          referenceMetier: refVisite,
+          refDevisTexte: refDevis,
+          numeroDI: devis.numeroDI || null,
+          client: devis.client,
+          chantier: devis.siteAdresse || devis.client,
+          siteAdresse: devis.siteAdresse || devis.client,
+          objet: isVisite
+            ? `[Visite Devis] ${devis.objet || devis.client}`
+            : devis.objet || `Travaux suite au devis ${refDevis}`,
+          origine: devis.origine || 'Devis client',
+          typeIntervention: isVisite ? 'Visite technique devis' : b.typeIntervention || 'Travaux complémentaires',
+          modePlanification: autoConv.modePlanification,
+          corpsEtat: devis.corpsEtat || 'Tous corps d’état',
+          priorite: b.priorite || devis.priorite || 'Normale',
+          dateDemande: parseDateOrNull(autoConv.dateDemande) || new Date(),
+          datePlanifiee: datePlan,
+          dateEcheance: parseDateOrNull(autoConv.echeance),
+          statutOperationnel: autoConv.statutOperationnel,
+          traitement: 'À traiter',
+          status: 'A_TRAITER',
+          statutFacture: isVisite ? 'Non facturable' : (autoConv.statutFacture || 'Non facturée'),
+          statutRapport: 'En attente',
+          entreprise: technicien,
+          technicien,
+          heureDebut: autoConv.heureDebut || heureDebut,
+          heureFin: autoConv.heureFin || heureFin,
+          isVisiteDevis: isVisite,
+          amount: isVisite ? 0 : devis.amount || 0,
+          tauxTVA: isVisite ? null : (devis.tauxTVA ?? null),
+          notes: b.notes || devis.notes || null,
+          origineDevisId: devis.id,
+          origineDevisClient: devis.client,
+          origineDevisDate: devis.dateCreated,
+          devisId: devis.id,
+          userId,
+          companyId: devis.companyId || companyId,
+          historiqueJson: addHistoriqueEvent(
+            null,
+            auteur,
+            isVisite ? 'Visite technique créée depuis le devis' : 'Intervention créée depuis le devis',
+            `Contexte copié depuis ${refDevis} (${devis.client})`
+          ),
+        },
       });
-    }
 
-    const refInterv = intervention.referenceMetier || `INT-${new Date().getFullYear()}-${String(intervention.id).padStart(3, '0')}`;
+      if (!txIntervention.referenceMetier) {
+        const refInt = await nextCompanyRef(companyId, 'INT', undefined, tx);
+        txIntervention = await tx.intervention.update({
+          where: { id: txIntervention.id },
+          data: { referenceMetier: refInt },
+        });
+      }
 
-    const updatedDevis = await prisma.devis.update({
-      where: { id: devisId },
-      data: {
-        refInterventionTexte: devis.refInterventionTexte
-          ? `${devis.refInterventionTexte}, ${refInterv}`
-          : refInterv,
-        ...(isVisite
-          ? {
-              visiteNecessaire: true,
-              visiteTechnicien: technicien,
-              visiteDate: datePlan,
-              visiteHeureDebut: heureDebut,
-              visiteHeureFin: heureFin,
-              visiteStatut: b.datePlanifiee ? 'Planifiée' : 'À planifier',
-            }
-          : {}),
-        historiqueJson: addHistoriqueEvent(
-          devis.historiqueJson,
-          auteur,
-          isVisite ? `Visite technique ${refInterv} liée` : `Intervention ${refInterv} créée et liée`,
-          technicien ? `Technicien : ${technicien}` : 'À affecter dans le planning'
-        ),
-      },
-      include: { interventions: true },
+      const refInterv = txIntervention.referenceMetier || `INT-${new Date().getFullYear()}-${String(txIntervention.id).padStart(3, '0')}`;
+
+      const txUpdatedDevis = await tx.devis.update({
+        where: { id: devisId },
+        data: {
+          refInterventionTexte: devis.refInterventionTexte
+            ? `${devis.refInterventionTexte}, ${refInterv}`
+            : refInterv,
+          ...(isVisite
+            ? {
+                visiteNecessaire: true,
+                visiteTechnicien: technicien,
+                visiteDate: datePlan,
+                visiteHeureDebut: heureDebut,
+                visiteHeureFin: heureFin,
+                visiteStatut: b.datePlanifiee ? 'Planifiée' : 'À planifier',
+              }
+            : {}),
+          historiqueJson: addHistoriqueEvent(
+            devis.historiqueJson,
+            auteur,
+            isVisite ? `Visite technique ${refInterv} liée` : `Intervention ${refInterv} créée et liée`,
+            technicien ? `Technicien : ${technicien}` : 'À affecter dans le planning'
+          ),
+        },
+        include: { interventions: true },
+      });
+
+      await tx.demande.updateMany({ where: { devisId, companyId, interventionId: null }, data: { interventionId: txIntervention.id } });
+      return { intervention: txIntervention, updatedDevis: txUpdatedDevis };
     });
 
-    await prisma.demande.updateMany({ where: { devisId, companyId, interventionId: null }, data: { interventionId: intervention.id } });
     if (ouvreAttente) {
       await notifierAffectation(companyId, intervention).catch((e) => console.error('Notification affectation :', e?.message));
     }
@@ -1102,8 +1171,8 @@ devisRouter.post(
     notify(() => socketEvents.interventionCreated(userId, companyId, intervention));
 
     return res.status(201).json({
-      data: intervention,
-      devis: transformDevis(updatedDevis),
+      data: shapeIntervention(acc, transformIntervention(intervention)),
+      devis: shapeDevis(acc, transformDevis(updatedDevis)),
       message: isVisite
         ? 'Visite technique créée et ajoutée au planning (devis conservé)'
         : 'Intervention liée créée avec succès (devis conservé)',
@@ -1118,25 +1187,50 @@ devisRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const companyId = requireCompanyId(req.user?.companyId);
     const devisId = parseInt(req.params.id, 10);
+    if (!Number.isSafeInteger(devisId) || devisId < 1) {
+      throw new AppError(400, 'Identifiant devis invalide', 'VALIDATION_ERROR');
+    }
 
+    const acc = await loadAccess(req);
     const devis = await prisma.devis.findFirst({
       where: { id: devisId, companyId },
       include: { interventions: true, company: true },
     });
 
-    if (!devis) {
+    if (!devis || !canReadDevis(acc, devis)) {
       throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
+    }
+    if (!acc.isAdmin && (acc.isFieldOnly || !acc.perms.canEditDevis || !acc.canSeeAmounts)) {
+      throw new AppError(403, 'Permission insuffisante pour envoyer ce devis par e-mail', 'FORBIDDEN');
     }
 
     const { toEmail, ccEmail, subject, customMessage } = req.body || {};
-    const rawTo = String(toEmail || '').trim();
-    const validEmails = rawTo
-      .split(',')
-      .map((e) => e.trim().toLowerCase())
-      .filter((e) => e.includes('@'));
+    const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const parseEmailList = (raw: unknown): string[] =>
+      String(raw || '')
+        .split(/[,;]/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => EMAIL_FORMAT_RE.test(e));
+
+    const validEmails = [...new Set(parseEmailList(toEmail))];
+    const validCcEmails = [...new Set(parseEmailList(ccEmail))];
 
     if (validEmails.length === 0) {
       throw new AppError(400, 'Adresse e-mail de destinataire valide requise', 'VALIDATION_ERROR');
+    }
+    const allRecipients = [...new Set([...validEmails, ...validCcEmails])];
+    if (allRecipients.length > 5) {
+      throw new AppError(400, 'Maximum 5 destinataires autorisés par envoi', 'TOO_MANY_RECIPIENTS');
+    }
+
+    const { adresses } = await adressesPourDevis(companyId, devis.client);
+    const allowedEmails = new Set(adresses.map((a) => a.email.trim().toLowerCase()));
+    if (allowedEmails.size === 0) {
+      throw new AppError(422, 'Aucune adresse e-mail enregistrée sur la fiche client pour cet envoi', 'ADRESSE_CLIENT_REQUISE');
+    }
+    const unauthorized = allRecipients.filter((email) => !allowedEmails.has(email));
+    if (unauthorized.length > 0) {
+      throw new AppError(422, 'Destinataire(s) absent(s) de la fiche client de ce devis', 'ADRESSE_HORS_FICHE');
     }
 
     const senderEmail = req.user?.email || 'zehair@anelecgroupe.com';
@@ -1146,7 +1240,7 @@ devisRouter.post(
     const delivery = await sendDevisProposalEmail({
       companyId,
       toEmail: validEmails.join(', '),
-      ccEmail: ccEmail ? String(ccEmail).trim() : undefined,
+      ccEmail: validCcEmails.length > 0 ? validCcEmails.join(', ') : undefined,
       subject,
       customMessage,
       devis: {
@@ -1184,7 +1278,7 @@ devisRouter.post(
       include: { interventions: true },
     });
 
-    const transformed = transformDevis(updated);
+    const transformed = shapeDevis(acc, transformDevis(updated));
     res.json({
       success: true,
       data: transformed,
@@ -1200,13 +1294,19 @@ devisRouter.post(
 // DEVIS CLIENT — PDF importé, envoi par lien sécurisé, suivi des réponses
 // ============================================================================
 
-async function devisPourDocument(req: Request, exigerEcriture: boolean) {
+async function devisPourDocument(req: Request, exigerEcriture: boolean, exigerMontants = false) {
   const companyId = requireCompanyId(req.user?.companyId);
   const id = parseInt(req.params.id, 10);
   const acc = await loadAccess(req);
   const devis = await prisma.devis.findFirst({ where: { id, companyId } });
   if (!devis || !canReadDevis(acc, devis)) throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
-  return { companyId, acc, devis, id, exigerEcriture };
+  if (exigerEcriture && !acc.isAdmin && (acc.isFieldOnly || !acc.perms.canEditDevis)) {
+    throw new AppError(403, 'Permission insuffisante pour modifier ce devis', 'FORBIDDEN');
+  }
+  if (exigerMontants && !acc.canSeeAmounts) {
+    throw new AppError(403, 'Accès aux montants financiers requis pour ce document', 'FORBIDDEN');
+  }
+  return { companyId, acc, devis, id };
 }
 
 // Dépôt manuel du PDF du devis importé (JSON base64 : pas de dépendance d'envoi de fichiers)
@@ -1214,27 +1314,31 @@ devisRouter.post(
   '/:id/document',
   policy('devis.document'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { companyId, devis } = await devisPourDocument(req, true);
+    const { companyId, devis } = await devisPourDocument(req, true, true);
     const v = validerPdf(req.body?.nomFichier, req.body?.contenuBase64);
     if (!v.ok) throw new AppError(400, v.message, 'INVALID_PDF');
     const auteur = req.user!.email.split('@')[0] || 'Utilisateur';
     const pret = await preparerPdfDeposeCompresse(v.octets);
-    const doc = await (prisma as any).devisDocument.create({
-      data: { companyId, devisId: devis.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256, contenu: pret.octets, deposePar: auteur },
-      select: { id: true, nomFichier: true, taille: true, createdAt: true, deposePar: true },
-    });
-    // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
-    const revoques = await revoquerLiensActifs(companyId, devis.id, 'Nouveau PDF déposé après envoi');
-    await prisma.devis.update({
-      where: { id: devis.id },
-      data: {
-        historiqueJson: addHistoriqueEvent(
-          devis.historiqueJson,
-          auteur,
-          'PDF du devis déposé',
-          `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (revoques ? ' • lien client précédent révoqué, renvoyez le devis' : '')
-        ),
-      },
+    const { doc, revoques } = await prisma.$transaction(async (tx: any) => {
+      await assertDocumentStorageQuota(tx, companyId, { devisId: devis.id }, pret.octets.length);
+      const txDoc = await tx.devisDocument.create({
+        data: { companyId, devisId: devis.id, nomFichier: v.nom, taille: pret.octets.length, sha256: pret.sha256, contenu: pret.octets, deposePar: auteur },
+        select: { id: true, nomFichier: true, taille: true, createdAt: true, deposePar: true },
+      });
+      // Nouveau PDF = nouvelle version : un lien déjà envoyé porte sur l'ancienne
+      const txRevoques = await revoquerLiensActifs(companyId, devis.id, 'Nouveau PDF déposé après envoi', tx);
+      await tx.devis.update({
+        where: { id: devis.id },
+        data: {
+          historiqueJson: addHistoriqueEvent(
+            devis.historiqueJson,
+            auteur,
+            'PDF du devis déposé',
+            `${v.nom} (${Math.round(pret.octets.length / 1024)} Ko)` + (txRevoques ? ' • lien client précédent révoqué, renvoyez le devis' : '')
+          ),
+        },
+      });
+      return { doc: txDoc, revoques: txRevoques };
     });
     res.status(201).json({
       data: { id: doc.id, nomFichier: doc.nomFichier, taille: doc.taille, createdAt: doc.createdAt, deposePar: doc.deposePar },
@@ -1248,7 +1352,7 @@ devisRouter.get(
   '/:id/document',
   policy('devis.suiviClient'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { companyId, devis } = await devisPourDocument(req, false);
+    const { companyId, devis } = await devisPourDocument(req, false, true);
     const origine = req.query.origine === 'GENERE' || req.query.origine === 'DEPOSE' ? (req.query.origine as 'GENERE' | 'DEPOSE') : undefined;
     const meta = await dernierDocument(companyId, devis.id, origine);
     if (!meta) throw new AppError(404, 'Aucun PDF déposé pour ce devis', 'NOT_FOUND');
@@ -1268,7 +1372,7 @@ devisRouter.post(
   '/:id/apercu',
   policy('devis.document'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { companyId, devis } = await devisPourDocument(req, false);
+    const { companyId, devis } = await devisPourDocument(req, false, true);
     const pdf = await fabriquerPdfDevisDoc(companyId, devis, {
       inclureVisite: req.body?.inclureVisite !== false,
       photos: { toutes: req.body?.toutesPhotos, ids: req.body?.photoIds },
@@ -1283,8 +1387,8 @@ devisRouter.post(
 
 // Rapport PDF interne de Visite Technique Préalable (définition technique & préparation du devis)
 devisRouter.post(
-  "/:id/visite-rapport/apercu",
-  policy("devis.suiviClient"),
+  '/:id/visite-rapport/apercu',
+  policy('devis.suiviClient'),
   asyncHandler(async (req: Request, res: Response) => {
     const { companyId, devis } = await devisPourDocument(req, false);
     const pdf = await fabriquerPdfVisiteTechnique(companyId, devis, {
@@ -1365,7 +1469,7 @@ devisRouter.post(
   '/:id/envoyer-client',
   policy('devis.sendClient'),
   asyncHandler(async (req: Request, res: Response) => {
-    const { companyId, devis } = await devisPourDocument(req, true);
+    const { companyId, acc, devis } = await devisPourDocument(req, true, true);
     if (req.body?.confirme !== true) {
       throw new AppError(400, 'Confirmez avoir vérifié le devis avant de l\'envoyer au client.', 'CONFIRMATION_REQUISE');
     }
@@ -1388,7 +1492,7 @@ devisRouter.post(
     const transformed = transformDevis(refreshed);
     notify(() => socketEvents.devisUpdated(req.user!.userId, companyId, transformed));
     res.json({
-      data: transformed,
+      data: shapeDevis(acc, transformed),
       envoyes: r.envoyes,
       echecs: r.echecs,
       message: `Devis envoyé à ${r.envoyes.join(', ')}` + (r.echecs.length ? ` (échec pour ${r.echecs.join(', ')})` : ''),

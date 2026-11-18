@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Camera, Plus, Trash2, ZoomIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { compressAndOptimizeImage, MAX_PHOTOS_PER_MISSION } from '../lib/imageOptimizer';
+import { safeImageSrc } from '../lib/companyHQ';
 import type { TerrainPhoto } from '../lib/api';
 
 type CategoriePhoto = NonNullable<TerrainPhoto['category']>;
@@ -176,7 +177,7 @@ export function PhotoDossierEditor({
                 style={{ position: 'relative', cursor: 'pointer', height: '94px', background: '#0f172a' }}
                 title="Agrandir la photo"
               >
-                <img src={ph.url} alt={ph.caption || 'Photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={safeImageSrc(ph.url) || ''} alt={ph.caption || 'Photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 <span
                   style={{
                     position: 'absolute',

@@ -274,7 +274,7 @@ export function CarteStudioView({
       if ((mode === 'positions' || mode === 'both') && premier) {
         const techIcon = L.divIcon({
           className: 'm-map-tech-marker',
-          html: `<div style="background:${color};color:#fff;border-radius:999px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.25);">${tName.slice(0, 2).toUpperCase()}</div>`,
+          html: `<div style="background:${color};color:#fff;border-radius:999px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.25);">${escapeHtml(tName.slice(0, 2).toUpperCase())}</div>`,
           iconSize: [32, 32],
           iconAnchor: [16, 40],
         });

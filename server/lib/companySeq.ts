@@ -7,16 +7,17 @@ import { prisma } from './prisma.js';
 export async function nextCompanyRef(
   companyId: number,
   prefix: 'DEV' | 'INT' | 'VIS',
-  year: number = new Date().getFullYear()
+  year: number = new Date().getFullYear(),
+  tx: any = prisma
 ): Promise<string> {
   const pattern = `${prefix}-${year}-`;
   const rows =
     prefix === 'DEV'
-      ? await prisma.devis.findMany({
+      ? await tx.devis.findMany({
           where: { companyId, referenceMetier: { startsWith: pattern } },
           select: { referenceMetier: true },
         })
-      : await prisma.intervention.findMany({
+      : await tx.intervention.findMany({
           where: { companyId, referenceMetier: { startsWith: pattern } },
           select: { referenceMetier: true },
         });

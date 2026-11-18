@@ -11,6 +11,8 @@
 import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertDocumentStorageQuota } from '../lib/storageQuotas.js';
+import { computeSchedulerBackoffMs, setBoundedRetryEntry, withWallTimeout } from '../domain/schedulerHelpers.js';
 import { APP_URL, sendRapportClientLinkEmail } from './emailService.js';
 import { notifier, ajouterHistorique } from './technicianAutomation.js';
 import { comptesParRoles, etatLien } from './devisClient.js';
@@ -114,8 +116,8 @@ export async function dernierDocumentRapport(companyId: number, interventionId: 
   return docs[0] || null;
 }
 
-export async function revoquerLiensRapportActifs(companyId: number, interventionId: number, raison: string): Promise<number> {
-  const res = await db.rapportLienClient.updateMany({
+export async function revoquerLiensRapportActifs(companyId: number, interventionId: number, raison: string, tx: any = db): Promise<number> {
+  const res = await tx.rapportLienClient.updateMany({
     where: { companyId, interventionId, reponse: null, revoqueLe: null },
     data: { revoqueLe: new Date(), revoqueRaison: raison },
   });
@@ -200,6 +202,7 @@ export async function envoyerRapportAuClient(p: {
     if (!doc) throw new AppError(422, "Déposez d'abord le PDF du rapport, ou choisissez de le générer.", 'DOCUMENT_REQUIS');
   } else {
     const pdf = await fabriquerPdf(companyId, intervention, photosChoisies);
+    await assertDocumentStorageQuota(db, companyId, { interventionId: intervention.id }, pdf.length);
     const crypto = await import('node:crypto');
     doc = await db.rapportDocument.create({
       data: {
@@ -217,18 +220,20 @@ export async function envoyerRapportAuClient(p: {
   }
 
   const maintenant = new Date();
-  await revoquerLiensRapportActifs(companyId, intervention.id, 'Nouvel envoi');
-  const lien = await db.rapportLienClient.create({
-    data: {
-      companyId,
-      interventionId: intervention.id,
-      documentId: doc!.id,
-      sel: genererSel(),
-      destinataires: JSON.stringify(choix.emails),
-      contenuJson: JSON.stringify(contenuPourClient(intervention, photosChoisies)),
-      expireLe: new Date(maintenant.getTime() + DUREE_LIEN_JOURS * JOUR_MS),
-      creePar: p.auteur,
-    },
+  const lien = await db.$transaction(async (tx: any) => {
+    await revoquerLiensRapportActifs(companyId, intervention.id, 'Nouvel envoi', tx);
+    return tx.rapportLienClient.create({
+      data: {
+        companyId,
+        interventionId: intervention.id,
+        documentId: doc!.id,
+        sel: genererSel(),
+        destinataires: JSON.stringify(choix.emails),
+        contenuJson: JSON.stringify(contenuPourClient(intervention, photosChoisies)),
+        expireLe: new Date(maintenant.getTime() + DUREE_LIEN_JOURS * JOUR_MS),
+        creePar: p.auteur,
+      },
+    });
   });
 
   const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
@@ -293,27 +298,35 @@ export async function enregistrerReponseRapport(jeton: string, body: unknown): P
   if (!v.ok) throw new AppError(400, v.message, 'INVALID_PAYLOAD');
   const { reponse, motif, nom } = v.value;
 
-  // Usage unique : la mise à jour ne réussit que si le lien est encore actif à cet instant précis
+  // Usage unique : vérification société active + prise du lien + mise à jour intervention dans une transaction atomique
   const maintenant = new Date();
-  const pris = await db.rapportLienClient.updateMany({
-    where: { id: lien.id, reponse: null, revoqueLe: null, expireLe: { gt: maintenant } },
-    data: { reponse, motif: motif || null, repondantNom: nom, reponduLe: maintenant },
-  });
-  if (!pris.count) throw new AppError(409, 'Une réponse a déjà été enregistrée pour ce rapport.', 'DEJA_REPONDU');
-
-  const intervention = await db.intervention.findFirst({ where: { id: lien.interventionId, companyId: lien.companyId } });
-  if (!intervention) throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
   const statutRapport = statutApresReponseRapport(reponse);
-  const ref = referenceRapport(intervention);
-  const details = `${nom}${motif ? ` — « ${motif} »` : ''}`;
+  const intervention = await db.$transaction(async (tx: any) => {
+    const comp = await tx.company.findUnique({ where: { id: lien.companyId }, select: { active: true } });
+    if (!comp || comp.active === false) {
+      throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
+    }
+    const pris = await tx.rapportLienClient.updateMany({
+      where: { id: lien.id, companyId: lien.companyId, interventionId: lien.interventionId, reponse: null, revoqueLe: null, expireLe: { gt: maintenant } },
+      data: { reponse, motif: motif || null, repondantNom: nom, reponduLe: maintenant },
+    });
+    if (!pris.count) throw new AppError(409, 'Une réponse a déjà été enregistrée pour ce rapport.', 'DEJA_REPONDU');
 
-  await db.intervention.update({
-    where: { id: intervention.id },
-    data: {
-      statutRapport,
-      historiqueJson: ajouterHistorique(intervention.historiqueJson, `Client (${nom})`, REPONSE_LIBELLE[reponse], details),
-    },
+    const txIntervention = await tx.intervention.findFirst({ where: { id: lien.interventionId, companyId: lien.companyId } });
+    if (!txIntervention) throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
+    const details = `${nom}${motif ? ` — « ${motif} »` : ''}`;
+
+    await tx.intervention.update({
+      where: { id: txIntervention.id },
+      data: {
+        statutRapport,
+        historiqueJson: ajouterHistorique(txIntervention.historiqueJson, `Client (${nom})`, REPONSE_LIBELLE[reponse], details),
+        version: { increment: 1 },
+      },
+    });
+    return txIntervention;
   });
+  const ref = referenceRapport(intervention);
 
   const companyId = lien.companyId as number;
   const dest = await comptesParRoles(companyId, ['ADMIN', 'CONDUCTEUR_TRAVAUX', 'REDACTEUR_RAPPORTS'], [intervention.userId]);
@@ -340,114 +353,163 @@ export async function enregistrerReponseRapport(jeton: string, body: unknown): P
 // ---------------------------------------------------------------------------
 
 let enCours = false;
+let resumeCursorRapport = 0;
+const rapportRetryBackoff = new Map<string, { fails: number; retryAfter: number }>();
 
 export async function executerAutomatisationsRapport(maintenant: Date = new Date()): Promise<{ relances: number; expires: number }> {
   if (enCours) return { relances: 0, expires: 0 };
   enCours = true;
   const bilan = { relances: 0, expires: 0 };
+  const deadline = Date.now() + 20_000;
+  const tenantFails = new Map<number, number>();
+  const companyCache = new Map<number, string>();
+  const nowMs = maintenant.getTime();
+  let stoppedByDeadline = false;
+  let lastId = resumeCursorRapport;
   try {
-    const envoyes: any[] = await db.intervention.findMany({
-      where: {
-        statutRapport: STATUT_ENVOYE,
-        companyId: { not: null },
-        envoiClientLe: { not: null },
-        company: { is: { active: true, autoRapportActif: true } },
-      },
-      take: 500,
-    });
-
-    for (const it of envoyes) {
-      const companyId = it.companyId as number;
-      const lien = (await liensDuRapport(companyId, it.id))[0];
-      if (!lien) continue;
-      const action = prochaineActionRapport({
-        statutRapport: it.statutRapport,
-        envoiLe: it.envoiClientLe,
-        expireLe: lien.expireLe,
-        reponduOuRevoque: Boolean(lien.reponse || lien.revoqueLe),
-        relanceJ3Le: it.relanceClientJ3Le,
-        relanceJ7Le: it.relanceClientJ7Le,
-        maintenant,
+    while (Date.now() < deadline) {
+      const envoyes: any[] = await db.intervention.findMany({
+        where: {
+          ...(lastId > 0 ? { id: { gt: lastId } } : {}),
+          statutRapport: STATUT_ENVOYE,
+          companyId: { not: null },
+          envoiClientLe: { not: null },
+          company: { is: { active: true, autoRapportActif: true } },
+        },
+        orderBy: [{ id: 'asc' }],
+        take: 250,
       });
-      if (action === 'aucune') continue;
-      const ref = referenceRapport(it);
+      if (envoyes.length === 0) break;
 
-      if (action === 'expirer') {
-        const ok = await db.rapportLienClient.updateMany({
-          where: { id: lien.id, reponse: null, revoqueLe: null },
-          data: { revoqueLe: maintenant, revoqueRaison: 'Expiré' },
-        });
-        if (!ok.count) continue;
-        // Le statut ne change PAS : sans réponse du client, le rapport n'est jamais considéré comme validé
-        await db.intervention.update({
-          where: { id: it.id },
-          data: {
-            historiqueJson: ajouterHistorique(
-              it.historiqueJson,
-              'Automatique',
-              'Automatique — lien du rapport expiré',
-              `Sans réponse du client ${DUREE_LIEN_JOURS} jours après l'envoi : le rapport n'est PAS validé`
-            ),
-          },
-        });
-        const dest = await comptesParRoles(companyId, ['ADMIN', 'CONDUCTEUR_TRAVAUX', 'REDACTEUR_RAPPORTS'], [it.userId]);
-        await notifier(companyId, dest, {
-          type: 'RAPPORT_EXPIRE',
-          titre: 'Rapport sans réponse du client',
-          message: `Le rapport ${ref} (${it.client || 'client'}) est resté ${DUREE_LIEN_JOURS} jours sans réponse : il n'est pas validé. Relancez le client ou renvoyez-le.`,
-          interventionId: it.id,
-        });
-        bilan.expires++;
-        continue;
-      }
-
-      // Relance J+3 / J+7 : mêmes destinataires, même lien
-      let emails: string[] = [];
-      try {
-        const parsed = JSON.parse(lien.destinataires || '[]');
-        if (Array.isArray(parsed)) emails = parsed.map(String);
-      } catch {
-        emails = [];
-      }
-      if (emails.length === 0) continue;
-      const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
-      const relance = action === 'relancer_j3' ? 'J3' : 'J7';
-      let nbEnvoyes = 0;
-      for (const to of emails) {
+      for (const it of envoyes) {
+        if (it.id > lastId) lastId = it.id;
+        if (Date.now() >= deadline) {
+          stoppedByDeadline = true;
+          break;
+        }
+        const companyId = it.companyId as number;
         try {
-          const r = await courrier.envoyerLien({
-            companyId,
-            companyName: company?.name || 'Votre prestataire',
-            toEmail: to,
-            rapport: { reference: ref, client: it.client, chantier: it.chantier, siteAdresse: it.siteAdresse },
-            lien: urlLienRapport(lien),
-            expireLe: new Date(lien.expireLe),
-            relance,
+          const lien = (await liensDuRapport(companyId, it.id))[0];
+          if (!lien) continue;
+          const action = prochaineActionRapport({
+            statutRapport: it.statutRapport,
+            envoiLe: it.envoiClientLe,
+            expireLe: lien.expireLe,
+            reponduOuRevoque: Boolean(lien.reponse || lien.revoqueLe),
+            relanceJ3Le: it.relanceClientJ3Le,
+            relanceJ7Le: it.relanceClientJ7Le,
+            maintenant,
           });
-          if (r.sent) nbEnvoyes++;
+          if (action === 'aucune') continue;
+          const ref = referenceRapport(it);
+
+          if (action === 'expirer') {
+            const ok = await db.rapportLienClient.updateMany({
+              where: { id: lien.id, reponse: null, revoqueLe: null },
+              data: { revoqueLe: maintenant, revoqueRaison: 'Expiré' },
+            });
+            if (!ok.count) continue;
+            // Le statut ne change PAS : sans réponse du client, le rapport n'est jamais considéré comme validé
+            await db.intervention.update({
+              where: { id: it.id },
+              data: {
+                historiqueJson: ajouterHistorique(
+                  it.historiqueJson,
+                  'Automatique',
+                  'Automatique — lien du rapport expiré',
+                  `Sans réponse du client ${DUREE_LIEN_JOURS} jours après l'envoi : le rapport n'est PAS validé`
+                ),
+              },
+            });
+            const dest = await comptesParRoles(companyId, ['ADMIN', 'CONDUCTEUR_TRAVAUX', 'REDACTEUR_RAPPORTS'], [it.userId]);
+            await notifier(companyId, dest, {
+              type: 'RAPPORT_EXPIRE',
+              titre: 'Rapport sans réponse du client',
+              message: `Le rapport ${ref} (${it.client || 'client'}) est resté ${DUREE_LIEN_JOURS} jours sans réponse : il n'est pas validé. Relancez le client ou renvoyez-le.`,
+              interventionId: it.id,
+            });
+            bilan.expires++;
+            continue;
+          }
+
+          if ((tenantFails.get(companyId) || 0) >= 2) continue;
+          const retryKey = `${companyId}:${it.id}`;
+          const bo = rapportRetryBackoff.get(retryKey);
+          if (bo && nowMs < bo.retryAfter) continue;
+
+          // Relance J+3 / J+7 : mêmes destinataires, même lien
+          let emails: string[] = [];
+          try {
+            const parsed = JSON.parse(lien.destinataires || '[]');
+            if (Array.isArray(parsed)) emails = parsed.map(String);
+          } catch {
+            emails = [];
+          }
+          if (emails.length === 0) continue;
+          const verrou =
+            action === 'relancer_j3'
+              ? { relanceClientJ3Le: maintenant }
+              : { relanceClientJ7Le: maintenant, relanceClientJ3Le: it.relanceClientJ3Le || maintenant };
+          const claimWhere =
+            action === 'relancer_j3'
+              ? { id: it.id, companyId, relanceClientJ3Le: null, relanceClientJ7Le: null }
+              : { id: it.id, companyId, relanceClientJ7Le: null };
+          let companyName = companyCache.get(companyId);
+          if (companyName === undefined) {
+            const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
+            companyName = String(company?.name || 'Votre prestataire');
+            companyCache.set(companyId, companyName);
+          }
+          const safeCompanyName = companyName;
+          const relance = action === 'relancer_j3' ? 'J3' : 'J7';
+          let nbEnvoyes = 0;
+          for (const to of emails) {
+            try {
+              const r = await withWallTimeout(
+                courrier.envoyerLien({
+                  companyId,
+                  companyName: safeCompanyName,
+                  toEmail: to,
+                  rapport: { reference: ref, client: it.client, chantier: it.chantier, siteAdresse: it.siteAdresse },
+                  lien: urlLienRapport(lien),
+                  expireLe: new Date(lien.expireLe),
+                  relance,
+                })
+              );
+              if (r.sent) nbEnvoyes++;
+            } catch {
+              /* echec gere par backoff exponentiel et disjoncteur par societe */
+            }
+          }
+          if (nbEnvoyes === 0) {
+            tenantFails.set(companyId, (tenantFails.get(companyId) || 0) + 1);
+            const fails = (bo?.fails || 0) + 1;
+            const waitMs = computeSchedulerBackoffMs(fails);
+            setBoundedRetryEntry(rapportRetryBackoff, retryKey, { fails, retryAfter: nowMs + waitMs });
+            continue;
+          }
+          rapportRetryBackoff.delete(retryKey);
+          await db.intervention.updateMany({
+            where: claimWhere,
+            data: {
+              ...verrou,
+              historiqueJson: ajouterHistorique(
+                it.historiqueJson,
+                'Automatique',
+                `Automatique — relance ${action === 'relancer_j3' ? 'J+3' : 'J+7'} du rapport envoyée au client`,
+                `Sans réponse depuis l'envoi • ${emails.join(', ')}`
+              ),
+            },
+          });
+          bilan.relances++;
         } catch {
-          /* on réessaie à la prochaine passe si aucune adresse n'a reçu le message */
+          // Isoler les erreurs par dossier pour ne jamais bloquer les autres entreprises
         }
       }
-      if (nbEnvoyes === 0) continue;
-      const verrou =
-        action === 'relancer_j3'
-          ? { relanceClientJ3Le: maintenant }
-          : { relanceClientJ7Le: maintenant, relanceClientJ3Le: it.relanceClientJ3Le || maintenant };
-      await db.intervention.update({
-        where: { id: it.id },
-        data: {
-          ...verrou,
-          historiqueJson: ajouterHistorique(
-            it.historiqueJson,
-            'Automatique',
-            `Automatique — relance ${action === 'relancer_j3' ? 'J+3' : 'J+7'} du rapport envoyée au client`,
-            `Sans réponse depuis l'envoi • ${emails.join(', ')}`
-          ),
-        },
-      });
-      bilan.relances++;
+      if (stoppedByDeadline) break;
+      if (envoyes.length < 250) break;
     }
+    resumeCursorRapport = stoppedByDeadline ? lastId : 0;
   } finally {
     enCours = false;
   }

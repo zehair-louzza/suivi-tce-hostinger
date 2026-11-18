@@ -20,7 +20,7 @@ const COMPANY_B = 20;
 async function startServer() {
   const server = http.createServer();
   const io = new Server(server, { cors: { origin: '*' } });
-  setupSocketHandlers(io);
+  setupSocketHandlers(io, { verifyConnection: async () => true });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const port = (server.address() as AddressInfo).port;
   const clients: ClientSocket[] = [];

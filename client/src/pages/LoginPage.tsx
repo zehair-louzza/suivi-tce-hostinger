@@ -206,7 +206,7 @@ const registerCompanySchema = z
 
 type RegisterCompanyForm = z.infer<typeof registerCompanySchema>;
 
-function decodeJwtPayload(token: string): { email?: string; name?: string; picture?: string } | null {
+function decodeJwtPayload(token: string): { email?: string; name?: string; picture?: string; nonce?: string } | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -291,20 +291,50 @@ export function LoginPage() {
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'cgu' | 'rgpd' | 'mentions'>('cgu');
 
-  // Google OAuth State
+  // Google OAuth State + Nonce CSPRNG (protection CSRF sur le retour OAuth)
   const googleClientId = '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com';
 
-  const getGoogleAuthUrl = (tab: 'login' | 'register') => {
+  const randomHexToken = () => {
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  const startGoogleOAuth = (tab: 'login' | 'register') => {
+    setIsGoogleLoading(true);
+    if (tab === 'register') {
+      const regValues = registerForm.getValues();
+      try {
+        if (regValues.companyName) sessionStorage.setItem('pending_google_company_name', regValues.companyName);
+        if (regValues.siretOrSiren) sessionStorage.setItem('pending_google_siret', regValues.siretOrSiren);
+        if (regValues.acceptTerms) sessionStorage.setItem('pending_google_terms', 'true');
+      } catch {
+        // ignore storage error
+      }
+    }
+    const csrf = randomHexToken();
+    const nonce = randomHexToken();
+    try {
+      sessionStorage.setItem(
+        'anelec_google_oauth_tx',
+        JSON.stringify({ csrf, nonce, tab, createdAt: Date.now() })
+      );
+    } catch {
+      // ignore storage error
+    }
     const origin =
       typeof window !== 'undefined' && window.location.origin
         ? window.location.origin
         : 'https://suivi.anelecgroupe.com';
     const redirectUri = `${origin}/login`;
-    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
       googleClientId
     )}&redirect_uri=${encodeURIComponent(
       redirectUri
-    )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=${Date.now()}&prompt=select_account&state=${tab}`;
+    )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=${encodeURIComponent(
+      nonce
+    )}&prompt=select_account&state=${encodeURIComponent(`${tab}:${csrf}`)}`;
+    window.location.assign(url);
   };
 
   // Même e-mail dans plusieurs entreprises : choix du compte à ouvrir (nom + SIREN), après identification
@@ -374,6 +404,8 @@ export function LoginPage() {
     try {
       sessionStorage.removeItem('anelec_google_credential');
       sessionStorage.removeItem('anelec_google_profile');
+      sessionStorage.removeItem('anelec_google_oauth_tx');
+      sessionStorage.removeItem('anelec_oauth_hash');
       sessionStorage.removeItem('pending_google_company_name');
       sessionStorage.removeItem('pending_google_siret');
       sessionStorage.removeItem('pending_google_terms');
@@ -398,11 +430,14 @@ export function LoginPage() {
     const tokenType = params.get('type');
     const state = params.get('state');
 
-    // Nettoyer le hash de l'URL
+    // Nettoyer le hash de l'URL immédiatement
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
 
     // Cas 1 : Lien de confirmation d'e-mail Supabase Auth (#access_token=...&type=signup)
-    if (accessToken && (tokenType === 'signup' || tokenType === 'recovery' || tokenType === 'magiclink')) {
+    if (accessToken && tokenType === 'signup') {
+      if (useAuthStore.getState().isAuthenticated) {
+        return;
+      }
       confirmSupabaseToken(accessToken)
         .then((res) => {
           toast.success(res.message || 'Votre adresse e-mail a été confirmée et votre compte est activé !');
@@ -414,23 +449,41 @@ export function LoginPage() {
       return;
     }
 
-    // Cas 2 : Retour Google OAuth 2.0
+    // Cas 2 : Retour Google OAuth 2.0 — contrôle strict du jeton CSRF state + nonce
     const googleToken = idToken || accessToken;
     if (googleToken) {
-      if (state === 'register') {
+      let storedTx: { csrf?: string; nonce?: string; tab?: string; createdAt?: number } | null = null;
+      try {
+        const rawTx = sessionStorage.getItem('anelec_google_oauth_tx');
+        sessionStorage.removeItem('anelec_google_oauth_tx');
+        if (rawTx) storedTx = JSON.parse(rawTx);
+      } catch {
+        storedTx = null;
+      }
+
+      const [stateTab, stateCsrf] = String(state || '').split(':');
+      const txFresh = Boolean(storedTx?.createdAt && Date.now() - storedTx.createdAt < 15 * 60_000);
+      const csrfOk = Boolean(storedTx?.csrf && stateCsrf && stateCsrf === storedTx.csrf);
+      const decoded = idToken ? decodeJwtPayload(idToken) : null;
+      const nonceOk = !idToken || Boolean(decoded?.nonce && storedTx?.nonce && decoded.nonce === storedTx.nonce);
+
+      if (!txFresh || !csrfOk || !nonceOk) {
+        clearGoogleSelection();
+        toast.error('Session OAuth expirée ou invalide (protection CSRF). Veuillez réessayer.');
+        return;
+      }
+
+      if (stateTab === 'register' || storedTx?.tab === 'register') {
         setActiveTab('register');
       }
 
       // Décodage immédiat du profil Google depuis l'id_token s'il est présent pour pré-remplir instantanément les champs
-      if (idToken) {
-        const decoded = decodeJwtPayload(idToken);
-        if (decoded?.email) {
-          saveGoogleSelection(googleToken, {
-            email: decoded.email,
-            name: decoded.name || decoded.email.split('@')[0],
-            picture: decoded.picture,
-          });
-        }
+      if (idToken && decoded?.email) {
+        saveGoogleSelection(googleToken, {
+          email: decoded.email,
+          name: decoded.name || decoded.email.split('@')[0],
+          picture: decoded.picture,
+        });
       }
 
       const pendingName = sessionStorage.getItem('pending_google_company_name') || '';
@@ -1014,9 +1067,9 @@ export function LoginPage() {
             noValidate
           >
             {/* BOUTON GOOGLE DIRECT */}
-            <a
-              href={getGoogleAuthUrl('login')}
-              onClick={() => setIsGoogleLoading(true)}
+            <button
+              type="button"
+              onClick={() => startGoogleOAuth('login')}
               style={{
                 width: '100%',
                 padding: '11px 14px',
@@ -1043,7 +1096,7 @@ export function LoginPage() {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
               <span>Continuer avec Google</span>
-            </a>
+            </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -4px 0' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />
@@ -1324,17 +1377,9 @@ export function LoginPage() {
             ) : (
               <>
                 {/* BOUTON GOOGLE DIRECT INSCRIPTION RAPIDE */}
-                <a
-                  href={getGoogleAuthUrl('register')}
-                  onClick={() => {
-                    setIsGoogleLoading(true);
-                    const regValues = registerForm.getValues();
-                    if (regValues.companyName)
-                      sessionStorage.setItem('pending_google_company_name', regValues.companyName);
-                    if (regValues.siretOrSiren)
-                      sessionStorage.setItem('pending_google_siret', regValues.siretOrSiren);
-                    if (regValues.acceptTerms) sessionStorage.setItem('pending_google_terms', 'true');
-                  }}
+                <button
+                  type="button"
+                  onClick={() => startGoogleOAuth('register')}
                   style={{
                     width: '100%',
                     padding: '11px 14px',
@@ -1361,7 +1406,7 @@ export function LoginPage() {
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                   </svg>
                   <span>Inscription directe avec Google</span>
-                </a>
+                </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '-4px 0 -2px 0' }}>
                   <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle, #e2e8f0)' }} />

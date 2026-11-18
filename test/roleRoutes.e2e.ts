@@ -33,6 +33,10 @@ const user = (id: number, role: string, o: Record<string, any> = {}) => ({
 });
 
 before(async () => {
+  db.company.seed([
+    { id: 1, name: 'Société 1', active: true },
+    { id: 2, name: 'Société 2', active: true },
+  ]);
   db.user.seed([
     user(101, 'ADMIN'), user(102, 'CHIFFRAGE_DEVIS'), user(103, 'CONDUCTEUR_TRAVAUX'),
     user(104, 'REDACTEUR_RAPPORTS'), user(105, 'TECHNICIEN', { technicienNom: 'Karim' }),

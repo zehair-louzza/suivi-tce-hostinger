@@ -19,7 +19,7 @@ import { TourneeMapOptimizer } from './TourneeMapOptimizer';
 import { MissionResponseCard } from './MissionResponseCard';
 import { NotificationBell } from './NotificationBell';
 import { geocodeAddress } from '../lib/geocoding';
-import { useCompanyHQ, escapeHtml } from '../lib/companyHQ';
+import { useCompanyHQ, escapeHtml, safeImageSrc } from '../lib/companyHQ';
 import { CLOCK_IN_PERIMETER_METERS, haversineDistanceMeters } from '../../../shared/types';
 
 interface TechnicianMobileViewProps {
@@ -477,6 +477,8 @@ function MobileRouteMap({
       });
 
       const marker = L.marker(latLng, { icon: stopPinIcon }).addTo(lg);
+      const safeMapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m.chantier || 'Paris')}`;
+      const missionIdNum = Number(m.id) || 0;
       marker.bindPopup(`
         <div style="font-family: inherit; font-size: 14px; line-height: 1.45; min-width: 230px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
@@ -484,7 +486,7 @@ function MobileRouteMap({
               Étape ${stopNum}
             </span>
             <span style="font-weight: 700; color: #1D4ED8; font-size: 13px;">
-              ${m.heureDebut || '09:00'}
+              ${escapeHtml(m.heureDebut || '09:00')}
             </span>
           </div>
           <strong style="font-size: 15px; color: #0f172a; display: block; margin-top: 2px;">
@@ -496,21 +498,29 @@ function MobileRouteMap({
           <div style="display: flex; gap: 6px;">
             <button
               type="button"
-              onclick="window.__openMobileMission(${m.id})"
+              data-open-mission="${missionIdNum}"
               style="flex: 1; padding: 12px 12px; min-height: 44px; background: #1D4ED8; color: #fff; border: none; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;"
             >
               Ouvrir la mission
             </button>
-            <button
-              type="button"
-              onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m.chantier || 'Paris')}', '_blank')"
-              style="padding: 12px 14px; min-height: 44px; background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;"
+            <a
+              href="${escapeHtml(safeMapsHref)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 12px 14px; min-height: 44px; background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;"
             >
               GPS
-            </button>
+            </a>
           </div>
         </div>
       `);
+      marker.on('popupopen', (evt) => {
+        const el = evt.popup.getElement();
+        const btn = el?.querySelector('[data-open-mission]');
+        if (btn) {
+          btn.addEventListener('click', () => (window as any).__openMobileMission?.(missionIdNum), { once: true });
+        }
+      });
     });
 
     // 3. Tracé d'itinéraire
@@ -1538,12 +1548,15 @@ export function TechnicianMobileView({
               </span>
             </h3>
             <div className="t-photos">
-              {photos.map((p, i) => (
-                <figure key={i} className="t-photo">
-                  <img src={p.url} alt={p.label} />
-                  <figcaption>{p.label}</figcaption>
-                </figure>
-              ))}
+              {photos.map((p, i) => {
+                const safeSrc = safeImageSrc(p.url);
+                return safeSrc ? (
+                  <figure key={i} className="t-photo">
+                    <img src={safeSrc} alt={p.label} />
+                    <figcaption>{p.label}</figcaption>
+                  </figure>
+                ) : null;
+              })}
               <input
                 ref={fileInputRef}
                 type="file"

@@ -26,6 +26,34 @@ export function escapeHtml(value: unknown): string {
   });
 }
 
+const SAFE_DATA_IMG_RE = /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i;
+
+export function safeImageSrc(url: unknown): string | undefined {
+  if (typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  if (SAFE_DATA_IMG_RE.test(trimmed)) return trimmed;
+  if (/^\/(?!\/)/.test(trimmed) || /^blob:/i.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+export function safeExternalUrl(url: unknown): string {
+  if (typeof url !== 'string') return '#';
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.toString();
+  } catch {
+    // ignore invalid URL
+  }
+  return '#';
+}
+
+export function safeHexColor(color: unknown, fallback = '#0f172a'): string {
+  const s = String(color || '').trim();
+  return /^#[0-9a-f]{3,8}$/i.test(s) ? s : fallback;
+}
+
 export interface CompanyHQ {
   name: string;
   addr: string;

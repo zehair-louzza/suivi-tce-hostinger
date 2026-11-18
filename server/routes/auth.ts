@@ -6,12 +6,13 @@ import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { assertStrongPassword } from '../lib/password.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { PLATFORM_CREATOR, getEffectivePermissions, isPlatformCreatorIdentity, ROLE_DEFINITIONS } from '../../shared/types.js';
+import { PLATFORM_CREATOR, getEffectivePermissions, isPlatformCreatorIdentity, ROLE_DEFINITIONS, sanitizePermissionsForRole } from '../../shared/types.js';
 import { resolveCreatorAwarePhone, syncPlatformCreatorInDb } from '../lib/platformCreator.js';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
+import { esc, sendConfirmationEmail, sendPasswordResetEmail } from '../services/emailService.js';
 import { initCompanyReferentiels } from '../lib/companyInit.js';
+import { disconnectUserSockets } from '../socket/index.js';
 import {
   basePublicUserSelect,
   findPublicUserUnique,
@@ -28,10 +29,63 @@ import {
 
 export const authRouter = Router();
 
+const RESEND_COOLDOWN_MS = 45_000;
+const UNCONFIRMED_COMPANY_GRACE_MS = 15 * 60_000;
+
+async function assertOrCleanPendingCompany(
+  tx: any,
+  whereOr: Record<string, unknown>[]
+): Promise<void> {
+  const existingCompany = await tx.company.findFirst({ where: { OR: whereOr } });
+  if (!existingCompany) return;
+
+  const existingUsers = await tx.user.findMany({
+    where: { companyId: existingCompany.id },
+    select: {
+      id: true,
+      emailConfirmed: true,
+      active: true,
+      confirmationCodeExpires: true,
+      createdAt: true,
+    },
+  });
+  const now = Date.now();
+  const isExpiredUnconfirmedOnly =
+    existingUsers.length > 0 &&
+    existingUsers.every((u: any) => {
+      if (u.emailConfirmed || u.active) return false;
+      const expiresAt = u.confirmationCodeExpires
+        ? new Date(u.confirmationCodeExpires).getTime()
+        : new Date(u.createdAt).getTime() + UNCONFIRMED_COMPANY_GRACE_MS;
+      return expiresAt < now;
+    });
+
+  if (!isExpiredUnconfirmedOnly) {
+    throw new AppError(
+      409,
+      'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
+      'COMPANY_EXISTS'
+    );
+  }
+
+  await tx.referentiel.deleteMany({ where: { companyId: existingCompany.id } });
+  await tx.user.deleteMany({ where: { companyId: existingCompany.id } });
+  await tx.company.delete({ where: { id: existingCompany.id } });
+}
+
+async function isCompanyActiveForUser(user: { companyId?: number | null; company?: { active?: boolean } | null }): Promise<boolean> {
+  if (user.company && typeof user.company.active === 'boolean') return user.company.active;
+  if (user.companyId == null) return true;
+  const comp = await prisma.company.findUnique({ where: { id: user.companyId }, select: { active: true } });
+  return !comp ? false : comp.active !== false;
+}
+
 // Confirmation d'e-mail et acceptation contractuelle des conditions
 authRouter.get(
   '/confirm-email',
   asyncHandler(async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     const token = String(req.query.token || '').trim();
     if (!token) {
       return res.status(400).send('<h1>Lien de confirmation invalide</h1><p>Le jeton de validation est manquant.</p>');
@@ -42,8 +96,8 @@ authRouter.get(
       include: { company: true },
     });
 
-    if (!user) {
-      return res.status(404).send('<h1>Jeton d\'activation introuvable ou déjà utilisé</h1><p>Veuillez contacter le support ANELEC GROUPE.</p>');
+    if (!user || user.emailConfirmed === true || !(await isCompanyActiveForUser(user))) {
+      return res.status(404).send("<h1>Jeton d'activation introuvable ou déjà utilisé</h1><p>Veuillez contacter le support ANELEC GROUPE.</p>");
     }
 
     await prisma.user.update({
@@ -52,13 +106,20 @@ authRouter.get(
         active: true,
         emailConfirmed: true,
         confirmationToken: null,
+        confirmationCode: null,
+        confirmationCodeExpires: null,
+        confirmationCodeAttempts: 0,
+        confirmationSentAt: null,
         termsAcceptedAt: new Date(),
         termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
       },
     });
 
-    const companyName = user.company?.name || 'votre entreprise';
-    const loginUrl = (process.env.APP_URL || 'https://suivi.anelecgroupe.com') + '/login?activated=1';
+    const companyName = esc(user.company?.name || 'votre entreprise');
+    const safeName = esc(user.name);
+    const rawBaseUrl = (process.env.APP_URL || 'https://suivi.anelecgroupe.com').trim();
+    const safeBaseUrl = /^https?:\/\//i.test(rawBaseUrl) ? rawBaseUrl.replace(/\/+$/, '') : 'https://suivi.anelecgroupe.com';
+    const loginUrl = esc(`${safeBaseUrl}/login?activated=1`);
 
     return res.send(`<!DOCTYPE html>
 <html lang="fr">
@@ -82,7 +143,7 @@ authRouter.get(
     <div class="icon">✓</div>
     <h1>Espace Entreprise Activé !</h1>
     <p>
-      Félicitations <strong>${user.name}</strong> ! Votre compte administrateur et l'espace de <strong>${companyName}</strong> ont été certifiés et activés avec succès.<br /><br />
+      Félicitations <strong>${safeName}</strong> ! Votre compte administrateur et l'espace de <strong>${companyName}</strong> ont été certifiés et activés avec succès.<br /><br />
       Les conditions contractuelles et la politique RGPD ont été formellement validées et enregistrées.
     </p>
     <a href="${loginUrl}" class="btn">Accéder à la plateforme ANELEC TCE</a>
@@ -131,10 +192,23 @@ const RegisterSchema = z.object({
   siretOrSiren: z.string().optional(),
 });
 
-function generateTokens(user: { id: number; email: string; role: string; companyId?: number | null }) {
+function generateTokens(user: {
+  id: number;
+  email: string;
+  role: string;
+  companyId?: number | null;
+  tokenVersion?: number | null;
+}) {
   // Pas d'entreprise de repli : un compte sans entreprise reçoit un jeton sans companyId (donc aucun accès aux données).
-  const payload = { userId: user.id, email: user.email, role: user.role, companyId: user.companyId ?? undefined };
-  const accessToken = jwt.sign(payload, config.jwtSecret, {
+  const sv = typeof user.tokenVersion === 'number' && Number.isInteger(user.tokenVersion) ? user.tokenVersion : 1;
+  const payload = {
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    companyId: user.companyId ?? undefined,
+    sv,
+  };
+  const accessToken = jwt.sign({ ...payload, type: 'access' }, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
   });
   const refreshToken = jwt.sign({ ...payload, type: 'refresh' }, config.jwtSecret, {
@@ -245,67 +319,28 @@ authRouter.post(
   '/register',
   asyncHandler(async (req, res) => {
     const data = RegisterSchema.parse(req.body);
-    // Un même e-mail peut avoir un compte dans plusieurs entreprises : l'inscription crée TOUJOURS une nouvelle
-    // entreprise (voir plus bas), donc aucun doublon (e-mail, entreprise) n'est possible ici.
     data.email = normaliserEmail(data.email);
-
-    // Aucune entreprise par défaut : on crée TOUJOURS un espace distinct (ou on refuse). Un nom vide ou composé
-    // d'espaces ne doit jamais rattacher le compte à une entreprise existante.
-    let companyId: number;
-
-    if (data.companyName && data.companyName.trim().length >= 2) {
-      const rawDigits = (data.siretOrSiren || '').replace(/\s+/g, '').replace(/[^0-9]/g, '');
-      let cleanSiret: string | null = null;
-      let cleanSiren: string | null = null;
-
-      if (rawDigits.length === 14) {
-        cleanSiret = rawDigits;
-        cleanSiren = rawDigits.slice(0, 9);
-      } else if (rawDigits.length === 9) {
-        cleanSiren = rawDigits;
-        cleanSiret = `${rawDigits}00010`;
-      } else if (rawDigits.length > 0) {
-        throw new AppError(400, 'Le SIREN doit comporter 9 chiffres et le SIRET 14 chiffres.', 'INVALID_SIRET');
-      }
-
-      let company = await prisma.company.findFirst({
-        where: {
-          OR: [
-            ...(cleanSiret ? [{ siret: cleanSiret }] : []),
-            ...(cleanSiren ? [{ siren: cleanSiren }] : []),
-            { name: { equals: data.companyName.trim(), mode: 'insensitive' } },
-          ],
-        },
-      });
-
-      // SÉCURITÉ : s'inscrire avec le nom/SIREN d'une entreprise existante donnait un accès ADMIN à ses données.
-      if (company) {
-        throw new AppError(
-          409,
-          'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
-          'COMPANY_EXISTS'
-        );
-      }
-
-      if (!company) {
-        company = await prisma.company.create({
-          data: {
-            name: data.companyName.trim(),
-            siret: cleanSiret,
-            siren: cleanSiren,
-          },
-        });
-
-        // Initialisation des référentiels de base pour le nouveau tenant
-        await initCompanyReferentiels(company.id, data.name);
-      }
-
-      companyId = company.id;
-    } else {
-      throw new AppError(400, "Le nom de l'entreprise est obligatoire", 'INVALID_COMPANY');
+    const cleanCompanyName = (data.companyName || '').trim();
+    const cleanName = data.name.trim();
+    if (cleanCompanyName.length < 2 || !cleanName) {
+      throw new AppError(400, "Le nom du responsable et le nom de l'entreprise sont obligatoires", 'INVALID_COMPANY');
     }
 
-    assertStrongPassword(data.password, { email: data.email, name: data.name, companyName: data.companyName });
+    // Validation stricte SIRET/SIREN et politique de mot de passe AVANT toute écriture en base (pas de squat d'entreprise)
+    const rawDigits = (data.siretOrSiren || '').replace(/\s+/g, '').replace(/[^0-9]/g, '');
+    let cleanSiret: string | null = null;
+    let cleanSiren: string | null = null;
+    if (rawDigits.length === 14) {
+      cleanSiret = rawDigits;
+      cleanSiren = rawDigits.slice(0, 9);
+    } else if (rawDigits.length === 9) {
+      cleanSiren = rawDigits;
+      cleanSiret = `${rawDigits}00010`;
+    } else if (rawDigits.length > 0) {
+      throw new AppError(400, 'Le SIREN doit comporter 9 chiffres et le SIRET 14 chiffres.', 'INVALID_SIRET');
+    }
+
+    assertStrongPassword(data.password, { email: data.email, name: cleanName, companyName: cleanCompanyName });
     const password = await bcrypt.hash(data.password, 12);
     // Tout créateur d'espace entreprise est ADMINISTRATEUR de son espace
     const role = 'ADMIN';
@@ -317,43 +352,76 @@ authRouter.post(
     const confirmationSentAt = new Date();
 
     const resolvedPhone = resolveCreatorAwarePhone(data.email, data.phone);
-    const isCreator = isPlatformCreatorIdentity({ email: data.email, phone: resolvedPhone });
+    const isCreator = isPlatformCreatorIdentity({ email: data.email });
     if (isCreator) {
       await syncPlatformCreatorInDb();
     }
-    const userData: Record<string, unknown> = {
-        email: data.email,
-        password,
-        name: isCreator && !data.name.trim() ? PLATFORM_CREATOR.name : data.name,
-        role,
-        companyId,
-        active: false,
-        emailConfirmed: false,
-        confirmationToken,
-        confirmationCode,
-        confirmationCodeExpires,
-        confirmationSentAt,
-        ...(resolvedPhone ? { phone: resolvedPhone } : {}),
-    };
-    const user = await prisma.user.create({
-      data: userData as any,
-      select: publicUserSelect,
-    });
+
+    let companyId: number;
+    try {
+      const createdResult = await prisma.$transaction(async (tx) => {
+        await assertOrCleanPendingCompany(tx, [
+          ...(cleanSiret ? [{ siret: cleanSiret }] : []),
+          ...(cleanSiren ? [{ siren: cleanSiren }] : []),
+          { name: { equals: cleanCompanyName, mode: 'insensitive' } },
+        ]);
+
+        const company = await tx.company.create({
+          data: {
+            name: cleanCompanyName,
+            siret: cleanSiret,
+            siren: cleanSiren,
+          },
+        });
+        await initCompanyReferentiels(company.id, cleanName, tx);
+
+        const userData: Record<string, unknown> = {
+          email: data.email,
+          password,
+          name: isCreator && !cleanName ? PLATFORM_CREATOR.name : cleanName,
+          role,
+          companyId: company.id,
+          active: false,
+          emailConfirmed: false,
+          confirmationToken,
+          confirmationCode,
+          confirmationCodeExpires,
+          confirmationCodeAttempts: 0,
+          confirmationSentAt,
+          ...(resolvedPhone ? { phone: resolvedPhone } : {}),
+        };
+        const createdUser = await tx.user.create({
+          data: userData as any,
+          select: publicUserSelect,
+        });
+        return { companyId: company.id, user: createdUser };
+      });
+      companyId = createdResult.companyId;
+    } catch (e: any) {
+      if (e instanceof AppError) throw e;
+      if (e?.code === 'P2002') {
+        throw new AppError(
+          409,
+          'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
+          'COMPANY_EXISTS'
+        );
+      }
+      throw e;
+    }
 
     // Envoi de l'e-mail officiel d'activation avec code 6 chiffres
-    const compName = data.companyName.trim();
     const delivery = await sendConfirmationEmail({
       companyId,
       toEmail: data.email,
-      recipientName: data.name,
-      companyName: compName,
+      recipientName: cleanName,
+      companyName: cleanCompanyName,
       confirmationToken,
       confirmationCode,
     });
 
     res.status(201).json({
       companyId,
-      companyName: compName,
+      companyName: cleanCompanyName,
       message:
         delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
           ? `Un code de confirmation à 6 chiffres a été envoyé à ${data.email} depuis zehair@anelecgroupe.com. Saisissez-le pour activer votre espace entreprise.`
@@ -362,8 +430,8 @@ authRouter.post(
       email: data.email,
       requiresConfirmation: true,
       deliveryChannel: delivery.channel,
-      previewUrl: delivery.previewUrl || null,
-      activationLink: delivery.activationLink || null,
+      previewUrl: config.nodeEnv !== 'production' ? delivery.previewUrl || null : null,
+      activationLink: null,
     });
   })
 );
@@ -388,18 +456,34 @@ authRouter.post(
       throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
     }
 
-    // Un même e-mail peut avoir un compte en attente dans plusieurs entreprises : on renvoie un code POUR CHACUN,
-    // chaque e-mail nommant son entreprise (rien n'est dévoilé à l'écran, seul le propriétaire de la boîte mail les voit).
-    const enAttente = comptes.filter((c: any) => !c.emailConfirmed);
+    const enAttente: any[] = [];
+    for (const c of comptes as any[]) {
+      if (!c.emailConfirmed && (await isCompanyActiveForUser(c))) {
+        enAttente.push(c);
+      }
+    }
     if (enAttente.length === 0) {
-      return res.json({
-        alreadyConfirmed: true,
-        message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter directement.',
-      });
+      if (comptes.some((c: any) => c.emailConfirmed && c.active)) {
+        return res.json({
+          alreadyConfirmed: true,
+          message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter directement.',
+        });
+      }
+      throw new AppError(403, 'Aucun espace actif en attente de confirmation pour cette adresse', 'FORBIDDEN');
     }
 
     let delivery: Awaited<ReturnType<typeof sendConfirmationEmail>> | null = null;
     for (const user of enAttente as any[]) {
+      const hasActiveCode = Boolean(user.confirmationCode) && (user.confirmationCodeAttempts ?? 0) < 5;
+      const lastSentMs = user.confirmationSentAt ? new Date(user.confirmationSentAt).getTime() : 0;
+      if (hasActiveCode && lastSentMs > 0 && Date.now() - lastSentMs < RESEND_COOLDOWN_MS) {
+        throw new AppError(
+          429,
+          'Un code de confirmation vient déjà d’être envoyé. Patientez quelques instants avant de redemander un envoi.',
+          'RESEND_COOLDOWN'
+        );
+      }
+
       const confirmationToken = user.confirmationToken || crypto.randomBytes(32).toString('hex');
       const confirmationCode = String(crypto.randomInt(100000, 999999));
       const confirmationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
@@ -409,6 +493,7 @@ authRouter.post(
           confirmationToken,
           confirmationCode,
           confirmationCodeExpires,
+          confirmationCodeAttempts: 0,
           confirmationSentAt: new Date(),
         },
       });
@@ -430,17 +515,17 @@ authRouter.post(
       message:
         delivery.channel === 'SMTP_PRODUCTION' || delivery.channel === 'SUPABASE_AUTH_RELAY'
           ? `Un nouvel e-mail de confirmation a été envoyé à ${user.email}.`
-          : `Nouvel e-mail de confirmation généré pour ${user.email}. Vous pouvez aussi activer directement votre espace ci-dessous.`,
+          : `Nouvel e-mail de confirmation généré pour ${user.email}.`,
       emailSent: delivery.sent,
       email: user.email,
       deliveryChannel: delivery.channel,
-      previewUrl: delivery.previewUrl || null,
-      activationLink: delivery.activationLink || null,
+      previewUrl: config.nodeEnv !== 'production' ? delivery.previewUrl || null : null,
+      activationLink: null,
     });
   })
 );
 
-// Vérification du code de confirmation à 6 chiffres
+// Vérification du code de confirmation à 6 chiffres (limitée à 5 essais avant invalidation du code)
 authRouter.post(
   '/verify-code',
   asyncHandler(async (req: Request, res: Response) => {
@@ -465,26 +550,74 @@ authRouter.post(
       throw new AppError(404, 'Aucun compte trouvé avec cette adresse e-mail', 'USER_NOT_FOUND');
     }
 
-    // Plusieurs entreprises peuvent attendre une confirmation pour le même e-mail : chaque code est propre à une
-    // entreprise, c'est donc le code saisi qui désigne le compte à activer.
-    const user = comptes.find((c) => !(c.emailConfirmed && c.active) && c.confirmationCode && c.confirmationCode === code);
-    if (!user) {
+    const pending: any[] = [];
+    for (const c of comptes) {
+      if (!c.emailConfirmed && (await isCompanyActiveForUser(c))) {
+        pending.push(c);
+      }
+    }
+    if (pending.length === 0) {
       if (comptes.every((c) => c.emailConfirmed && c.active)) {
         return res.json({
           alreadyConfirmed: true,
           message: 'Ce compte est déjà confirmé et actif. Vous pouvez vous connecter.',
         });
       }
+      throw new AppError(403, 'Ce compte ne peut pas être activé', 'ACCOUNT_DISABLED');
+    }
+
+    const codeBuf = Buffer.from(code, 'utf8');
+    const user = pending.find((c) => {
+      if (!c.confirmationCode || (c.confirmationCodeAttempts ?? 0) >= 5) return false;
+      const storedBuf = Buffer.from(String(c.confirmationCode), 'utf8');
+      return storedBuf.length === codeBuf.length && crypto.timingSafeEqual(storedBuf, codeBuf);
+    });
+
+    if (!user) {
+      let locked = false;
+      for (const c of pending) {
+        if ((c.confirmationCodeAttempts ?? 0) >= 5 || !c.confirmationCode) {
+          locked = true;
+          continue;
+        }
+        const inc = await prisma.user.updateMany({
+          where: {
+            id: c.id,
+            confirmationCode: c.confirmationCode,
+            ...(typeof c.confirmationCodeAttempts === 'number'
+              ? { confirmationCodeAttempts: { lt: 5 } }
+              : {}),
+          },
+          data: {
+            confirmationCodeAttempts: { increment: 1 },
+          },
+        });
+        if (inc.count === 0) {
+          locked = true;
+          continue;
+        }
+        const nextAttempts = (c.confirmationCodeAttempts ?? 0) + 1;
+        if (nextAttempts >= 5) {
+          locked = true;
+          await prisma.user.updateMany({
+            where: { id: c.id, confirmationCodeAttempts: { gte: 5 } },
+            data: { confirmationCode: null, confirmationCodeExpires: null },
+          });
+        }
+      }
+      if (locked) {
+        throw new AppError(429, 'Trop de tentatives incorrectes : demandez un nouveau code de confirmation.', 'TOO_MANY_ATTEMPTS');
+      }
       throw new AppError(403, 'Code de confirmation incorrect. Vérifiez le code reçu par e-mail.', 'INVALID_CODE');
     }
 
     // Vérifier l'expiration (15 min)
-    if (user.confirmationCodeExpires && user.confirmationCodeExpires.getTime() < Date.now()) {
+    if (!user.confirmationCodeExpires || user.confirmationCodeExpires.getTime() < Date.now()) {
       throw new AppError(410, 'Ce code a expiré. Cliquez sur « Renvoyer le code » pour en recevoir un nouveau.', 'CODE_EXPIRED');
     }
 
     // Activer le compte
-    await prisma.user.update({
+    const activated = await prisma.user.update({
       where: { id: user.id },
       data: {
         active: true,
@@ -492,9 +625,12 @@ authRouter.post(
         confirmationToken: null,
         confirmationCode: null,
         confirmationCodeExpires: null,
+        confirmationCodeAttempts: 0,
+        confirmationSentAt: null,
         termsAcceptedAt: new Date(),
         termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
       },
+      select: publicUserSelect,
     });
 
     const companyName = user.company?.name || 'votre entreprise';
@@ -505,10 +641,11 @@ authRouter.post(
       email: user.email,
       role: user.role,
       companyId: user.companyId,
+      tokenVersion: (activated as any).tokenVersion,
     });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
-    const pub = await findPublicUserUnique({ id: user.id });
+    const pub = formatPublicUser(activated as any);
 
     res.json({
       success: true,
@@ -519,7 +656,7 @@ authRouter.post(
   })
 );
 
-// Demande de réinitialisation de mot de passe par e-mail
+// Demande de réinitialisation de mot de passe par e-mail (réservée aux comptes actifs et déjà confirmés)
 authRouter.post(
   '/forgot-password',
   asyncHandler(async (req: Request, res: Response) => {
@@ -528,18 +665,18 @@ authRouter.post(
       throw new AppError(400, 'Adresse e-mail requise', 'EMAIL_REQUIRED');
     }
 
-    // Un même e-mail peut avoir un compte dans plusieurs entreprises : un lien PAR compte, chaque e-mail nommant son
-    // entreprise. Le mot de passe d'une entreprise ne modifie jamais celui d'une autre.
     const comptes: any[] = await prisma.user.findMany({
       where: { email: { equals: email, mode: 'insensitive' } },
-      include: { company: { select: { name: true } } },
+      include: { company: { select: { name: true, active: true } } },
       orderBy: { id: 'asc' },
     });
 
     // Réponse identique que le compte existe ou non (pas d'énumération de comptes).
-    // Le lien n'est JAMAIS renvoyé dans la réponse : il part uniquement par e-mail.
     const genericMessage = `Si un compte existe pour ${email}, un e-mail de réinitialisation vient d'être envoyé.`;
     for (const user of comptes) {
+      if (user.active === false || user.emailConfirmed === false || !(await isCompanyActiveForUser(user))) {
+        continue;
+      }
       const resetToken = crypto.randomBytes(32).toString('hex');
       await prisma.user.update({
         where: { id: user.id },
@@ -578,27 +715,42 @@ authRouter.post(
     if (!user) {
       throw new AppError(404, 'Lien de réinitialisation invalide ou expiré', 'INVALID_TOKEN');
     }
+    if (user.active === false || user.emailConfirmed === false || !(await isCompanyActiveForUser(user))) {
+      throw new AppError(403, 'Ce compte est désactivé ou en attente de confirmation e-mail', 'ACCOUNT_DISABLED');
+    }
+
     const tokenRow = await prisma.user.findUnique({ where: { id: user.id }, select: { confirmationSentAt: true } });
     const sentAt = tokenRow?.confirmationSentAt;
-    if (sentAt && Date.now() - sentAt.getTime() > 2 * 60 * 60 * 1000) {
+    if (!sentAt || Date.now() - sentAt.getTime() > 2 * 60 * 60 * 1000) {
       throw new AppError(410, 'Ce lien de réinitialisation a expiré. Refaites une demande.', 'TOKEN_EXPIRED');
     }
 
-    assertStrongPassword(newPassword, { email: user.email, name: user.name });
+    assertStrongPassword(newPassword, { email: user.email, name: user.name, companyName: user.company?.name });
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        active: true,
-        emailConfirmed: true,
         confirmationToken: null,
+        confirmationCode: null,
+        confirmationCodeExpires: null,
+        confirmationCodeAttempts: 0,
+        confirmationSentAt: null,
+        tokenVersion: { increment: 1 },
       },
       select: publicUserSelect,
     });
+    disconnectUserSockets(user.id);
 
-    const pub = formatPublicUser(updated);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    const refreshedRow = await findPublicUserUnique({ id: user.id });
+    const pub = formatPublicUser((refreshedRow || updated) as any);
+    const tokens = generateTokens({
+      id: pub.id,
+      email: pub.email,
+      role: pub.role,
+      companyId: pub.companyId,
+      tokenVersion: (refreshedRow || updated as any)?.tokenVersion,
+    });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
     return res.json({
@@ -618,10 +770,15 @@ authRouter.post(
       throw new AppError(400, 'Jeton Supabase manquant', 'TOKEN_REQUIRED');
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://qfhxptwsuotqnrihzhxw.supabase.co';
-    const supabaseAnonKey =
-      process.env.SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmaHhwdHdzdW90cW5yaWh6aHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjM0NjgsImV4cCI6MjA4OTUzOTQ2OH0.r83-3B_3e25I2J9u-mN04t2-wF_2t0p_X-p4vH-bI0w';
+    const supabaseUrl = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+    const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new AppError(
+        503,
+        'Confirmation Supabase indisponible : configuration SUPABASE_URL / SUPABASE_ANON_KEY manquante',
+        'SUPABASE_NOT_CONFIGURED'
+      );
+    }
 
     const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
@@ -635,6 +792,9 @@ authRouter.post(
     }
 
     const supaUser: any = await userRes.json();
+    if (!supaUser?.email_confirmed_at) {
+      throw new AppError(403, 'Adresse e-mail non encore confirmée auprès du fournisseur d’identité', 'SUPABASE_EMAIL_UNCONFIRMED');
+    }
     const email = String(supaUser?.email || '').toLowerCase().trim();
     if (!email) {
       throw new AppError(400, 'Adresse e-mail introuvable dans le jeton Supabase', 'EMAIL_MISSING');
@@ -645,11 +805,24 @@ authRouter.post(
     if (comptes.length === 0) {
       throw new AppError(404, `Aucun compte trouvé pour ${email}`, 'USER_NOT_FOUND');
     }
-    // Le jeton prouve la propriété de l'e-mail ; plusieurs entreprises → on demande laquelle activer.
-    const enAttente = comptes.filter((c) => !c.emailConfirmed);
-    const candidats = enAttente.length > 0 ? enAttente : comptes;
-    if (candidats.length > 1) throw choixEntrepriseRequis(candidats);
-    const user = candidats[0];
+    // Seuls les comptes encore en attente de confirmation (et dont l'entreprise est active) peuvent être activés ici.
+    const enAttente: typeof comptes = [];
+    for (const c of comptes) {
+      if (!c.emailConfirmed && (await isCompanyActiveForUser(c))) {
+        enAttente.push(c);
+      }
+    }
+    if (enAttente.length === 0) {
+      if (comptes.some((c) => c.emailConfirmed && c.active === false)) {
+        throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+      }
+      if (comptes.some((c) => c.emailConfirmed)) {
+        throw new AppError(409, 'Compte déjà confirmé : connectez-vous directement avec vos identifiants.', 'ALREADY_CONFIRMED');
+      }
+      throw new AppError(403, 'Aucun espace actif en attente de confirmation pour ce compte', 'FORBIDDEN');
+    }
+    if (enAttente.length > 1) throw choixEntrepriseRequis(enAttente);
+    const user = enAttente[0];
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -657,13 +830,23 @@ authRouter.post(
         active: true,
         emailConfirmed: true,
         confirmationToken: null,
+        confirmationCode: null,
+        confirmationCodeExpires: null,
+        confirmationCodeAttempts: 0,
+        confirmationSentAt: null,
         termsAcceptedAt: new Date(),
       },
       select: publicUserSelect,
     });
 
     const pub = formatPublicUser(updated);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    const tokens = generateTokens({
+      id: pub.id,
+      email: pub.email,
+      role: pub.role,
+      companyId: pub.companyId,
+      tokenVersion: (updated as any).tokenVersion,
+    });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
     return res.json({
@@ -699,12 +882,21 @@ authRouter.post(
         'EMAIL_NOT_CONFIRMED'
       );
     }
-    if (user.active === false && !isPlatformCreatorIdentity(user)) {
+    if (user.active === false) {
       throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+    }
+    if (!(await isCompanyActiveForUser(user))) {
+      throw new AppError(403, 'Cet espace entreprise a été désactivé', 'COMPANY_DISABLED');
     }
 
     const pub = formatPublicUser(user);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    const tokens = generateTokens({
+      id: pub.id,
+      email: pub.email,
+      role: pub.role,
+      companyId: pub.companyId,
+      tokenVersion: user.tokenVersion,
+    });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     res.json({
       user: pub,
@@ -714,10 +906,34 @@ authRouter.post(
   })
 );
 
-authRouter.post('/logout', (_req: Request, res: Response) => {
-  clearAuthCookies(res);
-  res.json({ message: 'Déconnexion réussie' });
-});
+authRouter.post(
+  '/logout',
+  asyncHandler(async (req: Request, res: Response) => {
+    const token =
+      req.cookies?.accessToken ||
+      req.cookies?.refreshToken ||
+      req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, config.jwtSecret, { ignoreExpiration: true }) as { userId?: number };
+        if (decoded && Number.isInteger(decoded.userId)) {
+          await prisma.user.update({
+            where: { id: decoded.userId },
+            data: { tokenVersion: { increment: 1 } },
+          });
+          disconnectUserSockets(decoded.userId!);
+        }
+      } catch (err: any) {
+        const isJwtErr = err instanceof jwt.JsonWebTokenError || err instanceof jwt.TokenExpiredError;
+        if (!isJwtErr) {
+          console.error('[auth/logout] Échec lors de l’invalidation de session:', err?.message || err);
+        }
+      }
+    }
+    clearAuthCookies(res);
+    res.json({ message: 'Déconnexion réussie' });
+  })
+);
 
 authRouter.get(
   '/me',
@@ -725,7 +941,9 @@ authRouter.get(
   asyncHandler(async (req, res) => {
     if (!req.user) throw new AppError(401, 'Non authentifié', 'UNAUTHORIZED');
     const user = await findPublicUserUnique({ id: req.user.userId });
-    if (!user) throw new AppError(404, 'Utilisateur non trouvé', 'USER_NOT_FOUND');
+    if (!user || user.active === false || user.emailConfirmed === false || !(await isCompanyActiveForUser(user))) {
+      throw new AppError(403, 'Compte inactif, non confirmé ou introuvable', 'ACCOUNT_DISABLED');
+    }
     res.json({ user: formatPublicUser(user) });
   })
 );
@@ -848,6 +1066,7 @@ authRouter.patch(
 authRouter.post(
   '/refresh',
   asyncHandler(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const refreshToken = req.cookies?.refreshToken;
     if (!refreshToken) throw new AppError(401, 'Refresh token manquant', 'NO_REFRESH_TOKEN');
     try {
@@ -857,14 +1076,33 @@ authRouter.post(
         role: string;
         companyId?: number;
         type: string;
+        sv?: number;
       };
       if (decoded.type !== 'refresh') {
         throw new AppError(401, 'Token de refresh invalide', 'INVALID_REFRESH_TOKEN');
       }
       const user = await findPublicUserUnique({ id: decoded.userId });
-      if (!user) throw new AppError(401, 'Utilisateur non trouvé', 'USER_NOT_FOUND');
+      if (!user || user.active === false || user.emailConfirmed === false) {
+        throw new AppError(403, 'Compte inactif, non confirmé ou introuvable', 'ACCOUNT_DISABLED');
+      }
+      if (!(await isCompanyActiveForUser(user))) {
+        throw new AppError(403, 'Espace entreprise désactivé', 'COMPANY_DISABLED');
+      }
+      if (decoded.companyId != null && user.companyId !== decoded.companyId) {
+        throw new AppError(401, 'Session entreprise incohérente', 'SESSION_REVOKED');
+      }
+      const currentSv = typeof user.tokenVersion === 'number' ? user.tokenVersion : 1;
+      if (typeof decoded.sv === 'number' ? decoded.sv !== currentSv : currentSv > 1) {
+        throw new AppError(401, 'Refresh token révoqué : veuillez vous reconnecter', 'SESSION_REVOKED');
+      }
       const pub = formatPublicUser(user);
-      const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+      const tokens = generateTokens({
+        id: pub.id,
+        email: pub.email,
+        role: pub.role,
+        companyId: pub.companyId,
+        tokenVersion: currentSv,
+      });
       setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
       res.json({ accessToken: tokens.accessToken, message: 'Token rafraîchi' });
     } catch (error) {
@@ -888,6 +1126,13 @@ function hashInvitationToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function setInvitationSecurityHeaders(res: Response) {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+}
+
 const INVALID_INVITATION = new AppError(404, 'Invitation invalide, expirée ou déjà utilisée', 'INVALID_INVITATION');
 
 async function findPendingInvitation(rawToken: unknown) {
@@ -902,19 +1147,34 @@ async function findPendingInvitation(rawToken: unknown) {
   return inv;
 }
 
+function formatInvitationSummary(inv: NonNullable<Awaited<ReturnType<typeof findPendingInvitation>>>) {
+  return {
+    email: inv.email,
+    companyName: inv.company.name,
+    role: inv.role,
+    roleLabel: (ROLE_DEFINITIONS as any)[inv.role]?.label || inv.role,
+    invitedByName: inv.invitedByName,
+    expiresAt: inv.expiresAt.toISOString(),
+  };
+}
+
+authRouter.post(
+  '/invitations/lookup',
+  asyncHandler(async (req: Request, res: Response) => {
+    setInvitationSecurityHeaders(res);
+    const inv = await findPendingInvitation(req.body?.token);
+    if (!inv) throw INVALID_INVITATION;
+    res.json(formatInvitationSummary(inv));
+  })
+);
+
 authRouter.get(
   '/invitations/:token',
   asyncHandler(async (req: Request, res: Response) => {
+    setInvitationSecurityHeaders(res);
     const inv = await findPendingInvitation(req.params.token);
     if (!inv) throw INVALID_INVITATION;
-    res.json({
-      email: inv.email,
-      companyName: inv.company.name,
-      role: inv.role,
-      roleLabel: (ROLE_DEFINITIONS as any)[inv.role]?.label || inv.role,
-      invitedByName: inv.invitedByName,
-      expiresAt: inv.expiresAt.toISOString(),
-    });
+    res.json(formatInvitationSummary(inv));
   })
 );
 
@@ -928,6 +1188,7 @@ const AcceptInvitationSchema = z.object({
 authRouter.post(
   '/invitations/accept',
   asyncHandler(async (req: Request, res: Response) => {
+    setInvitationSecurityHeaders(res);
     const parsed = AcceptInvitationSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       throw new AppError(400, parsed.error.issues[0]?.message || 'Données invalides', 'VALIDATION_ERROR');
@@ -937,6 +1198,12 @@ authRouter.post(
     const inv = await findPendingInvitation(token);
     if (!inv) throw INVALID_INVITATION;
 
+    const upperRole = String(inv.role || '').trim().toUpperCase();
+    const roleDef = (ROLE_DEFINITIONS as Record<string, (typeof ROLE_DEFINITIONS)[keyof typeof ROLE_DEFINITIONS]>)[upperRole];
+    if (!roleDef) {
+      throw INVALID_INVITATION;
+    }
+
     const email = inv.email.trim().toLowerCase();
     // Doublon PAR entreprise : un compte dans une autre entreprise n'empêche pas d'accepter cette invitation.
     const taken = await findUserInCompany(email, inv.companyId);
@@ -944,16 +1211,90 @@ authRouter.post(
       throw new AppError(409, `Vous avez déjà un compte dans l'entreprise ${inv.company.name}. Connectez-vous.`, 'EMAIL_EXISTS');
     }
 
-    const role = (ROLE_DEFINITIONS as any)[inv.role] ? inv.role : 'CONDUCTEUR_TRAVAUX';
-    assertStrongPassword(password, { email, name });
+    let resolvedTechNom: string | null = inv.technicienNom ? inv.technicienNom.trim() || null : null;
+    if (upperRole === 'TECHNICIEN' && !resolvedTechNom) {
+      const candidateTech = name.trim();
+      if (candidateTech.length < 2) {
+        throw new AppError(400, 'Le nom du technicien doit comporter au moins 2 caractères', 'VALIDATION_ERROR');
+      }
+      resolvedTechNom = candidateTech;
+    }
+
+    let sanitizedInvPermsJson: string | null = null;
+    if (inv.permissionsJson) {
+      try {
+        const parsedPerms = JSON.parse(inv.permissionsJson);
+        if (parsedPerms && typeof parsedPerms === 'object' && !Array.isArray(parsedPerms)) {
+          const allowedKeys = Object.keys(roleDef.defaultPermissions);
+          const cleanPerms: Record<string, boolean> = {};
+          for (const k of allowedKeys) {
+            if (typeof parsedPerms[k] === 'boolean') cleanPerms[k] = parsedPerms[k];
+          }
+          const capped = sanitizePermissionsForRole(upperRole, cleanPerms);
+          if (Object.keys(capped).length > 0) sanitizedInvPermsJson = JSON.stringify(capped);
+        }
+      } catch {
+        sanitizedInvPermsJson = null;
+      }
+    }
+
+    assertStrongPassword(password, { email, name, companyName: inv.company.name });
     const hashed = await bcrypt.hash(password, 12);
+    const expectedTokenHash = hashInvitationToken(token);
 
     let created;
     try {
       created = await prisma.$transaction(async (tx) => {
-        // Le jeton ne peut servir qu'une fois, même en cas de clics simultanés
+        const comp = await tx.company.findUnique({ where: { id: inv.companyId }, select: { active: true } });
+        if (!comp || comp.active === false) throw INVALID_INVITATION;
+
+        if (upperRole === 'TECHNICIEN' && !inv.technicienNom && resolvedTechNom) {
+          const normCandidate = resolvedTechNom.toLowerCase();
+          const [companyTechs, refTechs] = await Promise.all([
+            tx.user.findMany({
+              where: { companyId: inv.companyId },
+              select: { technicienNom: true, name: true, role: true },
+            }),
+            tx.referentiel.findMany({
+              where: { companyId: inv.companyId, categorie: 'techniciens' },
+              select: { valeurs: true },
+            }),
+          ]);
+          const userCollides = companyTechs.some((u) => {
+            const existingTech = (u.technicienNom || '').trim().toLowerCase();
+            const existingTechUserName = u.role === 'TECHNICIEN' ? (u.name || '').trim().toLowerCase() : '';
+            return existingTech === normCandidate || existingTechUserName === normCandidate;
+          });
+          const refCollides = refTechs.some((r) => {
+            try {
+              const parsed = JSON.parse(r.valeurs || '[]');
+              if (!Array.isArray(parsed)) return false;
+              return parsed.some((item: any) => {
+                const label = typeof item === 'string' ? item : item?.nom || item?.name || '';
+                return String(label).trim().toLowerCase() === normCandidate;
+              });
+            } catch {
+              return false;
+            }
+          });
+          if (userCollides || refCollides) {
+            throw new AppError(
+              409,
+              'Ce nom de technicien est déjà utilisé dans cette entreprise : ajoutez une initiale ou demandez à l’administrateur de préciser votre nom terrain.',
+              'TECHNICIEN_NAME_CONFLICT'
+            );
+          }
+        }
+
+        // Le jeton ne peut servir qu'une fois : re-vérifier tokenHash, expiration et non-consommation dans la transaction
         const claimed = await tx.companyInvitation.updateMany({
-          where: { id: inv.id, acceptedAt: null, revokedAt: null },
+          where: {
+            id: inv.id,
+            tokenHash: expectedTokenHash,
+            acceptedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
           data: { acceptedAt: new Date() },
         });
         if (claimed.count !== 1) throw INVALID_INVITATION;
@@ -962,9 +1303,9 @@ authRouter.post(
             email,
             password: hashed,
             name,
-            role,
-            technicienNom: role === 'TECHNICIEN' ? inv.technicienNom || name : inv.technicienNom,
-            permissionsJson: inv.permissionsJson,
+            role: upperRole,
+            technicienNom: resolvedTechNom,
+            permissionsJson: sanitizedInvPermsJson,
             // Rattachement = celui de l'invitation, jamais une valeur fournie par le client
             companyId: inv.companyId,
             active: true,
@@ -984,7 +1325,13 @@ authRouter.post(
     }
 
     const pub = formatPublicUser(created);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    const tokens = generateTokens({
+      id: pub.id,
+      email: pub.email,
+      role: pub.role,
+      companyId: pub.companyId,
+      tokenVersion: (created as any).tokenVersion,
+    });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     res.status(201).json({
       user: pub,
@@ -1030,11 +1377,27 @@ authRouter.post(
     if (data.credential.startsWith('simulated_google_')) {
       throw new AppError(401, 'Jeton Google invalide', 'INVALID_GOOGLE_TOKEN');
     } else {
-      // Validation officielle du jeton Google (prend en charge ID Token et Access Token OAuth2)
+      // Validation officielle du jeton Google (ID Token et Access Token OAuth2 liés au client_id)
+      const expectedAud =
+        (process.env.GOOGLE_CLIENT_ID || '').trim() ||
+        '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com';
       try {
         let profile: any;
         if (data.credential.startsWith('ya29.')) {
-          // Jeton d'accès OAuth2
+          // Jeton d'accès OAuth2 : vérifier d'abord l'audience (client_id) auprès de tokeninfo
+          const tokenInfoRes = await fetch(
+            `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(data.credential)}`
+          );
+          if (!tokenInfoRes.ok) {
+            throw new AppError(401, 'Jeton d\x27accès Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
+          }
+          const tokenInfo: any = await tokenInfoRes.json();
+          if (tokenInfo.aud !== expectedAud && tokenInfo.azp !== expectedAud) {
+            throw new AppError(401, 'Jeton Google non émis pour cette application', 'INVALID_GOOGLE_TOKEN');
+          }
+          if (tokenInfo.email_verified !== 'true' && tokenInfo.email_verified !== true) {
+            throw new AppError(400, "L'adresse email Google n'a pas été certifiée par Google", 'EMAIL_NOT_VERIFIED');
+          }
           const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
             headers: { Authorization: `Bearer ${data.credential}` },
           });
@@ -1051,9 +1414,6 @@ authRouter.post(
             throw new AppError(401, 'Jeton Google invalide ou expiré', 'INVALID_GOOGLE_TOKEN');
           }
           profile = await googleRes.json();
-          // Le jeton doit avoir été émis pour NOTRE application (et pas pour une autre application Google)
-          const expectedAud =
-            process.env.GOOGLE_CLIENT_ID || '116679717813-chmnnnkeghjf6qs78qrts9m2o7dl4p20.apps.googleusercontent.com';
           if (profile.aud !== expectedAud) {
             throw new AppError(401, 'Jeton Google non émis pour cette application', 'INVALID_GOOGLE_TOKEN');
           }
@@ -1079,8 +1439,7 @@ authRouter.post(
       name = data.name.trim();
     }
 
-    // Création d'un espace : demandée explicitement par la présence du nom d'entreprise. Un e-mail déjà inscrit dans
-    // une autre entreprise peut ainsi ouvrir un NOUVEL espace (compte distinct) sans être connecté à l'ancien.
+    // Création d'un espace : demandée explicitement par la présence du nom d'entreprise.
     const creationDemandee = !!(data.companyName && data.companyName.trim());
 
     // 1. L'utilisateur existe déjà : Connexion directe (un compte par entreprise)
@@ -1094,24 +1453,59 @@ authRouter.post(
       } else if (comptes.length === 1) {
         user = comptes[0];
       } else {
-        // Plusieurs entreprises : le jeton Google prouve l'identité, l'utilisateur choisit l'entreprise à ouvrir.
         throw choixEntrepriseRequis(comptes);
       }
 
-      if (user.active === false && !isPlatformCreatorIdentity(user)) {
-        throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+      if (!(await isCompanyActiveForUser(user))) {
+        throw new AppError(403, 'Cet espace entreprise a été désactivé', 'COMPANY_DISABLED');
       }
-
-      // Google certifie l'email : activation automatique
-      if (!user.emailConfirmed) {
+      if (user.active === false) {
+        if (!user.emailConfirmed) {
+          const pendingRow = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { confirmationToken: true },
+          });
+          if (!pendingRow?.confirmationToken) {
+            throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+          }
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              emailConfirmed: true,
+              active: true,
+              confirmationToken: null,
+              confirmationCode: null,
+              confirmationCodeExpires: null,
+              confirmationCodeAttempts: 0,
+              confirmationSentAt: null,
+            },
+          });
+        } else {
+          throw new AppError(403, 'Ce compte utilisateur a été désactivé par l’administrateur', 'ACCOUNT_DISABLED');
+        }
+      } else if (!user.emailConfirmed) {
         await prisma.user.update({
           where: { id: user.id },
-          data: { emailConfirmed: true, active: true },
+          data: {
+            emailConfirmed: true,
+            confirmationToken: null,
+            confirmationCode: null,
+            confirmationCodeExpires: null,
+            confirmationCodeAttempts: 0,
+            confirmationSentAt: null,
+          },
         });
       }
 
-      const pub = formatPublicUser(user);
-      const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+      const freshUser = (await findPublicUserUnique({ id: user.id })) || user;
+      const pub = formatPublicUser(freshUser);
+      const tokens = generateTokens({
+        id: pub.id,
+        email: pub.email,
+        role: pub.role,
+        companyId: pub.companyId,
+        tokenVersion: freshUser.tokenVersion,
+      });
       setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
       return res.json({
         user: pub,
@@ -1121,7 +1515,6 @@ authRouter.post(
     }
 
     // 2. L'utilisateur n'existe pas encore : Inscription nouvelle entreprise
-    // Si l'utilisateur n'a pas encore renseigné les informations de son entreprise
     if (!data.companyName || !data.companyName.trim() || !data.siretOrSiren || !data.siretOrSiren.trim()) {
       return res.json({
         requiresCompanyInfo: true,
@@ -1158,71 +1551,77 @@ authRouter.post(
       throw new AppError(400, 'Format invalide : le SIREN doit comporter 9 chiffres et le SIRET 14 chiffres.', 'INVALID_SIRET');
     }
 
-    // Recherche ou création de l'entreprise cloisonnée
-    let company = await prisma.company.findFirst({
-      where: {
-        OR: [
-          ...(cleanSiret ? [{ siret: cleanSiret }] : []),
-          ...(cleanSiren ? [{ siren: cleanSiren }] : []),
-          { name: { equals: data.companyName.trim(), mode: 'insensitive' } },
-        ],
-      },
-    });
-
-    // SÉCURITÉ : idem inscription classique — jamais de rattachement implicite à une entreprise existante.
-    if (company) {
-      throw new AppError(
-        409,
-        'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
-        'COMPANY_EXISTS'
-      );
-    }
-
-    if (!company) {
-      company = await prisma.company.create({
-        data: {
-          name: data.companyName.trim(),
-          siret: cleanSiret,
-          siren: cleanSiren,
-        },
-      });
-
-      // Référentiels par défaut pour ce nouveau tenant
-      await initCompanyReferentiels(company.id, name);
-    }
-
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(randomPassword, 12);
 
     const resolvedGooglePhone = resolveCreatorAwarePhone(email, null);
-    const isGoogleCreator = isPlatformCreatorIdentity({ email, phone: resolvedGooglePhone });
+    const isGoogleCreator = isPlatformCreatorIdentity({ email });
     if (isGoogleCreator) {
       await syncPlatformCreatorInDb();
     }
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-        password: passwordHash,
-        name: isGoogleCreator && !name.trim() ? PLATFORM_CREATOR.name : name,
-        role: 'ADMIN',
-        companyId: company.id,
-        active: true,
-        emailConfirmed: true,
-        termsAcceptedAt: new Date(),
-        termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
-        ...(resolvedGooglePhone ? { phone: resolvedGooglePhone } : {}),
-      } as any,
-      select: publicUserSelect,
-    });
+
+    let companyNameCreated = data.companyName.trim();
+    let newUser;
+    try {
+      const txRes = await prisma.$transaction(async (tx) => {
+        await assertOrCleanPendingCompany(tx, [
+          ...(cleanSiret ? [{ siret: cleanSiret }] : []),
+          ...(cleanSiren ? [{ siren: cleanSiren }] : []),
+          { name: { equals: companyNameCreated, mode: 'insensitive' } },
+        ]);
+        const company = await tx.company.create({
+          data: {
+            name: companyNameCreated,
+            siret: cleanSiret,
+            siren: cleanSiren,
+          },
+        });
+        await initCompanyReferentiels(company.id, name, tx);
+        const created = await tx.user.create({
+          data: {
+            email,
+            password: passwordHash,
+            name: isGoogleCreator && !name.trim() ? PLATFORM_CREATOR.name : name,
+            role: 'ADMIN',
+            companyId: company.id,
+            active: true,
+            emailConfirmed: true,
+            termsAcceptedAt: new Date(),
+            termsAcceptedIp: String(req.ip || req.headers['x-forwarded-for'] || ''),
+            ...(resolvedGooglePhone ? { phone: resolvedGooglePhone } : {}),
+          } as any,
+          select: publicUserSelect,
+        });
+        return { company, created };
+      });
+      companyNameCreated = txRes.company.name;
+      newUser = txRes.created;
+    } catch (e: any) {
+      if (e instanceof AppError) throw e;
+      if (e?.code === 'P2002') {
+        throw new AppError(
+          409,
+          'Une entreprise portant ce nom ou ce SIREN/SIRET existe déjà sur la plateforme. Pour la rejoindre, demandez une invitation à son administrateur.',
+          'COMPANY_EXISTS'
+        );
+      }
+      throw e;
+    }
 
     const pub = formatPublicUser(newUser);
-    const tokens = generateTokens({ id: pub.id, email: pub.email, role: pub.role, companyId: pub.companyId });
+    const tokens = generateTokens({
+      id: pub.id,
+      email: pub.email,
+      role: pub.role,
+      companyId: pub.companyId,
+      tokenVersion: (newUser as any).tokenVersion,
+    });
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
     res.status(201).json({
       user: pub,
       accessToken: tokens.accessToken,
-      message: `Espace Entreprise ${company.name} initialisé avec succès via Google !`,
+      message: `Espace Entreprise ${companyNameCreated} initialisé avec succès via Google !`,
     });
   })
 );

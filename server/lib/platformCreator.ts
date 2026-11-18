@@ -10,9 +10,14 @@ import {
  * Force le numéro canonique du créateur (+33628618628) dès que l'identité créateur est reconnue.
  */
 export function resolveCreatorAwarePhone(email?: string | null, phone?: string | null): string | null {
-  const normalized = normaliserTelephoneFr(phone);
-  if (isPlatformCreatorIdentity({ email, phone: normalized })) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanEmail === PLATFORM_CREATOR.email) {
     return PLATFORM_CREATOR.phone;
+  }
+  const normalized = normaliserTelephoneFr(phone);
+  // Empêcher tout autre compte de s'approprier le numéro réservé au créateur de plateforme
+  if (normalized === PLATFORM_CREATOR.phone) {
+    return null;
   }
   return normalized || null;
 }

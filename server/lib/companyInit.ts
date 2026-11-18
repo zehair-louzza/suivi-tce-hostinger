@@ -10,9 +10,13 @@ import {
  * Initialise les référentiels métier de base pour une nouvelle entreprise.
  * Aucune donnée ANELEC (clients, techniciens, compétences) n'est copiée.
  */
-export async function initCompanyReferentiels(companyId: number, adminName: string): Promise<void> {
+export async function initCompanyReferentiels(
+  companyId: number,
+  adminName: string,
+  dbClient: { referentiel: typeof prisma.referentiel } = prisma
+): Promise<void> {
   const cleanAdmin = String(adminName || '').trim();
-  await prisma.referentiel.createMany({
+  await dbClient.referentiel.createMany({
     data: [
       { categorie: 'corpsEtat', valeurs: JSON.stringify([...DEFAULT_CORPS_ETAT]), companyId },
       { categorie: 'origines', valeurs: JSON.stringify([...DEFAULT_ORIGINES]), companyId },

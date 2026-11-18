@@ -3,7 +3,6 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { execFileSync } from 'child_process';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -32,8 +31,14 @@ import { authMiddleware } from './middleware/auth.js';
 import { setupSocketHandlers, setSocketInstance } from './socket/index.js';
 
 const app = express();
-// Faire confiance au reverse proxy (Cloudflare / Nginx Hostinger) pour extraire la véritable IP du client
-app.set('trust proxy', true);
+// Faire confiance uniquement au reverse proxy immédiat (1 saut par défaut, configurable via TRUST_PROXY)
+const trustProxyRaw = (process.env.TRUST_PROXY || '').trim();
+app.set(
+  'trust proxy',
+  trustProxyRaw === 'false' || trustProxyRaw === '0'
+    ? false
+    : Math.max(1, parseInt(trustProxyRaw || '1', 10) || 1)
+);
 const httpServer = createServer(app);
 
 export const io = new Server(httpServer, {
@@ -45,18 +50,61 @@ setupSocketHandlers(io);
 // referrerPolicy : helmet envoie « no-referrer » par défaut, ce qui fait bloquer (403) les tuiles
 // OpenStreetMap, dont la politique d'usage exige un en-tête Referer. On n'envoie que l'origine.
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  crossOriginOpenerPolicy: false,
-  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: [
+        "'self'",
+        'data:',
+        'blob:',
+        'https://*.tile.openstreetmap.org',
+        'https://*.tile.openstreetmap.fr',
+        'https://server.arcgisonline.com',
+      ],
+      connectSrc: [
+        "'self'",
+        'ws:',
+        'wss:',
+        'https://api-adresse.data.gouv.fr',
+        'https://nominatim.openstreetmap.org',
+        'https://router.project-osrm.org',
+        'https://accounts.google.com',
+        'https://*.supabase.co',
+      ],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'", 'https://accounts.google.com'],
+      frameAncestors: ["'none'"],
+    },
+  },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 app.use(cors({ origin: config.corsOriginList, credentials: true }));
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
-app.use(cookieParser(config.cookieSecret));
-app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
+function redactUrlTokens(url: string | undefined): string {
+  if (!url) return '';
+  return url
+    .replace(/([?&](?:token|resetToken|access_token|id_token)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/(\/api\/auth\/invitations\/)[^/?\s]+/gi, '$1[REDACTED]')
+    .replace(/(\/(?:api\/public\/(?:devis|rapport)|(?:devis|rapport)-client)\/)[^/?\s]+/gi, '$1[REDACTED]');
+}
 
-// Limiteur de tentatives de connexion (protection anti brute-force sur /api/auth/login)
+morgan.token('safe-url', (req) => redactUrlTokens((req as express.Request).originalUrl || req.url));
+morgan.token('safe-referrer', (req) => redactUrlTokens(req.headers.referer || req.headers.referrer as string | undefined) || '-');
+
+app.use(
+  morgan(
+    config.nodeEnv === 'development'
+      ? ':method :safe-url :status :response-time ms'
+      : ':remote-addr - :remote-user [:date[clf]] ":method :safe-url HTTP/:http-version" :status :res[content-length] ":safe-referrer" ":user-agent"'
+  )
+);
+
+// Limiteur de tentatives d'authentification (connexion, OTP, reset, OAuth, rafraîchissement, inscriptions)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -65,28 +113,49 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Limiteur d'API général (appliqué UNIQUEMENT à /api, JAMAIS aux fichiers statiques / HTML / PWA / assets)
+// Limiteur strict dédié au code OTP à 6 chiffres (anti brute-force)
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de tentatives de vérification du code, réessayez plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiteur d'API général (jamais contournable via un en-tête Authorization ou un cookie non vérifié)
 const apiLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
-  max: Math.max(config.rateLimitMax, 15000),
+  max: config.rateLimitMax,
   message: { error: 'Trop de requêtes, réessayez plus tard' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    // Ne jamais bloquer les health checks ni les utilisateurs connectés
-    if (req.path === '/health') return true;
-    if (req.cookies?.token || req.headers.authorization) return true;
-    return false;
-  },
+  skip: (req) => req.path === '/health' || req.path === '/health/ready',
 });
 
 app.set('io', io);
 
-// Application des limiteurs ciblés
+// Limitation de débit appliquée AVANT le parsing de corps JSON volumineux (15 Mo max pour PDF/photos)
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/resend-confirmation', authLimiter);
+app.use('/api/auth/verify-code', otpLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/confirm-supabase-token', authLimiter);
+app.use('/api/auth/google', authLimiter);
+app.use('/api/auth/refresh', authLimiter);
 app.use('/api/auth/invitations', authLimiter);
 app.use('/api', apiLimiter);
+
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
+
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(cookieParser(config.cookieSecret));
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
@@ -151,6 +220,10 @@ if (config.nodeEnv === 'production') {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDist, 'manifest.webmanifest'));
     });
+    app.use((req, res, next) => {
+      if (req.path.endsWith('.map')) return res.status(404).end();
+      next();
+    });
     app.use(
       express.static(clientDist, {
         setHeaders: (res, filePath) => {
@@ -189,30 +262,6 @@ process.on('SIGINT', async () => {
   httpServer.close(() => process.exit(0));
 });
 
-/**
- * Applique automatiquement les migrations Prisma en attente au démarrage (prod).
- * Garantit que le schéma de la base (ex. colonnes d'apparence) est à jour, ce
- * qui évite les erreurs 500 « column does not exist » après un déploiement.
- * En cas d'échec (CLI Prisma absente, etc.) le serveur démarre quand même : la
- * couche d'authentification est résiliente aux colonnes manquantes.
- */
-function applyPendingMigrations() {
-  if (config.nodeEnv !== 'production') return;
-  try {
-    console.log('→ Application des migrations Prisma (prisma migrate deploy)...');
-    const localBin = path.resolve(process.cwd(), 'node_modules/.bin/prisma');
-    const bin = fs.existsSync(localBin) ? localBin : 'prisma';
-    execFileSync(bin, ['migrate', 'deploy'], { stdio: 'inherit' });
-    console.log('✓ Migrations Prisma à jour.');
-  } catch (err) {
-    console.error(
-      '⚠ Échec de `prisma migrate deploy` au démarrage (le serveur continue) :',
-      (err as Error)?.message
-    );
-  }
-}
-
-applyPendingMigrations();
 demarrerPlanificateurTechnicien();
 demarrerPlanificateurDevis();
 demarrerPlanificateurRapport();

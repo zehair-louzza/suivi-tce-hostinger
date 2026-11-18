@@ -139,8 +139,21 @@ export function decouper(texte: string, font: PDFFont, taille: number, largeur: 
       if (courante) lignes.push(courante);
       let reste = mot;
       while (font.widthOfTextAtSize(reste, taille) > largeur) {
-        let n = reste.length;
-        while (n > 1 && font.widthOfTextAtSize(reste.slice(0, n), taille) > largeur) n--;
+        let lo = 1;
+        let hi = 1;
+        while (hi < reste.length && font.widthOfTextAtSize(reste.slice(0, hi), taille) <= largeur) {
+          lo = hi;
+          hi = Math.min(reste.length, hi * 2);
+        }
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi) / 2);
+          if (font.widthOfTextAtSize(reste.slice(0, mid), taille) <= largeur) {
+            lo = mid;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        const n = Math.max(1, lo);
         lignes.push(reste.slice(0, n));
         reste = reste.slice(n);
       }

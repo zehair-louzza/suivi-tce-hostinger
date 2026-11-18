@@ -80,10 +80,11 @@ function requireTriage(acc: Access) {
 
 /** Droit de créer la pièce vers laquelle la demande est orientée. */
 function canOrienter(acc: Access, decision: Decision): boolean {
+  if (!acc.isKnownRole) return false;
   if (acc.isAdmin) return true;
   if (decision === 'DEVIS') return Boolean(acc.perms.canEditDevis);
   if (decision === 'VISITE') return Boolean(acc.perms.canEditDevis) || Boolean(acc.perms.canEditPlanning);
-  return Boolean(acc.perms.canEditInterventions) || Boolean(acc.perms.canEditPlanning);
+  return !acc.isFieldOnly && acc.role !== 'CHIFFRAGE_DEVIS' && Boolean(acc.perms.canEditInterventions);
 }
 
 const auteurOf = (req: Request) => req.user?.email || 'Utilisateur';
@@ -204,8 +205,16 @@ demandesRouter.patch(
     }
     if (b.statut !== undefined) {
       if (!STATUTS.includes(b.statut)) throw new AppError(400, 'Statut inconnu');
+      if (b.statut !== existing.statut) {
+        if (existing.statut !== 'A_DECIDER') {
+          throw new AppError(409, 'Une demande déjà orientée ou annulée ne peut plus changer d’état', 'INVALID_STATE_TRANSITION');
+        }
+        if (b.statut === 'ORIENTEE') {
+          throw new AppError(400, 'Utilisez l’action « Orienter » pour passer une demande à ORIENTEE', 'INVALID_STATE_TRANSITION');
+        }
+      }
       data.statut = b.statut;
-      if (b.statut === 'ANNULEE') {
+      if (b.statut === 'ANNULEE' && existing.statut !== 'ANNULEE') {
         data.historiqueJson = addEvent(existing.historiqueJson, auteurOf(req), 'Demande annulée', txt(b.motif, 200) || '');
       }
     }
@@ -233,7 +242,9 @@ demandesRouter.post(
     const id = parseInt(req.params.id, 10);
     const demande = await prisma.demande.findFirst({ where: { id, companyId } });
     if (!demande) throw new AppError(404, 'Demande introuvable');
-    if (demande.statut === 'ORIENTEE') throw new AppError(409, 'Cette demande a déjà été orientée');
+    if (demande.statut !== 'A_DECIDER') {
+      throw new AppError(409, 'Cette demande ne peut plus être orientée dans son état actuel');
+    }
 
     const decision = String(req.body?.decision || '').toUpperCase() as Decision;
     if (!DECISIONS.includes(decision)) throw new AppError(400, 'Décision inconnue : VISITE, DEVIS ou INTERVENTION');
@@ -245,108 +256,115 @@ demandesRouter.post(
     const auteur = auteurOf(req);
     const annee = new Date(demande.dateReception).getFullYear();
     const chantier = demande.site || demande.client;
-    let devisId: number | null = null;
-    let interventionId: number | null = null;
-    let libelle = '';
 
-    if (decision === 'DEVIS') {
-      const autoDevis = applyDevisAutomations<Record<string, any>>({
-        statutCommercial: 'À préparer',
-        traitement: 'À traiter',
-        prochaineAction: 'Chiffrer',
-        amount: 0,
-        validiteJours: 30,
-        dateCreated: new Date(),
-        dateDemande: demande.dateReception,
-        echeance: demande.echeanceSouhaitee || undefined,
-      });
-      const devis = await prisma.devis.create({
-        data: {
-          client: demande.client,
-          siteAdresse: demande.site,
-          objet: demande.objet,
-          corpsEtat: demande.corpsEtat,
-          // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
-          numeroDI: demande.numeroDI || demande.referenceInterne,
-          origine: demande.canalReception || 'Client',
-          priorite: demande.priorite,
-          statutCommercial: autoDevis.statutCommercial,
-          traitement: autoDevis.traitement,
-          prochaineAction: autoDevis.prochaineAction,
+    const { updated, devisId, interventionId, libelle } = await prisma.$transaction(async (tx) => {
+      let txDevisId: number | null = null;
+      let txInterventionId: number | null = null;
+      let txLibelle = '';
+
+      if (decision === 'DEVIS') {
+        const autoDevis = applyDevisAutomations<Record<string, any>>({
+          statutCommercial: 'À préparer',
+          traitement: 'À traiter',
+          prochaineAction: 'Chiffrer',
           amount: 0,
-          validiteJours: autoDevis.validiteJours,
+          validiteJours: 30,
           dateCreated: new Date(),
           dateDemande: demande.dateReception,
-          echeance: parseDateOrNull(autoDevis.echeance),
-          notes: demande.notes,
-          historiqueJson: addEvent(null, auteur, 'Devis créé depuis la demande', demande.numeroDI || demande.referenceInterne || ''),
-          userId,
-          companyId,
-        },
-      });
-      const ref = await nextCompanyRef(companyId, 'DEV', annee);
-      await prisma.devis.update({ where: { id: devis.id }, data: { referenceMetier: ref } });
-      await syncDevisDossier({ ...devis, referenceMetier: ref }, companyId);
-      devisId = devis.id;
-      libelle = `Devis ${ref}`;
-    } else {
-      const isVisite = decision === 'VISITE';
-      const autoIntv = applyInterventionAutomations<Record<string, any>>({
-        dateDemande: demande.dateReception,
-        echeance: demande.echeanceSouhaitee || undefined,
-        priorite: demande.priorite,
-        statutOperationnel: 'À planifier',
-        statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
-      });
-      const intervention = await prisma.intervention.create({
-        data: {
-          client: demande.client,
-          chantier,
-          objet: demande.objet,
-          corpsEtat: demande.corpsEtat,
-          // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
-          numeroDI: demande.numeroDI || demande.referenceInterne,
-          origine: demande.canalReception,
-          priorite: demande.priorite,
-          typeIntervention: isVisite ? 'Visite technique devis' : 'Corrective',
-          isVisiteDevis: isVisite,
-          modePlanification: autoIntv.modePlanification,
-          statutOperationnel: autoIntv.statutOperationnel,
-          traitement: 'À traiter',
-          statutFacture: isVisite ? 'Non facturable' : (autoIntv.statutFacture || 'Non facturée'),
-          statutRapport: 'En attente',
-          amount: 0,
-          datePlanifiee: new Date(),
+          echeance: demande.echeanceSouhaitee || undefined,
+        });
+        const devis = await tx.devis.create({
+          data: {
+            client: demande.client,
+            siteAdresse: demande.site,
+            objet: demande.objet,
+            corpsEtat: demande.corpsEtat,
+            // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
+            numeroDI: demande.numeroDI || demande.referenceInterne,
+            origine: demande.canalReception || 'Client',
+            priorite: demande.priorite,
+            statutCommercial: autoDevis.statutCommercial,
+            traitement: autoDevis.traitement,
+            prochaineAction: autoDevis.prochaineAction,
+            amount: 0,
+            validiteJours: autoDevis.validiteJours,
+            dateCreated: new Date(),
+            dateDemande: demande.dateReception,
+            echeance: parseDateOrNull(autoDevis.echeance),
+            notes: demande.notes,
+            historiqueJson: addEvent(null, auteur, 'Devis créé depuis la demande', demande.numeroDI || demande.referenceInterne || ''),
+            userId,
+            companyId,
+          },
+        });
+        const ref = await nextCompanyRef(companyId, 'DEV', annee, tx);
+        await tx.devis.update({ where: { id: devis.id }, data: { referenceMetier: ref } });
+        await syncDevisDossier({ ...devis, referenceMetier: ref }, companyId, tx);
+        txDevisId = devis.id;
+        txLibelle = `Devis ${ref}`;
+      } else {
+        const isVisite = decision === 'VISITE';
+        const autoIntv = applyInterventionAutomations<Record<string, any>>({
           dateDemande: demande.dateReception,
-          dateEcheance: parseDateOrNull(autoIntv.echeance),
-          notes: demande.notes,
-          historiqueJson: addEvent(
-            null,
-            auteur,
-            isVisite ? 'Visite créée depuis la demande' : 'Intervention créée depuis la demande',
-            demande.numeroDI || demande.referenceInterne || ''
-          ),
-          userId,
-          companyId,
+          echeance: demande.echeanceSouhaitee || undefined,
+          priorite: demande.priorite,
+          statutOperationnel: 'À planifier',
+          statutFacture: isVisite ? 'Non facturable' : 'Non facturée',
+        });
+        const intervention = await tx.intervention.create({
+          data: {
+            client: demande.client,
+            chantier,
+            objet: demande.objet,
+            corpsEtat: demande.corpsEtat,
+            // Un particulier n'a pas de DI : sa référence interne devient son numéro de suivi
+            numeroDI: demande.numeroDI || demande.referenceInterne,
+            origine: demande.canalReception,
+            priorite: demande.priorite,
+            typeIntervention: isVisite ? 'Visite technique devis' : 'Corrective',
+            isVisiteDevis: isVisite,
+            modePlanification: autoIntv.modePlanification,
+            statutOperationnel: autoIntv.statutOperationnel,
+            traitement: 'À traiter',
+            statutFacture: isVisite ? 'Non facturable' : (autoIntv.statutFacture || 'Non facturée'),
+            statutRapport: 'En attente',
+            amount: 0,
+            datePlanifiee: new Date(),
+            dateDemande: demande.dateReception,
+            dateEcheance: parseDateOrNull(autoIntv.echeance),
+            notes: demande.notes,
+            historiqueJson: addEvent(
+              null,
+              auteur,
+              isVisite ? 'Visite créée depuis la demande' : 'Intervention créée depuis la demande',
+              demande.numeroDI || demande.referenceInterne || ''
+            ),
+            userId,
+            companyId,
+          },
+        });
+        const ref = await nextCompanyRef(companyId, isVisite ? 'VIS' : 'INT', annee, tx);
+        await tx.intervention.update({ where: { id: intervention.id }, data: { referenceMetier: ref } });
+        txInterventionId = intervention.id;
+        txLibelle = `${isVisite ? 'Visite' : 'Intervention'} ${ref}`;
+      }
+
+      const claimed = await tx.demande.updateMany({
+        where: { id, companyId, statut: 'A_DECIDER' },
+        data: {
+          statut: 'ORIENTEE',
+          decision,
+          decidedAt: new Date(),
+          devisId: txDevisId,
+          interventionId: txInterventionId,
+          historiqueJson: addEvent(demande.historiqueJson, auteur, 'Demande orientée', txLibelle),
         },
       });
-      const prefix = isVisite ? 'VIS' : 'INT';
-      const ref = await nextCompanyRef(companyId, isVisite ? 'VIS' : 'INT', annee);
-      await prisma.intervention.update({ where: { id: intervention.id }, data: { referenceMetier: ref } });
-      interventionId = intervention.id;
-      libelle = `${isVisite ? 'Visite' : 'Intervention'} ${ref}`;
-    }
-
-    const updated = await prisma.demande.update({
-      where: { id },
-      data: {
-        statut: 'ORIENTEE',
-        decision,
-        decidedAt: new Date(),
-        devisId,
-        interventionId,
-        historiqueJson: addEvent(demande.historiqueJson, auteur, 'Demande orientée', libelle),
-      },
+      if (claimed.count !== 1) {
+        throw new AppError(409, 'Cette demande a déjà été orientée ou annulée');
+      }
+      const txUpdated = await tx.demande.findFirst({ where: { id, companyId } });
+      return { updated: txUpdated, devisId: txDevisId, interventionId: txInterventionId, libelle: txLibelle };
     });
 
     try { if (devisId) socketEvents.devisCreated(userId, companyId, { id: devisId }); else if (interventionId) socketEvents.interventionCreated(userId, companyId, { id: interventionId }); } catch {}

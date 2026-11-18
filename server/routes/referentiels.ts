@@ -4,7 +4,21 @@ import { prisma } from '../lib/prisma.js';
 import { policy, secureRouter } from '../lib/guard.js';
 import { requireCompanyId } from '../lib/tenant.js';
 import { loadAccess } from '../lib/loadAccess.js';
-import { shapeClientFiche, techMatches } from '../lib/access.js';
+import { canReadDevis, canReadIntervention, shapeClientFiche, techMatches } from '../lib/access.js';
+
+const ALLOWED_REFERENTIEL_CATEGORIES = new Set([
+  'clients',
+  'clients_fiches',
+  'corps_etat',
+  'origines',
+  'responsables',
+  'techniciens',
+  'motifs_blocage',
+  'resultats_techniques',
+  'technicien_competences',
+  'equipes_journalieres',
+  'baremes',
+]);
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { socketEvents } from '../socket/index.js';
@@ -183,15 +197,20 @@ referentielsRouter.get(
             ],
           }
         : { id: -1 };
-      const [myInterventions, myVisits] = await Promise.all([
-        prisma.intervention.findMany({ where: { companyId, ...mineWhere }, select: { client: true } }),
+      const [rawInterventions, rawVisits] = await Promise.all([
+        prisma.intervention.findMany({
+          where: { companyId, ...mineWhere },
+          select: { client: true, entreprise: true, technicien: true, devisId: true, origineDevisId: true, isVisiteDevis: true },
+        }),
         bound
           ? prisma.devis.findMany({
               where: { companyId, visiteTechnicien: { contains: bound, mode: 'insensitive' } },
-              select: { client: true },
+              select: { client: true, visiteTechnicien: true, statutCommercial: true },
             })
-          : Promise.resolve([] as { client: string | null }[]),
+          : Promise.resolve([] as { client: string | null; visiteTechnicien: string | null; statutCommercial: string | null }[]),
       ]);
+      const myInterventions = rawInterventions.filter((i) => canReadIntervention(acc, i));
+      const myVisits = rawVisits.filter((d) => canReadDevis(acc, d));
       const myClients = new Set(
         [...myInterventions, ...myVisits].map((m: any) => String(m.client || '').trim().toLowerCase()).filter(Boolean)
       );
@@ -239,6 +258,9 @@ referentielsRouter.put(
     }
 
     const rawCat = req.params.categorie === 'corpsEtat' ? 'corps_etat' : req.params.categorie;
+    if (!ALLOWED_REFERENTIEL_CATEGORIES.has(String(rawCat))) {
+      throw new AppError(400, 'Catégorie de référentiel invalide ou protégée', 'VALIDATION_ERROR');
+    }
     const categorie = rawCat as keyof ReferentielsMap;
     const companyId = requireCompanyId(caller.companyId);
 
@@ -572,44 +594,66 @@ referentielsRouter.post(
   '/gps-position',
   policy('gps.post'),
   asyncHandler(async (req: Request, res: Response) => {
-    const companyId = requireCompanyId(req.user?.companyId);
+    const acc = await loadAccess(req);
+    const companyId = acc.companyId;
     const b = req.body || {};
-    let technicien = String(b.technicien || '').trim();
 
-    if (req.user?.userId) {
-      const caller = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        select: { id: true, role: true, technicienNom: true, name: true },
-      });
-      if (caller && (caller.role === 'TECHNICIEN' || caller.technicienNom)) {
-        technicien = (caller.technicienNom || caller.name || technicien).trim();
+    let technicien: string;
+    if (acc.role === 'CHIFFRAGE_DEVIS' && !acc.isAdmin) {
+      throw new AppError(403, 'Profil chiffrage non autorisé à enregistrer une position GPS terrain', 'FORBIDDEN');
+    }
+    if (!acc.isAdmin && !acc.perms.canEditPlanning) {
+      if (!acc.boundTech) {
+        throw new AppError(403, 'Aucun profil technicien associé à votre compte', 'FORBIDDEN');
       }
+      technicien = acc.boundTech;
+    } else {
+      technicien = String(b.technicien || acc.boundTech || '').trim().slice(0, 120);
     }
 
     const lat = Number(b.lat);
     const lng = Number(b.lng);
 
-    if (!technicien || Number.isNaN(lat) || Number.isNaN(lng)) {
-      res.status(400).json({ error: 'Technicien et coordonnées GPS (lat, lng) requis' });
+    if (
+      !technicien ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      res.status(400).json({ error: 'Technicien et coordonnées GPS valides (lat, lng) requis' });
       return;
     }
 
+    const rawAccNum = b.accuracy !== undefined && b.accuracy !== null ? Number(b.accuracy) : undefined;
+    const accNum = rawAccNum !== undefined && Number.isFinite(rawAccNum) && rawAccNum >= 0 && rawAccNum <= 50_000
+      ? rawAccNum
+      : undefined;
+    const ALLOWED_GPS_STATUTS = ['EN_COURS', 'CLOTUREE', 'EN_SERVICE'] as const;
+    const ALLOWED_GPS_SOURCES = ['GPS_MOBILE', 'GEOCODED_FALLBACK'] as const;
+    const rawStatut = String(b.statut || '');
+    const rawSource = String(b.source || '');
     const payload: GpsPositionPayload = {
       technicien,
       lat,
       lng,
-      accuracy: b.accuracy ? Number(b.accuracy) : undefined,
-      timestamp: b.timestamp || new Date().toISOString(),
-      missionId: b.missionId ? Number(b.missionId) : undefined,
-      missionRef: b.missionRef ? String(b.missionRef) : undefined,
-      chantier: b.chantier ? String(b.chantier) : undefined,
-      client: b.client ? String(b.client) : undefined,
-      statut: b.statut || 'EN_SERVICE',
-      source: b.source || 'GPS_MOBILE',
+      accuracy: accNum !== undefined && Number.isFinite(accNum) && accNum >= 0 ? accNum : undefined,
+      timestamp: b.timestamp ? String(b.timestamp).slice(0, 40) : new Date().toISOString(),
+      missionId: b.missionId && Number.isFinite(Number(b.missionId)) ? Number(b.missionId) : undefined,
+      missionRef: b.missionRef ? String(b.missionRef).slice(0, 80) : undefined,
+      chantier: b.chantier ? String(b.chantier).slice(0, 200) : undefined,
+      client: b.client ? String(b.client).slice(0, 160) : undefined,
+      statut: (ALLOWED_GPS_STATUTS as readonly string[]).includes(rawStatut)
+        ? (rawStatut as GpsPositionPayload['statut'])
+        : 'EN_SERVICE',
+      source: (ALLOWED_GPS_SOURCES as readonly string[]).includes(rawSource)
+        ? (rawSource as GpsPositionPayload['source'])
+        : 'GPS_MOBILE',
     };
 
     const updatedMap = await saveTechnicienGpsPosition(companyId, payload);
-    const acc = await loadAccess(req);
     res.json({
       data: payload,
       positions_gps_techniciens: acc.canSeeTeam ? updatedMap : ownGpsOnly(updatedMap, acc.boundTech),

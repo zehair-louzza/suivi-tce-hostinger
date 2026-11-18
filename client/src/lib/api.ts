@@ -177,6 +177,7 @@ api.interceptors.response.use(
       url.includes('/auth/refresh') ||
       url.includes('/auth/logout') ||
       url.includes('/auth/google') ||
+      url.includes('/auth/invitations') ||
       url.includes('/auth/config');
 
     if (error.response?.status === 401 && !originalRequest?._retry && !isAuthEndpoint) {
@@ -514,14 +515,14 @@ export interface EntrepriseChoix {
 
 export const authApi = {
   getInvitation: (token: string) =>
-    api.get<{
+    api.post<{
       email: string;
       companyName: string;
       role: string;
       roleLabel: string;
       invitedByName: string | null;
       expiresAt: string;
-    }>(`/auth/invitations/${encodeURIComponent(token)}`),
+    }>('/auth/invitations/lookup', { token }),
   acceptInvitation: (payload: { token: string; name: string; password: string; acceptTerms: true }) =>
     api.post<{ user: User; accessToken: string; message: string }>('/auth/invitations/accept', payload),
   login: (email: string, password: string, companyId?: number) =>

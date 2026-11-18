@@ -32,9 +32,14 @@ function matchValue(actual: any, cond: any): boolean {
 function matches(row: Row, where: Row | undefined): boolean {
   if (!where) return true;
   for (const [k, cond] of Object.entries(where)) {
+    if (cond === undefined) continue;
     if (k === 'OR') { if (!(cond as Row[]).some((w) => matches(row, w))) return false; continue; }
     if (k === 'AND') { if (!(Array.isArray(cond) ? cond : [cond]).every((w: Row) => matches(row, w))) return false; continue; }
     if (k === 'NOT') { if ((Array.isArray(cond) ? cond : [cond]).some((w: Row) => matches(row, w))) return false; continue; }
+    if (k.includes('_') && cond && typeof cond === 'object' && !Array.isArray(cond) && !(cond instanceof Date)) {
+      if (!matches(row, cond as Row)) return false;
+      continue;
+    }
     if (!matchValue(row[k], cond)) return false;
   }
   return true;
@@ -68,6 +73,13 @@ class Table {
     if (a.select) return Object.fromEntries(Object.keys(a.select).filter((k) => a.select[k] === true).map((k) => [k, row[k]]));
     return { ...row };
   }
+  async createMany(a: { data: Row[]; skipDuplicates?: boolean }) {
+    const items = Array.isArray(a?.data) ? a.data : [];
+    for (const item of items) {
+      this.rows.push({ id: ++this.seq, createdAt: new Date(), updatedAt: new Date(), version: 1, ...item });
+    }
+    return { count: items.length };
+  }
   async update(a: Row) {
     const row = this.rows.find((x) => matches(x, a.where));
     if (!row) throw new Error(`${this.name}: enregistrement introuvable`);
@@ -84,15 +96,25 @@ class Table {
     if (i < 0) throw new Error(`${this.name}: enregistrement introuvable`);
     return this.rows.splice(i, 1)[0];
   }
+  async deleteMany(a: Row = {}) {
+    const before = this.rows.length;
+    this.rows = this.rows.filter((x) => !matches(x, a.where));
+    return { count: before - this.rows.length };
+  }
 }
 
 export function createFakeDb() {
   const db: Record<string, any> = {
     user: new Table('user'),
     devis: new Table('devis'),
+    demande: new Table('demande'),
     intervention: new Table('intervention'),
+    conversionRequest: new Table('conversionRequest'),
     referentiel: new Table('referentiel'),
+    pointageTechnicien: new Table('pointageTechnicien'),
+    pointageDerogation: new Table('pointageDerogation'),
     company: new Table('company'),
+    platformCreator: new Table('platformCreator'),
     notification: new Table('notification'),
     companyMailSettings: new Table('companyMailSettings'),
     emailLog: new Table('emailLog'),

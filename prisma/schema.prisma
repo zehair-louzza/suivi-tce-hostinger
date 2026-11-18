@@ -71,7 +71,9 @@ model User {
   confirmationToken  String?
   confirmationCode   String?
   confirmationCodeExpires DateTime?
+  confirmationCodeAttempts Int           @default(0)
   confirmationSentAt DateTime?
+  tokenVersion       Int                 @default(1)
   termsAcceptedAt    DateTime?
   termsAcceptedIp    String?
   themePref          String?

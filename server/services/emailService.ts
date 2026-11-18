@@ -1,4 +1,5 @@
 import net from 'net';
+import crypto from 'crypto';
 import { buildInvitationEmail } from './invitationEmail.js';
 import { promises as dns } from 'dns';
 import nodemailer, { Transporter } from 'nodemailer';
@@ -16,11 +17,9 @@ const DEFAULT_SMTP_USER = process.env.SMTP_USER || 'zehair@anelecgroupe.com';
 const DEFAULT_SMTP_PASS = process.env.SMTP_PASS || '';
 export const APP_URL = process.env.APP_URL || 'https://suivi.anelecgroupe.com';
 
-// Supabase Auth Relay fallback (projet officiel ANELEC TCE)
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://qfhxptwsuotqnrihzhxw.supabase.co';
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFmaHhwdHdzdW90cW5yaWh6aHh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjM0NjgsImV4cCI6MjA4OTUzOTQ2OH0.r83-3B_3e25I2J9u-mN04t2-wF_2t0p_X-p4vH-bI0w';
+// Relais Supabase Auth optionnel (requiert configuration explicite par variables d'environnement)
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || '').trim();
 
 /** Échappe le HTML des valeurs saisies par les utilisateurs avant de les mettre dans un e-mail. */
 export function esc(value: unknown): string {
@@ -93,6 +92,37 @@ let etherealAccountCache: { user: string; pass: string; host: string; port: numb
 
 const ALLOWED_SMTP_PORTS = [25, 465, 587, 2525];
 
+function expandIpv6Words(raw: string): number[] | null {
+  const zoneIdx = raw.indexOf('%');
+  const clean = (zoneIdx === -1 ? raw : raw.slice(0, zoneIdx)).toLowerCase();
+  const [leftRaw, rightRaw] = clean.split('::');
+  if (clean.split('::').length > 2) return null;
+  const parsePart = (part: string): number[] | null => {
+    if (!part) return [];
+    const tokens = part.split(':');
+    const out: number[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      if (tok.includes('.')) {
+        if (i !== tokens.length - 1 || !net.isIPv4(tok)) return null;
+        const [a, b, c, d] = tok.split('.').map(Number);
+        out.push((a << 8) | b, (c << 8) | d);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/.test(tok)) return null;
+        out.push(parseInt(tok, 16));
+      }
+    }
+    return out;
+  };
+  const left = parsePart(leftRaw || '');
+  const right = rightRaw !== undefined ? parsePart(rightRaw) : [];
+  if (!left || !right) return null;
+  if (rightRaw === undefined) return left.length === 8 ? left : null;
+  const fill = 8 - left.length - right.length;
+  if (fill < 0) return null;
+  return [...left, ...Array(fill).fill(0), ...right];
+}
+
 function isPrivateAddress(addr: string): boolean {
   const a = addr.trim().toLowerCase();
   if (net.isIPv4(a)) {
@@ -106,9 +136,29 @@ function isPrivateAddress(addr: string): boolean {
     );
   }
   if (net.isIPv6(a)) {
-    const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return a === '::' || a === '::1' || a.startsWith('fc') || a.startsWith('fd') || a.startsWith('fe80');
+    const words = expandIpv6Words(a);
+    if (!words) return true;
+    const isAllZeroExceptLast = words.slice(0, 7).every((w) => w === 0);
+    if (isAllZeroExceptLast && (words[7] === 0 || words[7] === 1)) return true; // :: / ::1
+    const isV4Compat = words.slice(0, 6).every((w) => w === 0);
+    if (isV4Compat) {
+      const ip4 = `${words[6] >> 8}.${words[6] & 0xff}.${words[7] >> 8}.${words[7] & 0xff}`;
+      if (isPrivateAddress(ip4)) return true;
+    }
+    const isV4Mapped = words.slice(0, 5).every((w) => w === 0) && words[5] === 0xffff;
+    if (isV4Mapped) {
+      const ip4 = `${words[6] >> 8}.${words[6] & 0xff}.${words[7] >> 8}.${words[7] & 0xff}`;
+      return isPrivateAddress(ip4);
+    }
+    const w0 = words[0];
+    if ((w0 & 0xfe00) === 0xfc00) return true; // fc00::/7 ULA
+    if ((w0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+    if ((w0 & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local obsolète
+    if ((w0 & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+    if (w0 === 0x2002) return true; // 2002::/16 6to4 (encapsule IPv4 arbitraire)
+    if (w0 === 0x0064 && words[1] === 0xff9b) return true; // 64:ff9b::/96 NAT64
+    if (w0 === 0x2001 && words[1] === 0x0000) return true; // Teredo
+    return false;
   }
   return true;
 }
@@ -131,9 +181,9 @@ export function assertPublicSmtpHost(host: string): void {
   }
 }
 
-/** Le nom doit se résoudre vers des adresses publiques uniquement. */
-async function assertResolvesPublic(host: string): Promise<void> {
-  let addrs: { address: string }[];
+/** Le nom doit se résoudre vers des adresses publiques uniquement (et retourne les IP épinglées). */
+async function resolvePublicAddresses(host: string): Promise<Array<{ address: string; family: 4 | 6 }>> {
+  let addrs: { address: string; family: number }[];
   try {
     addrs = await dns.lookup(host, { all: true });
   } catch {
@@ -142,6 +192,11 @@ async function assertResolvesPublic(host: string): Promise<void> {
   if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
     throw new Error("Serveur SMTP invalide : l'adresse du serveur n'est pas publique.");
   }
+  return addrs.map((a) => ({ address: a.address, family: (a.family === 6 ? 6 : 4) as 4 | 6 }));
+}
+
+async function assertResolvesPublic(host: string): Promise<void> {
+  await resolvePublicAddresses(host);
 }
 
 async function loadCompanyRow(companyId: number) {
@@ -426,7 +481,7 @@ function buildSmtpCandidates(cfg: SmtpConfigData, discovery: boolean): Candidate
   const candidates: Candidate[] = [];
   for (const pass of passwords) {
     if (!pass) continue;
-    candidates.push({ host: cfg.host, port: cfg.port, secure: cfg.port === 465, user: cfg.user, pass });
+    candidates.push({ host: cfg.host, port: cfg.port, secure: Boolean(cfg.secure), user: cfg.user, pass });
     for (const h of hosts) {
       for (const p of [465, 587]) {
         if (h === cfg.host && p === cfg.port) continue;
@@ -448,12 +503,16 @@ async function triggerSupabaseAuthEmailRelay(
   mode: 'signup' | 'recovery' = 'signup'
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return { ok: false, error: 'Relais Supabase Auth non configuré (SUPABASE_URL / SUPABASE_ANON_KEY requis)' };
+    }
     if (mode === 'recovery') {
       // Les comptes étant stockés dans public.users avec jeton resetToken, Supabase /recover ne peut pas délivrer le lien de réinitialisation.
       return { ok: false, error: 'Relais Supabase Auth non applicable à reset-password' };
     }
 
-    // Signup ou OTP magic link sur Supabase Auth avec redirect_to pointant directement vers l'activation du compte
+    const ephemeralSecret = `${crypto.randomBytes(24).toString('base64url')}!A1a`;
+    // Provisionnement technique avec mot de passe CSPRNG haute entropie (jamais Date.now() ni secret interne en metadata)
     const signupRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: 'POST',
       headers: {
@@ -462,11 +521,10 @@ async function triggerSupabaseAuthEmailRelay(
       },
       body: JSON.stringify({
         email: toEmail,
-        password: `Anelec!${Date.now()}Aa1`,
+        password: ephemeralSecret,
         data: {
           full_name: recipientName,
           company_name: companyName,
-          activation_link: activationLink,
         },
         gotrue_meta_security: {},
       }),
@@ -476,7 +534,7 @@ async function triggerSupabaseAuthEmailRelay(
       return { ok: true };
     }
 
-    // Si l'utilisateur est déjà inscrit dans auth.users, on déclenche /auth/v1/resend ou /auth/v1/otp
+    // Si l'utilisateur est déjà inscrit dans auth.users, on déclenche /auth/v1/resend
     const resendRes = await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
       method: 'POST',
       headers: {
@@ -486,9 +544,6 @@ async function triggerSupabaseAuthEmailRelay(
       body: JSON.stringify({
         type: 'signup',
         email: toEmail,
-        options: {
-          emailRedirectTo: activationLink,
-        },
       }),
     });
 
@@ -575,20 +630,30 @@ export async function dispatchEmailWithFallback(options: {
   const logCompanyId = options.companyId ?? null;
   const newId = () => `mail_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-  // 1. Serveur SMTP (boîte de l'entreprise, ou expéditeur plateforme avec découverte)
+  const pinTenantLookup = !isPlatformSender;
+
+  // 1. Serveur SMTP (boîte de l'entreprise épinglée sur IP publique littérale au moment exact de connexion, ou expéditeur plateforme)
   for (const cand of candidates) {
     try {
+      let targetHost = cand.host;
+      if (pinTenantLookup) {
+        assertPublicSmtpHost(cand.host);
+        const publicAddrs = await resolvePublicAddresses(cand.host);
+        // Nodemailer ignore options.lookup : passer l'IP publique littérale épinglée avec tls.servername empêche tout rebinding DNS
+        targetHost = publicAddrs[0].address;
+      }
+      const forceStartTls = !cand.secure && (pinTenantLookup || process.env.NODE_ENV === 'production');
       const transport: Transporter = nodemailer.createTransport({
-        host: cand.host,
+        host: targetHost,
         port: cand.port,
         secure: cand.secure,
+        ...(forceStartTls ? { requireTLS: true } : {}),
         auth: { user: cand.user, pass: cand.pass },
-        // Certificat strictement vérifié pour les boîtes d'entreprise ; l'expéditeur plateforme garde son comportement historique.
-        tls: { rejectUnauthorized: !isPlatformSender },
+        tls: { rejectUnauthorized: true, servername: cand.host },
         connectionTimeout: 5500,
         greetingTimeout: 5500,
         socketTimeout: 7500,
-      });
+      } as any);
 
       const info = await transport.sendMail({
         from: `"${fromName.replace(/"/g, '')}" <${cand.user}>`,
@@ -608,7 +673,6 @@ export async function dispatchEmailWithFallback(options: {
         fromAddress: cand.user,
         hostUsed: `${cand.host}:${cand.port}`,
         messageId: info.messageId,
-        activationLink: options.activationLink,
         timestamp: new Date().toISOString(),
       };
 
@@ -646,7 +710,7 @@ export async function dispatchEmailWithFallback(options: {
         channel: 'SUPABASE_AUTH_RELAY',
         senderMode: 'PLATFORM',
         hostUsed: 'supabase-auth-mailer',
-        activationLink: options.activationLink,
+        // activationLink omis de la réponse publique
         error: lastSmtpError || undefined,
         timestamp: new Date().toISOString(),
       };
@@ -704,7 +768,7 @@ export async function dispatchEmailWithFallback(options: {
         hostUsed: `${etherealAccountCache.host}:${etherealAccountCache.port}`,
         messageId: info.messageId,
         previewUrl,
-        activationLink: options.activationLink,
+        // activationLink omis de la réponse publique
         error: lastSmtpError || 'SMTP_PASS non configuré ou refusé par le serveur (mot de passe d’application requis)',
         timestamp: new Date().toISOString(),
       };
@@ -732,7 +796,6 @@ export async function dispatchEmailWithFallback(options: {
     sent: false,
     channel: 'NONE',
     senderMode,
-    activationLink: options.activationLink,
     error:
       lastSmtpError ||
       (candidates.length === 0
@@ -848,7 +911,7 @@ export async function sendConfirmationEmail({
     useCompanyMailbox: false,
     allowPreviewFallback: true,
     toEmail,
-    subject: `${codeDisplay} — Code de confirmation espace entreprise ${companyName} - ANELEC TCE`,
+    subject: `Code de confirmation espace entreprise ${companyName} - ANELEC TCE`,
     html: htmlContent,
     text: `Bonjour ${recipientName},\n\nVotre code de confirmation pour activer l'espace entreprise ${companyName} :\n\n${codeDisplay}\n\nCe code expire dans 15 minutes.\n\nSaisissez-le sur la page d'inscription pour activer votre espace.\n\nEn confirmant ce code, vous acceptez les conditions d'utilisation et la politique RGPD.`,
     activationLink,
@@ -1224,20 +1287,22 @@ export async function sendDevisProposalEmail(params: {
       <span style="color:#0284c7;font-weight:800;">${esc(ref)}</span>
     </div>
     <p style="font-size:14px;line-height:1.6;color:#334155;">
-      ${params.customMessage || `Bonjour,<br/><br/>Veuillez trouver ci-dessous le récapitulatif de notre proposition de devis <strong>${esc(ref)}</strong> concernant votre demande de travaux.`}
+      ${params.customMessage
+        ? esc(params.customMessage).replace(/\r?\n/g, '<br/>')
+        : `Bonjour,<br/><br/>Veuillez trouver ci-dessous le récapitulatif de notre proposition de devis <strong>${esc(ref)}</strong> concernant votre demande de travaux.`}
     </p>
     <div class="grid">
-      <div><strong>Client / Donneur d'ordre :</strong><br/>${params.devis.client}</div>
-      <div><strong>Site / Chantier :</strong><br/>${params.devis.siteAdresse || '—'}</div>
-      <div><strong>Corps d'état :</strong><br/>${params.devis.corpsEtat || 'Tous corps d’état'}</div>
-      <div><strong>Montant Total HT :</strong><br/><span style="font-size:15px;font-weight:800;color:#0284c7;">${amountFormatted} HT</span></div>
+      <div><strong>Client / Donneur d'ordre :</strong><br/>${esc(params.devis.client)}</div>
+      <div><strong>Site / Chantier :</strong><br/>${esc(params.devis.siteAdresse || '—')}</div>
+      <div><strong>Corps d'état :</strong><br/>${esc(params.devis.corpsEtat || 'Tous corps d’état')}</div>
+      <div><strong>Montant Total HT :</strong><br/><span style="font-size:15px;font-weight:800;color:#0284c7;">${esc(amountFormatted)} HT</span></div>
     </div>
     <div style="background:#f8fafc;border-left:4px solid #0284c7;padding:14px;border-radius:8px;font-size:13px;color:#1e293b;">
       <strong>Objet des travaux :</strong><br/>
-      ${params.devis.objet || 'Travaux de maintenance et remise en état'}
+      ${esc(params.devis.objet || 'Travaux de maintenance et remise en état')}
     </div>
     <p style="font-size:11px;color:#94a3b8;margin-top:24px;text-align:center;">
-      Transmis par ${params.senderName} (${params.senderEmail}) • ${params.companyName}
+      Transmis par ${esc(params.senderName)} (${esc(params.senderEmail)}) • ${esc(params.companyName)}
     </p>
   </div>
 </body>

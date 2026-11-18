@@ -10,6 +10,8 @@
 import { prisma } from '../lib/prisma.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertDocumentStorageQuota } from '../lib/storageQuotas.js';
+import { computeSchedulerBackoffMs, setBoundedRetryEntry, withWallTimeout } from '../domain/schedulerHelpers.js';
 import { APP_URL, sendDevisClientLinkEmail } from './emailService.js';
 import { notifier, ajouterHistorique } from './technicianAutomation.js';
 import { parsePhotosJson } from '../lib/terrainPhotos.js';
@@ -81,9 +83,9 @@ export async function adressesPourDevis(companyId: number, nomClient: string | n
 export type EtatLien = 'actif' | 'repondu' | 'revoque' | 'expire';
 
 export function etatLien(l: any, maintenant: Date = new Date()): EtatLien {
-  if (l.reponse) return 'repondu';
   if (l.revoqueLe) return 'revoque';
   if (new Date(l.expireLe).getTime() <= maintenant.getTime()) return 'expire';
+  if (l.reponse) return 'repondu';
   return 'actif';
 }
 
@@ -240,8 +242,8 @@ export async function fabriquerPdfVisiteTechnique(
   });
 }
 
-export async function revoquerLiensActifs(companyId: number, devisId: number, raison: string): Promise<number> {
-  const res = await db.devisLienClient.updateMany({
+export async function revoquerLiensActifs(companyId: number, devisId: number, raison: string, tx: any = db): Promise<number> {
+  const res = await tx.devisLienClient.updateMany({
     where: { companyId, devisId, reponse: null, revoqueLe: null },
     data: { revoqueLe: new Date(), revoqueRaison: raison },
   });
@@ -311,6 +313,7 @@ export async function envoyerAuClient(p: {
       inclureVisite: p.inclureVisite,
       photos: p.photos,
     });
+    await assertDocumentStorageQuota(db, companyId, { devisId: devis.id }, pdf.length);
     const crypto = await import('node:crypto');
     doc = await db.devisDocument.create({
       data: {
@@ -327,17 +330,19 @@ export async function envoyerAuClient(p: {
   }
 
   const maintenant = new Date();
-  await revoquerLiensActifs(companyId, devis.id, 'Nouvel envoi');
-  const lien = await db.devisLienClient.create({
-    data: {
-      companyId,
-      devisId: devis.id,
-      documentId: doc!.id,
-      sel: genererSel(),
-      destinataires: JSON.stringify(choix.emails),
-      expireLe: new Date(maintenant.getTime() + DUREE_LIEN_JOURS * JOUR_MS),
-      creePar: p.auteur,
-    },
+  const lien = await db.$transaction(async (tx: any) => {
+    await revoquerLiensActifs(companyId, devis.id, 'Nouvel envoi', tx);
+    return tx.devisLienClient.create({
+      data: {
+        companyId,
+        devisId: devis.id,
+        documentId: doc!.id,
+        sel: genererSel(),
+        destinataires: JSON.stringify(choix.emails),
+        expireLe: new Date(maintenant.getTime() + DUREE_LIEN_JOURS * JOUR_MS),
+        creePar: p.auteur,
+      },
+    });
   });
 
   const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
@@ -417,29 +422,37 @@ export async function enregistrerReponseClient(jeton: string, body: unknown): Pr
   if (!v.ok) throw new AppError(400, v.message, 'INVALID_PAYLOAD');
   const { reponse, motif, nom } = v.value;
 
-  // Usage unique : la mise à jour ne réussit que si le lien est encore actif à cet instant précis
+  // Usage unique : vérification société active + prise du lien + mise à jour du devis dans une transaction atomique
   const maintenant = new Date();
-  const pris = await db.devisLienClient.updateMany({
-    where: { id: lien.id, reponse: null, revoqueLe: null, expireLe: { gt: maintenant } },
-    data: { reponse, motif: motif || null, repondantNom: nom, reponduLe: maintenant },
-  });
-  if (!pris.count) throw new AppError(409, 'Une réponse a déjà été enregistrée pour ce devis.', 'DEJA_REPONDU');
-
-  const devis = await db.devis.findFirst({ where: { id: lien.devisId, companyId: lien.companyId } });
-  if (!devis) throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
   const statutCommercial = statutApresReponse(reponse);
-  const ref = referenceDevis(devis);
-  const details = `${nom}${motif ? ` — « ${motif} »` : ''}`;
+  const devis = await db.$transaction(async (tx: any) => {
+    const comp = await tx.company.findUnique({ where: { id: lien.companyId }, select: { active: true } });
+    if (!comp || comp.active === false) {
+      throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
+    }
+    const pris = await tx.devisLienClient.updateMany({
+      where: { id: lien.id, companyId: lien.companyId, devisId: lien.devisId, reponse: null, revoqueLe: null, expireLe: { gt: maintenant } },
+      data: { reponse, motif: motif || null, repondantNom: nom, reponduLe: maintenant },
+    });
+    if (!pris.count) throw new AppError(409, 'Une réponse a déjà été enregistrée pour ce devis.', 'DEJA_REPONDU');
 
-  await db.devis.update({
-    where: { id: devis.id },
-    data: {
-      statutCommercial,
-      dateRelance: null,
-      prochaineAction: reponse === 'ACCEPTEE' ? 'Planifier les travaux' : reponse === 'MODIFICATION' ? 'Modifier le devis et le renvoyer' : null,
-      historiqueJson: ajouterHistorique(devis.historiqueJson, `Client (${nom})`, REPONSE_LIBELLE[reponse], details),
-    },
+    const txDevis = await tx.devis.findFirst({ where: { id: lien.devisId, companyId: lien.companyId } });
+    if (!txDevis) throw new AppError(404, 'Lien invalide, expiré ou déjà utilisé', 'LIEN_INVALIDE');
+    const details = `${nom}${motif ? ` — « ${motif} »` : ''}`;
+
+    await tx.devis.update({
+      where: { id: txDevis.id },
+      data: {
+        statutCommercial,
+        dateRelance: null,
+        prochaineAction: reponse === 'ACCEPTEE' ? 'Planifier les travaux' : reponse === 'MODIFICATION' ? 'Modifier le devis et le renvoyer' : null,
+        historiqueJson: ajouterHistorique(txDevis.historiqueJson, `Client (${nom})`, REPONSE_LIBELLE[reponse], details),
+        version: { increment: 1 },
+      },
+    });
+    return txDevis;
   });
+  const ref = referenceDevis(devis);
 
   const companyId = lien.companyId as number;
   if (reponse === 'ACCEPTEE') {
@@ -468,108 +481,156 @@ export async function enregistrerReponseClient(jeton: string, body: unknown): Pr
 // ---------------------------------------------------------------------------
 
 let enCours = false;
+let resumeCursorDevis = 0;
+const devisRetryBackoff = new Map<string, { fails: number; retryAfter: number }>();
 
 export async function executerAutomatisationsDevis(maintenant: Date = new Date()): Promise<{ relances: number; expires: number }> {
   if (enCours) return { relances: 0, expires: 0 };
   enCours = true;
   const bilan = { relances: 0, expires: 0 };
+  const deadline = Date.now() + 20_000;
+  const tenantFails = new Map<number, number>();
+  const companyCache = new Map<number, string>();
+  const nowMs = maintenant.getTime();
+  let stoppedByDeadline = false;
+  let lastId = resumeCursorDevis;
   try {
-    const devisEnvoyes: any[] = await db.devis.findMany({
-      where: {
-        statutCommercial: 'Envoyé au client',
-        companyId: { not: null },
-        envoiClientLe: { not: null },
-        company: { is: { active: true, autoDevisActif: true } },
-      },
-      take: 500,
-    });
-
-    for (const d of devisEnvoyes) {
-      const companyId = d.companyId as number;
-      const liens = await liensDuDevis(companyId, d.id);
-      const lien = liens[0];
-      if (!lien) continue;
-      const action = prochaineActionDevis({
-        statut: d.statutCommercial,
-        envoiLe: d.envoiClientLe,
-        expireLe: lien.expireLe,
-        reponduOuRevoque: Boolean(lien.reponse || lien.revoqueLe),
-        relanceJ3Le: d.relanceClientJ3Le,
-        relanceJ7Le: d.relanceClientJ7Le,
-        maintenant,
+    while (Date.now() < deadline) {
+      const devisEnvoyes: any[] = await db.devis.findMany({
+        where: {
+          ...(lastId > 0 ? { id: { gt: lastId } } : {}),
+          statutCommercial: 'Envoyé au client',
+          companyId: { not: null },
+          envoiClientLe: { not: null },
+          company: { is: { active: true, autoDevisActif: true } },
+        },
+        orderBy: [{ id: 'asc' }],
+        take: 250,
       });
-      if (action === 'aucune') continue;
-      const ref = referenceDevis(d);
+      if (devisEnvoyes.length === 0) break;
 
-      if (action === 'expirer') {
-        const ok = await db.devisLienClient.updateMany({
-          where: { id: lien.id, reponse: null, revoqueLe: null },
-          data: { revoqueLe: maintenant, revoqueRaison: 'Expiré' },
-        });
-        if (!ok.count) continue;
-        await db.devis.update({
-          where: { id: d.id },
-          data: {
-            statutCommercial: 'Expiré',
-            prochaineAction: 'Relancer le client par téléphone ou renvoyer le devis',
-            historiqueJson: ajouterHistorique(d.historiqueJson, 'Automatique', 'Automatique — devis expiré', `Sans réponse du client ${DUREE_LIEN_JOURS} jours après l'envoi`),
-          },
-        });
-        const dest = await comptesParRoles(companyId, ['ADMIN', 'CHIFFRAGE_DEVIS'], [d.userId]);
-        await notifier(companyId, dest, {
-          type: 'DEVIS_EXPIRE',
-          titre: 'Devis expiré sans réponse',
-          message: `Le devis ${ref} (${d.client}) est resté ${DUREE_LIEN_JOURS} jours sans réponse : il est passé à « Expiré ».`,
-          devisId: d.id,
-        });
-        bilan.expires++;
-        continue;
-      }
-
-      // Relance J+3 / J+7 : mêmes destinataires, même lien
-      let emails: string[] = [];
-      try {
-        const parsed = JSON.parse(lien.destinataires || '[]');
-        if (Array.isArray(parsed)) emails = parsed.map(String);
-      } catch {
-        emails = [];
-      }
-      if (emails.length === 0) continue;
-      const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
-      const relance = action === 'relancer_j3' ? 'J3' : 'J7';
-      let envoyes = 0;
-      for (const to of emails) {
+      for (const d of devisEnvoyes) {
+        if (d.id > lastId) lastId = d.id;
+        if (Date.now() >= deadline) {
+          stoppedByDeadline = true;
+          break;
+        }
+        const companyId = d.companyId as number;
         try {
-          const r = await courrier.envoyerLien({
-            companyId,
-            companyName: company?.name || 'Votre prestataire',
-            toEmail: to,
-            devis: { reference: ref, client: d.client, objet: d.objet, siteAdresse: d.siteAdresse },
-            lien: urlLien(lien),
-            expireLe: new Date(lien.expireLe),
-            relance,
+          const liens = await liensDuDevis(companyId, d.id);
+          const lien = liens[0];
+          if (!lien) continue;
+          const action = prochaineActionDevis({
+            statut: d.statutCommercial,
+            envoiLe: d.envoiClientLe,
+            expireLe: lien.expireLe,
+            reponduOuRevoque: Boolean(lien.reponse || lien.revoqueLe),
+            relanceJ3Le: d.relanceClientJ3Le,
+            relanceJ7Le: d.relanceClientJ7Le,
+            maintenant,
           });
-          if (r.sent) envoyes++;
+          if (action === 'aucune') continue;
+          const ref = referenceDevis(d);
+
+          if (action === 'expirer') {
+            const ok = await db.devisLienClient.updateMany({
+              where: { id: lien.id, reponse: null, revoqueLe: null },
+              data: { revoqueLe: maintenant, revoqueRaison: 'Expiré' },
+            });
+            if (!ok.count) continue;
+            await db.devis.update({
+              where: { id: d.id },
+              data: {
+                statutCommercial: 'Expiré',
+                prochaineAction: 'Relancer le client par téléphone ou renvoyer le devis',
+                historiqueJson: ajouterHistorique(d.historiqueJson, 'Automatique', 'Automatique — devis expiré', `Sans réponse du client ${DUREE_LIEN_JOURS} jours après l'envoi`),
+              },
+            });
+            const dest = await comptesParRoles(companyId, ['ADMIN', 'CHIFFRAGE_DEVIS'], [d.userId]);
+            await notifier(companyId, dest, {
+              type: 'DEVIS_EXPIRE',
+              titre: 'Devis expiré sans réponse',
+              message: `Le devis ${ref} (${d.client}) est resté ${DUREE_LIEN_JOURS} jours sans réponse : il est passé à « Expiré ».`,
+              devisId: d.id,
+            });
+            bilan.expires++;
+            continue;
+          }
+
+          if ((tenantFails.get(companyId) || 0) >= 2) continue;
+          const retryKey = `${companyId}:${d.id}`;
+          const bo = devisRetryBackoff.get(retryKey);
+          if (bo && nowMs < bo.retryAfter) continue;
+
+          // Relance J+3 / J+7 : mêmes destinataires, même lien
+          let emails: string[] = [];
+          try {
+            const parsed = JSON.parse(lien.destinataires || '[]');
+            if (Array.isArray(parsed)) emails = parsed.map(String);
+          } catch {
+            emails = [];
+          }
+          if (emails.length === 0) continue;
+          const verrou = action === 'relancer_j3' ? { relanceClientJ3Le: maintenant } : { relanceClientJ7Le: maintenant, relanceClientJ3Le: d.relanceClientJ3Le || maintenant };
+          const claimWhere = action === 'relancer_j3'
+            ? { id: d.id, companyId, relanceClientJ3Le: null, relanceClientJ7Le: null }
+            : { id: d.id, companyId, relanceClientJ7Le: null };
+          let companyName = companyCache.get(companyId);
+          if (companyName === undefined) {
+            const company = await db.company.findUnique({ where: { id: companyId }, select: { name: true } });
+            companyName = String(company?.name || 'Votre prestataire');
+            companyCache.set(companyId, companyName);
+          }
+          const safeCompanyName = companyName;
+          const relance = action === 'relancer_j3' ? 'J3' : 'J7';
+          let envoyes = 0;
+          for (const to of emails) {
+            try {
+              const r = await withWallTimeout(
+                courrier.envoyerLien({
+                  companyId,
+                  companyName: safeCompanyName,
+                  toEmail: to,
+                  devis: { reference: ref, client: d.client, objet: d.objet, siteAdresse: d.siteAdresse },
+                  lien: urlLien(lien),
+                  expireLe: new Date(lien.expireLe),
+                  relance,
+                })
+              );
+              if (r.sent) envoyes++;
+            } catch {
+              /* echec gere par backoff exponentiel et disjoncteur par societe */
+            }
+          }
+          if (envoyes === 0) {
+            tenantFails.set(companyId, (tenantFails.get(companyId) || 0) + 1);
+            const fails = (bo?.fails || 0) + 1;
+            const waitMs = computeSchedulerBackoffMs(fails);
+            setBoundedRetryEntry(devisRetryBackoff, retryKey, { fails, retryAfter: nowMs + waitMs });
+            continue;
+          }
+          devisRetryBackoff.delete(retryKey);
+          await db.devis.updateMany({
+            where: claimWhere,
+            data: {
+              ...verrou,
+              historiqueJson: ajouterHistorique(
+                d.historiqueJson,
+                'Automatique',
+                `Automatique — relance ${action === 'relancer_j3' ? 'J+3' : 'J+7'} envoyée au client`,
+                `Sans réponse depuis l'envoi • ${emails.join(', ')}`
+              ),
+            },
+          });
+          bilan.relances++;
         } catch {
-          /* on réessaie à la prochaine passe si aucune adresse n'a reçu le message */
+          // Isoler les erreurs par dossier pour ne jamais bloquer les autres entreprises
         }
       }
-      if (envoyes === 0) continue;
-      const verrou = action === 'relancer_j3' ? { relanceClientJ3Le: maintenant } : { relanceClientJ7Le: maintenant, relanceClientJ3Le: d.relanceClientJ3Le || maintenant };
-      await db.devis.update({
-        where: { id: d.id },
-        data: {
-          ...verrou,
-          historiqueJson: ajouterHistorique(
-            d.historiqueJson,
-            'Automatique',
-            `Automatique — relance ${action === 'relancer_j3' ? 'J+3' : 'J+7'} envoyée au client`,
-            `Sans réponse depuis l'envoi • ${emails.join(', ')}`
-          ),
-        },
-      });
-      bilan.relances++;
+      if (stoppedByDeadline) break;
+      if (devisEnvoyes.length < 250) break;
     }
+    resumeCursorDevis = stoppedByDeadline ? lastId : 0;
   } finally {
     enCours = false;
   }

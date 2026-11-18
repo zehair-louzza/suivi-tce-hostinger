@@ -62,6 +62,7 @@ const ATTENDU: Record<Action, [boolean, boolean, boolean, boolean, boolean]> = {
   'notifications.update': [true, true, true, true, true],
   'admin.pointages.read': [true, true, true, true, true],
   'admin.pointages.clock': [true, true, true, true, true],
+  'admin.pointages.exception': [true, false, false, false, false],
 };
 // interventions.create : direction, planificateur et chargé d'études (visites de chiffrage, vérifié dans la route).
 // Jamais le terrain ni les rapports.

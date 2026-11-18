@@ -17,6 +17,7 @@ export interface AccessUser {
 export interface Access {
   userId: number;
   role: string;
+  isKnownRole: boolean;
   perms: UserPermissions;
   /** Direction : tout, dans SA seule entreprise */
   isAdmin: boolean;
@@ -52,39 +53,46 @@ const NO_PERMISSIONS: UserPermissions = {
 
 export function accessFor(user: AccessUser | null | undefined, tokenRole?: string | null): Access {
   const baseRole = ((user?.role || tokenRole || '') as string).toUpperCase();
-  // Le compte créateur/fondateur reconnu par identité canonique (e-mail / téléphone) est administrateur de SA seule entreprise
+  // Le compte créateur/fondateur reconnu par identité canonique (e-mail) est administrateur de SA seule entreprise
   const isOwner = isPlatformCreatorIdentity(user) && (baseRole === 'ADMIN' || !baseRole);
   const role = isOwner ? 'ADMIN' : baseRole;
-  // Rôle inconnu = aucun droit (refus par défaut). Avant, un rôle inconnu héritait des droits du planificateur.
-  const perms = ROLE_DEFINITIONS[role] ? getEffectivePermissions(role, user?.permissionsJson) : { ...NO_PERMISSIONS };
-  const isAdmin = isOwner || role === 'ADMIN' || Boolean(perms.canManageUsers);
+  // Rôle inconnu / hérité (USER, VIEWER…) = aucun droit (refus par défaut).
+  const isKnownRole = isOwner || Boolean(ROLE_DEFINITIONS[role]);
+  const perms = isKnownRole ? getEffectivePermissions(role, user?.permissionsJson) : { ...NO_PERMISSIONS };
+  const isAdmin = isKnownRole && (isOwner || role === 'ADMIN' || Boolean(perms.canManageUsers));
   const isMobileOnly =
     !isAdmin &&
-    (role === 'TECHNICIEN' ||
+    (!isKnownRole ||
+      role === 'TECHNICIEN' ||
       Boolean(perms.mobileOnly) ||
       (Boolean(user?.technicienNom) && !perms.canEditDevis && !perms.canManageBilling && !perms.canEditPlanning));
-  const isFieldOnly = isMobileOnly || role === 'TECHNICIEN';
+  const isFieldOnly = !isKnownRole || isMobileOnly || role === 'TECHNICIEN';
   return {
     userId: user?.id ?? 0,
     role,
+    isKnownRole,
     perms,
     isAdmin,
     isFieldOnly,
     boundTech: (user?.technicienNom || user?.name || '').trim(),
-    canSeeAmounts: isAdmin || Boolean(perms.canViewFinancials),
-    canTriageDemandes: isAdmin || (!isFieldOnly && (Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning))),
-    canSeeTeam: isAdmin || role === 'CONDUCTEUR_TRAVAUX',
-    canSeeBilling: isAdmin || Boolean(perms.canManageBilling),
-    linkedOnly: !isAdmin && !isFieldOnly && role === 'CHIFFRAGE_DEVIS',
+    canSeeAmounts: isKnownRole && (isAdmin || Boolean(perms.canViewFinancials)),
+    canTriageDemandes: isKnownRole && (isAdmin || (!isFieldOnly && (Boolean(perms.canEditDevis) || Boolean(perms.canEditPlanning)))),
+    canSeeTeam: isKnownRole && (isAdmin || role === 'CONDUCTEUR_TRAVAUX'),
+    canSeeBilling: isKnownRole && (isAdmin || Boolean(perms.canManageBilling)),
+    linkedOnly: isKnownRole && !isAdmin && !isFieldOnly && role === 'CHIFFRAGE_DEVIS',
   };
 }
 
-/** Une mission est « à moi » si son technicien correspond à mon nom (jamais si je n'ai pas de nom). */
+/** Une mission est « à moi » si son technicien correspond exactement à mon nom (jamais si je n'ai pas de nom). */
 export function techMatches(bound: string, value?: string | null): boolean {
   const b = (bound || '').trim().toLowerCase();
   const v = (value || '').trim().toLowerCase();
   if (!b || !v) return false;
-  return v.includes(b) || b.includes(v);
+  return v
+    .split(/[,;/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .includes(b);
 }
 
 const ACCEPTED_DEVIS = ['Accepté', 'Signé', 'Facturé', 'Gagné'];
@@ -96,6 +104,7 @@ export function canReadDevis(
   a: Access,
   d: { visiteTechnicien?: string | null; statutCommercial?: string | null }
 ): boolean {
+  if (!a.isKnownRole) return false;
   if (a.isAdmin) return true;
   if (a.isFieldOnly) return techMatches(a.boundTech, d.visiteTechnicien);
   if (a.perms.canEditDevis) return true;
@@ -114,6 +123,7 @@ export function canReadIntervention(
     isVisiteDevis?: boolean | null;
   }
 ): boolean {
+  if (!a.isKnownRole) return false;
   if (a.isAdmin) return true;
   if (a.isFieldOnly) return techMatches(a.boundTech, i.entreprise) || techMatches(a.boundTech, i.technicien);
   if (a.linkedOnly) return Boolean(i.devisId || i.origineDevisId || i.isVisiteDevis);
@@ -174,7 +184,7 @@ const REPORT_KEYS = [
 const TERRAIN_KEYS = [
   'statutOperationnel', 'traitement', 'status', 'heureDebutReelle', 'heureFinReelle', 'dateReelle', 'dateFin',
   'dateDebut', 'gpsCloture', 'compteRendu', 'actionsRealisees', 'photos', 'elementsChiffrage',
-  'resultatTechnique', 'motifBlocage', 'statutRapport',
+  'resultatTechnique', 'motifBlocage',
 ];
 const PLANNING_KEYS = [
   'datePlanifiee', 'heureDebut', 'heureFin', 'entreprise', 'technicien', 'statutOperationnel',
@@ -216,9 +226,26 @@ export function writableInterventionFields(
   }
   if (a.perms.canManageBilling) {
     BILLING_KEYS.forEach((k) => keys.add(k));
-    AMOUNT_KEYS.forEach((k) => keys.add(k));
+    if (a.canSeeAmounts) AMOUNT_KEYS.forEach((k) => keys.add(k));
   }
   return keys;
+}
+
+/** Normalise et borne les paramètres de pagination page/limit. */
+export function coercePagination(
+  rawPage: unknown,
+  rawLimit: unknown,
+  defaultLimit: number,
+  maxLimit: number
+): { page: number; limit: number } {
+  const parsedPage = Number.parseInt(String(rawPage ?? ''), 10);
+  const parsedLimit = Number.parseInt(String(rawLimit ?? ''), 10);
+  const page = Number.isFinite(parsedPage) && parsedPage >= 1 ? Math.min(parsedPage, 10_000) : 1;
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit >= 1
+      ? Math.min(parsedLimit, maxLimit)
+      : defaultLimit;
+  return { page, limit };
 }
 
 /** Garde uniquement les champs autorisés ; renvoie aussi la liste des champs refusés. */

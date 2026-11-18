@@ -10,18 +10,27 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
+import { prisma } from '../lib/prisma.js';
+import { loadActiveSessionUser } from '../middleware/auth.js';
 
 interface TokenPayload {
   userId: number;
   email: string;
   role: string;
   companyId?: number;
+  type?: string;
+  sv?: number;
   iat: number;
   exp: number;
 }
 
 interface AuthenticatedSocket extends Socket {
   user?: TokenPayload;
+}
+
+export interface SocketHandlerOptions {
+  /** Hook réservé aux tests unitaires isolés sans base de données. */
+  verifyConnection?: (decoded: TokenPayload) => Promise<boolean>;
 }
 
 let ioInstance: Server;
@@ -40,6 +49,18 @@ function getIO(): Server {
 const companyRoom = (companyId: number) => `company:${companyId}`;
 const userRoom = (userId: number) => `user:${userId}`;
 
+/** Ferme immédiatement les sockets actives d'un utilisateur (déconnexion, reset mot de passe, désactivation). */
+export function disconnectUserSockets(userId: number): void {
+  if (!ioInstance || !Number.isInteger(userId) || userId <= 0) return;
+  const sockets = ioInstance.sockets?.sockets;
+  if (!sockets) return;
+  for (const sock of sockets.values() as Iterable<AuthenticatedSocket>) {
+    if (sock.user?.userId === userId) {
+      sock.disconnect(true);
+    }
+  }
+}
+
 function isValidCompanyId(companyId: unknown): companyId is number {
   return typeof companyId === 'number' && Number.isInteger(companyId) && companyId > 0;
 }
@@ -51,10 +72,10 @@ export function allowedRoomsFor(user: Pick<TokenPayload, 'userId' | 'companyId'>
   return rooms;
 }
 
-export function setupSocketHandlers(io: Server) {
+export function setupSocketHandlers(io: Server, options?: SocketHandlerOptions) {
   ioInstance = io;
 
-  // Authentification des sockets : le jeton fixe l'utilisateur ET l'entreprise
+  // Authentification des sockets : le jeton fixe l'utilisateur ET l'entreprise, vérifiés en base
   io.use(async (socket: AuthenticatedSocket, next) => {
     try {
       const token =
@@ -66,13 +87,51 @@ export function setupSocketHandlers(io: Server) {
       }
 
       const decoded = jwt.verify(token, config.jwtSecret) as TokenPayload;
+      if (decoded.type === 'refresh' || (decoded.type && decoded.type !== 'access')) {
+        return next(new Error('Invalid token type'));
+      }
       if (!isValidCompanyId(decoded.companyId)) {
         return next(new Error('Account not attached to a company'));
       }
+
+      if (options?.verifyConnection) {
+        const ok = await options.verifyConnection(decoded);
+        if (!ok) return next(new Error('Account disabled or revoked'));
+      } else {
+        const user = await loadActiveSessionUser(decoded.userId);
+        if (!user || user.active === false || user.emailConfirmed === false) {
+          return next(new Error('Account disabled or unconfirmed'));
+        }
+        if (user.companyId !== decoded.companyId) {
+          return next(new Error('Company session mismatch'));
+        }
+        const currentSv = typeof (user as { tokenVersion?: number }).tokenVersion === 'number'
+          ? (user as { tokenVersion: number }).tokenVersion
+          : 1;
+        if (typeof decoded.sv === 'number' ? decoded.sv !== currentSv : currentSv > 1) {
+          return next(new Error('Session revoked'));
+        }
+        const comp = await prisma.company.findUnique({ where: { id: decoded.companyId }, select: { active: true } });
+        if (!comp || comp.active === false) {
+          return next(new Error('Company disabled'));
+        }
+      }
+
       socket.user = decoded;
       for (const room of allowedRoomsFor(decoded)) socket.join(room);
+      if (typeof decoded.exp === 'number') {
+        const ms = decoded.exp * 1000 - Date.now();
+        if (ms <= 0) {
+          return next(new Error('Token expired'));
+        }
+        const timer = setTimeout(() => {
+          socket.disconnect(true);
+        }, Math.min(ms, 2_147_483_647));
+        timer.unref?.();
+        socket.once('disconnect', () => clearTimeout(timer));
+      }
       next();
-    } catch (err) {
+    } catch {
       next(new Error('Invalid token'));
     }
   });

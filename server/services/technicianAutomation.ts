@@ -11,6 +11,7 @@ import { techMatches } from '../lib/access.js';
 import { socketEvents } from '../socket/index.js';
 import { sendAutomationEmail } from './emailService.js';
 import { prochaineAction, normaliserDelai, normaliserDelaiAlerte, suggererRemplacants, type CandidatTechnicien } from '../domain/technicianResponse.js';
+import { computeSchedulerBackoffMs, setBoundedRetryEntry, withWallTimeout } from '../domain/schedulerHelpers.js';
 
 const db = prisma as any;
 
@@ -169,102 +170,157 @@ export async function suggererPour(companyId: number, intervention: any, refusan
 }
 
 let enCours = false;
+let resumeCursorTech = 0;
+const techEmailBackoff = new Map<string, { fails: number; retryAfter: number }>();
 
-/** Passe périodique : relances et alertes. Idempotente (chaque étape est verrouillée par sa date). */
+/** Passe périodique : relances et alertes. Idempotente, ordonnée et résistante à la famine entre entreprises. */
 export async function executerAutomatisationsTechnicien(maintenant: Date = new Date()): Promise<{ relances: number; alertes: number }> {
   if (enCours) return { relances: 0, alertes: 0 };
   enCours = true;
   const bilan = { relances: 0, alertes: 0 };
+  const deadline = Date.now() + 20_000;
+  const nowMs = maintenant.getTime();
+  const planifCache = new Map<number, Destinataire[]>();
+  const techComptesCache = new Map<string, Destinataire[]>();
+  const tenantFails = new Map<number, number>();
+  let stoppedByDeadline = false;
+  let lastId = resumeCursorTech;
   try {
-    const attente: any[] = await db.intervention.findMany({
-      where: {
-        reponseTechnicien: 'EN_ATTENTE',
-        companyId: { not: null },
-        company: { is: { active: true, autoTechnicienActif: true } },
-      },
-      select: {
-        id: true,
-        companyId: true,
-        entreprise: true,
-        statutOperationnel: true,
-        referenceMetier: true,
-        chantier: true,
-        client: true,
-        datePlanifiee: true,
-        historiqueJson: true,
-        affecteLe: true,
-        relanceTechnicienLe: true,
-        alertePlanificateurLe: true,
-        company: { select: { autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true } },
-      },
-      take: 500,
-    });
-
-    for (const i of attente) {
-      const companyId = i.companyId as number;
-      // L'affectation n'a plus d'objet : on referme l'attente sans rien envoyer
-      if (!i.entreprise || STATUTS_TERMINES.includes(String(i.statutOperationnel || ''))) {
-        await db.intervention.update({ where: { id: i.id }, data: { reponseTechnicien: null } });
-        continue;
-      }
-      const action = prochaineAction({
-        reponse: 'EN_ATTENTE',
-        affecteLe: i.affecteLe,
-        relanceLe: i.relanceTechnicienLe,
-        alerteLe: i.alertePlanificateurLe,
-        maintenant,
-        delaiMinutes: i.company?.autoTechnicienDelaiMinutes,
-        delaiAlerteMinutes: i.company?.autoTechnicienAlerteMinutes,
-        pasLeDimanche: i.company?.autoTechnicienHeuresBureau !== false,
+    while (Date.now() < deadline) {
+      const attente: any[] = await db.intervention.findMany({
+        where: {
+          ...(lastId > 0 ? { id: { gt: lastId } } : {}),
+          reponseTechnicien: 'EN_ATTENTE',
+          companyId: { not: null },
+          OR: [{ relanceTechnicienLe: null }, { alertePlanificateurLe: null }],
+          company: { is: { active: true, autoTechnicienActif: true } },
+        },
+        select: {
+          id: true,
+          companyId: true,
+          entreprise: true,
+          statutOperationnel: true,
+          referenceMetier: true,
+          chantier: true,
+          client: true,
+          datePlanifiee: true,
+          historiqueJson: true,
+          affecteLe: true,
+          relanceTechnicienLe: true,
+          alertePlanificateurLe: true,
+          company: { select: { autoTechnicienDelaiMinutes: true, autoTechnicienAlerteMinutes: true, autoTechnicienHeuresBureau: true } },
+        },
+        orderBy: [{ id: 'asc' }],
+        take: 250,
       });
-      if (action === 'aucune') continue;
+      if (attente.length === 0) break;
 
-      const delai = normaliserDelai(i.company?.autoTechnicienDelaiMinutes);
-      if (action === 'relancer_technicien') {
-        const comptes = await comptesTechnicien(companyId, i.entreprise);
-        await notifier(companyId, comptes, {
-          type: 'RELANCE_TECHNICIEN',
-          titre: 'Mission en attente de votre réponse',
-          message: `${libelleMission(i)} attend votre réponse depuis plus de ${libelleDuree(delai)}.`,
-          interventionId: i.id,
-        });
-        await db.intervention.update({
-          where: { id: i.id },
-          data: {
-            relanceTechnicienLe: maintenant,
-            historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — relance du technicien', `${i.entreprise} n'a pas répondu à son affectation depuis ${libelleDuree(delai)}`),
-          },
-        });
-        bilan.relances++;
-      } else {
-        const planif = await comptesPlanification(companyId);
-        await notifier(companyId, planif, {
-          type: 'ALERTE_SANS_REPONSE',
-          titre: 'Technicien sans réponse',
-          message: `${i.entreprise} n'a toujours pas répondu pour ${libelleMission(i)}. Pensez à le joindre ou à réaffecter la mission.`,
-          interventionId: i.id,
-        });
-        for (const u of planif) {
-          sendAutomationEmail({
-            companyId,
-            toEmail: u.email,
-            recipientName: u.name || 'collègue',
-            subject: `Technicien sans réponse — ${libelleMission(i)}`,
-            heading: 'Technicien sans réponse',
-            lines: [`${i.entreprise} n'a pas répondu à son affectation pour ${libelleMission(i)}, même après relance.`, 'Joignez-le ou réaffectez la mission.'],
-            linkPath: '/',
-          }).catch(() => undefined);
+      for (const i of attente) {
+        if (i.id > lastId) lastId = i.id;
+        if (Date.now() >= deadline) {
+          stoppedByDeadline = true;
+          break;
         }
-        await db.intervention.update({
-          where: { id: i.id },
-          data: {
-            alertePlanificateurLe: maintenant,
-            historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — alerte au planificateur', `${i.entreprise} n'a pas répondu après relance`),
-          },
-        });
-        bilan.alertes++;
+        const companyId = i.companyId as number;
+        try {
+          if (!i.entreprise || STATUTS_TERMINES.includes(String(i.statutOperationnel || ''))) {
+            await db.intervention.update({ where: { id: i.id }, data: { reponseTechnicien: null } });
+            continue;
+          }
+          const action = prochaineAction({
+            reponse: 'EN_ATTENTE',
+            affecteLe: i.affecteLe,
+            relanceLe: i.relanceTechnicienLe,
+            alerteLe: i.alertePlanificateurLe,
+            maintenant,
+            delaiMinutes: i.company?.autoTechnicienDelaiMinutes,
+            delaiAlerteMinutes: i.company?.autoTechnicienAlerteMinutes,
+            pasLeDimanche: i.company?.autoTechnicienHeuresBureau !== false,
+          });
+          if (action === 'aucune') continue;
+
+          const delai = normaliserDelai(i.company?.autoTechnicienDelaiMinutes);
+          if (action === 'relancer_technicien') {
+            const claimed = await db.intervention.updateMany({
+              where: { id: i.id, companyId, reponseTechnicien: 'EN_ATTENTE', relanceTechnicienLe: null },
+              data: {
+                relanceTechnicienLe: maintenant,
+                historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — relance du technicien', `${i.entreprise} n'a pas répondu à son affectation depuis ${libelleDuree(delai)}`),
+              },
+            });
+            if (!claimed.count) continue;
+            const techKey = `${companyId}:${String(i.entreprise).trim().toLowerCase()}`;
+            let comptes = techComptesCache.get(techKey);
+            if (!comptes) {
+              comptes = await comptesTechnicien(companyId, i.entreprise);
+              techComptesCache.set(techKey, comptes);
+            }
+            await notifier(companyId, comptes, {
+              type: 'RELANCE_TECHNICIEN',
+              titre: 'Mission en attente de votre réponse',
+              message: `${libelleMission(i)} attend votre réponse depuis plus de ${libelleDuree(delai)}.`,
+              interventionId: i.id,
+            });
+            bilan.relances++;
+          } else {
+            const claimed = await db.intervention.updateMany({
+              where: { id: i.id, companyId, reponseTechnicien: 'EN_ATTENTE', alertePlanificateurLe: null },
+              data: {
+                alertePlanificateurLe: maintenant,
+                historiqueJson: ajouterHistorique(i.historiqueJson, 'Automatique', 'Automatique — alerte au planificateur', `${i.entreprise} n'a pas répondu après relance`),
+              },
+            });
+            if (!claimed.count) continue;
+            let planif = planifCache.get(companyId);
+            if (!planif) {
+              planif = await comptesPlanification(companyId);
+              planifCache.set(companyId, planif);
+            }
+            await notifier(companyId, planif, {
+              type: 'ALERTE_SANS_REPONSE',
+              titre: 'Technicien sans réponse',
+              message: `${i.entreprise} n'a toujours pas répondu pour ${libelleMission(i)}. Pensez à le joindre ou à réaffecter la mission.`,
+              interventionId: i.id,
+            });
+            const boKey = String(companyId);
+            const bo = techEmailBackoff.get(boKey);
+            if ((tenantFails.get(companyId) || 0) < 2 && (!bo || nowMs >= bo.retryAfter)) {
+              for (const u of planif) {
+                try {
+                  const res = await withWallTimeout(
+                    sendAutomationEmail({
+                      companyId,
+                      toEmail: u.email,
+                      recipientName: u.name || 'collègue',
+                      subject: `Technicien sans réponse — ${libelleMission(i)}`,
+                      heading: 'Technicien sans réponse',
+                      lines: [`${i.entreprise} n'a pas répondu à son affectation pour ${libelleMission(i)}, même après relance.`, 'Joignez-le ou réaffectez la mission.'],
+                      linkPath: '/',
+                    })
+                  );
+                  if (res && res.sent === false) {
+                    throw new Error('MAIL_NOT_SENT');
+                  }
+                } catch {
+                  const nextFails = (bo?.fails || 0) + 1;
+                  tenantFails.set(companyId, (tenantFails.get(companyId) || 0) + 1);
+                  setBoundedRetryEntry(techEmailBackoff, boKey, {
+                    fails: nextFails,
+                    retryAfter: nowMs + computeSchedulerBackoffMs(nextFails),
+                  });
+                }
+              }
+            }
+            bilan.alertes++;
+          }
+        } catch {
+          // Ne jamais bloquer les autres entreprises ni les autres dossiers
+        }
       }
+      if (stoppedByDeadline) break;
+      if (attente.length < 250) break;
     }
+    resumeCursorTech = stoppedByDeadline ? lastId : 0;
   } finally {
     enCours = false;
   }

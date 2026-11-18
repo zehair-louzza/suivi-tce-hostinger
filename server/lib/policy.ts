@@ -10,65 +10,69 @@ import { accessFor, type Access } from './access.js';
 
 type Rule = (a: Access) => boolean;
 
-const anyMember: Rule = () => true;
-const admin: Rule = (a) => a.isAdmin;
+const anyMember: Rule = (a) => a.isKnownRole;
+const admin: Rule = (a) => a.isKnownRole && a.isAdmin;
 
 export const POLICY = {
   // --- Devis
   'devis.list': anyMember, // le contenu est filtré par rôle dans la route
   'devis.read': anyMember, // idem, objet par objet
-  'devis.stats': (a) => !a.isFieldOnly,
-  'devis.create': (a) => a.isAdmin || a.perms.canEditDevis,
-  'devis.update': (a) => a.isAdmin || a.isFieldOnly || a.perms.canEditDevis || a.perms.canConvertDevis,
-  'devis.delete': (a) => a.isAdmin || a.perms.canDeleteRecords,
-  'devis.convert': (a) => a.isAdmin || a.perms.canConvertDevis || a.perms.canEditDevis,
-  'devis.sendEmail': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
+  'devis.stats': (a) => a.isKnownRole && !a.isFieldOnly,
+  'devis.create': (a) => a.isKnownRole && (a.isAdmin || a.perms.canEditDevis),
+  'devis.update': (a) => a.isKnownRole && (a.isAdmin || a.isFieldOnly || a.perms.canEditDevis || a.perms.canConvertDevis),
+  'devis.delete': (a) => a.isKnownRole && (a.isAdmin || a.perms.canDeleteRecords),
+  'devis.convert': (a) => a.isKnownRole && (a.isAdmin || a.perms.canConvertDevis || a.perms.canEditDevis),
+  'devis.sendEmail': (a) => a.isKnownRole && (a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis)),
   // Devis client par lien sécurisé : dépôt du PDF importé, envoi, suivi des réponses
-  'devis.document': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
-  'devis.sendClient': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis),
-  'devis.suiviClient': (a) => !a.isFieldOnly,
+  'devis.document': (a) => a.isKnownRole && (a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis)),
+  'devis.sendClient': (a) => a.isKnownRole && (a.isAdmin || (!a.isFieldOnly && a.perms.canEditDevis)),
+  'devis.suiviClient': (a) => a.isKnownRole && !a.isFieldOnly,
 
   // --- Interventions
   'interventions.list': anyMember,
   'interventions.read': anyMember,
-  'interventions.stats': (a) => !a.isFieldOnly,
+  'interventions.stats': (a) => a.isKnownRole && !a.isFieldOnly,
   // Création : direction, planificateur, chargé d'études (visites de chiffrage). Jamais le terrain ni les rapports.
-  'interventions.create': (a) => a.isAdmin || (!a.isFieldOnly && a.perms.canEditPlanning),
+  'interventions.create': (a) => a.isKnownRole && (a.isAdmin || (!a.isFieldOnly && a.perms.canEditPlanning)),
   'interventions.update': (a) =>
-    a.isAdmin ||
-    a.isFieldOnly ||
-    a.perms.canEditInterventions ||
-    a.perms.canWriteReports ||
-    a.perms.canEditPlanning ||
-    a.perms.canManageBilling,
+    a.isKnownRole &&
+    (a.isAdmin ||
+      a.isFieldOnly ||
+      a.perms.canEditInterventions ||
+      a.perms.canWriteReports ||
+      a.perms.canEditPlanning ||
+      a.perms.canManageBilling),
   // Réponse du technicien à son affectation (accepter / refuser) : le terrain uniquement, sur SES missions
-  'interventions.respond': (a) => a.isFieldOnly,
-  'interventions.delete': (a) => a.isAdmin || a.perms.canDeleteRecords,
+  'interventions.respond': (a) => a.isKnownRole && a.isFieldOnly,
+  'interventions.delete': (a) => a.isKnownRole && (a.isAdmin || a.perms.canDeleteRecords),
   // Rapport client par lien sécurisé : PDF (généré ou déposé), envoi, suivi des réponses
   'rapports.document': (a) =>
-    a.isAdmin ||
-    (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
+    a.isKnownRole &&
+    (a.isAdmin ||
+      (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling))),
   'rapports.sendClient': (a) =>
-    a.isAdmin ||
-    (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
-  'rapports.suiviClient': (a) => !a.isFieldOnly,
+    a.isKnownRole &&
+    (a.isAdmin ||
+      (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling))),
+  'rapports.suiviClient': (a) => a.isKnownRole && !a.isFieldOnly,
   'interventions.sendReport': (a) =>
-    a.isAdmin ||
-    (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling)),
+    a.isKnownRole &&
+    (a.isAdmin ||
+      (!a.isFieldOnly && (a.perms.canWriteReports || a.perms.canEditInterventions || a.perms.canManageBilling))),
 
   // --- Notifications : chacun ne lit et ne marque que les siennes (filtré par utilisateur dans la route)
   'notifications.list': anyMember,
   'notifications.update': anyMember,
 
   // --- Demandes reçues
-  'demandes.list': (a) => a.canTriageDemandes,
-  'demandes.create': (a) => a.canTriageDemandes,
-  'demandes.update': (a) => a.canTriageDemandes,
-  'demandes.orienter': (a) => a.canTriageDemandes,
+  'demandes.list': (a) => a.isKnownRole && a.canTriageDemandes,
+  'demandes.create': (a) => a.isKnownRole && a.canTriageDemandes,
+  'demandes.update': (a) => a.isKnownRole && a.canTriageDemandes,
+  'demandes.orienter': (a) => a.isKnownRole && a.canTriageDemandes,
 
   // --- Paramètres métier et GPS
   'referentiels.read': anyMember,
-  'referentiels.write': (a) => a.isAdmin || a.perms.canManageReferentiels,
+  'referentiels.write': (a) => a.isKnownRole && (a.isAdmin || a.perms.canManageReferentiels),
   'gps.post': anyMember, // chacun ne peut déposer que sa propre position (forcée côté serveur)
 
   // --- Administration
@@ -85,7 +89,7 @@ export const POLICY = {
   'admin.automations.manage': admin,
   'admin.pointages.read': anyMember, // direction et planificateur : l'équipe ; les autres : le leur (filtré dans la route)
   'admin.pointages.clock': anyMember, // chacun pointe pour lui-même (forcé côté serveur)
-  'admin.pointages.exception': (a) => a.isAdmin || Boolean(a.perms.canApproveRemoteClockIn),
+  'admin.pointages.exception': (a) => a.isKnownRole && (a.isAdmin || Boolean(a.perms.canApproveRemoteClockIn)),
 } satisfies Record<string, Rule>;
 
 export type Action = keyof typeof POLICY;
