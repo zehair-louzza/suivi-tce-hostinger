@@ -309,3 +309,21 @@ test('R2-9: GET /api/devis and /api/interventions clamp pagination page/limit', 
   assert.equal(i.json?.pagination?.page, 1);
   assert.equal(i.json?.pagination?.limit, 300);
 });
+
+test('R2-10: PATCH /api/devis/:id enforces optimistic CAS on version', async () => {
+  const r1 = await reqApi('PATCH', '/api/devis/10', T_ADMIN, { objet: 'Mise a jour 1' });
+  assert.equal(r1.status, 200);
+  // Concurrent PATCH simulated via mismatched stale version in store
+  const originalFindFirst = db.devis.findFirst.bind(db.devis);
+  db.devis.findFirst = async (args: any) => {
+    const row = await originalFindFirst(args);
+    return row ? { ...row, version: 0 } : row;
+  };
+  try {
+    const conflict = await reqApi('PATCH', '/api/devis/10', T_ADMIN, { objet: 'Conflit' });
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.json?.code, 'VERSION_CONFLICT');
+  } finally {
+    db.devis.findFirst = originalFindFirst;
+  }
+});

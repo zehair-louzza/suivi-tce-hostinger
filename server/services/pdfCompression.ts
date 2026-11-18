@@ -253,9 +253,11 @@ export function assertPdfFlateStreamsBounded(octets: Buffer): void {
     const endIdx = octets.indexOf('endstream', dataStart, 'latin1');
     if (endIdx === -1) break;
 
-    const dictWindowStart = Math.max(0, streamIdx - 512);
+    const dictWindowStart = Math.max(0, streamIdx - 4096);
     const dictSlice = octets.toString('latin1', dictWindowStart, streamIdx);
-    if (dictSlice.includes('/FlateDecode')) {
+    const dictStartIdx = dictSlice.lastIndexOf('<<');
+    const inspectedDict = dictStartIdx >= 0 ? dictSlice.slice(dictStartIdx) : dictSlice;
+    if (inspectedDict.includes('/FlateDecode')) {
       const compressedSlice = octets.subarray(dataStart, endIdx);
       const remainingTotal = MAX_PDF_INFLATE_TOTAL - totalInflated;
       if (remainingTotal <= 0) {

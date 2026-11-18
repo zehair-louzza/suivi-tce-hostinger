@@ -909,11 +909,23 @@ devisRouter.patch(
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const txUpdated = await tx.devis.update({
-        where: { id },
+      const casWhere: any = {
+        id,
+        companyId,
+        ...(typeof (existing as any).version === 'number' ? { version: (existing as any).version } : {}),
+      };
+      const lockRes = await tx.devis.updateMany({
+        where: casWhere,
         data: updateData,
+      });
+      if (lockRes.count !== 1) {
+        throw new AppError(409, 'Ce devis vient d’être modifié : rechargez la fiche avant de réessayer.', 'VERSION_CONFLICT');
+      }
+      const txUpdated = await tx.devis.findFirst({
+        where: { id, companyId },
         include: { interventions: true },
       });
+      if (!txUpdated) throw new AppError(404, 'Devis non trouvé', 'NOT_FOUND');
 
       // Devis modifié après envoi : le lien du client porte sur l'ancienne version, il est révoqué atomiquement
       if (contenuDevisModifie(existing as any, txUpdated as any) && (await revoquerLiensActifs(companyId, id, 'Devis modifié après envoi', tx)) > 0) {

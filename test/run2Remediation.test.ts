@@ -66,7 +66,13 @@ test('assertPdfFlateStreamsBounded rejects oversized FlateDecode bomb before PDF
     deflated,
     Buffer.from('\nendstream\nendobj\n%%EOF', 'latin1'),
   ]);
+  const paddedDictPdf = Buffer.concat([
+    Buffer.from('%PDF-1.4\n1 0 obj\n<< /Filter /FlateDecode /Padding (' + 'P'.repeat(900) + ') >>\nstream\n', 'latin1'),
+    deflated,
+    Buffer.from('\nendstream\nendobj\n%%EOF', 'latin1'),
+  ]);
   assert.throws(() => assertPdfFlateStreamsBounded(fakePdf), /décompression|excessif/i);
+  assert.throws(() => assertPdfFlateStreamsBounded(paddedDictPdf), /décompression|excessif/i);
 });
 
 test('decouper wraps very long unspaced tokens efficiently with binary search', () => {
