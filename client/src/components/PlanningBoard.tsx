@@ -11,6 +11,7 @@ import {
   formatDateFR,
 } from '../lib/api';
 import toast from 'react-hot-toast';
+import { AddressAutocompleteInput } from './AddressAutocompleteInput';
 
 export interface PlanningSlotItem {
   id: string;
@@ -3779,12 +3780,12 @@ export function PlanningBoard({
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Site / Chantier / Adresse *</label>
-                    <input
+                    <AddressAutocompleteInput
                       required
                       className="input"
                       value={quickSite}
-                      onChange={(e) => setQuickSite(e.target.value)}
-                      placeholder="Ex: Immeuble Pasteur"
+                      onChange={setQuickSite}
+                      placeholder="Ex : 18 Rue La Fayette, 75009 Paris"
                     />
                   </div>
                   <div>

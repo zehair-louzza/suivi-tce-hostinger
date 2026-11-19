@@ -71,6 +71,7 @@ app.use(helmet({
         'ws:',
         'wss:',
         'https://api-adresse.data.gouv.fr',
+        'https://data.geopf.fr',
         'https://nominatim.openstreetmap.org',
         'https://router.project-osrm.org',
         'https://accounts.google.com',

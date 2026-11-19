@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import type { ClientProfile, DecisionDemande, TypeDemandeur } from '../lib/api';
 import { demandeApi } from '../lib/api';
+import { AddressAutocompleteInput } from './AddressAutocompleteInput';
 
 export interface DemandesStudioViewProps {
   clientProfiles: ClientProfile[];
@@ -431,7 +432,13 @@ function FormulaireDemande({
           <label htmlFor="dem-site" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
             Site ou chantier
           </label>
-          <input id="dem-site" className="input" value={site} onChange={(e) => setSite(e.target.value)} />
+          <AddressAutocompleteInput
+            id="dem-site"
+            className="input"
+            value={site}
+            onChange={setSite}
+            placeholder="Ex : 18 Rue La Fayette, 75009 Paris"
+          />
         </div>
 
         <div>

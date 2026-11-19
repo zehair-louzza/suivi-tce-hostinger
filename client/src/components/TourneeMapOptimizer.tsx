@@ -363,11 +363,12 @@ export function TourneeMapOptimizer({
       const remainingWithCoords: CircuitStop[] = [];
       for (const m of remainingMissions) {
         if (isCancelled) return;
-        const coords = await geocodeAddress(m.address || m.chantierOrSite || m.client);
+        const addrCandidate = cleanAddressString(m.address || m.chantierOrSite || '');
+        const coords = addrCandidate ? await geocodeAddress(addrCandidate) : null;
         remainingWithCoords.push({
           ...m,
           coordinates: coords || undefined,
-          geocodingStatus: coords ? 'ok' : 'approx',
+          geocodingStatus: coords ? 'ok' : 'error',
         });
       }
 
@@ -379,12 +380,13 @@ export function TourneeMapOptimizer({
         if (m.gpsCloture && typeof m.gpsCloture.lat === 'number' && typeof m.gpsCloture.lng === 'number') {
           coords = { lat: m.gpsCloture.lat, lng: m.gpsCloture.lng };
         } else {
-          coords = await geocodeAddress(m.address || m.chantierOrSite || m.client);
+          const addrCandidate = cleanAddressString(m.address || m.chantierOrSite || '');
+          coords = addrCandidate ? await geocodeAddress(addrCandidate) : null;
         }
         completedWithCoords.push({
           ...m,
           coordinates: coords || undefined,
-          geocodingStatus: coords ? 'ok' : 'approx',
+          geocodingStatus: coords ? 'ok' : 'error',
         });
       }
 
@@ -479,6 +481,15 @@ export function TourneeMapOptimizer({
           statusColor = '#d97706';
         }
 
+        const hasKnownPosition =
+          hq.configured ||
+          Boolean(liveGps && typeof liveGps.lat === 'number' && typeof liveGps.lng === 'number') ||
+          Boolean(runningMission?.coordinates) ||
+          Boolean(lastDone?.gpsCloture && typeof lastDone.gpsCloture.lat === 'number') ||
+          Boolean(lastDone?.coordinates);
+
+        if (!hasKnownPosition) continue;
+
         liveTechData.push({
           technicien: techName,
           coords,
@@ -533,11 +544,18 @@ export function TourneeMapOptimizer({
         return;
       }
 
-      const tspResult = solveTSP(depotPoint, remainingWithCoords);
+      const locatedRemaining = remainingWithCoords.filter((s) => Boolean(s.coordinates));
+      const unlocatedRemaining = remainingWithCoords.filter((s) => !s.coordinates);
 
-      const sequenced = tspResult.orderedStops.map((stop, index) => {
+      const startDepot = hq.configured
+        ? depotPoint
+        : locatedRemaining[0]?.coordinates || depotPoint;
+
+      const tspResult = solveTSP(startDepot, locatedRemaining);
+
+      const sequencedLocated = tspResult.orderedStops.map((stop, index) => {
         const prevPoint =
-          index === 0 ? depotPoint : tspResult.orderedStops[index - 1].coordinates || depotPoint;
+          index === 0 ? startDepot : tspResult.orderedStops[index - 1].coordinates || startDepot;
         const leg = stop.coordinates
           ? estimateRoadDistanceAndDuration(prevPoint, stop.coordinates)
           : undefined;
@@ -549,13 +567,23 @@ export function TourneeMapOptimizer({
         };
       });
 
-      const pointsToTrace: GeoPoint[] = [depotPoint];
-      sequenced.forEach((s) => {
+      const sequencedUnlocated = unlocatedRemaining.map((stop, idx) => ({
+        ...stop,
+        sequenceNumber: sequencedLocated.length + idx + 1,
+        distanceToNext: undefined,
+        durationToNext: undefined,
+      }));
+
+      const sequenced = [...sequencedLocated, ...sequencedUnlocated];
+
+      const pointsToTrace: GeoPoint[] = [];
+      if (hq.configured) pointsToTrace.push(depotPoint);
+      sequencedLocated.forEach((s) => {
         if (s.coordinates) pointsToTrace.push(s.coordinates);
       });
-      pointsToTrace.push(depotPoint);
+      if (hq.configured && sequencedLocated.length > 0) pointsToTrace.push(depotPoint);
 
-      const poly = await fetchOsrmPolyline(pointsToTrace);
+      const poly = pointsToTrace.length >= 2 ? await fetchOsrmPolyline(pointsToTrace) : [];
 
       if (!isCancelled) {
         setOptimizedStops(sequenced);
@@ -660,11 +688,11 @@ export function TourneeMapOptimizer({
       routeLayerRef.current = null;
     }
 
-    const bounds = L.latLngBounds(
-      [officeCoords.lat, officeCoords.lng],
-      [officeCoords.lat, officeCoords.lng]
-    );
+    const bounds = L.latLngBounds([]);
     let hasExtendedBounds = false;
+    if (hq.configured) {
+      bounds.extend([officeCoords.lat, officeCoords.lng]);
+    }
 
     const showTrajet = displayMode === 'trajet' || displayMode === 'both';
     const showPositions = displayMode === 'positions' || displayMode === 'both';
@@ -903,7 +931,7 @@ export function TourneeMapOptimizer({
       });
     }
 
-    if (hasExtendedBounds) {
+    if (hasExtendedBounds && bounds.isValid()) {
       map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
     } else {
       map.setView([officeCoords.lat, officeCoords.lng], hq.configured ? 13 : 6);
@@ -931,15 +959,17 @@ export function TourneeMapOptimizer({
   const fitAllMapPoints = () => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    const bounds = L.latLngBounds(
-      [officeCoords.lat, officeCoords.lng],
-      [officeCoords.lat, officeCoords.lng]
-    );
+    const bounds = L.latLngBounds([]);
+    if (hq.configured) bounds.extend([officeCoords.lat, officeCoords.lng]);
     technicienMarkers.forEach((tm) => bounds.extend([tm.coords.lat, tm.coords.lng]));
     optimizedStops.forEach((s) => {
       if (s.coordinates) bounds.extend([s.coordinates.lat, s.coordinates.lng]);
     });
-    map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+    } else {
+      map.setView([officeCoords.lat, officeCoords.lng], hq.configured ? 13 : 6);
+    }
   };
 
   // URL Google Maps globale de l'itinéraire restant de la journée

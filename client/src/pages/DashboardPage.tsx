@@ -1,4 +1,5 @@
 import { getCompanyName } from '../lib/companyHQ';
+import { AddressAutocompleteInput } from '../components/AddressAutocompleteInput';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -1654,10 +1655,11 @@ export function DashboardPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Site / Immeuble / Adresse</label>
-                    <input
+                    <AddressAutocompleteInput
                       className="input"
                       value={selectedDevis.site || ''}
-                      onChange={(e) => setSelectedDevis({ ...selectedDevis, site: e.target.value })}
+                      onChange={(val) => setSelectedDevis({ ...selectedDevis, site: val })}
+                      placeholder="Ex : 18 Rue La Fayette, 75009 Paris"
                     />
                   </div>
                   <div>
@@ -2361,10 +2363,11 @@ export function DashboardPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>Chantier / Site / Adresse *</label>
-                    <input
+                    <AddressAutocompleteInput
                       className="input"
                       value={selectedIntv.chantier || ''}
-                      onChange={(e) => setSelectedIntv({ ...selectedIntv, chantier: e.target.value })}
+                      onChange={(val) => setSelectedIntv({ ...selectedIntv, chantier: val })}
+                      placeholder="Ex : 18 Rue La Fayette, 75009 Paris"
                     />
                   </div>
                   <div>

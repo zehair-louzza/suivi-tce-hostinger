@@ -48,20 +48,50 @@ export interface OptimizedTour {
   routePolyline: [number, number][]; // Coordonnées réelles [lat, lng] pour la ligne Leaflet
 }
 
-// Point de départ officiel fixe (Siège & Bureau ANELEC GROUPE - Paris 2e)
-export const DEFAULT_DEPOT_ADDRESS = '9 Rue des Colonnes, 75002 Paris';
-export const DEFAULT_DEPOT_COORDS: GeoPoint = {
-  lat: 48.869742,
-  lng: 2.339379,
-  label: 'Siège & Bureau ANELEC GROUPE (Départ & Retour de Tournée)',
-};
+export interface AddressSuggestion {
+  label: string;
+  lat: number;
+  lng: number;
+  postcode?: string;
+  city?: string;
+  score?: number;
+}
 
-const CACHE_KEY = 'anelec_geo_cache_v4';
+const CACHE_KEY = 'anelec_geo_cache_v5';
+const LEGACY_CACHE_KEYS = ['anelec_geo_cache_v4', 'anelec_geo_cache_v3'];
+
+function isValidFranceCoords(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= 41.0 &&
+    lat <= 51.5 &&
+    lng >= -5.5 &&
+    lng <= 10.0
+  );
+}
 
 function getLocalCache(): Record<string, GeoPoint> {
   try {
+    for (const oldKey of LEGACY_CACHE_KEYS) {
+      localStorage.removeItem(oldKey);
+    }
     const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, GeoPoint>;
+    const clean: Record<string, GeoPoint> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (
+        v &&
+        typeof v.lat === 'number' &&
+        typeof v.lng === 'number' &&
+        isValidFranceCoords(v.lat, v.lng) &&
+        !String(v.label || '').includes('(Zone Paris / IDF)')
+      ) {
+        clean[k] = v;
+      }
+    }
+    return clean;
   } catch {
     return {};
   }
@@ -71,6 +101,9 @@ function getLocalCache(): Record<string, GeoPoint> {
 export function clearGeocodeCache() {
   try {
     localStorage.removeItem(CACHE_KEY);
+    for (const oldKey of LEGACY_CACHE_KEYS) {
+      localStorage.removeItem(oldKey);
+    }
   } catch {
     // stockage indisponible : rien à purger
   }
@@ -92,97 +125,142 @@ export function cleanAddressString(raw: string): string {
   return raw
     .replace(/[⌖▪•▲✓✓]/g, '')
     .replace(/\[[^\]]+\]/g, '') // supprime les [Visite Devis]
+    .replace(/\s*\(Zone Paris \/ IDF\)\s*/gi, '')
     .replace(/^(site|adresse|chantier)\s*:\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+async function queryBanEndpoint(
+  baseUrl: string,
+  query: string,
+  limit = 1,
+  minScore = 0.4
+): Promise<AddressSuggestion[]> {
+  try {
+    const url = `${baseUrl}?q=${encodeURIComponent(query)}&limit=${limit}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data?.features)) return [];
+    const out: AddressSuggestion[] = [];
+    for (const feat of data.features) {
+      const coords = feat?.geometry?.coordinates;
+      const props = feat?.properties || {};
+      if (!Array.isArray(coords) || coords.length < 2) continue;
+      const lng = Number(coords[0]);
+      const lat = Number(coords[1]);
+      const score = typeof props.score === 'number' ? props.score : 1;
+      if (score < minScore || !isValidFranceCoords(lat, lng)) continue;
+      out.push({
+        label: String(props.label || query),
+        lat,
+        lng,
+        postcode: props.postcode ? String(props.postcode) : undefined,
+        city: props.city ? String(props.city) : undefined,
+        score,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function queryNominatim(query: string): Promise<GeoPoint | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=fr&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const item = data[0];
+    const lat = Number(item?.lat);
+    const lng = Number(item?.lon);
+    if (!isValidFranceCoords(lat, lng)) return null;
+    return {
+      lat,
+      lng,
+      label: String(item?.display_name || query),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Géocode automatiquement une adresse textuelle en coordonnées {lat, lng}
+ * Autocomplétion d'adresses françaises (BAN data.gouv.fr avec repli IGN Géoplateforme)
+ */
+export async function searchAddressSuggestions(
+  rawQuery: string,
+  limit = 5
+): Promise<AddressSuggestion[]> {
+  const query = cleanAddressString(rawQuery);
+  if (!query || query.length < 3) return [];
+
+  const ban = await queryBanEndpoint('https://api-adresse.data.gouv.fr/search/', query, limit, 0.3);
+  if (ban.length > 0) return ban;
+
+  return queryBanEndpoint('https://data.geopf.fr/geocodage/search', query, limit, 0.3);
+}
+
+/**
+ * Géocode automatiquement une adresse textuelle en coordonnées réelles {lat, lng}.
+ * Ne fabrique JAMAIS de coordonnées fictives : retourne null si l'adresse est introuvable.
  */
 export async function geocodeAddress(rawAddress: string): Promise<GeoPoint | null> {
   const query = cleanAddressString(rawAddress);
-  if (!query || query.length < 2) return null;
+  if (!query || query.length < 3) return null;
 
   const cache = getLocalCache();
   if (cache[query]) {
     return cache[query];
   }
 
-  // 1. Essai prioritaire avec l'API officielle française BAN (Base Adresse Nationale)
-  try {
-    const banUrl = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=1`;
-    const res = await fetch(banUrl, { headers: { Accept: 'application/json' } });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.features && data.features.length > 0) {
-        const feat = data.features[0];
-        const [lng, lat] = feat.geometry.coordinates;
-        // Valider que le point se situe bien en France métropolitaine (Île-de-France et région)
-        if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
-          const result: GeoPoint = {
-            lat,
-            lng,
-            label: feat.properties.label || query,
-          };
-          cache[query] = result;
-          setLocalCache(cache);
-          return result;
-        }
-      }
-    }
-  } catch {
-    // fallback
+  const saveAndReturn = (pt: GeoPoint): GeoPoint => {
+    cache[query] = pt;
+    setLocalCache(cache);
+    return pt;
+  };
+
+  // 1. API officielle française BAN (Base Adresse Nationale)
+  const banHits = await queryBanEndpoint('https://api-adresse.data.gouv.fr/search/', query, 1, 0.4);
+  if (banHits.length > 0) {
+    return saveAndReturn({ lat: banHits[0].lat, lng: banHits[0].lng, label: banHits[0].label });
   }
 
-  // 2. Si la requête contient des barres obliques (ex: "orange / pantin / 20 rue mermouse"), retenter avec les sous-parties
+  // 2. Repli officiel IGN Géoplateforme (même référentiel BAN)
+  const geopfHits = await queryBanEndpoint('https://data.geopf.fr/geocodage/search', query, 1, 0.4);
+  if (geopfHits.length > 0) {
+    return saveAndReturn({ lat: geopfHits[0].lat, lng: geopfHits[0].lng, label: geopfHits[0].label });
+  }
+
+  // 3. Si la requête contient des barres obliques (ex: "orange / pantin / 20 rue ..."), retenter avec les sous-parties
   if (query.includes('/')) {
     const parts = query.split('/').map((p) => p.trim()).filter(Boolean);
-    const street = parts.find((p) => /\d+|rue|avenue|bd|boulevard|chemin|allée|place/i.test(p));
-    const city = parts.find((p) => !/\d+|rue|avenue|bd|boulevard/i.test(p) && p.length > 2);
+    const street = parts.find((p) => /\d+|rue|avenue|bd|boulevard|chemin|allée|place|impasse|route/i.test(p));
+    const city = parts.find((p) => !/\d+|rue|avenue|bd|boulevard|chemin|allée|place|impasse|route/i.test(p) && p.length > 2);
     const combined = [street, city].filter(Boolean).join(' ');
     if (combined && combined !== query) {
-      try {
-        const banUrl = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(combined)}&limit=1`;
-        const res = await fetch(banUrl, { headers: { Accept: 'application/json' } });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.features && data.features.length > 0) {
-            const [lng, lat] = data.features[0].geometry.coordinates;
-            if (lat >= 41.5 && lat <= 51.5 && lng >= -5.0 && lng <= 9.5) {
-              const result: GeoPoint = {
-                lat,
-                lng,
-                label: data.features[0].properties.label || combined,
-              };
-              cache[query] = result;
-              setLocalCache(cache);
-              return result;
-            }
-          }
-        }
-      } catch {
-        // fallback
+      const splitBan = await queryBanEndpoint('https://api-adresse.data.gouv.fr/search/', combined, 1, 0.4);
+      if (splitBan.length > 0) {
+        return saveAndReturn({ lat: splitBan[0].lat, lng: splitBan[0].lng, label: splitBan[0].label });
+      }
+      const splitGeopf = await queryBanEndpoint('https://data.geopf.fr/geocodage/search', combined, 1, 0.4);
+      if (splitGeopf.length > 0) {
+        return saveAndReturn({ lat: splitGeopf[0].lat, lng: splitGeopf[0].lng, label: splitGeopf[0].label });
       }
     }
   }
 
-  // 3. Fallback déterministe en Île-de-France (dans un rayon proche de 2-4 km du Bureau ANELEC)
-  let hash = 0;
-  for (let i = 0; i < query.length; i++) {
-    hash = (hash << 5) - hash + query.charCodeAt(i);
-    hash |= 0;
+  // 4. Repli Nominatim OpenStreetMap (France)
+  const nomHit = await queryNominatim(query);
+  if (nomHit) {
+    return saveAndReturn(nomHit);
   }
-  const offsetLat = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.04;
-  const offsetLng = ((Math.abs(hash >> 3) % 1000) / 1000 - 0.5) * 0.05;
-  const approxResult: GeoPoint = {
-    lat: DEFAULT_DEPOT_COORDS.lat + offsetLat,
-    lng: DEFAULT_DEPOT_COORDS.lng + offsetLng,
-    label: `${query} (Zone Paris / IDF)`,
-  };
-  cache[query] = approxResult;
-  setLocalCache(cache);
-  return approxResult;
+
+  // Adresse introuvable : ne jamais inventer une fausse coordonnée
+  return null;
 }
 
 /**

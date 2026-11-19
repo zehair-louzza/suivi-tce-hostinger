@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { AddressAutocompleteInput } from './AddressAutocompleteInput';
 import {
   useTheme,
   THEMES,
@@ -843,19 +844,23 @@ function SiegeEditor({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <input
-          type="text"
+        <AddressAutocompleteInput
           value={addr}
-          onChange={(e) => {
-            setAddr(e.target.value);
+          onChange={(val) => {
+            setAddr(val);
             setDirty(true);
             setGeocodeResult(null);
           }}
-          placeholder="Ex : 12 Rue de la Paix, 75002 Paris"
+          onSelectSuggestion={(s) => {
+            setAddr(s.label);
+            setDirty(true);
+            setGeocodeResult({ lat: s.lat, lng: s.lng, label: s.label });
+          }}
+          placeholder="Ex : 36 Rue Hélène Cochennec, 93300 Aubervilliers"
           data-testid={`${testId}-address-input`}
+          className=""
           style={{
-            flex: '1 1 260px',
-            minWidth: 0,
+            width: '100%',
             padding: '10px 14px',
             borderRadius: 8,
             border: '1px solid var(--color-border)',

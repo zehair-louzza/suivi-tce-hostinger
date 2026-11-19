@@ -325,7 +325,8 @@ function MobileRouteMap({
           }
         }
         if (!lat || !lng) {
-          const geo = await geocodeAddress(m.chantier || m.client || 'Paris');
+          const rawAddr = m.chantier || (m as any).siteAdresse || '';
+          const geo = rawAddr ? await geocodeAddress(rawAddr) : null;
           if (geo?.lat && geo?.lng) {
             lat = geo.lat;
             lng = geo.lng;
@@ -413,7 +414,8 @@ function MobileRouteMap({
       onOpenMission(id);
     };
 
-    const bounds = L.latLngBounds(hq.pos, hq.pos);
+    const bounds = L.latLngBounds([]);
+    if (hq.configured) bounds.extend(hq.pos);
     let hasStop = false;
 
     // 1. Marqueur du siège : même pastille ronde, pictogramme seul, que sur la carte de bureau
@@ -477,7 +479,7 @@ function MobileRouteMap({
       });
 
       const marker = L.marker(latLng, { icon: stopPinIcon }).addTo(lg);
-      const safeMapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(m.chantier || 'Paris')}`;
+      const safeMapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${latLng[0]},${latLng[1]}`)}&travelmode=driving`;
       const missionIdNum = Number(m.id) || 0;
       marker.bindPopup(`
         <div style="font-family: inherit; font-size: 14px; line-height: 1.45; min-width: 230px;">
@@ -1470,7 +1472,9 @@ export function TechnicianMobileView({
     const duration = formatDuration(m.heureDebut, m.heureFin);
     const phone = findPhone(m.notes);
     const addr = m.chantier || '';
-    const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr || 'Paris')}`;
+    const mapsHref = addr
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}&travelmode=driving`
+      : 'https://www.google.com/maps';
 
     return (
       <section className="t-detail" data-testid="terrain-mission-detail">
