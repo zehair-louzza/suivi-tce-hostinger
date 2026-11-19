@@ -114,6 +114,15 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Limiteur dédié au rafraîchissement de session (évite de couper la session lors de rechargements répétés)
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: { error: 'Trop de rafraîchissements de session, patientez un instant' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Limiteur strict dédié au code OTP à 6 chiffres (anti brute-force)
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -144,7 +153,7 @@ app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/auth/confirm-supabase-token', authLimiter);
 app.use('/api/auth/google', authLimiter);
-app.use('/api/auth/refresh', authLimiter);
+app.use('/api/auth/refresh', refreshLimiter);
 app.use('/api/auth/invitations', authLimiter);
 app.use('/api', apiLimiter);
 

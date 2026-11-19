@@ -59,6 +59,7 @@ export interface AddressSuggestion {
 
 const CACHE_KEY = 'anelec_geo_cache_v5';
 const LEGACY_CACHE_KEYS = ['anelec_geo_cache_v4', 'anelec_geo_cache_v3'];
+const MAX_GEO_CACHE_ENTRIES = 250;
 
 function isValidFranceCoords(lat: number, lng: number): boolean {
   return (
@@ -111,6 +112,15 @@ export function clearGeocodeCache() {
 
 function setLocalCache(cache: Record<string, GeoPoint>) {
   try {
+    const keys = Object.keys(cache);
+    if (keys.length > MAX_GEO_CACHE_ENTRIES) {
+      const trimmed: Record<string, GeoPoint> = {};
+      for (const k of keys.slice(keys.length - MAX_GEO_CACHE_ENTRIES)) {
+        trimmed[k] = cache[k];
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(trimmed));
+      return;
+    }
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
     // ignore

@@ -234,8 +234,12 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.post('/auth/refresh');
           const { accessToken } = response.data;
           set({ accessToken });
-        } catch (err) {
-          get().logout();
+        } catch (err: any) {
+          const status = err?.response?.status;
+          // Ne déconnecter que si la session est réellement invalide (401/403), jamais sur un 429 ou un incident réseau temporaire.
+          if (status === 401 || status === 403) {
+            get().logout();
+          }
           throw err;
         }
       },
@@ -246,7 +250,13 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.get('/auth/me');
           const { user } = response.data;
           set({ user, isAuthenticated: true, isLoading: false });
-        } catch {
+        } catch (err: any) {
+          const status = err?.response?.status;
+          // Sur 429 (limite de débit) ou erreur réseau/5xx transitoire, conserver la session persistée plutôt que déconnecter.
+          if (status === 429 || !status || status >= 500) {
+            set({ isLoading: false });
+            return;
+          }
           set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
